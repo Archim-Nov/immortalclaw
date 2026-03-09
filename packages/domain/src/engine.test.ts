@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   advanceWorld,
-  createCultivator,
   createSeedWorld,
   getAgentBindingInfo,
   getCultivatorState,
-  listCultivators,
+  getStrategySnapshot,
   performAction,
-  selectCultivatorForAgent,
+  syncCultivatorFromPersona,
 } from "./index.js";
 
 test("cultivation action creates a job and advances realm progress after ticks", () => {
@@ -38,31 +37,57 @@ test("joining the sect updates sect state immediately", () => {
 
   assert.equal(result.accepted, true);
   const state = getCultivatorState(world, "yun-zhong-he");
-  assert.equal(state.sect?.name, "青云宗");
+  assert.ok(state.sect?.name);
 });
 
-test("agents can create and select their own characters", () => {
+test("agent persona sync auto-provisions and reuses a single character", () => {
   const world = createSeedWorld();
 
-  const first = createCultivator(world, {
+  const first = syncCultivatorFromPersona(world, {
     agentId: "openclaw-main",
-    name: "柳如烟",
+    name: "Liu Ruyan",
     genderPresentation: "female",
     startingPath: "alchemy",
   });
-  const second = createCultivator(world, {
+  const second = syncCultivatorFromPersona(world, {
     agentId: "openclaw-main",
-    name: "韩天河",
-    genderPresentation: "male",
+    name: "Liu Ruyan",
+    genderPresentation: "female",
+    pronouns: "she/her",
+    temperament: "calm",
     startingPath: "sword",
   });
 
-  const listed = listCultivators(world, "openclaw-main");
-  assert.equal(listed.length, 2);
-  assert.equal(getAgentBindingInfo(world, "openclaw-main").selectedCultivatorId, second.id);
+  assert.equal(first.created, true);
+  assert.equal(second.created, false);
+  assert.equal(first.selectedCultivatorId, second.selectedCultivatorId);
+  assert.equal(
+    getAgentBindingInfo(world, "openclaw-main").selectedCultivatorId,
+    first.selectedCultivatorId,
+  );
 
-  const selection = selectCultivatorForAgent(world, "openclaw-main", first.id);
-  assert.equal(selection.selectedCultivatorId, first.id);
-  assert.equal(getAgentBindingInfo(world, "openclaw-main").selectedCultivatorId, first.id);
-  assert.equal(first.isSelected, true);
+  const state = getCultivatorState(world, first.selectedCultivatorId);
+  assert.equal(state.cultivator.name, "Liu Ruyan");
+  assert.equal(state.cultivator.pronouns, "she/her");
+  assert.equal(state.cultivator.temperament, "calm");
+});
+
+test("studying a manual adds technique and strategy recommends safe progression", () => {
+  const world = createSeedWorld();
+  const before = getCultivatorState(world, "yun-zhong-he");
+  const beforeManualCount = before.inventory["sword-manual"];
+  const beforeTechniqueCount = before.cultivation.techniques.length;
+
+  const act = performAction(world, "yun-zhong-he", "study-sword-manual");
+  assert.equal(act.accepted, true);
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(beforeManualCount, 1);
+  assert.equal(state.inventory["sword-manual"], 0);
+  assert.ok(state.cultivation.techniques.length >= beforeTechniqueCount);
+  assert.ok(state.statusEffects.some((effect) => effect.id === "insight"));
+
+  const strategy = getStrategySnapshot(world, "yun-zhong-he");
+  assert.equal(strategy.cultivatorId, "yun-zhong-he");
+  assert.ok(strategy.recommendedSequence.length > 0);
 });

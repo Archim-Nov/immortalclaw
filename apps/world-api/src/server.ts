@@ -1,22 +1,24 @@
 import http from "node:http";
+import type { WorldState } from "../../../packages/domain/src/index.js";
 import {
   advanceWorld,
-  createCultivator,
-  createSeedWorld,
+  createWorldStore,
   getAgentBindingInfo,
   getCultivatorState,
   getDaoLogs,
   getMessages,
   getSectInfo,
+  getStrategySnapshot,
   getTribulationPreview,
-  listCultivators,
   listAvailableActions,
   performAction,
   resolveCultivatorIdForAgent,
-  selectCultivatorForAgent,
+  syncCultivatorFromPersona,
 } from "../../../packages/domain/src/index.js";
 
-const world = createSeedWorld();
+const store = createWorldStore({
+  filePath: process.env.WORLD_DB_PATH,
+});
 const port = Number(process.env.PORT ?? 8787);
 
 function sendJson(response: http.ServerResponse, statusCode: number, payload: unknown): void {
@@ -62,7 +64,7 @@ function readAgentId(url: URL): string {
   return agentId;
 }
 
-function resolveCultivatorId(url: URL): string {
+function resolveCultivatorIdInWorld(world: WorldState, url: URL): string {
   const cultivatorId = url.searchParams.get("cultivatorId");
   if (cultivatorId) {
     return cultivatorId;
@@ -80,22 +82,26 @@ const server = http.createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
 
     if (method === "GET" && url.pathname === "/health") {
-      sendJson(response, 200, { ok: true, tick: world.tick });
+      const world = store.read();
+      sendJson(response, 200, { ok: true, tick: world.tick, dbPath: store.filePath });
       return;
     }
 
     if (method === "GET" && url.pathname === "/world/state") {
+      const world = store.read();
       sendJson(response, 200, world);
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/state") {
-      sendJson(response, 200, getCultivatorState(world, resolveCultivatorId(url)));
+      const world = store.read();
+      sendJson(response, 200, getCultivatorState(world, resolveCultivatorIdInWorld(world, url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/actions") {
-      const cultivatorId = resolveCultivatorId(url);
+      const world = store.read();
+      const cultivatorId = resolveCultivatorIdInWorld(world, url);
       sendJson(response, 200, {
         tick: world.tick,
         cultivatorId,
@@ -104,38 +110,38 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (method === "GET" && url.pathname === "/cultivator/list") {
-      const agentId = url.searchParams.get("agentId");
-      sendJson(response, 200, {
-        tick: world.tick,
-        agentId,
-        characters: listCultivators(world, agentId),
-      });
-      return;
-    }
-
     if (method === "GET" && url.pathname === "/cultivator/messages") {
-      sendJson(response, 200, getMessages(world, resolveCultivatorId(url)));
+      const world = store.read();
+      sendJson(response, 200, getMessages(world, resolveCultivatorIdInWorld(world, url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/tribulation") {
-      sendJson(response, 200, getTribulationPreview(world, resolveCultivatorId(url)));
+      const world = store.read();
+      sendJson(response, 200, getTribulationPreview(world, resolveCultivatorIdInWorld(world, url)));
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/cultivator/strategy") {
+      const world = store.read();
+      sendJson(response, 200, getStrategySnapshot(world, resolveCultivatorIdInWorld(world, url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/sect") {
-      sendJson(response, 200, getSectInfo(world, resolveCultivatorId(url)));
+      const world = store.read();
+      sendJson(response, 200, getSectInfo(world, resolveCultivatorIdInWorld(world, url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/dao-heart") {
-      sendJson(response, 200, getDaoLogs(world, resolveCultivatorId(url)));
+      const world = store.read();
+      sendJson(response, 200, getDaoLogs(world, resolveCultivatorIdInWorld(world, url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/agent/binding") {
-      sendJson(response, 200, getAgentBindingInfo(world, readAgentId(url)));
+      sendJson(response, 200, getAgentBindingInfo(store.read(), readAgentId(url)));
       return;
     }
 
@@ -145,53 +151,46 @@ const server = http.createServer(async (request, response) => {
         typeof body.cultivatorId === "string" ? body.cultivatorId.trim() : "";
       const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
       const actionId = String(body.actionId ?? "");
-      const cultivatorId = directCultivatorId || (agentId ? resolveCultivatorIdForAgent(world, agentId) : "");
+      const cultivatorId =
+        directCultivatorId ||
+        (agentId ? store.transact((world) => resolveCultivatorIdForAgent(world, agentId)) : "");
       if (!cultivatorId || !actionId) {
         throw new Error("Body must include actionId and either cultivatorId or agentId.");
       }
-      sendJson(response, 200, performAction(world, cultivatorId, actionId as never));
+      sendJson(response, 200, store.transact((world) => performAction(world, cultivatorId, actionId as never)));
       return;
     }
 
-    if (method === "POST" && url.pathname === "/cultivator/create") {
+    if (method === "POST" && url.pathname === "/agent/sync-persona") {
       const body = await readJsonBody(request);
-      const name = typeof body.name === "string" ? body.name : "";
-      if (!name.trim()) {
-        throw new Error("Body must include character name.");
-      }
+      const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!agentId) throw new Error("Body must include agentId.");
+      if (!name) throw new Error("Body must include persona name.");
       sendJson(
         response,
         200,
-        createCultivator(world, {
-          agentId: typeof body.agentId === "string" ? body.agentId : undefined,
-          name,
-          genderPresentation:
-            typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
-          pronouns: typeof body.pronouns === "string" ? body.pronouns : undefined,
-          age: typeof body.age === "number" ? body.age : undefined,
-          origin: typeof body.origin === "string" ? body.origin : undefined,
-          temperament: typeof body.temperament === "string" ? body.temperament : undefined,
-          startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
-        }),
+        store.transact((world) =>
+          syncCultivatorFromPersona(world, {
+            agentId,
+            name,
+            genderPresentation:
+              typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
+            pronouns: typeof body.pronouns === "string" ? body.pronouns : undefined,
+            age: typeof body.age === "number" ? body.age : undefined,
+            origin: typeof body.origin === "string" ? body.origin : undefined,
+            temperament: typeof body.temperament === "string" ? body.temperament : undefined,
+            startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
+          }),
+        ),
       );
-      return;
-    }
-
-    if (method === "POST" && url.pathname === "/cultivator/select") {
-      const body = await readJsonBody(request);
-      const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
-      const cultivatorId = typeof body.cultivatorId === "string" ? body.cultivatorId.trim() : "";
-      if (!agentId || !cultivatorId) {
-        throw new Error("Body must include agentId and cultivatorId.");
-      }
-      sendJson(response, 200, selectCultivatorForAgent(world, agentId, cultivatorId));
       return;
     }
 
     if (method === "POST" && url.pathname === "/world/tick") {
       const body = await readJsonBody(request);
       const steps = typeof body.steps === "number" ? body.steps : 1;
-      sendJson(response, 200, advanceWorld(world, steps));
+      sendJson(response, 200, store.transact((world) => advanceWorld(world, steps)));
       return;
     }
 

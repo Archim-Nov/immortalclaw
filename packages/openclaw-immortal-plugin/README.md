@@ -2,12 +2,27 @@
 
 This plugin connects an OpenClaw agent to the local Immortal Claw world API.
 
+## Identity Binding
+
+The plugin no longer exposes manual character creation or character switching.
+
+Instead it reads the agent bootstrap files in the OpenClaw workspace:
+
+- `IDENTITY.md`
+- `SOUL.md`
+
+On the first world lookup, the plugin syncs that persona into a single agent-bound cultivator through `/agent/sync-persona`.
+
+Supported persona formats include:
+
+- YAML front matter such as `name:`, `gender:`, `pronouns:`, `path:`
+- inline markdown fields such as `- gender: female`
+- section-based notes such as `## Background`, `## Core Values`, `## Communication Style`
+
 ## Tools
 
-- `immortal_create_character`
-- `immortal_list_characters`
-- `immortal_select_character`
 - `immortal_state`
+- `immortal_strategy`
 - `immortal_actions`
 - `immortal_messages`
 - `immortal_tribulation`
@@ -32,7 +47,7 @@ This plugin connects an OpenClaw agent to the local Immortal Claw world API.
         config: {
           worldBaseUrl: "http://127.0.0.1:8787",
           agentId: "openclaw-main",
-          defaultCultivatorId: "yun-zhong-he",
+          personaDir: "C:/path/to/openclaw/workspace",
           requestTimeoutMs: 8000
         }
       }
@@ -41,21 +56,21 @@ This plugin connects an OpenClaw agent to the local Immortal Claw world API.
 }
 ```
 
+`personaDir` should point at the OpenClaw workspace that contains `IDENTITY.md` and `SOUL.md`. If omitted, the plugin falls back to `process.cwd()`.
+
 ## Expected Flow
 
-For a fresh agent:
-
-1. `immortal_create_character`
-2. `immortal_state`
+1. `immortal_state`
+2. `immortal_strategy`
 3. `immortal_actions`
 4. `immortal_act`
 5. optional `immortal_tick`
 6. re-check with `immortal_state`
 
-For an existing agent with multiple characters:
+The plugin injects system guidance via `before_prompt_build` so the agent:
 
-1. `immortal_list_characters`
-2. `immortal_select_character`
-3. `immortal_state`
+- does not invent state or action ids
+- treats `IDENTITY.md` and `SOUL.md` as the source of persona truth
+- inspects state and risk before acting
 
-The plugin also injects system guidance via `before_prompt_build` so the agent does not invent action ids or world state.
+`immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call before it will execute.

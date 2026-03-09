@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { createImmortalRealmPlugin } from "./index.js";
 
@@ -7,7 +10,7 @@ type RegisteredTool = {
   execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
 };
 
-test("plugin registers onboarding tools and prompt hook", async () => {
+test("plugin registers identity-bound tools and prompt hook", async () => {
   const plugin = createImmortalRealmPlugin({
     fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
   });
@@ -31,10 +34,8 @@ test("plugin registers onboarding tools and prompt hook", async () => {
   assert.deepEqual(
     tools.map((tool) => tool.name),
     [
-      "immortal_create_character",
-      "immortal_list_characters",
-      "immortal_select_character",
       "immortal_state",
+      "immortal_strategy",
       "immortal_actions",
       "immortal_messages",
       "immortal_tribulation",
@@ -49,7 +50,7 @@ test("plugin registers onboarding tools and prompt hook", async () => {
   const result = await hooks[0]?.handler({}, {});
   assert.match(
     String((result as { prependSystemContext?: string }).prependSystemContext),
-    /immortal_create_character/,
+    /IDENTITY\.md and SOUL\.md/,
   );
 });
 
@@ -62,6 +63,14 @@ test("legacy defaultCultivatorId still works for state and act tools", async () 
         method: String(init?.method ?? "GET"),
         body: typeof init?.body === "string" ? init.body : undefined,
       });
+      if (String(input).includes("/cultivator/actions")) {
+        return new Response(
+          JSON.stringify({
+            actions: [{ actionId: "cultivate" }],
+          }),
+          { status: 200 },
+        );
+      }
       return new Response(JSON.stringify({ ok: true, url: String(input) }), { status: 200 });
     },
   });
@@ -80,95 +89,38 @@ test("legacy defaultCultivatorId still works for state and act tools", async () 
   });
 
   await tools.get("immortal_state")?.execute("tool-1", {});
-  await tools.get("immortal_act")?.execute("tool-2", { actionId: "cultivate" });
-  await tools.get("immortal_tick")?.execute("tool-3", { steps: 3 });
+  await tools.get("immortal_actions")?.execute("tool-2", {});
+  await tools.get("immortal_act")?.execute("tool-3", { actionId: "cultivate" });
+  await tools.get("immortal_tick")?.execute("tool-4", { steps: 3 });
 
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 5);
   assert.equal(
     requests[0]?.url,
     "http://127.0.0.1:8787/cultivator/state?cultivatorId=yun-zhong-he",
   );
-  assert.equal(requests[1]?.method, "POST");
-  assert.match(String(requests[1]?.body), /"cultivatorId":"yun-zhong-he"/);
-  assert.equal(requests[2]?.url, "http://127.0.0.1:8787/world/tick");
+  assert.equal(
+    requests[1]?.url,
+    "http://127.0.0.1:8787/cultivator/actions?cultivatorId=yun-zhong-he",
+  );
+  assert.equal(
+    requests[2]?.url,
+    "http://127.0.0.1:8787/cultivator/actions?cultivatorId=yun-zhong-he",
+  );
+  assert.equal(requests[3]?.method, "POST");
+  assert.match(String(requests[3]?.body), /"cultivatorId":"yun-zhong-he"/);
+  assert.equal(requests[4]?.url, "http://127.0.0.1:8787/world/tick");
 });
 
-test("agent-bound flow can create, list, resolve, and select characters", async () => {
-  const requests: Array<{ url: string; method: string; body: string | undefined }> = [];
-  let selectedCultivatorId: string | null = "cultivator-2";
-
+test("act tool rejects when state or actions were not checked first", async () => {
   const plugin = createImmortalRealmPlugin({
-    fetchImpl: async (input, init) => {
-      const url = String(input);
-      const method = String(init?.method ?? "GET");
-      const body = typeof init?.body === "string" ? init.body : undefined;
-      requests.push({ url, method, body });
-
-      if (url.includes("/cultivator/create")) {
-        selectedCultivatorId = "cultivator-3";
-        return new Response(
-          JSON.stringify({
-            id: "cultivator-3",
-            name: "柳如烟",
-            isSelected: true,
-          }),
-          { status: 200 },
-        );
-      }
-
-      if (url.includes("/cultivator/list")) {
-        return new Response(
-          JSON.stringify({
-            agentId: "openclaw-main",
-            characters: [
-              { id: "cultivator-2", name: "云中鹤", isSelected: selectedCultivatorId === "cultivator-2" },
-              { id: "cultivator-3", name: "柳如烟", isSelected: selectedCultivatorId === "cultivator-3" },
-            ],
-          }),
-          { status: 200 },
-        );
-      }
-
-      if (url.includes("/cultivator/select")) {
-        selectedCultivatorId = "cultivator-2";
-        return new Response(
-          JSON.stringify({
-            agentId: "openclaw-main",
-            selectedCultivatorId,
-          }),
-          { status: 200 },
-        );
-      }
-
-      if (url.includes("/agent/binding")) {
-        return new Response(
-          JSON.stringify({
-            agentId: "openclaw-main",
-            selectedCultivatorId,
-          }),
-          { status: 200 },
-        );
-      }
-
-      if (url.includes("/cultivator/state")) {
-        return new Response(
-          JSON.stringify({
-            tick: 0,
-            cultivator: { id: selectedCultivatorId, name: selectedCultivatorId },
-          }),
-          { status: 200 },
-        );
-      }
-
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    },
+    fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
   });
 
   const tools = new Map<string, RegisteredTool>();
   plugin.register({
     pluginConfig: {
       worldBaseUrl: "http://127.0.0.1:8787",
-      agentId: "openclaw-main",
+      defaultCultivatorId: "yun-zhong-he",
     },
     registerTool(tool) {
       tools.set(tool.name, tool);
@@ -176,29 +128,179 @@ test("agent-bound flow can create, list, resolve, and select characters", async 
     logger: {},
   });
 
-  await tools.get("immortal_create_character")?.execute("tool-1", {
-    name: "柳如烟",
-    genderPresentation: "female",
-  });
-  await tools.get("immortal_list_characters")?.execute("tool-2", {});
-  const stateResult = (await tools.get("immortal_state")?.execute("tool-3", {})) as {
-    details?: { cultivator?: { id?: string } };
-  };
-  await tools.get("immortal_select_character")?.execute("tool-4", {
-    cultivatorId: "cultivator-2",
-  });
+  await assert.rejects(
+    () => tools.get("immortal_act")!.execute("tool-1", { actionId: "cultivate" }),
+    /immortal_state|immortal_strategy|immortal_actions/,
+  );
+});
 
-  assert.match(String(requests[0]?.body), /"agentId":"openclaw-main"/);
-  assert.match(String(requests[0]?.body), /"genderPresentation":"female"/);
-  assert.equal(requests[1]?.url, "http://127.0.0.1:8787/cultivator/list?agentId=openclaw-main");
-  assert.equal(
-    requests[2]?.url,
-    "http://127.0.0.1:8787/agent/binding?agentId=openclaw-main",
-  );
-  assert.equal(
-    requests[3]?.url,
-    "http://127.0.0.1:8787/cultivator/state?cultivatorId=cultivator-3",
-  );
-  assert.equal(stateResult.details?.cultivator?.id, "cultivator-3");
-  assert.match(String(requests[4]?.body), /"cultivatorId":"cultivator-2"/);
+test("agent-bound flow auto-syncs persona from bootstrap files before state lookup", async () => {
+  const personaDir = mkdtempSync(path.join(tmpdir(), "immortal-plugin-"));
+  try {
+    writeFileSync(
+      path.join(personaDir, "IDENTITY.md"),
+      "# Su Mingyue\n\n- gender: female\n- pronouns: she/her\n- origin: Frost Harbor\n- path: sword\n",
+      "utf8",
+    );
+    writeFileSync(
+      path.join(personaDir, "SOUL.md"),
+      "## Temperament\nCalm and exacting.\n",
+      "utf8",
+    );
+
+    const requests: Array<{ url: string; method: string; body: string | undefined }> = [];
+    const plugin = createImmortalRealmPlugin({
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        const method = String(init?.method ?? "GET");
+        const body = typeof init?.body === "string" ? init.body : undefined;
+        requests.push({ url, method, body });
+
+        if (url.includes("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "openclaw-main",
+              selectedCultivatorId: "cultivator-9",
+              created: true,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.includes("/cultivator/state")) {
+          return new Response(
+            JSON.stringify({
+              tick: 0,
+              cultivator: { id: "cultivator-9", name: "Su Mingyue" },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    });
+
+    const tools = new Map<string, RegisteredTool>();
+    plugin.register({
+      pluginConfig: {
+        worldBaseUrl: "http://127.0.0.1:8787",
+        agentId: "openclaw-main",
+        personaDir,
+      },
+      registerTool(tool) {
+        tools.set(tool.name, tool);
+      },
+      logger: {},
+    });
+
+    const stateResult = (await tools.get("immortal_state")?.execute("tool-1", {})) as {
+      details?: { cultivator?: { id?: string } };
+    };
+
+    assert.equal(requests[0]?.url, "http://127.0.0.1:8787/agent/sync-persona");
+    assert.match(String(requests[0]?.body), /"agentId":"openclaw-main"/);
+    assert.match(String(requests[0]?.body), /"name":"Su Mingyue"/);
+    assert.match(String(requests[0]?.body), /"genderPresentation":"female"/);
+    assert.match(String(requests[0]?.body), /"startingPath":"sword"/);
+    assert.match(String(requests[0]?.body), /"temperament":"Calm and exacting\."/);
+    assert.equal(
+      requests[1]?.url,
+      "http://127.0.0.1:8787/cultivator/state?cultivatorId=cultivator-9",
+    );
+    assert.equal(stateResult.details?.cultivator?.id, "cultivator-9");
+  } finally {
+    rmSync(personaDir, { recursive: true, force: true });
+  }
+});
+
+test("persona sync supports front matter and section-based bootstrap files", async () => {
+  const personaDir = mkdtempSync(path.join(tmpdir(), "immortal-plugin-rich-"));
+  try {
+    writeFileSync(
+      path.join(personaDir, "Identity.md"),
+      [
+        "---",
+        "name: Shen Qing",
+        "gender: male",
+        "pronouns: he/him",
+        "path: array",
+        "---",
+        "",
+        "## Background",
+        "- From the northern relay forts.",
+        "- Works like a field strategist.",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      path.join(personaDir, "Soul.md"),
+      [
+        "## Core Values",
+        "- Precise",
+        "- Patient",
+        "",
+        "## Communication Style",
+        "- Quiet but direct.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const requests: Array<{ url: string; body: string | undefined }> = [];
+    const plugin = createImmortalRealmPlugin({
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        const body = typeof init?.body === "string" ? init.body : undefined;
+        requests.push({ url, body });
+
+        if (url.includes("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "openclaw-rich",
+              selectedCultivatorId: "cultivator-11",
+              created: true,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.includes("/cultivator/state")) {
+          return new Response(
+            JSON.stringify({
+              tick: 0,
+              cultivator: { id: "cultivator-11", name: "Shen Qing" },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    });
+
+    const tools = new Map<string, RegisteredTool>();
+    plugin.register({
+      pluginConfig: {
+        worldBaseUrl: "http://127.0.0.1:8787",
+        agentId: "openclaw-rich",
+        personaDir,
+      },
+      registerTool(tool) {
+        tools.set(tool.name, tool);
+      },
+      logger: {},
+    });
+
+    await tools.get("immortal_state")?.execute("tool-rich", {});
+
+    assert.equal(requests[0]?.url, "http://127.0.0.1:8787/agent/sync-persona");
+    assert.match(String(requests[0]?.body), /"name":"Shen Qing"/);
+    assert.match(String(requests[0]?.body), /"genderPresentation":"male"/);
+    assert.match(String(requests[0]?.body), /"pronouns":"he\/him"/);
+    assert.match(String(requests[0]?.body), /"startingPath":"array"/);
+    assert.match(String(requests[0]?.body), /northern relay forts/);
+    assert.match(String(requests[0]?.body), /Precise; Patient; Quiet but direct\./);
+  } finally {
+    rmSync(personaDir, { recursive: true, force: true });
+  }
 });

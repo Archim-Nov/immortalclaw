@@ -10,7 +10,35 @@ export type ZoneId =
   | "mystic-ruins"
   | "healing-sanctuary";
 
-export type ItemId = "healing-pill" | "qi-pill";
+export type ItemId =
+  | "healing-pill"
+  | "qi-pill"
+  | "ward-talisman"
+  | "spirit-ore"
+  | "ruin-fragment"
+  | "beast-core"
+  | "sword-manual"
+  | "alchemy-manual"
+  | "array-manual";
+
+export type ItemCategory = "consumable" | "talisman" | "material" | "manual";
+
+export type FactionId =
+  | "townsfolk"
+  | "market-guild"
+  | "qing-yun-sect"
+  | "rogue-cultivators";
+
+export type StatusEffectId =
+  | "wounded"
+  | "poisoned"
+  | "clear-mind"
+  | "qi-surge"
+  | "fortune-marked"
+  | "warded"
+  | "deviation"
+  | "insight"
+  | "spirit-saturated";
 
 export type TimedActionId =
   | "travel-town"
@@ -24,13 +52,24 @@ export type TimedActionId =
   | "cultivate"
   | "take-mortal-task"
   | "mine-spirit-stones"
-  | "search-fortune";
+  | "search-fortune"
+  | "take-sect-errand"
+  | "hunt-mine-beast"
+  | "challenge-guardian";
 
 export type ImmediateActionId =
   | "buy-healing-pill"
   | "buy-qi-pill"
+  | "buy-ward-talisman"
   | "use-healing-pill"
   | "use-qi-pill"
+  | "use-ward-talisman"
+  | "sell-spirit-ore"
+  | "sell-ruin-fragment"
+  | "sell-beast-core"
+  | "study-sword-manual"
+  | "study-alchemy-manual"
+  | "study-array-manual"
   | "join-sect";
 
 export type ActionId = TimedActionId | ImmediateActionId;
@@ -45,10 +84,27 @@ export interface Zone {
 export interface Sect {
   id: string;
   name: string;
-  type: "剑修" | "丹修" | "阵法";
+  type: "剑修" | "丹修" | "阵修";
   treasury: number;
   memberIds: string[];
   spiritVeins: string[];
+}
+
+export interface ItemDefinition {
+  id: ItemId;
+  name: string;
+  category: ItemCategory;
+  description: string;
+  baseValue: number;
+}
+
+export interface StatusEffect {
+  id: StatusEffectId;
+  name: string;
+  description: string;
+  source: string;
+  remainingTicks: number;
+  intensity: number;
 }
 
 export interface Cultivator {
@@ -71,11 +127,13 @@ export interface Cultivator {
   maxSpiritualPower: number;
   karma: number;
   reputation: number;
+  factionReputation: Record<FactionId, number>;
   lifespan: number;
   age: number;
   sectId: string | null;
   techniques: string[];
   inventory: Record<ItemId, number>;
+  statusEffects: StatusEffect[];
   activeJobId: string | null;
   injuryTicksRemaining: number;
   nextTribulationTick: number;
@@ -108,10 +166,42 @@ export interface Message {
   content: string;
 }
 
+export interface WorldEvent {
+  id: string;
+  tick: number;
+  cultivatorId: string | null;
+  zoneId: ZoneId;
+  title: string;
+  content: string;
+  severity: "low" | "medium" | "high";
+  tags: string[];
+}
+
+export interface CombatLogEntry {
+  id: string;
+  tick: number;
+  cultivatorId: string;
+  zoneId: ZoneId;
+  encounterId: "mine-beast" | "ruins-guardian";
+  enemyName: string;
+  outcome: "victory" | "defeat";
+  damageTaken: number;
+  spiritualPowerSpent: number;
+  loot: Partial<Record<ItemId, number>>;
+  summary: string;
+}
+
 export interface AgentBinding {
   agentId: string;
   cultivatorIds: string[];
   selectedCultivatorId: string | null;
+}
+
+export interface AgentPersonaSyncResult {
+  agentId: string;
+  selectedCultivatorId: string;
+  cultivator: CharacterSummary;
+  created: boolean;
 }
 
 export interface CharacterSummary {
@@ -146,6 +236,7 @@ export interface TribulationPreview {
   difficulty: number;
   isWarned: boolean;
   preparationTime: number;
+  supportScore: number;
 }
 
 export interface AvailableAction {
@@ -178,21 +269,31 @@ export interface TickSummary {
     success: boolean;
     summary: string;
   }>;
+  triggeredEvents: WorldEvent[];
 }
 
-export interface WorldState {
-  tick: number;
-  cultivators: Record<string, Cultivator>;
-  agentBindings: Record<string, AgentBinding>;
-  sects: Record<string, Sect>;
-  zones: Record<ZoneId, Zone>;
-  jobs: Record<string, ActionJob>;
-  daoLogs: DaoLogEntry[];
-  messages: Message[];
-  nextCultivatorSequence: number;
-  nextJobSequence: number;
-  nextLogSequence: number;
-  nextMessageSequence: number;
+export interface InventoryEntryView {
+  id: ItemId;
+  name: string;
+  category: ItemCategory;
+  description: string;
+  count: number;
+  baseValue: number;
+}
+
+export interface FactionStandingView {
+  factionId: FactionId;
+  name: string;
+  value: number;
+  standing: "hostile" | "cold" | "neutral" | "trusted" | "favored";
+}
+
+export interface StatusEffectView {
+  id: StatusEffectId;
+  name: string;
+  description: string;
+  remainingTicks: number;
+  source: string;
 }
 
 export interface CultivatorStateView {
@@ -233,6 +334,48 @@ export interface CultivatorStateView {
   } | null;
   tribulation: TribulationPreview;
   inventory: Record<ItemId, number>;
+  inventoryDetails: InventoryEntryView[];
   currentJob: ActionJob | null;
   nearbyOpportunities: string[];
+  statusEffects: StatusEffectView[];
+  factionReputation: FactionStandingView[];
+  recentEvents: WorldEvent[];
+  recentCombats: CombatLogEntry[];
+  agentGuidance: {
+    warnings: string[];
+    priorities: string[];
+    suggestedActions: ActionId[];
+  };
+}
+
+export interface StrategySnapshot {
+  tick: number;
+  cultivatorId: string;
+  riskLevel: "low" | "medium" | "high";
+  shortTermGoal: string;
+  longTermGoal: string;
+  recommendedSequence: ActionId[];
+  reason: string;
+}
+
+export interface WorldState {
+  version: number;
+  tick: number;
+  updatedAt: string;
+  cultivators: Record<string, Cultivator>;
+  agentBindings: Record<string, AgentBinding>;
+  sects: Record<string, Sect>;
+  zones: Record<ZoneId, Zone>;
+  itemDefinitions: Record<ItemId, ItemDefinition>;
+  jobs: Record<string, ActionJob>;
+  daoLogs: DaoLogEntry[];
+  messages: Message[];
+  worldEvents: WorldEvent[];
+  combatLogs: CombatLogEntry[];
+  nextCultivatorSequence: number;
+  nextJobSequence: number;
+  nextLogSequence: number;
+  nextMessageSequence: number;
+  nextEventSequence: number;
+  nextCombatSequence: number;
 }

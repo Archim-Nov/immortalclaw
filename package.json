@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev:api": "tsx apps/world-api/src/server.ts",
+    "dev:worker": "tsx apps/world-worker/src/worker.ts",
     "test": "node --import tsx --test packages/**/*.test.ts"
   },
   "devDependencies": {
