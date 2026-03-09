@@ -8,7 +8,7 @@ Immortal Claw is a small persistent cultivation-world prototype.
 - `apps/world-api`: HTTP API
 - `apps/world-worker`: auto-tick worker
 - `packages/openclaw-immortal-plugin`: OpenClaw plugin
-- `docs/`: project plans and setup notes
+- `docs/`: project plans, product docs, and setup notes
 
 ## Current Features
 
@@ -51,6 +51,19 @@ curl -X POST "http://127.0.0.1:8787/cultivator/act" -H "Content-Type: applicatio
 curl -X POST "http://127.0.0.1:8787/world/tick" -H "Content-Type: application/json" -d "{\"steps\":4}"
 ```
 
+## Spec-Driven Development
+
+This repo keeps lightweight delivery guidance in versioned docs:
+
+- `AGENTS.md`
+- `docs/product/vision.md`
+- `docs/process/spec-driven-development.md`
+- `docs/process/harness-engineering.md`
+- `docs/templates/`
+- `harness/README.md`
+
+Use these docs to move work from product intent to spec to plan to implementation and verification.
+
 ## Docs
 
 - `docs/phase-1-first-version-plan.md`
@@ -58,6 +71,7 @@ curl -X POST "http://127.0.0.1:8787/world/tick" -H "Content-Type: application/js
 - `docs/phase-3-full-version-plan.md`
 - `docs/first-version-preview.md`
 - `docs/openclaw-agent-setup.md`
+- `docs/immortal-realm-design.md`
 
 ## OpenClaw
 
