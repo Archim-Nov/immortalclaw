@@ -197,6 +197,7 @@ const cultivators: Record<string, Cultivator> = {
     activeJobId: null,
     injuryTicksRemaining: 0,
     nextTribulationTick: 100,
+    registrationRecord: null,
   },
 };
 

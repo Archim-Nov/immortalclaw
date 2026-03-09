@@ -10,6 +10,54 @@ type RegisteredTool = {
   execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
 };
 
+function createRegistrationRecord() {
+  return {
+    record_type: "registration_record",
+    questionnaire_version: "immortal-claw-oc-v1",
+    answers: {
+      Q1: "C",
+      Q2: "C",
+      Q3: "C",
+      Q4: "C",
+      Q5: "C",
+      Q6: "C",
+      Q7: "C",
+      Q8: "A",
+      Q9: "C",
+      Q10: "C",
+      Q11: "C",
+      Q12: "C",
+      Q13: "B",
+      Q14: "B",
+      Q15: "B",
+      Q16: "B",
+      Q17: "C",
+      Q18: "B",
+    },
+    result: {
+      core_temperament: "潜渊型",
+      secondary_temperament: "观澜型",
+      behavior_aspect: "水土 / 潜守",
+      cultivation_motive: "求真知",
+      five_element_scores: {
+        metal: 5,
+        wood: 6,
+        water: 11,
+        fire: 3,
+        earth: 9,
+      },
+      spirit_root_result: "水偏灵根",
+      confidence: {
+        core: "high",
+        behavior: "high",
+        motive: "medium",
+        overall: "high",
+      },
+    },
+    summary: "其心性偏潜守，行路以观势为先，求知之念最重。",
+  };
+}
+
 test("plugin registers identity-bound tools and prompt hook", async () => {
   const plugin = createImmortalRealmPlugin({
     fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
@@ -35,6 +83,8 @@ test("plugin registers identity-bound tools and prompt hook", async () => {
     tools.map((tool) => tool.name),
     [
       "immortal_state",
+      "immortal_registration",
+      "immortal_registration_save",
       "immortal_strategy",
       "immortal_actions",
       "immortal_messages",
@@ -109,6 +159,71 @@ test("legacy defaultCultivatorId still works for state and act tools", async () 
   assert.equal(requests[3]?.method, "POST");
   assert.match(String(requests[3]?.body), /"cultivatorId":"yun-zhong-he"/);
   assert.equal(requests[4]?.url, "http://127.0.0.1:8787/world/tick");
+});
+
+test("registration tools persist and fetch canonical registration records", async () => {
+  const requests: Array<{ url: string; method: string; body: string | undefined }> = [];
+  const plugin = createImmortalRealmPlugin({
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      const method = String(init?.method ?? "GET");
+      const body = typeof init?.body === "string" ? init.body : undefined;
+      requests.push({ url, method, body });
+
+      if (url.includes("/cultivator/registration?") || url.endsWith("/cultivator/registration?cultivatorId=yun-zhong-he")) {
+        return new Response(
+          JSON.stringify({
+            ...createRegistrationRecord(),
+            saved_at: "2026-03-09T00:00:00.000Z",
+            cultivator_id: "yun-zhong-he",
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (url.endsWith("/cultivator/registration")) {
+        return new Response(
+          JSON.stringify({
+            ...createRegistrationRecord(),
+            saved_at: "2026-03-09T00:00:00.000Z",
+            cultivator_id: "yun-zhong-he",
+          }),
+          { status: 200 },
+        );
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  });
+
+  const tools = new Map<string, RegisteredTool>();
+  plugin.register({
+    pluginConfig: {
+      worldBaseUrl: "http://127.0.0.1:8787",
+      defaultCultivatorId: "yun-zhong-he",
+    },
+    registerTool(tool) {
+      tools.set(tool.name, tool);
+    },
+    logger: {},
+  });
+
+  await tools.get("immortal_registration_save")?.execute("tool-save", {
+    record: createRegistrationRecord(),
+  });
+  const registrationResult = (await tools.get("immortal_registration")?.execute("tool-get", {})) as {
+    details?: { result?: { core_temperament?: string } };
+  };
+
+  assert.equal(requests[0]?.url, "http://127.0.0.1:8787/cultivator/registration");
+  assert.equal(requests[0]?.method, "POST");
+  assert.match(String(requests[0]?.body), /"cultivatorId":"yun-zhong-he"/);
+  assert.match(String(requests[0]?.body), /"record_type":"registration_record"/);
+  assert.equal(
+    requests[1]?.url,
+    "http://127.0.0.1:8787/cultivator/registration?cultivatorId=yun-zhong-he",
+  );
+  assert.equal(registrationResult.details?.result?.core_temperament, "潜渊型");
 });
 
 test("act tool rejects when state or actions were not checked first", async () => {

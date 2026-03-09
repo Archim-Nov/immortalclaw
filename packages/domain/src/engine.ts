@@ -1,7 +1,8 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
-  CombatLogEntry, Cultivator, CultivatorStateView, CreateCultivatorInput, FactionId, ItemId,
-  StatusEffect, StrategySnapshot, TickSummary, TribulationPreview, WorldEvent, WorldState,
+  CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
+  CreateCultivatorInput, FactionId, ItemId, RegistrationAnswer, RegistrationQuestionId, StatusEffect,
+  StrategySnapshot, TickSummary, TribulationPreview, WorldEvent, WorldState,
 } from "./model.js";
 import { createEmptyInventory, createFactionReputation } from "./seed.js";
 
@@ -56,6 +57,10 @@ const addWorldEvent = (world: WorldState, event: Omit<WorldEvent, "id" | "tick">
   (world.worldEvents.unshift({ id: `event-${world.nextEventSequence++}`, tick: world.tick, ...event }), world.worldEvents[0]!);
 const addCombatLog = (world: WorldState, entry: Omit<CombatLogEntry, "id" | "tick">): CombatLogEntry =>
   (world.combatLogs.unshift({ id: `combat-${world.nextCombatSequence++}`, tick: world.tick, ...entry }), world.combatLogs[0]!);
+const REGISTRATION_QUESTIONS: RegistrationQuestionId[] = [
+  "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18",
+];
+const REGISTRATION_ANSWERS = new Set<RegistrationAnswer>(["A", "B", "C", "D"]);
 function createJob(world: WorldState, cultivatorId: string, actionId: keyof typeof ACTION_DURATIONS, label: string): ActionJob {
   return { id: `job-${world.nextJobSequence++}`, cultivatorId, actionId, label, remainingTicks: ACTION_DURATIONS[actionId], totalTicks: ACTION_DURATIONS[actionId] };
 }
@@ -78,11 +83,65 @@ function applyPersonaMetadata(cultivator: Cultivator, input: CreateCultivatorInp
   if (input.temperament?.trim()) cultivator.temperament = input.temperament.trim();
   if (typeof input.age === "number" && Number.isFinite(input.age)) cultivator.age = clamp(input.age, 16, 80);
 }
+function validateRegistrationRecord(record: CultivationRegistrationRecord): CultivationRegistrationRecord {
+  if (record.record_type !== "registration_record") {
+    throw new Error("registration record must use record_type 'registration_record'.");
+  }
+  if (typeof record.questionnaire_version !== "string" || record.questionnaire_version.trim().length === 0) {
+    throw new Error("registration record must include questionnaire_version.");
+  }
+  for (const questionId of REGISTRATION_QUESTIONS) {
+    const answer = record.answers?.[questionId];
+    if (!answer || !REGISTRATION_ANSWERS.has(answer)) {
+      throw new Error(`registration record is missing a valid answer for ${questionId}.`);
+    }
+  }
+  if (typeof record.result?.core_temperament !== "string" || !record.result.core_temperament.trim()) {
+    throw new Error("registration record must include result.core_temperament.");
+  }
+  if (typeof record.result?.secondary_temperament !== "string" || !record.result.secondary_temperament.trim()) {
+    throw new Error("registration record must include result.secondary_temperament.");
+  }
+  if (typeof record.result?.behavior_aspect !== "string" || !record.result.behavior_aspect.trim()) {
+    throw new Error("registration record must include result.behavior_aspect.");
+  }
+  if (typeof record.result?.cultivation_motive !== "string" || !record.result.cultivation_motive.trim()) {
+    throw new Error("registration record must include result.cultivation_motive.");
+  }
+  for (const elementId of ["metal", "wood", "water", "fire", "earth"] as const) {
+    const value = record.result?.five_element_scores?.[elementId];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`registration record must include numeric result.five_element_scores.${elementId}.`);
+    }
+  }
+  if (typeof record.result?.spirit_root_result !== "string" || !record.result.spirit_root_result.trim()) {
+    throw new Error("registration record must include result.spirit_root_result.");
+  }
+  if (typeof record.summary !== "string" || !record.summary.trim()) {
+    throw new Error("registration record must include summary.");
+  }
+  return record;
+}
+function registrationViewOf(cultivator: Cultivator): CultivationRegistrationView | null {
+  const record = cultivator.registrationRecord;
+  if (!record) {
+    return null;
+  }
+  return {
+    saved_at: record.saved_at ?? null,
+    core_temperament: record.result.core_temperament,
+    secondary_temperament: record.result.secondary_temperament,
+    behavior_aspect: record.result.behavior_aspect,
+    cultivation_motive: record.result.cultivation_motive,
+    spirit_root_result: record.result.spirit_root_result,
+    overall_confidence: record.result.confidence.overall,
+  };
+}
 
 export function createCultivator(world: WorldState, input: CreateCultivatorInput): CharacterSummary {
   const name = input.name.trim(); if (!name || name.length > 24) throw new Error("Character name must be 1-24 chars.");
   const agentId = normalizeAgentId(input.agentId); const starter = starterProfile(input.startingPath ?? "wanderer");
-  const cultivator: Cultivator = { id: `cultivator-${world.nextCultivatorSequence++}`, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", startingPath: input.startingPath ?? "wanderer", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: "mortal-town", spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, karma: 0, reputation: starter.reputation, factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, nextTribulationTick: 100 };
+  const cultivator: Cultivator = { id: `cultivator-${world.nextCultivatorSequence++}`, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", startingPath: input.startingPath ?? "wanderer", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: "mortal-town", spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, karma: 0, reputation: starter.reputation, factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, nextTribulationTick: 100, registrationRecord: null };
   world.cultivators[cultivator.id] = cultivator;
   let selectedCultivatorId: string | null = null;
   if (agentId) { const binding = ensureAgentBinding(world, agentId); binding.cultivatorIds.push(cultivator.id); binding.selectedCultivatorId = cultivator.id; selectedCultivatorId = cultivator.id; }
@@ -132,6 +191,29 @@ export function getMessages(world: WorldState, cultivatorId: string) { getCultiv
 export function getDaoLogs(world: WorldState, cultivatorId: string) { getCultivatorOrThrow(world, cultivatorId); return world.daoLogs.filter((e) => e.cultivatorId === cultivatorId); }
 export function getCombatLogs(world: WorldState, cultivatorId: string, limit = 10) { getCultivatorOrThrow(world, cultivatorId); return world.combatLogs.filter((e) => e.cultivatorId === cultivatorId).slice(0, clamp(limit, 1, 50)); }
 export function getRecentWorldEvents(world: WorldState, cultivatorId?: string, limit = 10) { return (cultivatorId ? world.worldEvents.filter((e) => e.cultivatorId === null || e.cultivatorId === cultivatorId) : world.worldEvents).slice(0, clamp(limit, 1, 50)); }
+export function getCultivationRegistration(world: WorldState, cultivatorId: string): CultivationRegistrationRecord | null {
+  return structuredClone(getCultivatorOrThrow(world, cultivatorId).registrationRecord ?? null);
+}
+export function saveCultivationRegistration(
+  world: WorldState,
+  cultivatorId: string,
+  record: CultivationRegistrationRecord,
+  savedByAgentId?: string | null,
+): CultivationRegistrationRecord {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const validated = validateRegistrationRecord(structuredClone(record));
+  const savedAt = new Date().toISOString();
+  const stored: CultivationRegistrationRecord = {
+    ...validated,
+    saved_at: savedAt,
+    cultivator_id: cultivator.id,
+    agent_id: normalizeAgentId(savedByAgentId) ?? cultivator.createdByAgentId,
+  };
+  cultivator.registrationRecord = stored;
+  addDaoLog(world, cultivator.id, "问心定档", `${cultivator.name} completed registration: ${stored.result.core_temperament}, ${stored.result.behavior_aspect}, ${stored.result.cultivation_motive}.`, ["registration", "attunement"]);
+  addMessage(world, cultivator.id, "Immortal Registry", "Registration Locked", `${cultivator.name}'s cultivation registration has been recorded.`);
+  return structuredClone(stored);
+}
 
 function hasEffect(cultivator: Cultivator, effectId: StatusEffect["id"]) { return cultivator.statusEffects.some((effect) => effect.id === effectId); }
 function upsertEffect(cultivator: Cultivator, effect: StatusEffect) {
@@ -222,6 +304,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     factionReputation: (Object.keys(cultivator.factionReputation) as FactionId[]).map((factionId) => ({ factionId, name: FACTION_NAMES[factionId], value: cultivator.factionReputation[factionId], standing: standing(cultivator.factionReputation[factionId]) })),
     recentEvents: getRecentWorldEvents(world, cultivatorId, 5),
     recentCombats: getCombatLogs(world, cultivatorId, 4),
+    registration: registrationViewOf(cultivator),
     agentGuidance: guidance(world, cultivator),
   };
 }

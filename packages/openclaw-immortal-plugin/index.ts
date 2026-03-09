@@ -150,6 +150,23 @@ const TICK_SCHEMA = {
     },
   },
 };
+
+const REGISTRATION_SAVE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["record"],
+  properties: {
+    cultivatorId: CULTIVATOR_OR_AGENT_SCHEMA.properties.cultivatorId,
+    agentId: CULTIVATOR_OR_AGENT_SCHEMA.properties.agentId,
+    record: {
+      type: "object",
+      additionalProperties: true,
+      description:
+        "Canonical registration_record object returned by the OC cultivation registration questionnaire skill.",
+    },
+  },
+};
+
 function normalizeBaseUrl(input: unknown): string {
   if (typeof input !== "string" || input.trim().length === 0) {
     return "http://127.0.0.1:8787";
@@ -574,6 +591,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- Use immortal_strategy to pick a short-term goal and recommended action sequence before acting.",
     "- Use the exact actionId returned by immortal_actions when calling immortal_act.",
     "- Timed actions are not complete until later state or tick results confirm completion.",
+    "- When an OC questionnaire returns a canonical registration_record, persist it with immortal_registration_save and read it back with immortal_registration or immortal_state.registration.",
     "- Use immortal_messages, immortal_tribulation, immortal_sect, and immortal_dao_logs for supporting context instead of guessing.",
     "- immortal_tick is an operator or GM action. Only use it when the user explicitly wants to advance time or when you are running the simulation for testing.",
   ]
@@ -796,6 +814,44 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           },
         }),
       );
+
+      api.registerTool(
+        createGetTool({
+          name: "immortal_registration",
+          label: "Immortal Registration",
+          description:
+            "Read the saved OC cultivation registration record for the current cultivator.",
+          pathBuilder: (cultivatorId) =>
+            `/cultivator/registration?cultivatorId=${encodeURIComponent(cultivatorId)}`,
+          fetchImpl,
+          config,
+        }),
+      );
+
+      api.registerTool({
+        name: "immortal_registration_save",
+        label: "Immortal Registration Save",
+        description:
+          "Persist a canonical OC cultivation registration record for the current cultivator.",
+        parameters: REGISTRATION_SAVE_SCHEMA,
+        execute: async (_toolCallId, rawParams) => {
+          const record = rawParams.record;
+          if (!record || typeof record !== "object" || Array.isArray(record)) {
+            throw new Error("record is required and must be an object.");
+          }
+          const cultivatorId = await resolveCultivatorId(fetchImpl, config, rawParams);
+          const agentId = resolveAgentId(config, rawParams, false);
+          const payload = await requestWorld(fetchImpl, config, "/cultivator/registration", {
+            method: "POST",
+            body: JSON.stringify({
+              cultivatorId,
+              ...(agentId ? { agentId } : {}),
+              record,
+            }),
+          });
+          return jsonResult("immortal_registration_save", payload);
+        },
+      });
 
       api.registerTool(
         createGetTool({

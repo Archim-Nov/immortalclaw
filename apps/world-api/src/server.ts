@@ -1,9 +1,10 @@
 import http from "node:http";
-import type { WorldState } from "../../../packages/domain/src/index.js";
+import type { CultivationRegistrationRecord, WorldState } from "../../../packages/domain/src/index.js";
 import {
   advanceWorld,
   createWorldStore,
   getAgentBindingInfo,
+  getCultivationRegistration,
   getCultivatorState,
   getDaoLogs,
   getMessages,
@@ -13,6 +14,7 @@ import {
   listAvailableActions,
   performAction,
   resolveCultivatorIdForAgent,
+  saveCultivationRegistration,
   syncCultivatorFromPersona,
 } from "../../../packages/domain/src/index.js";
 
@@ -76,6 +78,31 @@ function resolveCultivatorIdInWorld(world: WorldState, url: URL): string {
   throw new Error("Missing query parameter: cultivatorId or agentId");
 }
 
+function resolveCultivatorIdFromBody(world: WorldState, body: Record<string, unknown>): string {
+  const cultivatorId = typeof body.cultivatorId === "string" ? body.cultivatorId.trim() : "";
+  if (cultivatorId) {
+    return cultivatorId;
+  }
+  const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+  if (agentId) {
+    return resolveCultivatorIdForAgent(world, agentId);
+  }
+  throw new Error("Body must include cultivatorId or agentId.");
+}
+
+function readOptionalAgentId(body: Record<string, unknown>): string | undefined {
+  const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+  return agentId || undefined;
+}
+
+function readRegistrationRecord(body: Record<string, unknown>): CultivationRegistrationRecord {
+  const { record } = body;
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    throw new Error("Body must include a registration record object.");
+  }
+  return record as CultivationRegistrationRecord;
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const method = request.method ?? "GET";
@@ -128,6 +155,12 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/cultivator/registration") {
+      const world = store.read();
+      sendJson(response, 200, getCultivationRegistration(world, resolveCultivatorIdInWorld(world, url)));
+      return;
+    }
+
     if (method === "GET" && url.pathname === "/cultivator/sect") {
       const world = store.read();
       sendJson(response, 200, getSectInfo(world, resolveCultivatorIdInWorld(world, url)));
@@ -147,17 +180,34 @@ const server = http.createServer(async (request, response) => {
 
     if (method === "POST" && url.pathname === "/cultivator/act") {
       const body = await readJsonBody(request);
-      const directCultivatorId =
-        typeof body.cultivatorId === "string" ? body.cultivatorId.trim() : "";
-      const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
       const actionId = String(body.actionId ?? "");
-      const cultivatorId =
-        directCultivatorId ||
-        (agentId ? store.transact((world) => resolveCultivatorIdForAgent(world, agentId)) : "");
-      if (!cultivatorId || !actionId) {
+      if (!actionId) {
         throw new Error("Body must include actionId and either cultivatorId or agentId.");
       }
-      sendJson(response, 200, store.transact((world) => performAction(world, cultivatorId, actionId as never)));
+      sendJson(
+        response,
+        200,
+        store.transact((world) => performAction(world, resolveCultivatorIdFromBody(world, body), actionId as never)),
+      );
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/cultivator/registration") {
+      const body = await readJsonBody(request);
+      const record = readRegistrationRecord(body);
+      const agentId = readOptionalAgentId(body);
+      sendJson(
+        response,
+        200,
+        store.transact((world) =>
+          saveCultivationRegistration(
+            world,
+            resolveCultivatorIdFromBody(world, body),
+            record,
+            agentId,
+          ),
+        ),
+      );
       return;
     }
 

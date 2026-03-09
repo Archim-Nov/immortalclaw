@@ -2,7 +2,12 @@ export type {
   ActionExecutionResult,
   AgentPersonaSyncResult,
   AvailableAction,
+  CultivationRegistrationRecord,
+  CultivationRegistrationView,
   CultivatorStateView,
+  FiveElementId,
+  RegistrationAnswer,
+  RegistrationQuestionId,
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
@@ -11,6 +16,7 @@ export type {
 export {
   advanceWorld,
   createCultivator,
+  getCultivationRegistration,
   getCombatLogs,
   getAgentBindingInfo,
   getCultivatorState,
@@ -24,6 +30,7 @@ export {
   listAvailableActions,
   performAction,
   resolveCultivatorIdForAgent,
+  saveCultivationRegistration,
   selectCultivatorForAgent,
   syncCultivatorFromPersona,
 } from "./engine.js";

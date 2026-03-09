@@ -1,6 +1,28 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
 export type StartingPath = "sword" | "alchemy" | "array" | "wanderer";
+export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
+export type RegistrationQuestionId =
+  | "Q1"
+  | "Q2"
+  | "Q3"
+  | "Q4"
+  | "Q5"
+  | "Q6"
+  | "Q7"
+  | "Q8"
+  | "Q9"
+  | "Q10"
+  | "Q11"
+  | "Q12"
+  | "Q13"
+  | "Q14"
+  | "Q15"
+  | "Q16"
+  | "Q17"
+  | "Q18";
+export type RegistrationAnswer = "A" | "B" | "C" | "D";
+export type RegistrationConfidenceLevel = "high" | "medium" | "low";
 
 export type ZoneId =
   | "mortal-town"
@@ -137,6 +159,43 @@ export interface Cultivator {
   activeJobId: string | null;
   injuryTicksRemaining: number;
   nextTribulationTick: number;
+  registrationRecord: CultivationRegistrationRecord | null;
+}
+
+export interface CultivationRegistrationResult {
+  core_temperament: string;
+  secondary_temperament: string;
+  behavior_aspect: string;
+  cultivation_motive: string;
+  five_element_scores: Record<FiveElementId, number>;
+  spirit_root_result: string;
+  confidence: {
+    core: RegistrationConfidenceLevel;
+    behavior: RegistrationConfidenceLevel;
+    motive: RegistrationConfidenceLevel;
+    overall: RegistrationConfidenceLevel;
+  };
+}
+
+export interface CultivationRegistrationRecord {
+  record_type: "registration_record";
+  questionnaire_version: string;
+  answers: Record<RegistrationQuestionId, RegistrationAnswer>;
+  result: CultivationRegistrationResult;
+  summary: string;
+  saved_at?: string;
+  cultivator_id?: string;
+  agent_id?: string | null;
+}
+
+export interface CultivationRegistrationView {
+  saved_at: string | null;
+  core_temperament: string;
+  secondary_temperament: string;
+  behavior_aspect: string;
+  cultivation_motive: string;
+  spirit_root_result: string;
+  overall_confidence: RegistrationConfidenceLevel;
 }
 
 export interface ActionJob {
@@ -341,6 +400,7 @@ export interface CultivatorStateView {
   factionReputation: FactionStandingView[];
   recentEvents: WorldEvent[];
   recentCombats: CombatLogEntry[];
+  registration: CultivationRegistrationView | null;
   agentGuidance: {
     warnings: string[];
     priorities: string[];
