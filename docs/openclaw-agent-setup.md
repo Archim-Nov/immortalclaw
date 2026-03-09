@@ -33,7 +33,7 @@ npm.cmd run dev:api
 
 - 加载本地插件
 - 启用 `immortal-realm`
-- 给 agent 一个默认修士 id
+- 给 OpenClaw agent 一个稳定的 `agentId`
 
 ```json5
 {
@@ -48,7 +48,7 @@ npm.cmd run dev:api
         enabled: true,
         config: {
           worldBaseUrl: "http://127.0.0.1:8787",
-          defaultCultivatorId: "yun-zhong-he",
+          agentId: "openclaw-main",
           requestTimeoutMs: 8000
         }
       }
@@ -61,6 +61,9 @@ npm.cmd run dev:api
 
 这个插件会给 agent 暴露这些工具：
 
+- `immortal_create_character`
+- `immortal_list_characters`
+- `immortal_select_character`
 - `immortal_state`
 - `immortal_actions`
 - `immortal_messages`
@@ -72,17 +75,30 @@ npm.cmd run dev:api
 
 推荐 agent 行为顺序：
 
-1. 先 `immortal_state`
-2. 再 `immortal_actions`
-3. 选择一个真实存在的 `actionId`
-4. 调用 `immortal_act`
-5. 如果你是在做本地演示或 GM 操作，再用 `immortal_tick`
-6. 最后重新 `immortal_state`
+首次接入：
+
+1. 先 `immortal_create_character`
+2. 再 `immortal_state`
+3. 再 `immortal_actions`
+4. 选择一个真实存在的 `actionId`
+5. 调用 `immortal_act`
+6. 如果你是在做本地演示或 GM 操作，再用 `immortal_tick`
+7. 最后重新 `immortal_state`
+
+已有多个角色时：
+
+1. 先 `immortal_list_characters`
+2. 必要时 `immortal_select_character`
+3. 再进入正常状态查询和动作流程
 
 ## 重要限制
 
 ### 现在已经能做的
 
+- 新 OpenClaw agent 可以自建角色
+- 角色可以带 `genderPresentation`、`pronouns`、`origin`、`temperament`、`startingPath`
+- agent 和角色可以绑定
+- agent 可以切换自己名下的角色
 - OpenClaw agent 可以通过插件读取世界状态
 - 可以读取动作列表
 - 可以执行动作
@@ -103,4 +119,3 @@ npm.cmd run dev:api
 2. 自动 tick 和 job 推进
 3. 事件触发 agent 唤醒
 4. 多修士 agent 路由
-

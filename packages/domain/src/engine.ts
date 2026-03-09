@@ -1,10 +1,13 @@
 import type {
+  AgentBinding,
   ActionExecutionResult,
   ActionId,
   ActionJob,
   AvailableAction,
+  CharacterSummary,
   Cultivator,
   CultivatorStateView,
+  CreateCultivatorInput,
   ImmediateActionId,
   ItemId,
   TickSummary,
@@ -54,6 +57,98 @@ function getCultivatorOrThrow(world: WorldState, cultivatorId: string): Cultivat
     throw new Error(`Cultivator not found: ${cultivatorId}`);
   }
   return cultivator;
+}
+
+function getAgentBinding(world: WorldState, agentId: string): AgentBinding | null {
+  return world.agentBindings[agentId] ?? null;
+}
+
+function ensureAgentBinding(world: WorldState, agentId: string): AgentBinding {
+  const existing = getAgentBinding(world, agentId);
+  if (existing) {
+    return existing;
+  }
+  const created: AgentBinding = {
+    agentId,
+    cultivatorIds: [],
+    selectedCultivatorId: null,
+  };
+  world.agentBindings[agentId] = created;
+  return created;
+}
+
+function normalizeAgentId(input: string | null | undefined): string | null {
+  if (!input) {
+    return null;
+  }
+  const agentId = input.trim();
+  return agentId.length > 0 ? agentId : null;
+}
+
+function defaultPronounsForGender(genderPresentation: Cultivator["genderPresentation"]): string {
+  switch (genderPresentation) {
+    case "male":
+      return "他/他的";
+    case "female":
+      return "她/她的";
+    case "nonbinary":
+    case "other":
+    case "unspecified":
+      return "TA/TA的";
+  }
+}
+
+function buildStarterProfile(startingPath: Cultivator["startingPath"]) {
+  switch (startingPath) {
+    case "sword":
+      return {
+        techniques: ["太乙剑诀", "清风步"],
+        spiritStones: 320,
+        inventory: { "healing-pill": 1, "qi-pill": 1 } as Record<ItemId, number>,
+        reputation: 16,
+      };
+    case "alchemy":
+      return {
+        techniques: ["温火诀", "灵草辨识"],
+        spiritStones: 280,
+        inventory: { "healing-pill": 2, "qi-pill": 0 } as Record<ItemId, number>,
+        reputation: 14,
+      };
+    case "array":
+      return {
+        techniques: ["基础阵纹", "静心诀"],
+        spiritStones: 260,
+        inventory: { "healing-pill": 1, "qi-pill": 2 } as Record<ItemId, number>,
+        reputation: 15,
+      };
+    case "wanderer":
+      return {
+        techniques: ["散修吐纳法", "轻身术"],
+        spiritStones: 360,
+        inventory: { "healing-pill": 1, "qi-pill": 1 } as Record<ItemId, number>,
+        reputation: 12,
+      };
+  }
+}
+
+function toCharacterSummary(
+  cultivator: Cultivator,
+  selectedCultivatorId: string | null,
+): CharacterSummary {
+  return {
+    id: cultivator.id,
+    name: cultivator.name,
+    genderPresentation: cultivator.genderPresentation,
+    pronouns: cultivator.pronouns,
+    origin: cultivator.origin,
+    temperament: cultivator.temperament,
+    startingPath: cultivator.startingPath,
+    realm: cultivator.realm,
+    realmLevel: cultivator.realmLevel,
+    locationId: cultivator.locationId,
+    sectId: cultivator.sectId,
+    isSelected: selectedCultivatorId === cultivator.id,
+  };
 }
 
 function getStatus(cultivator: Cultivator): "idle" | "busy" | "injured" {
@@ -125,6 +220,148 @@ function addMessage(
     subject,
     content,
   });
+}
+
+export function createCultivator(
+  world: WorldState,
+  input: CreateCultivatorInput,
+): CharacterSummary {
+  const name = input.name.trim();
+  if (name.length < 1 || name.length > 24) {
+    throw new Error("Character name must be between 1 and 24 characters.");
+  }
+
+  const agentId = normalizeAgentId(input.agentId);
+  const genderPresentation = input.genderPresentation ?? "unspecified";
+  const startingPath = input.startingPath ?? "wanderer";
+  const starterProfile = buildStarterProfile(startingPath);
+  const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
+  const cultivator: Cultivator = {
+    id: cultivatorId,
+    name,
+    genderPresentation,
+    pronouns: input.pronouns?.trim() || defaultPronounsForGender(genderPresentation),
+    origin: input.origin?.trim() || "云州散修",
+    temperament: input.temperament?.trim() || "谨慎",
+    startingPath,
+    createdByAgentId: agentId,
+    realm: "炼气",
+    realmLevel: 1,
+    realmProgress: 0,
+    locationId: "mortal-town",
+    spiritStones: starterProfile.spiritStones,
+    qi: 100,
+    maxQi: 100,
+    spiritualPower: 100,
+    maxSpiritualPower: 100,
+    karma: 0,
+    reputation: starterProfile.reputation,
+    lifespan: 160,
+    age: clamp(input.age ?? 18, 16, 80),
+    sectId: null,
+    techniques: starterProfile.techniques,
+    inventory: starterProfile.inventory,
+    activeJobId: null,
+    injuryTicksRemaining: 0,
+    nextTribulationTick: 100,
+  };
+
+  world.cultivators[cultivator.id] = cultivator;
+
+  let selectedCultivatorId: string | null = null;
+  if (agentId) {
+    const binding = ensureAgentBinding(world, agentId);
+    binding.cultivatorIds.push(cultivator.id);
+    binding.selectedCultivatorId = cultivator.id;
+    selectedCultivatorId = binding.selectedCultivatorId;
+  }
+
+  addDaoLog(
+    world,
+    cultivator.id,
+    "入世",
+    `${cultivator.name} 初入仙途，自 ${cultivator.origin} 而来。虽只得一身浅薄修为，却也终于在尘世中有了自己的立足之地。`,
+    ["character", "creation", cultivator.startingPath],
+  );
+  addMessage(
+    world,
+    cultivator.id,
+    "天机记录",
+    "新修士入册",
+    `${cultivator.name} 已登记入册，当前走的是${cultivator.startingPath}路线。`,
+  );
+
+  return toCharacterSummary(cultivator, selectedCultivatorId);
+}
+
+export function listCultivators(world: WorldState, agentId?: string | null): CharacterSummary[] {
+  const normalizedAgentId = normalizeAgentId(agentId);
+  if (!normalizedAgentId) {
+    return Object.values(world.cultivators)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((cultivator) => toCharacterSummary(cultivator, null));
+  }
+
+  const binding = getAgentBinding(world, normalizedAgentId);
+  if (!binding) {
+    return [];
+  }
+
+  return binding.cultivatorIds
+    .map((cultivatorId) => world.cultivators[cultivatorId])
+    .filter((cultivator): cultivator is Cultivator => Boolean(cultivator))
+    .map((cultivator) => toCharacterSummary(cultivator, binding.selectedCultivatorId));
+}
+
+export function getAgentBindingInfo(world: WorldState, agentId: string) {
+  const normalizedAgentId = normalizeAgentId(agentId);
+  if (!normalizedAgentId) {
+    throw new Error("agentId is required.");
+  }
+  const binding = getAgentBinding(world, normalizedAgentId);
+  if (!binding) {
+    return {
+      agentId: normalizedAgentId,
+      cultivatorIds: [],
+      selectedCultivatorId: null,
+    };
+  }
+  return {
+    agentId: binding.agentId,
+    cultivatorIds: [...binding.cultivatorIds],
+    selectedCultivatorId: binding.selectedCultivatorId,
+  };
+}
+
+export function selectCultivatorForAgent(world: WorldState, agentId: string, cultivatorId: string) {
+  const normalizedAgentId = normalizeAgentId(agentId);
+  if (!normalizedAgentId) {
+    throw new Error("agentId is required.");
+  }
+  const binding = ensureAgentBinding(world, normalizedAgentId);
+  if (!binding.cultivatorIds.includes(cultivatorId)) {
+    throw new Error("The requested cultivator is not owned by this agent.");
+  }
+  binding.selectedCultivatorId = cultivatorId;
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  return {
+    agentId: normalizedAgentId,
+    selectedCultivatorId: cultivator.id,
+    selectedCultivator: toCharacterSummary(cultivator, cultivator.id),
+  };
+}
+
+export function resolveCultivatorIdForAgent(world: WorldState, agentId: string): string {
+  const normalizedAgentId = normalizeAgentId(agentId);
+  if (!normalizedAgentId) {
+    throw new Error("agentId is required.");
+  }
+  const binding = getAgentBinding(world, normalizedAgentId);
+  if (!binding?.selectedCultivatorId) {
+    throw new Error("This agent has no selected cultivator. Create or select a character first.");
+  }
+  getCultivatorOrThrow(world, binding.selectedCultivatorId);
+  return binding.selectedCultivatorId;
 }
 
 function getTravelTarget(actionId: TimedActionId): ZoneId | null {
@@ -494,6 +731,11 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       reputation: cultivator.reputation,
       lifespan: cultivator.lifespan,
       age: Number(cultivator.age.toFixed(2)),
+      genderPresentation: cultivator.genderPresentation,
+      pronouns: cultivator.pronouns,
+      origin: cultivator.origin,
+      temperament: cultivator.temperament,
+      startingPath: cultivator.startingPath,
     },
     cultivation: {
       mainTechnique: cultivator.techniques[0] ?? "无名吐纳术",

@@ -1,4 +1,6 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
+export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
+export type StartingPath = "sword" | "alchemy" | "array" | "wanderer";
 
 export type ZoneId =
   | "mortal-town"
@@ -52,6 +54,12 @@ export interface Sect {
 export interface Cultivator {
   id: string;
   name: string;
+  genderPresentation: GenderPresentation;
+  pronouns: string;
+  origin: string;
+  temperament: string;
+  startingPath: StartingPath;
+  createdByAgentId: string | null;
   realm: RealmStage;
   realmLevel: number;
   realmProgress: number;
@@ -100,6 +108,38 @@ export interface Message {
   content: string;
 }
 
+export interface AgentBinding {
+  agentId: string;
+  cultivatorIds: string[];
+  selectedCultivatorId: string | null;
+}
+
+export interface CharacterSummary {
+  id: string;
+  name: string;
+  genderPresentation: GenderPresentation;
+  pronouns: string;
+  origin: string;
+  temperament: string;
+  startingPath: StartingPath;
+  realm: RealmStage;
+  realmLevel: number;
+  locationId: ZoneId;
+  sectId: string | null;
+  isSelected: boolean;
+}
+
+export interface CreateCultivatorInput {
+  agentId?: string | null;
+  name: string;
+  genderPresentation?: GenderPresentation;
+  pronouns?: string;
+  age?: number;
+  origin?: string;
+  temperament?: string;
+  startingPath?: StartingPath;
+}
+
 export interface TribulationPreview {
   nextTribulationTick: number;
   tribulationType: string;
@@ -143,11 +183,13 @@ export interface TickSummary {
 export interface WorldState {
   tick: number;
   cultivators: Record<string, Cultivator>;
+  agentBindings: Record<string, AgentBinding>;
   sects: Record<string, Sect>;
   zones: Record<ZoneId, Zone>;
   jobs: Record<string, ActionJob>;
   daoLogs: DaoLogEntry[];
   messages: Message[];
+  nextCultivatorSequence: number;
   nextJobSequence: number;
   nextLogSequence: number;
   nextMessageSequence: number;
@@ -172,6 +214,11 @@ export interface CultivatorStateView {
     reputation: number;
     lifespan: number;
     age: number;
+    genderPresentation: GenderPresentation;
+    pronouns: string;
+    origin: string;
+    temperament: string;
+    startingPath: StartingPath;
   };
   cultivation: {
     mainTechnique: string;
@@ -189,4 +236,3 @@ export interface CultivatorStateView {
   currentJob: ActionJob | null;
   nearbyOpportunities: string[];
 }
-

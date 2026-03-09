@@ -54,6 +54,12 @@ const cultivators: Record<string, Cultivator> = {
   "yun-zhong-he": {
     id: "yun-zhong-he",
     name: "云中鹤",
+    genderPresentation: "male",
+    pronouns: "他/他的",
+    origin: "云州散修",
+    temperament: "谨慎",
+    startingPath: "sword",
+    createdByAgentId: null,
     realm: "炼气",
     realmLevel: 3,
     realmProgress: 42,
@@ -83,6 +89,7 @@ export function createSeedWorld(): WorldState {
   return {
     tick: 0,
     cultivators: structuredClone(cultivators),
+    agentBindings: {},
     sects: structuredClone(sects),
     zones: structuredClone(zones),
     jobs: {},
@@ -106,6 +113,7 @@ export function createSeedWorld(): WorldState {
         content: "青云宗近日开山收徒，凡炼气后期修士皆可前来山门试录。",
       },
     ]),
+    nextCultivatorSequence: 2,
     nextJobSequence: 1,
     nextLogSequence: 2,
     nextMessageSequence: 2,

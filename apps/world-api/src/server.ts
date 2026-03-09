@@ -1,14 +1,19 @@
 import http from "node:http";
 import {
   advanceWorld,
+  createCultivator,
   createSeedWorld,
+  getAgentBindingInfo,
   getCultivatorState,
   getDaoLogs,
   getMessages,
   getSectInfo,
   getTribulationPreview,
+  listCultivators,
   listAvailableActions,
   performAction,
+  resolveCultivatorIdForAgent,
+  selectCultivatorForAgent,
 } from "../../../packages/domain/src/index.js";
 
 const world = createSeedWorld();
@@ -49,6 +54,26 @@ function readCultivatorId(url: URL): string {
   return cultivatorId;
 }
 
+function readAgentId(url: URL): string {
+  const agentId = url.searchParams.get("agentId");
+  if (!agentId) {
+    throw new Error("Missing query parameter: agentId");
+  }
+  return agentId;
+}
+
+function resolveCultivatorId(url: URL): string {
+  const cultivatorId = url.searchParams.get("cultivatorId");
+  if (cultivatorId) {
+    return cultivatorId;
+  }
+  const agentId = url.searchParams.get("agentId");
+  if (agentId) {
+    return resolveCultivatorIdForAgent(world, agentId);
+  }
+  throw new Error("Missing query parameter: cultivatorId or agentId");
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const method = request.method ?? "GET";
@@ -65,12 +90,12 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (method === "GET" && url.pathname === "/cultivator/state") {
-      sendJson(response, 200, getCultivatorState(world, readCultivatorId(url)));
+      sendJson(response, 200, getCultivatorState(world, resolveCultivatorId(url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/actions") {
-      const cultivatorId = readCultivatorId(url);
+      const cultivatorId = resolveCultivatorId(url);
       sendJson(response, 200, {
         tick: world.tick,
         cultivatorId,
@@ -79,34 +104,87 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/cultivator/list") {
+      const agentId = url.searchParams.get("agentId");
+      sendJson(response, 200, {
+        tick: world.tick,
+        agentId,
+        characters: listCultivators(world, agentId),
+      });
+      return;
+    }
+
     if (method === "GET" && url.pathname === "/cultivator/messages") {
-      sendJson(response, 200, getMessages(world, readCultivatorId(url)));
+      sendJson(response, 200, getMessages(world, resolveCultivatorId(url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/tribulation") {
-      sendJson(response, 200, getTribulationPreview(world, readCultivatorId(url)));
+      sendJson(response, 200, getTribulationPreview(world, resolveCultivatorId(url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/sect") {
-      sendJson(response, 200, getSectInfo(world, readCultivatorId(url)));
+      sendJson(response, 200, getSectInfo(world, resolveCultivatorId(url)));
       return;
     }
 
     if (method === "GET" && url.pathname === "/cultivator/dao-heart") {
-      sendJson(response, 200, getDaoLogs(world, readCultivatorId(url)));
+      sendJson(response, 200, getDaoLogs(world, resolveCultivatorId(url)));
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/agent/binding") {
+      sendJson(response, 200, getAgentBindingInfo(world, readAgentId(url)));
       return;
     }
 
     if (method === "POST" && url.pathname === "/cultivator/act") {
       const body = await readJsonBody(request);
-      const cultivatorId = String(body.cultivatorId ?? "");
+      const directCultivatorId =
+        typeof body.cultivatorId === "string" ? body.cultivatorId.trim() : "";
+      const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
       const actionId = String(body.actionId ?? "");
+      const cultivatorId = directCultivatorId || (agentId ? resolveCultivatorIdForAgent(world, agentId) : "");
       if (!cultivatorId || !actionId) {
-        throw new Error("Body must include cultivatorId and actionId.");
+        throw new Error("Body must include actionId and either cultivatorId or agentId.");
       }
       sendJson(response, 200, performAction(world, cultivatorId, actionId as never));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/cultivator/create") {
+      const body = await readJsonBody(request);
+      const name = typeof body.name === "string" ? body.name : "";
+      if (!name.trim()) {
+        throw new Error("Body must include character name.");
+      }
+      sendJson(
+        response,
+        200,
+        createCultivator(world, {
+          agentId: typeof body.agentId === "string" ? body.agentId : undefined,
+          name,
+          genderPresentation:
+            typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
+          pronouns: typeof body.pronouns === "string" ? body.pronouns : undefined,
+          age: typeof body.age === "number" ? body.age : undefined,
+          origin: typeof body.origin === "string" ? body.origin : undefined,
+          temperament: typeof body.temperament === "string" ? body.temperament : undefined,
+          startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
+        }),
+      );
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/cultivator/select") {
+      const body = await readJsonBody(request);
+      const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+      const cultivatorId = typeof body.cultivatorId === "string" ? body.cultivatorId.trim() : "";
+      if (!agentId || !cultivatorId) {
+        throw new Error("Body must include agentId and cultivatorId.");
+      }
+      sendJson(response, 200, selectCultivatorForAgent(world, agentId, cultivatorId));
       return;
     }
 

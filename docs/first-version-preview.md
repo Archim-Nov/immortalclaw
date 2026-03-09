@@ -66,6 +66,24 @@ curl "http://127.0.0.1:8787/cultivator/dao-heart?cultivatorId=yun-zhong-he"
 - `use-qi-pill`
 - `join-sect`
 
+## 现在也支持 agent 自建角色
+
+新增的是一条完整的 agent onboarding 链：
+
+- 创建角色
+- 绑定到 agent
+- 查看自己名下角色
+- 切换当前操控角色
+
+角色元数据支持：
+
+- `name`
+- `genderPresentation`
+- `pronouns`
+- `origin`
+- `temperament`
+- `startingPath`
+
 ## 首版接 OpenClaw 的位置
 
 后续接 `OpenClaw` 时，建议只把下面几个接口封成插件工具：
@@ -79,4 +97,3 @@ curl "http://127.0.0.1:8787/cultivator/dao-heart?cultivatorId=yun-zhong-he"
 - `immortal_dao_logs`
 
 这样代理只负责“看世界、选动作、写文本”，真正的结算仍由世界内核完成。
-

@@ -24,12 +24,16 @@ type OpenClawPluginApiLike = {
   pluginConfig?: Record<string, unknown>;
   logger?: PluginLogger;
   registerTool: (tool: ToolDefinition) => void;
-  on?: (event: string, handler: (...args: unknown[]) => Promise<PromptHookResult> | PromptHookResult) => void;
+  on?: (
+    event: string,
+    handler: (...args: unknown[]) => Promise<PromptHookResult> | PromptHookResult,
+  ) => void;
 };
 
 type PluginConfig = {
   worldBaseUrl: string;
   defaultCultivatorId?: string;
+  agentId?: string;
   requestTimeoutMs: number;
 };
 
@@ -37,13 +41,21 @@ type PluginFactoryOptions = {
   fetchImpl?: FetchLike;
 };
 
-const CULTIVATOR_SCHEMA = {
+const GENDER_VALUES = ["male", "female", "nonbinary", "other", "unspecified"];
+const STARTING_PATH_VALUES = ["sword", "alchemy", "array", "wanderer"];
+
+const CULTIVATOR_OR_AGENT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
     cultivatorId: {
       type: "string",
-      description: "Cultivator id. Optional when plugin defaultCultivatorId is configured.",
+      description:
+        "Cultivator id. Optional when the plugin has an agentId with a selected character or a defaultCultivatorId configured.",
+    },
+    agentId: {
+      type: "string",
+      description: "Optional agent identity override used to resolve the selected cultivator.",
     },
   },
 };
@@ -54,7 +66,12 @@ const CULTIVATOR_LIMIT_SCHEMA = {
   properties: {
     cultivatorId: {
       type: "string",
-      description: "Cultivator id. Optional when plugin defaultCultivatorId is configured.",
+      description:
+        "Cultivator id. Optional when the plugin has an agentId with a selected character or a defaultCultivatorId configured.",
+    },
+    agentId: {
+      type: "string",
+      description: "Optional agent identity override used to resolve the selected cultivator.",
     },
     limit: {
       type: "number",
@@ -72,11 +89,87 @@ const ACT_SCHEMA = {
   properties: {
     cultivatorId: {
       type: "string",
-      description: "Cultivator id. Optional when plugin defaultCultivatorId is configured.",
+      description:
+        "Cultivator id. Optional when the plugin has an agentId with a selected character or a defaultCultivatorId configured.",
+    },
+    agentId: {
+      type: "string",
+      description: "Optional agent identity override used to resolve the selected cultivator.",
     },
     actionId: {
       type: "string",
       description: "Exact actionId returned by immortal_actions.",
+    },
+  },
+};
+
+const LIST_CHARACTERS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    agentId: {
+      type: "string",
+      description: "Optional agent identity override. Required if plugin agentId is not configured.",
+    },
+  },
+};
+
+const SELECT_CHARACTER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["cultivatorId"],
+  properties: {
+    agentId: {
+      type: "string",
+      description: "Optional agent identity override. Required if plugin agentId is not configured.",
+    },
+    cultivatorId: {
+      type: "string",
+      description: "Cultivator id to mark as selected for this agent.",
+    },
+  },
+};
+
+const CREATE_CHARACTER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name"],
+  properties: {
+    agentId: {
+      type: "string",
+      description: "Optional agent identity override. Required if plugin agentId is not configured.",
+    },
+    name: {
+      type: "string",
+      description: "Character name.",
+    },
+    genderPresentation: {
+      type: "string",
+      enum: GENDER_VALUES,
+      description: "Character gender presentation metadata.",
+    },
+    pronouns: {
+      type: "string",
+      description: "Optional pronoun text, for example 他/他的 or 她/她的.",
+    },
+    age: {
+      type: "number",
+      minimum: 16,
+      maximum: 80,
+      description: "Optional starting age.",
+    },
+    origin: {
+      type: "string",
+      description: "Optional hometown or background origin.",
+    },
+    temperament: {
+      type: "string",
+      description: "Optional temperament or disposition tag.",
+    },
+    startingPath: {
+      type: "string",
+      enum: STARTING_PATH_VALUES,
+      description: "Starting cultivation path.",
     },
   },
 };
@@ -101,36 +194,26 @@ function normalizeBaseUrl(input: unknown): string {
   return input.replace(/\/+$/, "");
 }
 
+function trimString(input: unknown): string | undefined {
+  if (typeof input !== "string") {
+    return undefined;
+  }
+  const value = input.trim();
+  return value.length > 0 ? value : undefined;
+}
+
 function resolvePluginConfig(pluginConfig: Record<string, unknown> | undefined): PluginConfig {
   const requestTimeoutMs =
     typeof pluginConfig?.requestTimeoutMs === "number"
       ? Math.max(100, Math.min(30000, Math.floor(pluginConfig.requestTimeoutMs)))
       : 8000;
-  const defaultCultivatorId =
-    typeof pluginConfig?.defaultCultivatorId === "string" &&
-    pluginConfig.defaultCultivatorId.trim().length > 0
-      ? pluginConfig.defaultCultivatorId.trim()
-      : undefined;
 
   return {
     worldBaseUrl: normalizeBaseUrl(pluginConfig?.worldBaseUrl),
-    defaultCultivatorId,
+    defaultCultivatorId: trimString(pluginConfig?.defaultCultivatorId),
+    agentId: trimString(pluginConfig?.agentId),
     requestTimeoutMs,
   };
-}
-
-function resolveCultivatorId(config: PluginConfig, params: Record<string, unknown>): string {
-  const fromParams =
-    typeof params.cultivatorId === "string" && params.cultivatorId.trim().length > 0
-      ? params.cultivatorId.trim()
-      : undefined;
-  if (fromParams) {
-    return fromParams;
-  }
-  if (config.defaultCultivatorId) {
-    return config.defaultCultivatorId;
-  }
-  throw new Error("cultivatorId is required because defaultCultivatorId is not configured.");
 }
 
 function clampLimit(input: unknown): number | undefined {
@@ -196,15 +279,21 @@ function jsonResult(name: string, payload: unknown) {
 }
 
 function buildPromptGuidance(config: PluginConfig): string {
+  const bindingIdentity = config.agentId
+    ? `Default agentId: ${config.agentId}. Use agent-bound character tools unless the user explicitly switches characters.`
+    : "";
   const defaultIdentity = config.defaultCultivatorId
-    ? `Default cultivatorId: ${config.defaultCultivatorId}. Use it when the user does not specify another cultivator.\n`
+    ? `Fallback defaultCultivatorId: ${config.defaultCultivatorId}.`
     : "";
 
   return [
     "You are connected to a live Immortal Realm world.",
-    defaultIdentity.trimEnd(),
+    bindingIdentity,
+    defaultIdentity,
     "Rules for this world integration:",
-    "- Never invent current state, inventory, sect membership, tribulation status, or action ids.",
+    "- Never invent current state, inventory, sect membership, tribulation status, character ownership, or action ids.",
+    "- For a fresh agent with no character, use `immortal_create_character` first, then `immortal_state` and `immortal_actions`.",
+    "- Use `immortal_list_characters` and `immortal_select_character` when the user wants to manage or switch characters.",
     "- Call `immortal_state` and `immortal_actions` before making strategic recommendations or taking actions.",
     "- Use the exact `actionId` returned by `immortal_actions` when calling `immortal_act`.",
     "- Timed actions are not complete until later state or tick results confirm completion.",
@@ -213,6 +302,64 @@ function buildPromptGuidance(config: PluginConfig): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function resolveAgentId(
+  config: PluginConfig,
+  params: Record<string, unknown>,
+  required: boolean,
+): string | undefined {
+  const agentId = trimString(params.agentId) ?? config.agentId;
+  if (required && !agentId) {
+    throw new Error("agentId is required because plugin agentId is not configured.");
+  }
+  return agentId;
+}
+
+async function getBindingForAgent(
+  fetchImpl: FetchLike,
+  config: PluginConfig,
+  agentId: string,
+): Promise<{ selectedCultivatorId: string | null }> {
+  const payload = await requestWorld(
+    fetchImpl,
+    config,
+    `/agent/binding?agentId=${encodeURIComponent(agentId)}`,
+  );
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid binding response from world API.");
+  }
+  return payload as { selectedCultivatorId: string | null };
+}
+
+async function resolveCultivatorId(
+  fetchImpl: FetchLike,
+  config: PluginConfig,
+  params: Record<string, unknown>,
+): Promise<string> {
+  const directCultivatorId = trimString(params.cultivatorId);
+  if (directCultivatorId) {
+    return directCultivatorId;
+  }
+
+  const agentId = resolveAgentId(config, params, false);
+  if (agentId) {
+    const binding = await getBindingForAgent(fetchImpl, config, agentId);
+    if (binding.selectedCultivatorId) {
+      return binding.selectedCultivatorId;
+    }
+    throw new Error(
+      `Agent ${agentId} has no selected cultivator. Create a character with immortal_create_character or select one with immortal_select_character.`,
+    );
+  }
+
+  if (config.defaultCultivatorId) {
+    return config.defaultCultivatorId;
+  }
+
+  throw new Error(
+    "cultivatorId is required because neither an agent-bound character nor defaultCultivatorId is configured.",
+  );
 }
 
 function createGetTool(params: {
@@ -229,9 +376,9 @@ function createGetTool(params: {
     name: params.name,
     label: params.label,
     description: params.description,
-    parameters: params.schema ?? CULTIVATOR_SCHEMA,
+    parameters: params.schema ?? CULTIVATOR_OR_AGENT_SCHEMA,
     execute: async (_toolCallId, rawParams) => {
-      const cultivatorId = resolveCultivatorId(params.config, rawParams);
+      const cultivatorId = await resolveCultivatorId(params.fetchImpl, params.config, rawParams);
       const payload = await requestWorld(
         params.fetchImpl,
         params.config,
@@ -261,6 +408,9 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         defaultCultivatorId: {
           type: "string",
         },
+        agentId: {
+          type: "string",
+        },
         requestTimeoutMs: {
           type: "number",
           minimum: 100,
@@ -274,8 +424,76 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       const log = api.logger ?? {};
 
       log.info?.(
-        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} defaultCultivatorId=${config.defaultCultivatorId ?? "none"}`,
+        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} agentId=${config.agentId ?? "none"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"}`,
       );
+
+      api.registerTool({
+        name: "immortal_create_character",
+        label: "Immortal Create Character",
+        description:
+          "Create a new cultivator for the current agent and select it as the active character.",
+        parameters: CREATE_CHARACTER_SCHEMA,
+        execute: async (_toolCallId, rawParams) => {
+          const agentId = resolveAgentId(config, rawParams, true);
+          const name = trimString(rawParams.name);
+          if (!name) {
+            throw new Error("name is required.");
+          }
+          const payload = await requestWorld(fetchImpl, config, "/cultivator/create", {
+            method: "POST",
+            body: JSON.stringify({
+              agentId,
+              name,
+              genderPresentation: trimString(rawParams.genderPresentation),
+              pronouns: trimString(rawParams.pronouns),
+              age:
+                typeof rawParams.age === "number" && Number.isFinite(rawParams.age)
+                  ? rawParams.age
+                  : undefined,
+              origin: trimString(rawParams.origin),
+              temperament: trimString(rawParams.temperament),
+              startingPath: trimString(rawParams.startingPath),
+            }),
+          });
+          return jsonResult("immortal_create_character", payload);
+        },
+      });
+
+      api.registerTool({
+        name: "immortal_list_characters",
+        label: "Immortal List Characters",
+        description:
+          "List the characters owned by the current agent, including which one is currently selected.",
+        parameters: LIST_CHARACTERS_SCHEMA,
+        execute: async (_toolCallId, rawParams) => {
+          const agentId = resolveAgentId(config, rawParams, true);
+          const payload = await requestWorld(
+            fetchImpl,
+            config,
+            `/cultivator/list?agentId=${encodeURIComponent(agentId!)}`,
+          );
+          return jsonResult("immortal_list_characters", payload);
+        },
+      });
+
+      api.registerTool({
+        name: "immortal_select_character",
+        label: "Immortal Select Character",
+        description: "Select which cultivator the current agent should control.",
+        parameters: SELECT_CHARACTER_SCHEMA,
+        execute: async (_toolCallId, rawParams) => {
+          const agentId = resolveAgentId(config, rawParams, true);
+          const cultivatorId = trimString(rawParams.cultivatorId);
+          if (!cultivatorId) {
+            throw new Error("cultivatorId is required.");
+          }
+          const payload = await requestWorld(fetchImpl, config, "/cultivator/select", {
+            method: "POST",
+            body: JSON.stringify({ agentId, cultivatorId }),
+          });
+          return jsonResult("immortal_select_character", payload);
+        },
+      });
 
       api.registerTool(
         createGetTool({
@@ -373,11 +591,8 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           "Execute an action for a cultivator in the Immortal Realm world. The actionId must come from immortal_actions.",
         parameters: ACT_SCHEMA,
         execute: async (_toolCallId, rawParams) => {
-          const cultivatorId = resolveCultivatorId(config, rawParams);
-          const actionId =
-            typeof rawParams.actionId === "string" && rawParams.actionId.trim().length > 0
-              ? rawParams.actionId.trim()
-              : null;
+          const cultivatorId = await resolveCultivatorId(fetchImpl, config, rawParams);
+          const actionId = trimString(rawParams.actionId);
           if (!actionId) {
             throw new Error("actionId is required.");
           }
@@ -416,4 +631,3 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
 }
 
 export default createImmortalRealmPlugin();
-

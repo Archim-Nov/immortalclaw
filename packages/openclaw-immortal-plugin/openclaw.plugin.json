@@ -13,6 +13,9 @@
       "defaultCultivatorId": {
         "type": "string"
       },
+      "agentId": {
+        "type": "string"
+      },
       "requestTimeoutMs": {
         "type": "number",
         "minimum": 100,
@@ -22,4 +25,3 @@
     }
   }
 }
-

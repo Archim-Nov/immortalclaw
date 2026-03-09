@@ -4,6 +4,9 @@ This plugin connects an OpenClaw agent to the local Immortal Claw world API.
 
 ## Tools
 
+- `immortal_create_character`
+- `immortal_list_characters`
+- `immortal_select_character`
 - `immortal_state`
 - `immortal_actions`
 - `immortal_messages`
@@ -28,6 +31,7 @@ This plugin connects an OpenClaw agent to the local Immortal Claw world API.
         enabled: true,
         config: {
           worldBaseUrl: "http://127.0.0.1:8787",
+          agentId: "openclaw-main",
           defaultCultivatorId: "yun-zhong-he",
           requestTimeoutMs: 8000
         }
@@ -39,10 +43,19 @@ This plugin connects an OpenClaw agent to the local Immortal Claw world API.
 
 ## Expected Flow
 
-1. `immortal_state`
-2. `immortal_actions`
-3. `immortal_act`
-4. optional `immortal_tick`
-5. re-check with `immortal_state`
+For a fresh agent:
+
+1. `immortal_create_character`
+2. `immortal_state`
+3. `immortal_actions`
+4. `immortal_act`
+5. optional `immortal_tick`
+6. re-check with `immortal_state`
+
+For an existing agent with multiple characters:
+
+1. `immortal_list_characters`
+2. `immortal_select_character`
+3. `immortal_state`
 
 The plugin also injects system guidance via `before_prompt_build` so the agent does not invent action ids or world state.
