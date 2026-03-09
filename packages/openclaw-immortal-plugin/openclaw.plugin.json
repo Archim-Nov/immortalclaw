@@ -1,0 +1,25 @@
+{
+  "id": "immortal-realm",
+  "name": "Immortal Realm",
+  "description": "Connect OpenClaw agents to the Immortal Claw world API.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "worldBaseUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8787"
+      },
+      "defaultCultivatorId": {
+        "type": "string"
+      },
+      "requestTimeoutMs": {
+        "type": "number",
+        "minimum": 100,
+        "maximum": 30000,
+        "default": 8000
+      }
+    }
+  }
+}
+
