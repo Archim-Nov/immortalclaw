@@ -1,5 +1,6 @@
 export type {
   ActionExecutionResult,
+  ActionId,
   AgentPersonaSyncResult,
   AvailableAction,
   CultivationRegistrationRecord,
