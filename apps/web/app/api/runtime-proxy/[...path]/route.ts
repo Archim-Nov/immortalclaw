@@ -29,3 +29,11 @@ export async function GET(
   const { path } = await context.params;
   return forwardRuntimeRequest(request, path);
 }
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await context.params;
+  return forwardRuntimeRequest(request, path);
+}

@@ -40,13 +40,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     return performAction(this.world, cultivatorId, actionId);
   }
 
-  async advanceWorld(steps: number): Promise<TickSummary> {
+  async advanceWorld(steps: number, trigger: TickRunRecord["trigger"] = "manual"): Promise<TickSummary> {
     const summary = advanceWorld(this.world, steps);
     this.latestTickRun = {
       tick: summary.tick,
       advancedTicks: summary.advancedTicks,
       recordedAt: this.now(),
-      trigger: "manual",
+      trigger,
     };
     return summary;
   }

@@ -27,7 +27,7 @@ export async function runScheduledTick(
 
   try {
     const service = createRuntimeService({ repository: resolvedRepository });
-    await service.advanceWorld(readTickSteps(bindings));
+    await service.advanceWorld(readTickSteps(bindings), "scheduled");
   } finally {
     await resolvedRepository.releaseTickLock(lock.lockId);
   }

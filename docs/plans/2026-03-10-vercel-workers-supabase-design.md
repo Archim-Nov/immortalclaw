@@ -137,9 +137,11 @@ Local development should stay ergonomic even after the architecture split:
 - run the Vercel app locally for the web surface
 - run the Cloudflare Worker locally for runtime and API behavior through Wrangler and the Hono app
 - use either hosted-dev Supabase or local Supabase for persistence
-- replace implicit SQLite seeding with explicit seed and reset tooling
+- move toward explicit seed and reset tooling instead of relying on implicit SQLite seeding in the legacy harnesses
 
 The repo should keep a simple path for developers to inspect state, perform actions, and advance ticks without deploying the full stack.
+
+The older `apps/world-api` and `apps/world-worker` can remain in the repository as explicit local-only SQLite harnesses, but they should be documented as debugging backstops rather than as the primary runtime path.
 
 ## Verification Strategy
 
@@ -204,3 +206,14 @@ Implement it as a runtime-portable backend:
 - reserve Vercel for the web surface
 
 Do not introduce a separate always-on runtime service yet. Treat that as a future extension point rather than a requirement for the first deployable version.
+
+## Validation Deployment Notes
+
+The validation deployment milestone is satisfied when:
+
+- the Worker is deployed and responds to `/health`
+- runtime reads auto-seed or load state from Supabase
+- at least one action call persists rows into `world_actions`
+- scheduled ticking can be exercised locally or through Cloudflare trigger tooling
+
+That validation flow should be the default way this architecture is demonstrated going forward.

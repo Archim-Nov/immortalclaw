@@ -6,7 +6,7 @@ import {
 
 export interface RuntimeWorkerBindings {
   SUPABASE_URL?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
+  SUPABASE_SECRET_KEY?: string;
   WORLD_TICK_STEPS?: string;
   REPOSITORY?: WorldRepository;
 }
@@ -40,10 +40,10 @@ export function resolveRepository(
     return bindings.REPOSITORY;
   }
 
-  if (bindings.SUPABASE_URL && bindings.SUPABASE_SERVICE_ROLE_KEY) {
+  if (bindings.SUPABASE_URL && bindings.SUPABASE_SECRET_KEY) {
     return createSupabaseWorldRepository({
       url: bindings.SUPABASE_URL,
-      serviceRoleKey: bindings.SUPABASE_SERVICE_ROLE_KEY,
+      secretKey: bindings.SUPABASE_SECRET_KEY,
     });
   }
 

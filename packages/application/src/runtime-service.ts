@@ -5,19 +5,20 @@ import type {
   CultivatorStateView,
   TickSummary,
 } from "../../domain/src/runtime.js";
+import type { TickRunRecord } from "../../persistence/src/world-repository.js";
 
 export interface RuntimeRepository {
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listAvailableActions(cultivatorId: string): Promise<AvailableAction[]>;
   performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult>;
-  advanceWorld(steps: number): Promise<TickSummary>;
+  advanceWorld(steps: number, trigger?: TickRunRecord["trigger"]): Promise<TickSummary>;
 }
 
 export interface RuntimeService {
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listActions(cultivatorId: string): Promise<AvailableAction[]>;
   performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult>;
-  advanceWorld(steps: number): Promise<TickSummary>;
+  advanceWorld(steps: number, trigger?: TickRunRecord["trigger"]): Promise<TickSummary>;
 }
 
 export function createRuntimeService(options: { repository: RuntimeRepository }): RuntimeService {
@@ -33,8 +34,8 @@ export function createRuntimeService(options: { repository: RuntimeRepository })
     async performAction(cultivatorId, actionId) {
       return repository.performAction(cultivatorId, actionId);
     },
-    async advanceWorld(steps) {
-      return repository.advanceWorld(steps);
+    async advanceWorld(steps, trigger) {
+      return repository.advanceWorld(steps, trigger);
     },
   };
 }

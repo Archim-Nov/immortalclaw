@@ -6,7 +6,7 @@ Reshape Immortal Claw from a local Node.js prototype into a deployable multi-pla
 
 ## Problem
 
-The current prototype is optimized for local development:
+The original prototype was optimized for local development:
 
 - `apps/world-api` is a plain Node HTTP server
 - `apps/world-worker` is a long-running process
@@ -39,6 +39,7 @@ When the change is complete:
 - world state persists in Supabase instead of a local SQLite file
 - scheduled world progression runs through bounded tick executions instead of a resident worker process
 - local development still supports seeding, inspecting, acting on, and advancing the world
+- the older SQLite server and worker remain optional local-only harnesses rather than the primary production path
 
 ## Constraints
 
@@ -61,4 +62,7 @@ When the change is complete:
 
 - Should the first Postgres persistence pass use coarse world snapshots, normalized tables, or a hybrid model?
 - Should the public runtime API live entirely behind Cloudflare, or should Vercel proxy selected routes for the web app?
-- How aggressively should the repo preserve local SQLite support once Supabase is introduced?
+
+## Transition Decision
+
+Keep `apps/world-api` and `apps/world-worker` as explicit local SQLite harnesses for debugging and migration backstops, but treat `apps/runtime-worker` plus Supabase as the default runtime path for development guidance, validation deployment, and production.

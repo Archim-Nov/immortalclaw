@@ -113,6 +113,7 @@ test("advanceWorld delegates through the repository", async () => {
   const { world } = createWorldContext();
   const expected = advanceWorld(world, 1);
   let calledWithSteps = 0;
+  let calledWithTrigger: "manual" | "scheduled" | undefined;
 
   const service = createRuntimeService({
     repository: {
@@ -125,15 +126,17 @@ test("advanceWorld delegates through the repository", async () => {
       async performAction() {
         throw new Error("not used");
       },
-      async advanceWorld(inputSteps) {
+      async advanceWorld(inputSteps, inputTrigger) {
         calledWithSteps = inputSteps;
+        calledWithTrigger = inputTrigger;
         return expected;
       },
     },
   });
 
-  const result = await service.advanceWorld(1);
+  const result = await service.advanceWorld(1, "scheduled");
 
   assert.equal(calledWithSteps, 1);
+  assert.equal(calledWithTrigger, "scheduled");
   assert.deepEqual(result, expected);
 });

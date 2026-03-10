@@ -25,7 +25,7 @@ export interface WorldRepository {
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listAvailableActions(cultivatorId: string): Promise<AvailableAction[]>;
   performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult>;
-  advanceWorld(steps: number): Promise<TickSummary>;
+  advanceWorld(steps: number, trigger?: TickRunRecord["trigger"]): Promise<TickSummary>;
   getLatestTickRun(): Promise<TickRunRecord | null>;
   acquireTickLock(ownerId: string): Promise<TickLockRecord | null>;
   releaseTickLock(lockId: string): Promise<void>;

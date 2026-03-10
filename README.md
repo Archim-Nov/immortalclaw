@@ -1,17 +1,17 @@
 # Immortal Claw
 
-Immortal Claw is a persistent cultivation-world prototype that is being reshaped into a deployable split-platform application.
+Immortal Claw is a persistent cultivation-world prototype with a validated split-platform deployment path.
 
 ## Deployment Direction
 
-The current target architecture is:
+The current production architecture is:
 
 - `apps/web` on Vercel for the web shell and web-only routes
 - `apps/runtime-worker` on Cloudflare Workers with Hono for the runtime API and scheduled ticks
 - Supabase Postgres for durable world state
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
 
-The older `apps/world-api` and `apps/world-worker` remain in the repo as local SQLite harnesses during the migration. They are not the intended production path.
+The older `apps/world-api` and `apps/world-worker` remain in the repo as local SQLite harnesses for debugging and migration backstops. They are not the primary production path.
 
 ## Packages and Apps
 
@@ -72,12 +72,34 @@ Web app:
 Worker app:
 
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_SECRET_KEY`
 - `WORLD_TICK_STEPS`
+
+### Validation Deployment
+
+The validation deployment path is:
+
+- deploy `apps/runtime-worker` to Cloudflare Workers
+- point it at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
+- optionally point `apps/web` at the deployed Worker with `NEXT_PUBLIC_RUNTIME_BASE_URL`
+
+Validation smoke checks:
+
+```powershell
+curl "https://<worker-host>/health"
+curl "https://<worker-host>/cultivator/actions?cultivatorId=yun-zhong-he"
+curl -X POST "https://<worker-host>/cultivator/act" -H "Content-Type: application/json" -d "{\"cultivatorId\":\"yun-zhong-he\",\"actionId\":\"meditate\"}"
+```
+
+Check Supabase for rows in:
+
+- `world_snapshots`
+- `cultivator_records`
+- `world_actions`
 
 ### Legacy SQLite Harnesses
 
-These remain available while the migration is in progress:
+These remain available for local-only debugging:
 
 ```powershell
 npm.cmd run dev:legacy-api
@@ -103,6 +125,8 @@ curl "http://127.0.0.1:8787/cultivator/state?cultivatorId=yun-zhong-he"
 curl "http://127.0.0.1:8787/cultivator/actions?cultivatorId=yun-zhong-he"
 curl -X POST "http://127.0.0.1:8787/cultivator/act" -H "Content-Type: application/json" -d "{\"cultivatorId\":\"yun-zhong-he\",\"actionId\":\"cultivate\"}"
 ```
+
+These examples target the local runtime surface exposed by `npm.cmd run dev:worker`. Replace the base URL with your deployed Worker host for validation or hosted-dev checks.
 
 ## Spec-Driven Development
 

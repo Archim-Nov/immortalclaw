@@ -14,10 +14,14 @@ export interface RouteRegistrationOptions {
   repository?: WorldRepository;
 }
 
+function createStatusError(status: number, message: string) {
+  return Object.assign(new Error(message), { status });
+}
+
 function readCultivatorId(value: string | undefined): string {
   const cultivatorId = value?.trim();
   if (!cultivatorId) {
-    throw new Error("Missing query parameter: cultivatorId");
+    throw createStatusError(400, "Missing query parameter: cultivatorId");
   }
   return cultivatorId;
 }
@@ -55,7 +59,7 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const actionId = body.actionId?.trim();
 
     if (!actionId) {
-      throw new Error("Body must include actionId.");
+      throw createStatusError(400, "Body must include actionId.");
     }
 
     const payload = await service.performAction(cultivatorId, actionId as ActionId);
