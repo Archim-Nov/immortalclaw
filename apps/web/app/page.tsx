@@ -1,3 +1,13 @@
+import { readRuntimeBaseUrl } from "../lib/env.js";
+
 export default function HomePage() {
-  return <main>Immortal Claw web surface</main>;
+  const runtimeBaseUrl = readRuntimeBaseUrl();
+
+  return (
+    <main>
+      <h1>Immortal Claw</h1>
+      <p>Deployment-ready web surface for the Vercel shell.</p>
+      <p>Runtime endpoint: {runtimeBaseUrl ?? "not configured"}</p>
+    </main>
+  );
 }
