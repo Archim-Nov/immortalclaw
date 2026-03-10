@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import * as routeModule from "./[...path]/route.js";
+import * as routeModule from "./[...path]/route";
 
 test("POST proxies action requests to the runtime worker", async () => {
   const originalFetch = globalThis.fetch;

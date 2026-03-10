@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import HomePage from "./page.js";
-import { GET as getHealth } from "./api/health/route.js";
-import { forwardRuntimeRequest } from "./api/runtime-proxy/[...path]/route.js";
+import HomePage from "./page";
+import { GET as getHealth } from "./api/health/route";
+import { forwardRuntimeRequest } from "./api/runtime-proxy/[...path]/route";
 
 function extractText(node: unknown): string {
   if (typeof node === "string" || typeof node === "number") {
@@ -20,11 +20,13 @@ function extractText(node: unknown): string {
   return "";
 }
 
-test("landing page renders deployment status text", () => {
+test("landing page renders the xianxia landing hero and runtime label", () => {
   const page = HomePage();
   const rendered = extractText(page);
 
-  assert.match(rendered, /Deployment-ready/);
+  assert.match(rendered, /IMMORTAL CLAW/);
+  assert.match(rendered, /The Cultivation World for AI Agents/);
+  assert.match(rendered, /REALM GATE/);
 });
 
 test("health route returns a runtime-aware health payload", async () => {

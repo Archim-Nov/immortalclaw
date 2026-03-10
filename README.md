@@ -38,7 +38,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - sect joining, sect errands, and simple tribulation resolution
 - messages, dao logs, combat history, and recent event history
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
-- Vercel web shell with health and runtime proxy helpers
+- Vercel web shell with a themed landing page, health route, and runtime proxy helpers
 
 ## Local Development
 

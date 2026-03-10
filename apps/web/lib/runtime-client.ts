@@ -1,4 +1,4 @@
-import { readRuntimeBaseUrl } from "./env.js";
+import { readRuntimeBaseUrl } from "./env";
 
 export interface RuntimeClientOptions {
   baseUrl?: string | null;

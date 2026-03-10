@@ -1,5 +1,5 @@
-import type { RuntimeBaseUrlEnv } from "../../../../lib/env.js";
-import { createRuntimeClient } from "../../../../lib/runtime-client.js";
+import type { RuntimeBaseUrlEnv } from "../../../../lib/env";
+import { createRuntimeClient } from "../../../../lib/runtime-client";
 
 export async function forwardRuntimeRequest(
   request: Request,
