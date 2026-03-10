@@ -27,6 +27,7 @@ This follows the useful lesson from ClawCity: separate product delivery from run
 - Use short-lived compute invocations instead of permanent workers.
 - Keep runtime adapters thin.
 - Design for future runtime expansion without paying that cost now.
+- Use framework help at the transport edge only, not in the game logic core.
 
 ## Recommended Architecture
 
@@ -62,13 +63,26 @@ Supabase owns:
 - action and event history
 - future account linkage or auth-adjacent data
 
+### Worker Framework Boundary
+
+Use Hono inside `apps/runtime-worker` as the transport framework for:
+
+- route registration
+- middleware such as CORS, auth, and error mapping
+- request parsing and response helpers
+- runtime-specific composition
+
+Do not let Hono leak into `packages/domain`, `packages/application`, or `packages/persistence`.
+
+Those packages should stay framework-agnostic so the core game logic remains portable across Cloudflare Workers, local harnesses, and any future dedicated runtime service.
+
 ## Runtime Strategy
 
 Do not introduce a separate always-on runtime service in the first pass.
 
 Instead, treat runtime as an internal abstraction. The system should expose application use cases that can be called by:
 
-- a Cloudflare HTTP handler
+- a Hono HTTP handler running on Cloudflare Workers
 - a Cloudflare scheduled handler
 - a future queue consumer
 - a future dedicated runtime service if the product later needs one
@@ -82,7 +96,7 @@ The world should behave as a database-backed state machine.
 For request-driven actions:
 
 1. A client calls a Worker endpoint.
-2. The Worker invokes an application-layer use case.
+2. The Hono route invokes an application-layer use case.
 3. The use case loads the necessary world state from persistence repositories.
 4. The domain logic computes the result.
 5. The persistence layer writes the new state and append-only logs.
@@ -121,7 +135,7 @@ The domain package should no longer create or manage the database connection dir
 Local development should stay ergonomic even after the architecture split:
 
 - run the Vercel app locally for the web surface
-- run the Cloudflare Worker locally for runtime and API behavior
+- run the Cloudflare Worker locally for runtime and API behavior through Wrangler and the Hono app
 - use either hosted-dev Supabase or local Supabase for persistence
 - replace implicit SQLite seeding with explicit seed and reset tooling
 
@@ -133,7 +147,7 @@ Verification should cover three layers:
 
 - domain tests for simulation rules
 - application tests for use cases and repository contracts
-- adapter tests for the Worker and web entrypoints
+- adapter tests for the Hono Worker routes and scheduled handlers
 
 At least one end-to-end harness path should cover:
 
@@ -149,6 +163,7 @@ Benefits:
 - lower runtime cost than a Vercel-only scheduled backend
 - better fit for scheduled ticking than Vercel Hobby
 - cleaner separation between product shell and simulation runtime
+- Hono reduces raw transport boilerplate while staying lightweight
 - flexibility to add a dedicated runtime service later
 
 Costs:
@@ -156,11 +171,15 @@ Costs:
 - three-platform operational picture instead of one
 - more adapter and contract discipline required
 - migration effort to remove SQLite and Node-server assumptions
+- one more framework dependency at the Worker boundary
 
 ## Risks and Mitigations
 
 - Risk: transport adapters duplicate business logic.
   Mitigation: keep use cases in `packages/application` and contracts in `packages/contracts`.
+
+- Risk: Hono types or helpers leak into shared packages.
+  Mitigation: restrict Hono usage to `apps/runtime-worker`.
 
 - Risk: concurrent tick and action mutations corrupt state.
   Mitigation: add durable locking and idempotency in the application and persistence layers.
@@ -180,6 +199,7 @@ Implement it as a runtime-portable backend:
 - keep domain rules pure
 - add an application layer
 - add persistence adapters
+- use Hono as the Cloudflare Worker transport layer
 - move the public runtime API and scheduled ticks to Cloudflare Workers
 - reserve Vercel for the web surface
 

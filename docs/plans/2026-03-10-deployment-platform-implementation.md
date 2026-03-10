@@ -4,9 +4,9 @@
 
 **Goal:** Turn Immortal Claw into a deployable Vercel + Cloudflare Workers + Supabase application without baking platform-specific assumptions into the domain rules.
 
-**Architecture:** Keep `packages/domain` pure, add `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core, then attach thin Vercel and Cloudflare adapters. Replace the SQLite-backed resident-worker model with Supabase-backed repositories and bounded scheduled tick execution.
+**Architecture:** Keep `packages/domain` pure, add `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core, then attach thin Vercel and Cloudflare adapters. Use Hono only inside the Worker app for routing and middleware, and replace the SQLite-backed resident-worker model with Supabase-backed repositories and bounded scheduled tick execution.
 
-**Tech Stack:** TypeScript, Next.js on Vercel, Cloudflare Workers, Supabase Postgres, Node test runner, existing monorepo
+**Tech Stack:** TypeScript, Next.js on Vercel, Cloudflare Workers, Hono, Supabase Postgres, Node test runner, existing monorepo
 
 ---
 
@@ -27,6 +27,7 @@
 - Create: `apps/runtime-worker/package.json`
 - Create: `apps/runtime-worker/tsconfig.json`
 - Create: `apps/runtime-worker/wrangler.jsonc`
+- Create: `apps/runtime-worker/src/app.ts`
 - Create: `apps/runtime-worker/src/index.ts`
 - Create: `packages/application/src/index.ts`
 - Create: `packages/contracts/src/index.ts`
@@ -56,7 +57,8 @@ Expected: FAIL because the package file does not exist yet.
 - Convert the root package to explicit workspaces for `apps/*` and `packages/*`.
 - Add root scripts for `build`, `test`, `dev:web`, and `dev:worker`.
 - Add minimal package entrypoints for `apps/web`, `apps/runtime-worker`, `packages/application`, `packages/contracts`, and `packages/persistence`.
-- Add a placeholder Next.js app page and a placeholder Worker handler returning JSON.
+- Add Hono to `apps/runtime-worker` and scaffold a tiny app in `src/app.ts`.
+- Add a placeholder Next.js app page and a placeholder Worker adapter in `src/index.ts`.
 
 Use the smallest possible starter exports, for example:
 
@@ -64,13 +66,22 @@ Use the smallest possible starter exports, for example:
 export {};
 ```
 
-and a minimal Worker handler:
+and a minimal Hono app:
 
 ```ts
+import { Hono } from "hono";
+
+export const app = new Hono();
+app.get("/health", (c) => c.json({ ok: true }));
+```
+
+Then bridge it from the Worker entrypoint:
+
+```ts
+import { app } from "./app";
+
 export default {
-  async fetch(): Promise<Response> {
-    return Response.json({ ok: true });
-  },
+  fetch: app.fetch,
 };
 ```
 
@@ -149,7 +160,7 @@ export type RuntimeRepository = {
 };
 ```
 
-Keep HTTP, SQL, and Cloudflare types out of this package.
+Keep HTTP, SQL, Cloudflare, and Hono types out of this package.
 
 **Step 4: Run targeted tests and the full suite**
 
@@ -223,14 +234,16 @@ git add packages/persistence supabase
 git commit -m "feat: add Supabase persistence layer and schema"
 ```
 
-### Task 4: Port the runtime API and scheduled ticking to Cloudflare Workers
+### Task 4: Port the runtime API and scheduled ticking to Cloudflare Workers with Hono
 
 **Files:**
 - Create: `apps/runtime-worker/src/index.test.ts`
+- Modify: `apps/runtime-worker/src/app.ts`
 - Modify: `apps/runtime-worker/src/index.ts`
 - Create: `apps/runtime-worker/src/env.ts`
 - Create: `apps/runtime-worker/src/routes.ts`
 - Create: `apps/runtime-worker/src/scheduler.ts`
+- Create: `apps/runtime-worker/src/middleware.ts`
 - Modify: `packages/contracts/src/runtime-api.ts`
 - Modify: `packages/application/src/runtime-service.ts`
 
@@ -243,35 +256,40 @@ Create Worker tests that cover:
 - `POST /cultivator/act`
 - scheduled tick invocation
 
-Example test shape:
+Use the Hono app in tests where possible, for example:
 
 ```ts
 test("health route returns ok", async () => {
-  const response = await worker.fetch(new Request("https://runtime.test/health"), env, ctx);
+  const response = await app.request("https://runtime.test/health");
   assert.equal(response.status, 200);
 });
 ```
+
+Add one entrypoint-level test to confirm the Worker export still wires `fetch` and `scheduled` correctly.
 
 **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: FAIL because the routes and scheduler are placeholders.
 
-**Step 3: Implement thin Worker adapters**
+**Step 3: Implement thin Hono-based Worker adapters**
 
+- Register routes in Hono.
+- Add middleware for JSON errors, request logging, and CORS only if needed.
 - Parse requests in the Worker layer only.
 - Call the application service for all business behavior.
 - Add a scheduled handler that runs a bounded tick batch.
 - Read Supabase connection settings from Worker environment bindings.
 - Return typed JSON responses using the shared contracts package.
 
-Keep the handler shape as small as possible:
+Keep the entrypoint shape as small as possible:
 
 ```ts
+import { app } from "./app";
+import { runScheduledTick } from "./scheduler";
+
 export default {
-  async fetch(request, env, ctx) {
-    return handleRequest(request, env, ctx);
-  },
+  fetch: app.fetch,
   async scheduled(event, env, ctx) {
     return runScheduledTick(event, env, ctx);
   },
@@ -289,7 +307,7 @@ Expected: PASS with runtime endpoints covered and no regressions in the existing
 
 ```bash
 git add apps/runtime-worker packages/application packages/contracts
-git commit -m "feat: move runtime API and ticks to Cloudflare Workers"
+git commit -m "feat: move runtime API and ticks to Hono on Cloudflare Workers"
 ```
 
 ### Task 5: Add the Vercel web surface and integrate the runtime boundary
