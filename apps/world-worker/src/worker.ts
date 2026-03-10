@@ -1,7 +1,10 @@
 import { advanceWorld } from "../../../packages/domain/src/engine.js";
-import { createWorldStore } from "../../../packages/domain/src/store.js";
+import { createSqliteWorldStore } from "../../../packages/domain/src/store.js";
 
-const store = createWorldStore({
+const LEGACY_HARNESS_NOTICE =
+  "[world-worker] Legacy local SQLite harness. Use apps/runtime-worker for the primary scheduled tick path and deployed traffic.";
+
+const store = createSqliteWorldStore({
   filePath: process.env.WORLD_DB_PATH,
 });
 
@@ -45,8 +48,9 @@ function runCycle(): void {
   }
 }
 
+console.warn(LEGACY_HARNESS_NOTICE);
 console.log(
-  `[world-worker] using ${store.filePath}, interval=${tickIntervalMs}ms, steps=${tickSteps}`,
+  `[world-worker] local-only SQLite harness using ${store.filePath}, interval=${tickIntervalMs}ms, steps=${tickSteps}`,
 );
 
 runCycle();

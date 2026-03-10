@@ -110,6 +110,12 @@ export class SqliteWorldStore {
   }
 }
 
-export function createWorldStore(options: StoreOptions = {}): SqliteWorldStore {
+export function createSqliteWorldStore(options: StoreOptions = {}): SqliteWorldStore {
   return new SqliteWorldStore(options);
 }
+
+/**
+ * @deprecated Prefer `createSqliteWorldStore()` for the legacy local harnesses,
+ * or use `packages/persistence` for deployed runtimes backed by Supabase.
+ */
+export const createWorldStore = createSqliteWorldStore;

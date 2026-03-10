@@ -9,11 +9,16 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
     "outDir": "dist"
   },
   "include": [
     "apps/**/*.ts",
-    "packages/**/*.ts"
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx"
+  ],
+  "exclude": [
+    "apps/web/**/*"
   ]
 }
-

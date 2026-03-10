@@ -3,15 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && npm run build:web",
+    "build:web": "npm run build --workspace @immortal-claw/web",
     "dev:api": "tsx apps/world-api/src/server.ts",
-    "dev:worker": "tsx apps/world-worker/src/worker.ts",
-    "test": "node --import tsx --test packages/**/*.test.ts"
+    "dev:legacy-api": "tsx apps/world-api/src/server.ts",
+    "dev:legacy-worker": "tsx apps/world-worker/src/worker.ts",
+    "dev:web": "npm run dev --workspace @immortal-claw/web",
+    "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
+    "test": "node --import tsx --test apps/**/*.test.ts packages/**/*.test.ts",
+    "verify:worker": "npm run deploy --workspace @immortal-claw/runtime-worker -- --dry-run"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
 }

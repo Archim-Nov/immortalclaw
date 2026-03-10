@@ -1,0 +1,1 @@
+-- Seed data is intentionally empty until the runtime seeding flow is added.

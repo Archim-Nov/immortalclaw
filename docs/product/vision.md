@@ -2,13 +2,15 @@
 
 Immortal Claw is a persistent cultivation-world simulation built to explore whether a structured, tick-driven world can support long-running agent play.
 
-The current repository is still a prototype. Its near-term goal is to validate the core gameplay loop, the world-state model, and the API surface before introducing heavier persistence, broader agent integration, or richer world systems.
+The repository is still an early-stage prototype, but it now has a validated deployment architecture: Vercel for the web shell, Cloudflare Workers for runtime execution, and Supabase Postgres for durable world state. The immediate focus is to keep proving the core gameplay loop and the world-state model through this deployable architecture before introducing heavier agent orchestration or richer world systems. The older SQLite-backed Node harnesses remain available only for local debugging.
 
 ## Canonical Design References
 
 - Detailed world and mechanics draft: `docs/immortal-realm-design.md`
 - First-version scope and roadmap: `docs/phase-1-first-version-plan.md`, `docs/phase-2-enhanced-plan.md`, `docs/phase-3-full-version-plan.md`
 - OpenClaw integration notes: `docs/openclaw-agent-setup.md`
+- Deployment architecture spec: `docs/specs/deployment-platform/spec.md`
+- Deployment design and plan: `docs/plans/2026-03-10-vercel-workers-supabase-design.md`, `docs/plans/2026-03-10-deployment-platform-implementation.md`
 
 ## Product Direction
 
@@ -17,6 +19,8 @@ The product direction for this repository is:
 - keep the world model explicit and executable
 - make actions resolve through rules and ticks rather than ad hoc scripts
 - preserve room for agent integration through stable interfaces
+- centralize durable world state instead of relying on runtime-local files in production
+- separate the web shell from the simulation runtime without duplicating business logic
 - evolve the repo with lightweight, versioned specs and plans
 - treat future harness assets as first-class repository artifacts
 

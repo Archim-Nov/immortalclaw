@@ -12,4 +12,13 @@ This directory is reserved for validation assets that make the project easier to
 
 At this stage, harness engineering is intentionally lightweight. The repository is creating a stable home for scenarios and validation intent before adding heavier automation.
 
+Current high-value scenarios:
+
+- runtime API smoke: fetch health, state, actions, and act through `apps/runtime-worker`
+- scheduled tick smoke: advance the world through the Worker scheduled handler and verify tick metadata
+- web shell smoke: confirm the Vercel health route and runtime proxy wiring
+- legacy harness smoke: confirm the SQLite Node harnesses still work for local-only debugging during migration
+
+The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-action-and-tick.md`.
+
 Use `docs/process/harness-engineering.md` for the workflow guidance and `docs/templates/harness-checklist.md` for the first-pass format.
