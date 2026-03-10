@@ -4,7 +4,7 @@ export type {
   AvailableAction,
   CultivatorStateView,
   TickSummary,
-} from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
 
 import type {
   ActionExecutionResult,
@@ -12,7 +12,7 @@ import type {
   AvailableAction,
   CultivatorStateView,
   TickSummary,
-} from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
 
 export interface RuntimeHealthResponse {
   ok: boolean;

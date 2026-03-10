@@ -6,7 +6,7 @@ import {
   getCultivatorState,
   listAvailableActions,
   performAction,
-} from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
 import { createRuntimeService } from "./runtime-service.js";
 
 function createWorldContext() {

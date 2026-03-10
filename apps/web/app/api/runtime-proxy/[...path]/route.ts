@@ -1,9 +1,10 @@
+import type { RuntimeBaseUrlEnv } from "../../../../lib/env.js";
 import { createRuntimeClient } from "../../../../lib/runtime-client.js";
 
 export async function forwardRuntimeRequest(
   request: Request,
   pathSegments: string[],
-  env: NodeJS.ProcessEnv = process.env,
+  env: RuntimeBaseUrlEnv = process.env as RuntimeBaseUrlEnv,
   fetchImpl: typeof fetch = fetch,
 ) {
   const client = createRuntimeClient({

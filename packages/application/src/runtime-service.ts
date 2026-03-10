@@ -4,7 +4,7 @@ import type {
   AvailableAction,
   CultivatorStateView,
   TickSummary,
-} from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
 
 export interface RuntimeRepository {
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;

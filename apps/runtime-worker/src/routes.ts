@@ -4,7 +4,7 @@ import type {
   PerformActionRequest,
   RuntimeHealthResponse,
 } from "../../../packages/contracts/src/index.js";
-import type { ActionId } from "../../../packages/domain/src/index.js";
+import type { ActionId } from "../../../packages/domain/src/runtime.js";
 import type { Hono } from "hono";
 import type { WorldRepository } from "../../../packages/persistence/src/index.js";
 import type { RuntimeWorkerEnv } from "./env.js";

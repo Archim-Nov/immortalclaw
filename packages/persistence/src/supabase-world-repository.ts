@@ -5,7 +5,7 @@ import type {
   CultivatorStateView,
   TickSummary,
   WorldState,
-} from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
 import type { TickLockRecord, TickRunRecord, WorldRepository } from "./world-repository.js";
 
 export interface SupabaseWorldRepositoryOptions {

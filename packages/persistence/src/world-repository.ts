@@ -5,7 +5,7 @@ import type {
   CultivatorStateView,
   TickSummary,
   WorldState,
-} from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
 
 export interface TickRunRecord {
   tick: number;

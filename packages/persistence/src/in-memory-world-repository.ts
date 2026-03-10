@@ -4,8 +4,8 @@ import {
   getCultivatorState,
   listAvailableActions,
   performAction,
-} from "../../domain/src/index.js";
-import type { ActionId, TickSummary, WorldState } from "../../domain/src/index.js";
+} from "../../domain/src/runtime.js";
+import type { ActionId, TickSummary, WorldState } from "../../domain/src/runtime.js";
 import type { TickLockRecord, TickRunRecord, WorldRepository } from "./world-repository.js";
 
 export interface InMemoryWorldRepositoryOptions {

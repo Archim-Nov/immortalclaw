@@ -60,6 +60,7 @@ Useful verification commands:
 ```powershell
 npm.cmd test
 npm.cmd run build
+npm.cmd run verify:worker
 ```
 
 ### Runtime Environment

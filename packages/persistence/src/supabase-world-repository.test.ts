@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeedWorld } from "../../domain/src/index.js";
+import { createSeedWorld } from "../../domain/src/runtime.js";
 import { createInMemoryWorldRepository } from "./in-memory-world-repository.js";
 
 function createRepository() {
