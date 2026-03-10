@@ -10,13 +10,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev:api": "tsx apps/world-api/src/server.ts",
+    "dev:legacy-api": "tsx apps/world-api/src/server.ts",
+    "dev:legacy-worker": "tsx apps/world-worker/src/worker.ts",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
     "test": "node --import tsx --test apps/**/*.test.ts packages/**/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
 }

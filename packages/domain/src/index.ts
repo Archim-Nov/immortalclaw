@@ -36,4 +36,4 @@ export {
   syncCultivatorFromPersona,
 } from "./engine.js";
 export { createSeedWorld } from "./seed.js";
-export { SqliteWorldStore, createWorldStore } from "./store.js";
+export { SqliteWorldStore, createSqliteWorldStore, createWorldStore } from "./store.js";

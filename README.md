@@ -1,54 +1,106 @@
 # Immortal Claw
 
-Immortal Claw is a small persistent cultivation-world prototype.
+Immortal Claw is a persistent cultivation-world prototype that is being reshaped into a deployable split-platform application.
 
-## Packages
+## Deployment Direction
 
-- `packages/domain`: world rules, items, events, combat, persistence
-- `apps/world-api`: HTTP API
-- `apps/world-worker`: auto-tick worker
+The current target architecture is:
+
+- `apps/web` on Vercel for the web shell and web-only routes
+- `apps/runtime-worker` on Cloudflare Workers with Hono for the runtime API and scheduled ticks
+- Supabase Postgres for durable world state
+- `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
+
+The older `apps/world-api` and `apps/world-worker` remain in the repo as local SQLite harnesses during the migration. They are not the intended production path.
+
+## Packages and Apps
+
+- `apps/web`: Vercel-facing web surface
+- `apps/runtime-worker`: Cloudflare Worker runtime surface
+- `apps/world-api`: legacy local Node HTTP harness
+- `apps/world-worker`: legacy local auto-tick harness
+- `packages/domain`: simulation rules and world model
+- `packages/application`: transport-free use cases
+- `packages/contracts`: shared runtime request and response types
+- `packages/persistence`: repository interfaces and persistence adapters
 - `packages/openclaw-immortal-plugin`: OpenClaw plugin
-- `docs/`: project plans, product docs, and setup notes
+- `docs/`: specs, plans, process docs, and setup notes
+- `supabase/`: schema and seed scaffolding for the production data layer
 
 ## Current Features
 
-- persistent SQLite world snapshot
-- manual tick and auto tick worker
-- character creation, agent binding, character switching
-- zone travel, cultivation, healing, town tasks
-- mining, ruins exploration, basic PVE combat
-- pills, talismans, materials, buy/sell loop
-- status effects, ambient events, faction reputation
-- sect joining, sect errands, simple tribulation resolution
-- messages, dao logs, recent combat and event history
+- cultivation-world simulation with persistent world state
+- character creation, agent binding, and character switching
+- zone travel, cultivation, healing, and town tasks
+- mining, ruins exploration, and basic PVE combat
+- pills, talismans, materials, and buy/sell loops
+- status effects, ambient events, and faction reputation
+- sect joining, sect errands, and simple tribulation resolution
+- messages, dao logs, combat history, and recent event history
+- Hono-based runtime API routes and scheduled tick entrypoint scaffolding
+- Vercel web shell with health and runtime proxy helpers
 
-## Run
+## Local Development
+
+Install dependencies once:
 
 ```powershell
 npm.cmd install
-npm.cmd run dev:api
+```
+
+Primary local entrypoints:
+
+```powershell
+npm.cmd run dev:web
 npm.cmd run dev:worker
 ```
 
-Defaults:
+Useful verification commands:
+
+```powershell
+npm.cmd test
+npm.cmd run build
+```
+
+### Runtime Environment
+
+Web app:
+
+- `NEXT_PUBLIC_RUNTIME_BASE_URL`: base URL for the Cloudflare Worker runtime
+
+Worker app:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `WORLD_TICK_STEPS`
+
+### Legacy SQLite Harnesses
+
+These remain available while the migration is in progress:
+
+```powershell
+npm.cmd run dev:legacy-api
+npm.cmd run dev:legacy-worker
+```
+
+Legacy harness defaults:
 
 - API: `http://127.0.0.1:8787`
 - SQLite: `data/immortal-world.sqlite`
 
-Optional env vars:
+Legacy harness env vars:
 
 - `WORLD_DB_PATH`
 - `WORLD_TICK_INTERVAL_MS`
 - `WORLD_TICK_STEPS`
 - `PORT`
 
-## Example Calls
+## Example Runtime Calls
 
 ```powershell
 curl "http://127.0.0.1:8787/cultivator/state?cultivatorId=yun-zhong-he"
 curl "http://127.0.0.1:8787/cultivator/actions?cultivatorId=yun-zhong-he"
 curl -X POST "http://127.0.0.1:8787/cultivator/act" -H "Content-Type: application/json" -d "{\"cultivatorId\":\"yun-zhong-he\",\"actionId\":\"cultivate\"}"
-curl -X POST "http://127.0.0.1:8787/world/tick" -H "Content-Type: application/json" -d "{\"steps\":4}"
 ```
 
 ## Spec-Driven Development
@@ -72,6 +124,9 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/first-version-preview.md`
 - `docs/openclaw-agent-setup.md`
 - `docs/immortal-realm-design.md`
+- `docs/specs/deployment-platform/spec.md`
+- `docs/plans/2026-03-10-vercel-workers-supabase-design.md`
+- `docs/plans/2026-03-10-deployment-platform-implementation.md`
 
 ## OpenClaw
 

@@ -2,7 +2,7 @@ import http from "node:http";
 import type { CultivationRegistrationRecord, WorldState } from "../../../packages/domain/src/index.js";
 import {
   advanceWorld,
-  createWorldStore,
+  createSqliteWorldStore,
   getAgentBindingInfo,
   getCultivationRegistration,
   getCultivatorState,
@@ -18,7 +18,10 @@ import {
   syncCultivatorFromPersona,
 } from "../../../packages/domain/src/index.js";
 
-const store = createWorldStore({
+const LEGACY_HARNESS_NOTICE =
+  "[world-api] Legacy local SQLite harness. Production runtime traffic should go through apps/runtime-worker.";
+
+const store = createSqliteWorldStore({
   filePath: process.env.WORLD_DB_PATH,
 });
 const port = Number(process.env.PORT ?? 8787);
@@ -251,6 +254,7 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
+console.warn(LEGACY_HARNESS_NOTICE);
 server.listen(port, "127.0.0.1", () => {
   console.log(`Immortal Claw world API listening on http://127.0.0.1:${port}`);
 });

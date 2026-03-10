@@ -110,6 +110,8 @@ export class SqliteWorldStore {
   }
 }
 
-export function createWorldStore(options: StoreOptions = {}): SqliteWorldStore {
+export function createSqliteWorldStore(options: StoreOptions = {}): SqliteWorldStore {
   return new SqliteWorldStore(options);
 }
+
+export const createWorldStore = createSqliteWorldStore;
