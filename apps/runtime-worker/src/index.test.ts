@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import worker from "./index.js";
+import { createApp } from "./app.js";
+import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
+
+function createRepository() {
+  return createInMemoryWorldRepository();
+}
+
+test("health route returns ok", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  const response = await app.request("https://runtime.test/health");
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload, { ok: true });
+});
+
+test("state route returns cultivator state", async () => {
+  const repository = createRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+  const app = createApp({ repository });
+
+  const response = await app.request(`https://runtime.test/cultivator/state?cultivatorId=${cultivatorId}`);
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.cultivator.id, cultivatorId);
+});
+
+test("actions route returns available actions", async () => {
+  const repository = createRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+  const app = createApp({ repository });
+
+  const response = await app.request(`https://runtime.test/cultivator/actions?cultivatorId=${cultivatorId}`);
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.cultivatorId, cultivatorId);
+  assert.ok(Array.isArray(payload.actions));
+  assert.ok(payload.actions.length > 0);
+});
+
+test("act route performs an action", async () => {
+  const repository = createRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+  const app = createApp({ repository });
+
+  const response = await app.request("https://runtime.test/cultivator/act", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ cultivatorId, actionId: "cultivate" }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.cultivatorId, cultivatorId);
+  assert.equal(payload.actionId, "cultivate");
+  assert.equal(payload.accepted, true);
+});
+
+test("scheduled tick advances the world through the worker entrypoint", async () => {
+  const repository = createRepository();
+  const before = await repository.readWorld();
+
+  await worker.scheduled(
+    {
+      cron: "* * * * *",
+      scheduledTime: Date.now(),
+      type: "scheduled",
+    } as never,
+    {
+      REPOSITORY: repository,
+    } as never,
+    {
+      waitUntil() {
+        return undefined;
+      },
+    } as never,
+  );
+
+  const after = await repository.readWorld();
+  assert.ok(after.tick > before.tick);
+});
