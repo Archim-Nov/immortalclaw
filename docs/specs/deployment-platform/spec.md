@@ -2,7 +2,7 @@
 
 ## Summary
 
-Reshape Immortal Claw from a local Node.js prototype into a deployable multi-platform architecture with Vercel for the web surface, Cloudflare Workers for the runtime and API surface, and Supabase Postgres as the canonical system of record.
+Reshape Immortal Claw from a local Node.js prototype into a deployable multi-platform architecture with Cloudflare Pages for the web surface, Cloudflare Workers for the runtime and API surface, and Supabase Postgres as the canonical system of record.
 
 ## Problem
 
@@ -22,6 +22,7 @@ That shape is useful for early iteration, but it does not map cleanly to the dep
 - Separate product-facing web delivery from simulation runtime execution.
 - Replace the permanent worker model with bounded scheduled execution.
 - Preserve a path to add a dedicated runtime service later without rewriting core logic.
+- Migrate the web surface from Next.js on Vercel to a Vite React SPA on Cloudflare Pages.
 
 ## Non-Goals
 
@@ -34,12 +35,13 @@ That shape is useful for early iteration, but it does not map cleanly to the dep
 
 When the change is complete:
 
-- the web surface can be deployed through Vercel
+- the web surface can be deployed through Cloudflare Pages as a static SPA
 - the runtime and API surface can be deployed through Cloudflare Workers
 - world state persists in Supabase instead of a local SQLite file
 - scheduled world progression runs through bounded tick executions instead of a resident worker process
 - local development still supports seeding, inspecting, acting on, and advancing the world
 - the older SQLite server and worker remain optional local-only harnesses rather than the primary production path
+- browser routes are handled through client-side routing instead of Next.js route handlers
 
 ## Constraints
 
@@ -48,21 +50,22 @@ When the change is complete:
 - Persistent world updates must be safe under concurrent requests and scheduled ticks.
 - Source-of-truth docs must be updated alongside implementation.
 - The initial architecture should favor portability over provider-specific optimization.
+- The frontend should remain client-rendered for this migration and call the Worker origin directly.
 
 ## Acceptance Criteria
 
 - A shared application layer exists between transport adapters and domain logic.
 - The production persistence layer targets Supabase Postgres.
 - The Cloudflare Worker can serve the runtime and API surface and invoke scheduled ticks.
-- The Vercel app can host the web surface without embedding core simulation logic in route handlers.
+- The Vite app can build to static assets for Cloudflare Pages without embedding server-only logic in the frontend surface.
 - World mutation paths use durable coordination rather than in-memory single-process assumptions.
 - Local verification covers domain behavior, application use cases, and at least one end-to-end action-plus-tick flow.
 
 ## Open Questions
 
 - Should the first Postgres persistence pass use coarse world snapshots, normalized tables, or a hybrid model?
-- Should the public runtime API live entirely behind Cloudflare, or should Vercel proxy selected routes for the web app?
+- Should the public runtime API live entirely behind a separate Worker origin, or should the project unify frontend and backend deployment on Workers later?
 
 ## Transition Decision
 
-Keep `apps/world-api` and `apps/world-worker` as explicit local SQLite harnesses for debugging and migration backstops, but treat `apps/runtime-worker` plus Supabase as the default runtime path for development guidance, validation deployment, and production.
+Keep `apps/world-api` and `apps/world-worker` as explicit local SQLite harnesses for debugging and migration backstops, but treat `apps/web` on Cloudflare Pages plus `apps/runtime-worker` on Cloudflare Workers with Supabase as the default deployment path for development guidance, validation deployment, and production.
