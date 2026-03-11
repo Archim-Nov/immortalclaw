@@ -1,6 +1,7 @@
 {
   "name": "@immortal-claw/web",
   "private": true,
+  "description": "Vite React frontend for Cloudflare Pages.",
   "type": "module",
   "scripts": {
     "dev": "vite",

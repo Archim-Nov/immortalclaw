@@ -1,12 +1,14 @@
 # Deployment Platform Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+>
+> Status update on 2026-03-11: the repository completed a follow-on frontend migration that replaced the planned Vercel and Next.js web surface with a Vite React SPA on Cloudflare Pages. Treat Vercel and Next.js task details below as original draft context; current frontend guidance lives in `README.md` and the 2026-03-11 Vite Pages Worker plans.
 
-**Goal:** Turn Immortal Claw into a deployable Vercel + Cloudflare Workers + Supabase application without baking platform-specific assumptions into the domain rules.
+**Goal:** Turn Immortal Claw into a deployable Cloudflare Pages + Cloudflare Workers + Supabase application without baking platform-specific assumptions into the domain rules.
 
-**Architecture:** Keep `packages/domain` pure, add `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core, then attach thin Vercel and Cloudflare adapters. Use Hono only inside the Worker app for routing and middleware, and replace the SQLite-backed resident-worker model with Supabase-backed repositories and bounded scheduled tick execution.
+**Architecture:** Keep `packages/domain` pure, add `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core, then attach thin web and Cloudflare runtime adapters. Use Hono only inside the Worker app for routing and middleware, and replace the SQLite-backed resident-worker model with Supabase-backed repositories and bounded scheduled tick execution.
 
-**Tech Stack:** TypeScript, Next.js on Vercel, Cloudflare Workers, Hono, Supabase Postgres, Node test runner, existing monorepo
+**Tech Stack:** TypeScript, Vite and React on Cloudflare Pages, Cloudflare Workers, Hono, Supabase Postgres, Node test runner, existing monorepo
 
 ---
 
@@ -58,7 +60,7 @@ Expected: FAIL because the package file does not exist yet.
 - Add root scripts for `build`, `test`, `dev:web`, and `dev:worker`.
 - Add minimal package entrypoints for `apps/web`, `apps/runtime-worker`, `packages/application`, `packages/contracts`, and `packages/persistence`.
 - Add Hono to `apps/runtime-worker` and scaffold a tiny app in `src/app.ts`.
-- Add a placeholder Next.js app page and a placeholder Worker adapter in `src/index.ts`.
+- Add a placeholder web app page and a placeholder Worker adapter in `src/index.ts`.
 
 Use the smallest possible starter exports, for example:
 
@@ -310,7 +312,7 @@ git add apps/runtime-worker packages/application packages/contracts
 git commit -m "feat: move runtime API and ticks to Hono on Cloudflare Workers"
 ```
 
-### Task 5: Add the Vercel web surface and integrate the runtime boundary
+### Task 5: Historical draft for the web surface before the Vite Pages migration
 
 **Files:**
 - Modify: `apps/web/app/page.tsx`
@@ -338,20 +340,20 @@ Expected: FAIL because the web surface is still placeholder-only.
 - Replace the placeholder page with a concise deployment-ready landing page.
 - Add a small runtime client wrapper that reads the Worker base URL from environment.
 - Add a health endpoint and only add a proxy route if the web app needs same-origin runtime access.
-- Keep simulation logic out of the Vercel app.
+- Keep simulation logic out of the frontend web shell.
 
 **Step 4: Run web tests and build**
 
 Run:
 - `node --import tsx --test apps/web/app/page.test.tsx`
 - `npm run build`
-Expected: PASS with the Vercel app buildable and runtime integration isolated behind a client helper.
+Expected: PASS with the web app buildable and runtime integration isolated behind a client helper.
 
 **Step 5: Commit**
 
 ```bash
 git add apps/web
-git commit -m "feat: add Vercel web surface for deployment"
+git commit -m "feat: add web surface for deployment"
 ```
 
 ### Task 6: Remove SQLite-first assumptions, verify end to end, and sync docs
@@ -382,7 +384,7 @@ Expected: FAIL until docs and transitional compatibility code are updated.
 
 - Decide whether `apps/world-api` and `apps/world-worker` become dev-only harnesses or are removed.
 - Remove direct production guidance that points to SQLite and the resident worker.
-- Update README and product docs to describe the Vercel + Workers + Supabase architecture.
+- Update README and product docs to describe the Cloudflare Pages + Workers + Supabase architecture.
 - Update harness docs to include one end-to-end scenario for runtime action and ticking.
 
 **Step 4: Run full verification**

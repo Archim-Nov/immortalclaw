@@ -4,9 +4,9 @@ Immortal Claw is a persistent cultivation-world prototype with a validated split
 
 ## Deployment Direction
 
-The current production architecture is:
+The current target architecture is:
 
-- `apps/web` on Cloudflare Pages as a Vite web workspace
+- `apps/web` as a Vite React SPA deployed to Cloudflare Pages
 - `apps/runtime-worker` on Cloudflare Workers with Hono for the runtime API and scheduled ticks
 - Supabase Postgres for durable world state
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
@@ -38,7 +38,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - sect joining, sect errands, and simple tribulation resolution
 - messages, dao logs, combat history, and recent event history
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
-- Vite web build scaffold for the frontend migration
+- Vite SPA web shell with client-side routing and direct Worker runtime calls
 
 ## Local Development
 
@@ -73,17 +73,22 @@ Web app:
 
 Worker app:
 
+- `FRONTEND_ORIGIN`: required absolute frontend origin for CORS, for example `https://immortal-claw.pages.dev`
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 - `WORLD_TICK_STEPS`
+
+`FRONTEND_ORIGIN` should contain only the deployed frontend origin. Use a value like `https://immortal-claw.pages.dev`, not a path such as `https://immortal-claw.pages.dev/app`.
 
 ### Validation Deployment
 
 The validation deployment path is:
 
+- deploy `apps/web` to Cloudflare Pages
 - deploy `apps/runtime-worker` to Cloudflare Workers
-- point it at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
-- optionally point `apps/web` at the deployed Worker with `VITE_RUNTIME_BASE_URL`
+- set `FRONTEND_ORIGIN` on the Worker to the deployed Pages origin
+- point the Worker at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
+- set `VITE_RUNTIME_BASE_URL` in `apps/web` to the deployed Worker origin
 
 Validation smoke checks:
 

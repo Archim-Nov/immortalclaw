@@ -42,6 +42,8 @@ When the change is complete:
 - local development still supports seeding, inspecting, acting on, and advancing the world
 - the older SQLite server and worker remain optional local-only harnesses rather than the primary production path
 - browser routes are handled through client-side routing instead of Next.js route handlers
+- the browser reads the runtime base URL from `VITE_RUNTIME_BASE_URL`
+- the Worker CORS allowlist is configured through `FRONTEND_ORIGIN`
 
 ## Constraints
 
@@ -51,6 +53,7 @@ When the change is complete:
 - Source-of-truth docs must be updated alongside implementation.
 - The initial architecture should favor portability over provider-specific optimization.
 - The frontend should remain client-rendered for this migration and call the Worker origin directly.
+- `FRONTEND_ORIGIN` must be a valid absolute frontend origin such as `https://immortal-claw.pages.dev`.
 
 ## Acceptance Criteria
 
@@ -58,6 +61,8 @@ When the change is complete:
 - The production persistence layer targets Supabase Postgres.
 - The Cloudflare Worker can serve the runtime and API surface and invoke scheduled ticks.
 - The Vite app can build to static assets for Cloudflare Pages without embedding server-only logic in the frontend surface.
+- The frontend runtime client reads from `VITE_RUNTIME_BASE_URL` instead of `NEXT_PUBLIC_RUNTIME_BASE_URL`.
+- Worker deployment guidance documents `FRONTEND_ORIGIN` as a required binding for frontend CORS.
 - World mutation paths use durable coordination rather than in-memory single-process assumptions.
 - Local verification covers domain behavior, application use cases, and at least one end-to-end action-plus-tick flow.
 
