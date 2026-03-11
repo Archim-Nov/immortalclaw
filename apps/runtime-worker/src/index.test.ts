@@ -3,6 +3,7 @@ import test from "node:test";
 import worker from "./index.js";
 import { createApp } from "./app.js";
 import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
+import { LOCAL_VITE_PREVIEW_ORIGIN } from "./env.js";
 
 function createRepository() {
   return createInMemoryWorldRepository();
@@ -16,6 +17,40 @@ test("health route returns ok", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(payload, { ok: true });
+});
+
+test("worker fetch allows the local vite origin", async () => {
+  const response = await worker.fetch(
+    new Request("https://runtime.test/health", {
+      headers: {
+        origin: "http://localhost:5173",
+      },
+    }),
+    {
+      FRONTEND_ORIGIN: "https://immortal-claw.pages.dev",
+      REPOSITORY: createRepository(),
+    } as never,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:5173");
+});
+
+test("worker fetch allows the local vite preview origin", async () => {
+  const response = await worker.fetch(
+    new Request("https://runtime.test/health", {
+      headers: {
+        origin: LOCAL_VITE_PREVIEW_ORIGIN,
+      },
+    }),
+    {
+      FRONTEND_ORIGIN: "https://immortal-claw.pages.dev",
+      REPOSITORY: createRepository(),
+    } as never,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), LOCAL_VITE_PREVIEW_ORIGIN);
 });
 
 test("state route returns cultivator state", async () => {

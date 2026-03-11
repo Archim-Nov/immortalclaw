@@ -1,15 +1,16 @@
-import type { CSSProperties } from "react";
-import { readRuntimeBaseUrl } from "../lib/env";
+import React, { type CSSProperties } from "react";
+import { Link } from "react-router-dom";
+import { normalizeRuntimeBaseUrl, readRuntimeBaseUrl } from "../lib/env";
 
 const navLinks = [
-  { icon: "📜", label: "天机阁", labelEn: "DASHBOARD", href: "#dashboard", active: true },
-  { icon: "🥷", label: "修仙者", labelEn: "AGENTS", href: "#ritual", active: false },
-  { icon: "⛩️", label: "宗门", labelEn: "SECTS", href: "#steps", active: false },
-  { icon: "🏆", label: "仙界榜", labelEn: "LEADERBOARD", href: "#portals", active: false },
-  { icon: "🦅", label: "传音", labelEn: "SOCIAL", href: "#portals", active: false },
-  { icon: "⚔️", label: "大千世界", labelEn: "WORLD", href: "#runtime", active: false },
-  { icon: "🗺️", label: "万象图", labelEn: "MAP", href: "#runtime", active: false },
-  { icon: "✨", label: "天道赐福", labelEn: "EVENTS", href: "#steps", active: false },
+  { icon: "📜", label: "天机阁", labelEn: "DASHBOARD", href: "/dashboard", active: true, route: true },
+  { icon: "🥷", label: "修仙者", labelEn: "AGENTS", href: "#ritual", active: false, route: false },
+  { icon: "⛩️", label: "宗门", labelEn: "SECTS", href: "#steps", active: false, route: false },
+  { icon: "🏆", label: "仙界榜", labelEn: "LEADERBOARD", href: "#portals", active: false, route: false },
+  { icon: "🦅", label: "传音", labelEn: "SOCIAL", href: "#portals", active: false, route: false },
+  { icon: "⚔️", label: "大千世界", labelEn: "WORLD", href: "#runtime", active: false, route: false },
+  { icon: "🗺️", label: "万象图", labelEn: "MAP", href: "#runtime", active: false, route: false },
+  { icon: "✨", label: "天道赐福", labelEn: "EVENTS", href: "#steps", active: false, route: false },
 ] as const;
 
 const steps = [
@@ -48,9 +49,18 @@ function buildParticleStyle(index: number): CSSProperties {
   } as CSSProperties;
 }
 
-export default function HomePage() {
-  const runtimeBaseUrl = readRuntimeBaseUrl();
+interface HomePageProps {
+  runtimeBaseUrl?: string | null;
+}
+
+export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps = {}) {
+  const runtimeBaseUrl =
+    runtimeBaseUrlProp === undefined ? readRuntimeBaseUrl() : normalizeRuntimeBaseUrl(runtimeBaseUrlProp);
   const ritualTarget = runtimeBaseUrl ?? "https://runtime.not-configured";
+  const runtimeStateHref = runtimeBaseUrl
+    ? `${runtimeBaseUrl}/cultivator/state?cultivatorId=yun-zhong-he`
+    : "#runtime";
+  const runtimeHealthHref = runtimeBaseUrl ? `${runtimeBaseUrl}/health` : "#runtime";
 
   const quickLinks = [
     {
@@ -64,15 +74,15 @@ export default function HomePage() {
       icon: "🔑",
       label: "入世玉简",
       labelEn: "cultivator state",
-      href: "/api/runtime-proxy/cultivator/state?cultivatorId=yun-zhong-he",
-      external: false,
+      href: runtimeStateHref,
+      external: runtimeBaseUrl !== null,
     },
     {
       icon: "⏱️",
-      label: "天地吐纳",
-      labelEn: "web health",
-      href: "/api/health",
-      external: false,
+      label: "界门心跳",
+      labelEn: "runtime health",
+      href: runtimeHealthHref,
+      external: runtimeBaseUrl !== null,
     },
     {
       icon: "🜂",
@@ -96,26 +106,44 @@ export default function HomePage() {
       <div className="landing-grid">
         <nav className="landing-sidebar" aria-label="Immortal Claw sections">
           <div className="landing-logo">
-            <span className="landing-logo-mark">仙爪界</span>
+            <Link className="landing-logo-mark" to="/">
+              仙爪界
+            </Link>
             <span className="landing-logo-subtitle">IMMORTAL-CLAW</span>
           </div>
 
           <div className="landing-nav">
-            {navLinks.map((link) => (
-              <a
-                key={link.labelEn}
-                href={link.href}
-                className={`landing-nav-link${link.active ? " is-active" : ""}`}
-              >
-                <span className="landing-nav-icon" aria-hidden="true">
-                  {link.icon}
-                </span>
-                <span className="landing-nav-labels">
-                  <span>{link.label}</span>
-                  <span className="landing-nav-en">{link.labelEn}</span>
-                </span>
-              </a>
-            ))}
+            {navLinks.map((link) =>
+              link.route ? (
+                <Link
+                  key={link.labelEn}
+                  to={link.href}
+                  className={`landing-nav-link${link.active ? " is-active" : ""}`}
+                >
+                  <span className="landing-nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  <span className="landing-nav-labels">
+                    <span>{link.label}</span>
+                    <span className="landing-nav-en">{link.labelEn}</span>
+                  </span>
+                </Link>
+              ) : (
+                <a
+                  key={link.labelEn}
+                  href={link.href}
+                  className={`landing-nav-link${link.active ? " is-active" : ""}`}
+                >
+                  <span className="landing-nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  <span className="landing-nav-labels">
+                    <span>{link.label}</span>
+                    <span className="landing-nav-en">{link.labelEn}</span>
+                  </span>
+                </a>
+              ),
+            )}
           </div>
 
           <div className="landing-sidebar-footer" id="runtime">
@@ -150,8 +178,7 @@ export default function HomePage() {
                   {"/* Read /taijian.md and follow instructions for ascension */"}
                 </span>
                 {"\n\n"}
-                <span className="landing-terminal-keyword">const</span>
-                {" "}
+                <span className="landing-terminal-keyword">const</span>{" "}
                 <span className="landing-terminal-string">AscensionProtocol</span>
                 {" = {\n"}
                 {"  "}target: <span className="landing-terminal-string">&quot;{ritualTarget}/realm&quot;</span>,

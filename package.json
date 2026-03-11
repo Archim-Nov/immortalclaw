@@ -2,6 +2,7 @@
   "name": "immortal-claw",
   "version": "0.1.0",
   "private": true,
+  "description": "Immortal Claw monorepo with a Cloudflare Pages frontend, a Cloudflare Worker runtime, and Supabase persistence.",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -15,8 +16,8 @@
     "dev:legacy-worker": "tsx apps/world-worker/src/worker.ts",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
-    "test": "node --import tsx --test apps/**/*.test.ts packages/**/*.test.ts",
-    "verify:worker": "npm run deploy --workspace @immortal-claw/runtime-worker -- --dry-run"
+    "test": "node --import tsx --test \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"packages/**/*.test.ts\" \"packages/**/*.test.tsx\"",
+    "verify:worker": "node ./scripts/verify-worker.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

@@ -4,9 +4,9 @@ Immortal Claw is a persistent cultivation-world prototype with a validated split
 
 ## Deployment Direction
 
-The current production architecture is:
+The current target architecture is:
 
-- `apps/web` on Vercel for the web shell and web-only routes
+- `apps/web` as a Vite React SPA deployed to Cloudflare Pages
 - `apps/runtime-worker` on Cloudflare Workers with Hono for the runtime API and scheduled ticks
 - Supabase Postgres for durable world state
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
@@ -15,7 +15,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 
 ## Packages and Apps
 
-- `apps/web`: Vercel-facing web surface
+- `apps/web`: Vite web surface for Cloudflare Pages
 - `apps/runtime-worker`: Cloudflare Worker runtime surface
 - `apps/world-api`: legacy local Node HTTP harness
 - `apps/world-worker`: legacy local auto-tick harness
@@ -38,7 +38,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - sect joining, sect errands, and simple tribulation resolution
 - messages, dao logs, combat history, and recent event history
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
-- Vercel web shell with a themed landing page, health route, and runtime proxy helpers
+- Vite SPA web shell with client-side routing and direct Worker runtime calls
 
 ## Local Development
 
@@ -57,6 +57,12 @@ npm run dev:web
 npm run dev:worker
 ```
 
+Pinned local frontend ports:
+
+- `npm run dev:web` serves Vite dev on `http://localhost:5173`
+- `npm run preview --workspace @immortal-claw/web` serves the production build locally on `http://localhost:4173`
+- both Vite servers use `strictPort`, so they fail fast instead of silently moving to a different origin
+
 Useful verification commands:
 
 ```text
@@ -69,21 +75,50 @@ npm run verify:worker
 
 Web app:
 
-- `NEXT_PUBLIC_RUNTIME_BASE_URL`: base URL for the Cloudflare Worker runtime
+- `VITE_RUNTIME_BASE_URL`: base URL for the Cloudflare Worker runtime
 
 Worker app:
 
+- `FRONTEND_ORIGIN`: required absolute frontend origin for CORS, for example `https://immortal-claw.pages.dev`
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 - `WORLD_TICK_STEPS`
+
+`FRONTEND_ORIGIN` should contain only the deployed frontend origin. Use a value like `https://immortal-claw.pages.dev`, not a path such as `https://immortal-claw.pages.dev/app`.
+The Worker also permits:
+
+- local Vite dev at `http://localhost:5173`
+- local Vite preview at `http://localhost:4173`
+- Pages preview deployments tied to the configured `FRONTEND_ORIGIN` when that origin is a project `*.pages.dev` host
+
+If `FRONTEND_ORIGIN` is `https://immortal-claw.pages.dev`, the Worker will allow the production origin plus preview hosts such as:
+
+- `https://main.immortal-claw.pages.dev`
+- `https://<deployment-hash>.immortal-claw.pages.dev`
+
+The preview rule is intentionally narrow: it only accepts a single preview label in front of the configured project host and does not allow arbitrary `*.pages.dev` origins.
+
+### Cloudflare Pages Build Settings
+
+For this monorepo, configure the Pages project with:
+
+- Project root directory: `apps/web`
+- Build command: `npm run build`
+- Build output directory: `dist`
+
+That workspace build command runs the explicit web typecheck before `vite build`, so the Pages deployment path uses the same gate as local production builds.
+
+Set `VITE_RUNTIME_BASE_URL` in the Pages project environment so the SPA can call the runtime Worker directly.
 
 ### Validation Deployment
 
 The validation deployment path is:
 
+- deploy `apps/web` to Cloudflare Pages
 - deploy `apps/runtime-worker` to Cloudflare Workers
-- point it at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
-- optionally point `apps/web` at the deployed Worker with `NEXT_PUBLIC_RUNTIME_BASE_URL`
+- set `FRONTEND_ORIGIN` on the Worker to the deployed Pages origin
+- point the Worker at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
+- set `VITE_RUNTIME_BASE_URL` in `apps/web` to the deployed Worker origin
 
 Validation smoke checks:
 
@@ -152,8 +187,10 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/openclaw-agent-setup.md`
 - `docs/immortal-realm-design.md`
 - `docs/specs/deployment-platform/spec.md`
-- `docs/plans/2026-03-10-vercel-workers-supabase-design.md`
-- `docs/plans/2026-03-10-deployment-platform-implementation.md`
+- `docs/plans/2026-03-11-vite-pages-worker-design.md`
+- `docs/plans/2026-03-11-vite-pages-worker-implementation.md`
+- `docs/plans/2026-03-10-vercel-workers-supabase-design.md` (historical draft before the Vite Pages migration)
+- `docs/plans/2026-03-10-deployment-platform-implementation.md` (historical draft before the Vite Pages migration)
 
 ## OpenClaw
 

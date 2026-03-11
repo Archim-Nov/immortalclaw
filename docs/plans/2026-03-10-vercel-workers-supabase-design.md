@@ -1,4 +1,6 @@
-# Vercel, Cloudflare Workers, and Supabase Deployment Design
+# Cloudflare Pages, Cloudflare Workers, and Supabase Deployment Design
+
+> Status update on 2026-03-11: the follow-on frontend migration replaced the planned Vercel and Next.js web surface with a Vite React SPA on Cloudflare Pages. Treat older Vercel and Next.js references in this document as superseded design history unless they are restated below.
 
 ## Goal
 
@@ -14,7 +16,7 @@ The current repository has three prototype traits that are valuable locally but 
 
 The target operating model is:
 
-- Vercel for the web and product surface
+- Cloudflare Pages for the web and product surface
 - Cloudflare Workers for the runtime and scheduled execution surface
 - Supabase Postgres for durable state
 
@@ -33,7 +35,7 @@ This follows the useful lesson from ClawCity: separate product delivery from run
 
 ### Execution Surfaces
 
-- `apps/web`: Vercel-hosted frontend and web-specific endpoints.
+- `apps/web`: Vite React frontend deployed to Cloudflare Pages.
 - `apps/runtime-worker`: Cloudflare Worker for the runtime API, scheduled ticks, and future async entrypoints.
 - `packages/domain`: pure cultivation and world rules.
 - `packages/application`: orchestration layer for actions, state reads, tick advancement, validation, locks, and idempotency.
@@ -42,7 +44,7 @@ This follows the useful lesson from ClawCity: separate product delivery from run
 
 ### Responsibility Split
 
-Vercel owns:
+Cloudflare Pages owns:
 
 - the website
 - future player-facing UI
@@ -134,7 +136,7 @@ The domain package should no longer create or manage the database connection dir
 
 Local development should stay ergonomic even after the architecture split:
 
-- run the Vercel app locally for the web surface
+- run the Vite app locally for the web surface
 - run the Cloudflare Worker locally for runtime and API behavior through Wrangler and the Hono app
 - use either hosted-dev Supabase or local Supabase for persistence
 - move toward explicit seed and reset tooling instead of relying on implicit SQLite seeding in the legacy harnesses
@@ -162,8 +164,8 @@ At least one end-to-end harness path should cover:
 
 Benefits:
 
-- lower runtime cost than a Vercel-only scheduled backend
-- better fit for scheduled ticking than Vercel Hobby
+- clean separation between the static web shell and the simulation runtime
+- better fit for scheduled ticking than frontend-hosted server functions
 - cleaner separation between product shell and simulation runtime
 - Hono reduces raw transport boilerplate while staying lightweight
 - flexibility to add a dedicated runtime service later
@@ -194,7 +196,7 @@ Costs:
 
 ## Recommendation
 
-Adopt `Vercel + Cloudflare Workers + Supabase` as the target architecture.
+Adopt `Cloudflare Pages + Cloudflare Workers + Supabase` as the target architecture.
 
 Implement it as a runtime-portable backend:
 
@@ -203,7 +205,7 @@ Implement it as a runtime-portable backend:
 - add persistence adapters
 - use Hono as the Cloudflare Worker transport layer
 - move the public runtime API and scheduled ticks to Cloudflare Workers
-- reserve Vercel for the web surface
+- deploy the web surface as a Vite SPA on Cloudflare Pages
 
 Do not introduce a separate always-on runtime service yet. Treat that as a future extension point rather than a requirement for the first deployable version.
 
