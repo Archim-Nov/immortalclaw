@@ -6,6 +6,7 @@ The repository is still an early-stage prototype, but it now has a validated dep
 
 ## Canonical Design References
 
+- ClawCity gameplay-alignment baseline: `docs/specs/clawcity-gameplay-alignment/spec.md`
 - Detailed world and mechanics draft: `docs/immortal-realm-design.md`
 - First-version scope and roadmap: `docs/phase-1-first-version-plan.md`, `docs/phase-2-enhanced-plan.md`, `docs/phase-3-full-version-plan.md`
 - OpenClaw integration notes: `docs/openclaw-agent-setup.md`
@@ -16,6 +17,8 @@ The repository is still an early-stage prototype, but it now has a validated dep
 
 The product direction for this repository is:
 
+- preserve the ClawCity gameplay skeleton for world actions, social play, organizations, assets, and logs
+- add cultivation-specific differentiation through OC, attributes, five elements, realms, and combat extensions
 - keep the world model explicit and executable
 - make actions resolve through rules and ticks rather than ad hoc scripts
 - preserve room for agent integration through stable interfaces
