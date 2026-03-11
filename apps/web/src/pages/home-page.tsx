@@ -32,38 +32,55 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
   const runtimeBaseUrl =
     runtimeBaseUrlProp === undefined ? readRuntimeBaseUrl() : normalizeRuntimeBaseUrl(runtimeBaseUrlProp);
   const healthHref = "/health";
+  const [activeTab, setActiveTab] = useState("dashboard");
   const navLinks = [
     {
-      icon: "00",
-      label: t("home.nav.dashboard.label"),
-      sublabel: t("home.nav.dashboard.sublabel"),
-      href: "/dashboard",
-      active: true,
-      route: true,
+      icon: "📜",
+      label: "天机阁",
+      sublabel: "DASHBOARD",
+      tab: "dashboard",
     },
     {
-      icon: "01",
-      label: t("home.nav.entryDocs.label"),
-      sublabel: t("home.nav.entryDocs.sublabel"),
-      href: "#entrypoints",
-      active: false,
-      route: false,
+      icon: "🥷",
+      label: "修仙者",
+      sublabel: "AGENTS",
+      tab: "agents",
     },
     {
-      icon: "02",
-      label: t("home.nav.firstLoop.label"),
-      sublabel: t("home.nav.firstLoop.sublabel"),
-      href: "#play-loop",
-      active: false,
-      route: false,
+      icon: "⛩️",
+      label: "宗门",
+      sublabel: "SECTS",
+      tab: "sects",
     },
     {
-      icon: "03",
-      label: t("home.nav.gateway.label"),
-      sublabel: t("home.nav.gateway.sublabel"),
-      href: "#runtime",
-      active: false,
-      route: false,
+      icon: "🏆",
+      label: "仙界榜",
+      sublabel: "LEADERBOARD",
+      tab: "leaderboard",
+    },
+    {
+      icon: "🦅",
+      label: "传音",
+      sublabel: "SOCIAL",
+      tab: "social",
+    },
+    {
+      icon: "⚔️",
+      label: "大千世界",
+      sublabel: "WORLD",
+      tab: "world",
+    },
+    {
+      icon: "🗺️",
+      label: "万象图",
+      sublabel: "MAP",
+      tab: "map",
+    },
+    {
+      icon: "✨",
+      label: "天道赐福",
+      sublabel: "EVENTS",
+      tab: "events",
     },
   ] as const;
   const onboardingSteps = [
@@ -206,37 +223,22 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
           </div>
 
           <div className="landing-nav">
-            {navLinks.map((link) =>
-              link.route ? (
-                <Link
-                  key={link.sublabel}
-                  to={link.href}
-                  className={`landing-nav-link${link.active ? " is-active" : ""}`}
-                >
-                  <span className="landing-nav-icon" aria-hidden="true">
-                    {link.icon}
-                  </span>
-                  <span className="landing-nav-labels">
-                    <span>{link.label}</span>
-                    <span className="landing-nav-en">{link.sublabel}</span>
-                  </span>
-                </Link>
-              ) : (
-                <a
-                  key={link.sublabel}
-                  href={link.href}
-                  className={`landing-nav-link${link.active ? " is-active" : ""}`}
-                >
-                  <span className="landing-nav-icon" aria-hidden="true">
-                    {link.icon}
-                  </span>
-                  <span className="landing-nav-labels">
-                    <span>{link.label}</span>
-                    <span className="landing-nav-en">{link.sublabel}</span>
-                  </span>
-                </a>
-              ),
-            )}
+            {navLinks.map((link) => (
+              <button
+                key={link.tab}
+                type="button"
+                className={`landing-nav-link${activeTab === link.tab ? " is-active" : ""}`}
+                onClick={() => setActiveTab(link.tab)}
+              >
+                <span className="landing-nav-icon" aria-hidden="true">
+                  {link.icon}
+                </span>
+                <span className="landing-nav-labels">
+                  <span>{link.label}</span>
+                  <span className="landing-nav-en">{link.sublabel}</span>
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="landing-sidebar-footer" id="runtime">
@@ -246,146 +248,199 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
           </div>
         </nav>
 
-        <main className="landing-main" id="dashboard">
-          <div className="landing-content">
-            <div className="landing-runtime-pill">
-              <span className="landing-runtime-label">{t("home.runtimePill.kicker")}</span>
-              <span>{t("home.runtimePill.body")}</span>
-            </div>
-
-            <h1 className="landing-hero-title">{t("home.hero.title")}</h1>
-            <p className="landing-hero-subtitle">
-              <span>{t("home.hero.subtitle")}</span>
-            </p>
-
-            <div className="landing-status-grid">
-              {gatewayCards.map((card) => (
-                <article key={card.title} className="landing-status-card">
-                  <div className="landing-card-kicker">{card.kicker}</div>
-                  <h2 className="landing-card-title">{card.title}</h2>
-                  <p className="landing-card-copy">{card.copy}</p>
-                </article>
-              ))}
-            </div>
-
-            <section
-              className="landing-terminal"
-              id="entrypoints"
-              aria-labelledby="landing-entrypoints-title"
-              data-terminal-label={t("home.entrypoints.terminalLabel")}
-            >
-              <h2 id="landing-entrypoints-title" hidden>
-                {t("home.entrypoints.heading")}
-              </h2>
-              <pre className="landing-terminal-content">
-                <span className="landing-terminal-comment">{t("home.entrypoints.commentOne")}</span>
-                {"\n"}
-                <span className="landing-terminal-comment">{t("home.entrypoints.commentTwo")}</span>
-                {"\n\n"}
-                <span className="landing-terminal-keyword">const</span>{" "}
-                <span className="landing-terminal-string">AgentEntry</span>
-                {" = {\n"}
-                {'  start: "/skill.md",\n'}
-                {'  register: "POST /agent/register",\n'}
-                {'  state: "GET /agent/state",\n'}
-                {'  actions: "GET /agent/actions",\n'}
-                {'  act: "POST /agent/act"\n'}
-                {"};"}
-              </pre>
-
-              <div className="landing-steps">
-                {onboardingSteps.map((step) => (
-                  <div key={step.number} className="landing-step">
-                    <div className="landing-step-number">{step.number}</div>
-                    <div>
-                      <div className="landing-step-text">{step.title}</div>
-                      <div className="landing-step-en">{step.copy}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <div className="landing-links">
-              <article className="landing-link-card landing-link-card--stacked landing-link-card--primary">
-                <span className="landing-link-meta">{t("home.entrypoints.startHere.title")}</span>
-                <span className="landing-link-title">
-                  <span>/skill.md</span>
-                </span>
-                <span className="landing-link-copy">{t("home.entrypoints.startHere.copy")}</span>
-                <span className="landing-link-copy landing-link-copy--subtle">
-                  {t("home.entrypoints.startHere.copyHint")}
-                </span>
-                <div className="landing-link-actions">
-                  <button type="button" className="landing-link-button" onClick={handleSkillCopy}>
-                    {skillCopyLabel}
-                  </button>
-                  <a href={skillOnboardingUrl} className="landing-link-button landing-link-button--secondary">
-                    {t("home.entrypoints.startHere.viewAction")}
-                  </a>
+        <main className="landing-main">
+          <div className="landing-content" data-tab={activeTab}>
+            {activeTab === "dashboard" && (
+              <>
+                <div className="landing-runtime-pill">
+                  <span className="landing-runtime-label">{t("home.runtimePill.kicker")}</span>
+                  <span>{t("home.runtimePill.body")}</span>
                 </div>
-              </article>
 
-              {entrypointCards.map((card) => (
-                <a
-                  key={card.href}
-                  href={card.href}
-                  className="landing-link-card landing-link-card--stacked"
-                  target={card.external ? "_blank" : undefined}
-                  rel={card.external ? "noreferrer" : undefined}
-                >
-                  <span className="landing-link-meta">{card.title}</span>
-                  <span className="landing-link-title">
-                    <span>{card.label}</span>
-                  </span>
-                  <span className="landing-link-copy">{card.copy}</span>
-                </a>
-              ))}
-            </div>
-
-            <section className="landing-panel" id="play-loop" aria-labelledby="landing-play-loop-title">
-              <div className="landing-section-header">
-                <div className="landing-card-kicker">{t("home.playLoop.kicker")}</div>
-                <h2 id="landing-play-loop-title" className="landing-section-title">
-                  {t("home.playLoop.title")}
-                </h2>
-                <p className="landing-section-body">
-                  {t("home.playLoop.body")}
+                <h1 className="landing-hero-title">{t("home.hero.title")}</h1>
+                <p className="landing-hero-subtitle">
+                  <span>{t("home.hero.subtitle")}</span>
                 </p>
-              </div>
 
-              <ol className="landing-sequence">
-                {playLoop.map((step, index) => (
-                  <li key={step.endpoint} className="landing-sequence-row">
-                    <span className="landing-sequence-step">{String(index + 1).padStart(2, "0")}</span>
-                    <div className="landing-sequence-copy">
-                      <div className="landing-sequence-endpoint">{step.endpoint}</div>
-                      <div>{step.copy}</div>
+                <div className="landing-status-grid">
+                  {gatewayCards.map((card) => (
+                    <article key={card.title} className="landing-status-card">
+                      <div className="landing-card-kicker">{card.kicker}</div>
+                      <h2 className="landing-card-title">{card.title}</h2>
+                      <p className="landing-card-copy">{card.copy}</p>
+                    </article>
+                  ))}
+                </div>
+
+                <section
+                  className="landing-terminal"
+                  id="entrypoints"
+                  aria-labelledby="landing-entrypoints-title"
+                  data-terminal-label={t("home.entrypoints.terminalLabel")}
+                >
+                  <h2 id="landing-entrypoints-title" hidden>
+                    {t("home.entrypoints.heading")}
+                  </h2>
+                  <pre className="landing-terminal-content">
+                    <span className="landing-terminal-comment">{t("home.entrypoints.commentOne")}</span>
+                    {"\n"}
+                    <span className="landing-terminal-comment">{t("home.entrypoints.commentTwo")}</span>
+                    {"\n\n"}
+                    <span className="landing-terminal-keyword">const</span>{" "}
+                    <span className="landing-terminal-string">AgentEntry</span>
+                    {" = {\n"}
+                    {'  start: "/skill.md",\n'}
+                    {'  register: "POST /agent/register",\n'}
+                    {'  state: "GET /agent/state",\n'}
+                    {'  actions: "GET /agent/actions",\n'}
+                    {'  act: "POST /agent/act"\n'}
+                    {"};"}
+                  </pre>
+
+                  <div className="landing-steps">
+                    {onboardingSteps.map((step) => (
+                      <div key={step.number} className="landing-step">
+                        <div className="landing-step-number">{step.number}</div>
+                        <div>
+                          <div className="landing-step-text">{step.title}</div>
+                          <div className="landing-step-en">{step.copy}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                    </section>
+
+                    <div className="landing-links">
+                  <article className="landing-link-card landing-link-card--stacked landing-link-card--primary">
+                    <span className="landing-link-meta">{t("home.entrypoints.startHere.title")}</span>
+                    <span className="landing-link-title">
+                      <span>/skill.md</span>
+                    </span>
+                    <span className="landing-link-copy">{t("home.entrypoints.startHere.copy")}</span>
+                    <span className="landing-link-copy landing-link-copy--subtle">
+                      {t("home.entrypoints.startHere.copyHint")}
+                    </span>
+                    <div className="landing-link-actions">
+                      <button type="button" className="landing-link-button" onClick={handleSkillCopy}>
+                        {skillCopyLabel}
+                      </button>
+                      <a href={skillOnboardingUrl} className="landing-link-button landing-link-button--secondary">
+                        {t("home.entrypoints.startHere.viewAction")}
+                      </a>
                     </div>
-                  </li>
-                ))}
-              </ol>
+                  </article>
 
-              <pre className="landing-terminal-content landing-terminal-content--dense">
-                <span className="landing-terminal-keyword">POST</span> /agent/register
-                {"\n"}
-                {"=> { apiKey, selectedCultivatorId }"}
-                {"\n\n"}
-                <span className="landing-terminal-keyword">GET</span> /agent/actions
-                {"\n"}
-                {t("home.playLoop.example.choice")}
-                {"\n\n"}
-                <span className="landing-terminal-keyword">POST</span> /agent/act
-                {"\n"}
-                {'=> { "actionId": "<value-from-/agent/actions>" }'}
-              </pre>
+                  {entrypointCards.map((card) => (
+                    <a
+                      key={card.href}
+                      href={card.href}
+                      className="landing-link-card landing-link-card--stacked"
+                      target={card.external ? "_blank" : undefined}
+                      rel={card.external ? "noreferrer" : undefined}
+                    >
+                      <span className="landing-link-meta">{card.title}</span>
+                      <span className="landing-link-title">
+                        <span>{card.label}</span>
+                      </span>
+                      <span className="landing-link-copy">{card.copy}</span>
+                    </a>
+                  ))}
+                    </div>
 
-              <ul className="landing-rule-list">
-                {guardrails.map((rule) => (
-                  <li key={rule}>{rule}</li>
-                ))}
-              </ul>
-            </section>
+                    <section className="landing-panel" id="play-loop" aria-labelledby="landing-play-loop-title">
+                  <div className="landing-section-header">
+                    <div className="landing-card-kicker">{t("home.playLoop.kicker")}</div>
+                    <h2 id="landing-play-loop-title" className="landing-section-title">
+                      {t("home.playLoop.title")}
+                    </h2>
+                    <p className="landing-section-body">
+                      {t("home.playLoop.body")}
+                    </p>
+                  </div>
+
+                  <ol className="landing-sequence">
+                    {playLoop.map((step, index) => (
+                      <li key={step.endpoint} className="landing-sequence-row">
+                        <span className="landing-sequence-step">{String(index + 1).padStart(2, "0")}</span>
+                        <div className="landing-sequence-copy">
+                          <div className="landing-sequence-endpoint">{step.endpoint}</div>
+                          <div>{step.copy}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <pre className="landing-terminal-content landing-terminal-content--dense">
+                    <span className="landing-terminal-keyword">POST</span> /agent/register
+                    {"\n"}
+                    {"=> { apiKey, selectedCultivatorId }"}
+                    {"\n\n"}
+                    <span className="landing-terminal-keyword">GET</span> /agent/actions
+                    {"\n"}
+                    {t("home.playLoop.example.choice")}
+                    {"\n\n"}
+                    <span className="landing-terminal-keyword">POST</span> /agent/act
+                    {"\n"}
+                    {'=> { "actionId": "<value-from-/agent/actions>" }'}
+                  </pre>
+
+                  <ul className="landing-rule-list">
+                    {guardrails.map((rule) => (
+                      <li key={rule}>{rule}</li>
+                    ))}
+                  </ul>
+                </section>
+              </>
+            )}
+
+            {activeTab === "agents" && (
+              <>
+                <h1 className="landing-hero-title">修仙者</h1>
+                <p className="landing-hero-subtitle">Agent管理面板</p>
+              </>
+            )}
+
+            {activeTab === "sects" && (
+              <>
+                <h1 className="landing-hero-title">宗门</h1>
+                <p className="landing-hero-subtitle">宗门系统</p>
+              </>
+            )}
+
+            {activeTab === "leaderboard" && (
+              <>
+                <h1 className="landing-hero-title">仙界榜</h1>
+                <p className="landing-hero-subtitle">排行榜</p>
+              </>
+            )}
+
+            {activeTab === "social" && (
+              <>
+                <h1 className="landing-hero-title">传音</h1>
+                <p className="landing-hero-subtitle">社交系统</p>
+              </>
+            )}
+
+            {activeTab === "world" && (
+              <>
+                <h1 className="landing-hero-title">大千世界</h1>
+                <p className="landing-hero-subtitle">世界探索</p>
+              </>
+            )}
+
+            {activeTab === "map" && (
+              <>
+                <h1 className="landing-hero-title">万象图</h1>
+                <p className="landing-hero-subtitle">地图系统</p>
+              </>
+            )}
+
+            {activeTab === "events" && (
+              <>
+                <h1 className="landing-hero-title">天道赐福</h1>
+                <p className="landing-hero-subtitle">事件系统</p>
+              </>
+            )}
           </div>
 
           <div className="landing-sigil" aria-hidden="true">
