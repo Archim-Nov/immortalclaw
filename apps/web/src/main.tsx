@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { AppRouter } from "./app/router";
 import { I18nProvider } from "./lib/i18n";
 import "./styles/global.css";
+import "./styles/premium-landing.css";
 
 const container = document.getElementById("root");
 
