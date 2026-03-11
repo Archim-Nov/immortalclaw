@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setRuntimeBaseUrlMetaOverride } from "./env";
 import { createRuntimeClient } from "./runtime-client";
 
 test("createRuntimeClient throws a clear error when the runtime base URL is missing", () => {
-  assert.throws(() => createRuntimeClient({ baseUrl: null }), /runtime base url.*not configured/i);
+  setRuntimeBaseUrlMetaOverride({ env: {} });
+
+  try {
+    assert.throws(() => createRuntimeClient(), /runtime base url.*not configured/i);
+  } finally {
+    setRuntimeBaseUrlMetaOverride(null);
+  }
 });
 
 test("createRuntimeClient requests the runtime worker URL for a relative path", async () => {
