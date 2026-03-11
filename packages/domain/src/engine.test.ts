@@ -61,6 +61,52 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
   };
 }
 
+function createCultivationFocusedRegistrationRecord(): CultivationRegistrationRecord {
+  const record = createRegistrationRecord();
+  return {
+    ...record,
+    result: {
+      ...record.result,
+      core_temperament: "\u5411\u8363\u578b",
+      secondary_temperament: "\u70bd\u5fc3\u578b",
+      behavior_aspect: "\u6728\u706b / \u8363\u7130",
+      cultivation_motive: "\u8bc1\u5927\u9053",
+      five_element_scores: {
+        metal: 3,
+        wood: 11,
+        water: 4,
+        fire: 10,
+        earth: 5,
+      },
+      spirit_root_result: "\u6728\u504f\u7075\u6839",
+    },
+    summary: "\u751f\u957f\u4e0e\u6267\u884c\u5fc3\u8f83\u5f3a\uff0c\u9002\u5408\u7a33\u5b9a\u4fee\u70bc\u4e0e\u7834\u5883\u3002",
+  };
+}
+
+function createSupportTaskRegistrationRecord(): CultivationRegistrationRecord {
+  const record = createRegistrationRecord();
+  return {
+    ...record,
+    result: {
+      ...record.result,
+      core_temperament: "\u9547\u5cb3\u578b",
+      secondary_temperament: "\u5b88\u6212\u578b",
+      behavior_aspect: "\u571f / \u9547\u6301",
+      cultivation_motive: "\u6d4e\u4e16\u4eba",
+      five_element_scores: {
+        metal: 8,
+        wood: 4,
+        water: 6,
+        fire: 3,
+        earth: 12,
+      },
+      spirit_root_result: "\u571f\u5355\u7075\u6839",
+    },
+    summary: "\u91cd\u6839\u57fa\u4e0e\u627f\u538b\uff0c\u9002\u5408\u7a33\u5b9a\u5de5\u4f5c\u4e0e\u5929\u52ab\u51c6\u5907\u3002",
+  };
+}
+
 test("cultivation action creates a job and advances realm progress after ticks", () => {
   const world = createSeedWorld();
 
@@ -172,4 +218,60 @@ test("registration records save and surface through cultivator state", () => {
     spirit_root_result: "水偏灵根",
     overall_confidence: "high",
   });
+});
+
+test("registration effects surface and improve cultivation output", () => {
+  const baselineWorld = createSeedWorld();
+  const registeredWorld = createSeedWorld();
+
+  saveCultivationRegistration(
+    registeredWorld,
+    "yun-zhong-he",
+    createCultivationFocusedRegistrationRecord(),
+    "openclaw-main",
+  );
+
+  performAction(baselineWorld, "yun-zhong-he", "cultivate");
+  performAction(registeredWorld, "yun-zhong-he", "cultivate");
+
+  advanceWorld(baselineWorld, 4);
+  advanceWorld(registeredWorld, 4);
+
+  const baselineState = getCultivatorState(baselineWorld, "yun-zhong-he");
+  const registeredState = getCultivatorState(registeredWorld, "yun-zhong-he");
+
+  assert.ok(registeredState.registrationEffects);
+  assert.ok(registeredState.registrationEffects?.dominantElements.some((element) => element.id === "wood"));
+  assert.ok(registeredState.registrationEffects?.modifiers.some((modifier) => modifier.source === "cultivation-motive"));
+  assert.ok(registeredState.cultivator.realmProgress > baselineState.cultivator.realmProgress);
+});
+
+test("registration bonuses improve task rewards and tribulation support", () => {
+  const baselineWorld = createSeedWorld();
+  const registeredWorld = createSeedWorld();
+
+  saveCultivationRegistration(
+    registeredWorld,
+    "yun-zhong-he",
+    createSupportTaskRegistrationRecord(),
+    "openclaw-main",
+  );
+
+  const baselineSupport = getCultivatorState(baselineWorld, "yun-zhong-he").tribulation.supportScore;
+  const registeredSupport = getCultivatorState(registeredWorld, "yun-zhong-he").tribulation.supportScore;
+  assert.ok(registeredSupport > baselineSupport);
+
+  const baselineBefore = getCultivatorState(baselineWorld, "yun-zhong-he").cultivator.spiritStones;
+  const registeredBefore = getCultivatorState(registeredWorld, "yun-zhong-he").cultivator.spiritStones;
+
+  performAction(baselineWorld, "yun-zhong-he", "take-mortal-task");
+  performAction(registeredWorld, "yun-zhong-he", "take-mortal-task");
+
+  advanceWorld(baselineWorld, 2);
+  advanceWorld(registeredWorld, 2);
+
+  const baselineAfter = getCultivatorState(baselineWorld, "yun-zhong-he").cultivator.spiritStones;
+  const registeredAfter = getCultivatorState(registeredWorld, "yun-zhong-he").cultivator.spiritStones;
+
+  assert.ok((registeredAfter - registeredBefore) > (baselineAfter - baselineBefore));
 });

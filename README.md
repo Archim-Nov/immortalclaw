@@ -36,6 +36,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - pills, talismans, materials, and buy/sell loops
 - status effects, ambient events, and faction reputation
 - sect joining, sect errands, and simple tribulation resolution
+- saved cultivation registration with dominant-element and motive-driven runtime modifiers
 - messages, dao logs, combat history, and recent event history
 - self-serve agent registration, bearer-authenticated `/agent/*` routes, and public onboarding docs
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding

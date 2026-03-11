@@ -198,6 +198,23 @@ export interface CultivationRegistrationView {
   overall_confidence: RegistrationConfidenceLevel;
 }
 
+export interface RegistrationDominantElementView {
+  id: FiveElementId;
+  label: string;
+  score: number;
+}
+
+export interface RegistrationGameplayModifierView {
+  source: "core-temperament" | "behavior-aspect" | "cultivation-motive" | "spirit-root";
+  title: string;
+  summary: string;
+}
+
+export interface RegistrationGameplayEffectsView {
+  dominantElements: RegistrationDominantElementView[];
+  modifiers: RegistrationGameplayModifierView[];
+}
+
 export interface ActionJob {
   id: string;
   cultivatorId: string;
@@ -401,6 +418,7 @@ export interface CultivatorStateView {
   recentEvents: WorldEvent[];
   recentCombats: CombatLogEntry[];
   registration: CultivationRegistrationView | null;
+  registrationEffects: RegistrationGameplayEffectsView | null;
   agentGuidance: {
     warnings: string[];
     priorities: string[];

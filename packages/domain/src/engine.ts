@@ -1,7 +1,8 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, FactionId, ItemId, RegistrationAnswer, RegistrationQuestionId, StatusEffect,
+  CreateCultivatorInput, FactionId, FiveElementId, ItemId, RegistrationAnswer, RegistrationGameplayEffectsView,
+  RegistrationGameplayModifierView, RegistrationQuestionId, StatusEffect,
   StrategySnapshot, TickSummary, TribulationPreview, WorldEvent, WorldState,
 } from "./model.js";
 import { createEmptyInventory, createFactionReputation } from "./seed.js";
@@ -25,6 +26,13 @@ const TRAVEL_TARGETS = {
 } as const;
 const FACTION_NAMES: Record<FactionId, string> = {
   townsfolk: "Townsfolk", "market-guild": "Market Guild", "qing-yun-sect": "Qing Yun Sect", "rogue-cultivators": "Rogue Cultivators",
+};
+const ELEMENT_LABELS: Record<FiveElementId, string> = {
+  metal: "Metal",
+  wood: "Wood",
+  water: "Water",
+  fire: "Fire",
+  earth: "Earth",
 };
 const REALM_QI = "炼气" as Cultivator["realm"];
 const REALM_FOUNDATION = "筑基" as Cultivator["realm"];
@@ -61,6 +69,232 @@ const REGISTRATION_QUESTIONS: RegistrationQuestionId[] = [
   "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18",
 ];
 const REGISTRATION_ANSWERS = new Set<RegistrationAnswer>(["A", "B", "C", "D"]);
+
+interface RegistrationRuntimeModifiers {
+  dominantElements: RegistrationGameplayEffectsView["dominantElements"];
+  modifiers: RegistrationGameplayModifierView[];
+  cultivateBonus: number;
+  meditateBonus: number;
+  healBonus: number;
+  taskBonus: number;
+  sectBonus: number;
+  mineBonus: number;
+  fortuneBonus: number;
+  combatBonus: number;
+  combatGuard: number;
+  tribulationBonus: number;
+  studyBonus: number;
+}
+
+type RegistrationBonusKey =
+  | "cultivateBonus"
+  | "meditateBonus"
+  | "healBonus"
+  | "taskBonus"
+  | "sectBonus"
+  | "mineBonus"
+  | "fortuneBonus"
+  | "combatBonus"
+  | "combatGuard"
+  | "tribulationBonus"
+  | "studyBonus";
+
+type RegistrationBonusValues = Pick<RegistrationRuntimeModifiers, RegistrationBonusKey>;
+
+const REGISTRATION_BONUS_KEYS: RegistrationBonusKey[] = [
+  "cultivateBonus",
+  "meditateBonus",
+  "healBonus",
+  "taskBonus",
+  "sectBonus",
+  "mineBonus",
+  "fortuneBonus",
+  "combatBonus",
+  "combatGuard",
+  "tribulationBonus",
+  "studyBonus",
+];
+
+const ELEMENT_RUNTIME_BONUSES: Record<FiveElementId, Partial<RegistrationBonusValues>> = {
+  metal: { combatBonus: 4, studyBonus: 3 },
+  wood: { cultivateBonus: 4, healBonus: 4 },
+  water: { fortuneBonus: 4, combatGuard: 2 },
+  fire: { cultivateBonus: 3, combatBonus: 4 },
+  earth: { mineBonus: 4, tribulationBonus: 4, healBonus: 2 },
+};
+
+function createRegistrationRuntimeModifiers(): RegistrationRuntimeModifiers {
+  return {
+    dominantElements: [],
+    modifiers: [],
+    cultivateBonus: 0,
+    meditateBonus: 0,
+    healBonus: 0,
+    taskBonus: 0,
+    sectBonus: 0,
+    mineBonus: 0,
+    fortuneBonus: 0,
+    combatBonus: 0,
+    combatGuard: 0,
+    tribulationBonus: 0,
+    studyBonus: 0,
+  };
+}
+
+function addRegistrationBonuses(target: RegistrationRuntimeModifiers, bonuses: Partial<RegistrationBonusValues>) {
+  for (const key of REGISTRATION_BONUS_KEYS) {
+    const value = bonuses[key];
+    if (typeof value === "number") {
+      target[key] += value;
+    }
+  }
+}
+
+function scaleRegistrationBonuses(
+  bonuses: Partial<RegistrationBonusValues>,
+  divisor: number,
+): Partial<RegistrationBonusValues> {
+  const scaled: Partial<RegistrationBonusValues> = {};
+  for (const key of REGISTRATION_BONUS_KEYS) {
+    const value = bonuses[key];
+    if (typeof value === "number" && value > 0) {
+      scaled[key] = Math.max(1, Math.floor(value / divisor));
+    }
+  }
+  return scaled;
+}
+
+function registrationBonusSnapshotOf(source: RegistrationRuntimeModifiers): Partial<RegistrationBonusValues> {
+  const snapshot: Partial<RegistrationBonusValues> = {};
+  for (const key of REGISTRATION_BONUS_KEYS) {
+    if (source[key] > 0) {
+      snapshot[key] = source[key];
+    }
+  }
+  return snapshot;
+}
+
+function applyRegistrationModifier(
+  target: RegistrationRuntimeModifiers,
+  source: RegistrationGameplayModifierView["source"],
+  title: string,
+  summary: string,
+  bonuses: Partial<RegistrationBonusValues>,
+) {
+  target.modifiers.push({ source, title, summary });
+  addRegistrationBonuses(target, bonuses);
+}
+
+function dominantElementsOf(record: CultivationRegistrationRecord): RegistrationGameplayEffectsView["dominantElements"] {
+  const sorted = (Object.entries(record.result.five_element_scores) as Array<[FiveElementId, number]>)
+    .sort((left, right) => right[1] - left[1]);
+  const [first, second] = sorted;
+  if (!first) {
+    return [];
+  }
+  if (!second || first[1] - second[1] >= 3) {
+    return [{ id: first[0], label: ELEMENT_LABELS[first[0]], score: first[1] }];
+  }
+  return [
+    { id: first[0], label: ELEMENT_LABELS[first[0]], score: first[1] },
+    { id: second[0], label: ELEMENT_LABELS[second[0]], score: second[1] },
+  ];
+}
+function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeModifiers | null {
+  const record = cultivator.registrationRecord;
+  if (!record) {
+    return null;
+  }
+  const modifiers = createRegistrationRuntimeModifiers();
+  modifiers.dominantElements = dominantElementsOf(record);
+  for (const element of modifiers.dominantElements) {
+    addRegistrationBonuses(modifiers, ELEMENT_RUNTIME_BONUSES[element.id]);
+  }
+
+  const coreTemperament = record.result.core_temperament;
+  if (coreTemperament.includes("守戒")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A rule-bound core steadies defense, recovery discipline, and tribulation prep.", { combatGuard: 3, tribulationBonus: 3 });
+  } else if (coreTemperament.includes("断锋")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A cutting core sharpens decisive combat and manual study.", { combatBonus: 4, studyBonus: 2 });
+  } else if (coreTemperament.includes("扶生")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A nurturing core favors healing, low-risk errands, and team utility.", { healBonus: 4, taskBonus: 2 });
+  } else if (coreTemperament.includes("向荣")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A growth-oriented core turns stable sessions into stronger cultivation gains.", { cultivateBonus: 4, meditateBonus: 2 });
+  } else if (coreTemperament.includes("潜渊")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A patient core improves scouting, judgment, and safer risk-taking.", { fortuneBonus: 4, combatGuard: 2 });
+  } else if (coreTemperament.includes("观澜")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "An observant core improves study efficiency and opportunistic play.", { fortuneBonus: 3, studyBonus: 3 });
+  } else if (coreTemperament.includes("炽心")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A driven core converts pressure into cultivation momentum and combat force.", { cultivateBonus: 3, combatBonus: 3 });
+  } else if (coreTemperament.includes("争胜")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A competitive core leans into direct encounters and forceful progress.", { combatBonus: 4, studyBonus: 1 });
+  } else if (coreTemperament.includes("镇岳")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A mountain-like core reinforces frontline stability, mining resilience, and tribulation support.", { combatGuard: 4, mineBonus: 3, tribulationBonus: 2 });
+  } else if (coreTemperament.includes("守成")) {
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A conservative core protects recovery and long-cycle stability.", { healBonus: 3, tribulationBonus: 3 });
+  }
+
+  if (modifiers.dominantElements.length > 0) {
+    const behaviorBonuses = createRegistrationRuntimeModifiers();
+    const divisor = modifiers.dominantElements.length === 1 ? 2 : 3;
+    for (const element of modifiers.dominantElements) {
+      addRegistrationBonuses(behaviorBonuses, scaleRegistrationBonuses(ELEMENT_RUNTIME_BONUSES[element.id], divisor));
+    }
+    applyRegistrationModifier(
+      modifiers,
+      "behavior-aspect",
+      `Behavior aspect: ${record.result.behavior_aspect}`,
+      "The registration's action bias nudges routine jobs toward its preferred rhythm.",
+      registrationBonusSnapshotOf(behaviorBonuses),
+    );
+  }
+
+  const motive = record.result.cultivation_motive;
+  if (motive.includes("求长生")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Longevity-driven cultivation improves recovery and tribulation preparation.", { healBonus: 4, tribulationBonus: 2 });
+  } else if (motive.includes("证大道")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A path-seeking motive rewards sustained cultivation and hard breakthroughs.", { cultivateBonus: 4, combatBonus: 2 });
+  } else if (motive.includes("求真知")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Truth-seeking improves manual study, ruins scouting, and measured growth.", { studyBonus: 4, fortuneBonus: 3, cultivateBonus: 1 });
+  } else if (motive.includes("护所爱")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Protective intent favors healing and reliable problem-solving work.", { taskBonus: 3, healBonus: 2 });
+  } else if (motive.includes("济世人")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A public-serving motive improves steady task income and support actions.", { taskBonus: 4, healBonus: 2 });
+  } else if (motive.includes("雪旧恨")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Old grudges turn effort into sharper direct combat results.", { combatBonus: 4 });
+  } else if (motive.includes("争高低")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Competitive intent improves clashes and the study needed to win them.", { combatBonus: 3, studyBonus: 1 });
+  } else if (motive.includes("振门庭")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Family or sect pride rewards contribution-focused play.", { sectBonus: 4, taskBonus: 2 });
+  } else if (motive.includes("逆天命")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Defying fate improves dangerous exploration and hard fights.", { combatBonus: 3, fortuneBonus: 2 });
+  } else if (motive.includes("求逍遥")) {
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A freedom-seeking motive favors meditation and open-ended exploration.", { meditateBonus: 3, fortuneBonus: 2 });
+  }
+
+  const spiritRoot = record.result.spirit_root_result;
+  if (spiritRoot.includes("单灵根")) {
+    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A focused root converts effort into cleaner cultivation, combat, and tribulation support.", { cultivateBonus: 4, combatBonus: 2, tribulationBonus: 2 });
+  } else if (spiritRoot.includes("偏灵根")) {
+    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A leaning root keeps cultivation efficient while preserving adaptability.", { cultivateBonus: 3, fortuneBonus: 2 });
+  } else if (spiritRoot.includes("双灵根")) {
+    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A dual root supports flexible exploration and safer encounters.", { fortuneBonus: 3, combatGuard: 2 });
+  }
+
+  return modifiers;
+}
+
+function registrationEffectsViewOf(cultivator: Cultivator): RegistrationGameplayEffectsView | null {
+  const modifiers = registrationModifiersOf(cultivator);
+  if (!modifiers) {
+    return null;
+  }
+  return {
+    dominantElements: modifiers.dominantElements,
+    modifiers: modifiers.modifiers,
+  };
+}
+
 function createJob(world: WorldState, cultivatorId: string, actionId: keyof typeof ACTION_DURATIONS, label: string): ActionJob {
   return { id: `job-${world.nextJobSequence++}`, cultivatorId, actionId, label, remainingTicks: ACTION_DURATIONS[actionId], totalTicks: ACTION_DURATIONS[actionId] };
 }
@@ -232,6 +466,7 @@ function sellPrice(cultivator: Cultivator, base: number) { return Math.max(15, b
 function tribulationDifficulty(cultivator: Cultivator) { return cultivator.realm === REALM_FOUNDATION ? 65 + cultivator.realmLevel * 5 : cultivator.realm === REALM_CORE ? 95 + cultivator.realmLevel * 6 : 0; }
 function tribulationType(cultivator: Cultivator) { return cultivator.realm === REALM_FOUNDATION ? "Foundation Tribulation" : cultivator.realm === REALM_CORE ? "Core Tribulation" : "None"; }
 function guidance(world: WorldState, cultivator: Cultivator) {
+  const registration = registrationModifiersOf(cultivator);
   const warnings: string[] = []; const priorities: string[] = []; const suggestedActions: ActionId[] = [];
   if (cultivator.injuryTicksRemaining > 0) { warnings.push("Character is injured."); priorities.push("Recover before risky actions."); suggestedActions.push(cultivator.locationId === "healing-sanctuary" ? "heal" : "travel-healing-sanctuary"); }
   if (hasEffect(cultivator, "poisoned")) warnings.push("Poison drains HP each tick.");
@@ -242,6 +477,15 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   if (hasEffect(cultivator, "insight")) priorities.push("Insight is active. Use it on cultivation or a major encounter.");
   if (hasEffect(cultivator, "spirit-saturated")) priorities.push("Spirit saturation is active. Good time for cultivation.");
   if (cultivator.nextTribulationTick - world.tick <= 10) { warnings.push("Tribulation warning active."); suggestedActions.push(cultivator.locationId === "healing-sanctuary" ? "heal" : "travel-healing-sanctuary"); }
+  if (registration && cultivator.injuryTicksRemaining <= 0) {
+    if (registration.cultivateBonus >= 8) priorities.push("Registration favors longer cultivation sessions.");
+    if (registration.fortuneBonus >= 8) priorities.push("Registration favors scouting and flexible opportunity play.");
+    if (registration.tribulationBonus >= 6 && cultivator.nextTribulationTick - world.tick <= 20) priorities.push("Registration supports safer tribulation preparation if you start early.");
+    if (registration.sectBonus >= 4 && cultivator.sectId) suggestedActions.push(cultivator.locationId === "sect-gate" ? "take-sect-errand" : "travel-sect-gate");
+    if (registration.fortuneBonus >= 8) suggestedActions.push(cultivator.locationId === "mystic-ruins" ? "search-fortune" : "travel-mystic-ruins");
+    if (registration.mineBonus >= 6) suggestedActions.push(cultivator.locationId === "spirit-mine" ? "mine-spirit-stones" : "travel-spirit-mine");
+    if (registration.cultivateBonus >= 8) suggestedActions.push("cultivate");
+  }
   if (cultivator.inventory["sword-manual"] > 0) suggestedActions.push("study-sword-manual");
   if (cultivator.inventory["alchemy-manual"] > 0) suggestedActions.push("study-alchemy-manual");
   if (cultivator.inventory["array-manual"] > 0) suggestedActions.push("study-array-manual");
@@ -284,7 +528,14 @@ export function getStrategySnapshot(world: WorldState, cultivatorId: string): St
 
 export function getTribulationPreview(world: WorldState, cultivatorId: string): TribulationPreview {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
-  const supportScore = (cultivator.sectId ? 6 : 0) + (cultivator.locationId === "healing-sanctuary" ? 10 : 0) + (hasEffect(cultivator, "warded") ? 16 : 0) + (hasEffect(cultivator, "clear-mind") ? 8 : 0) - (hasEffect(cultivator, "poisoned") ? 10 : 0);
+  const registration = registrationModifiersOf(cultivator);
+  const supportScore =
+    (cultivator.sectId ? 6 : 0) +
+    (cultivator.locationId === "healing-sanctuary" ? 10 : 0) +
+    (hasEffect(cultivator, "warded") ? 16 : 0) +
+    (hasEffect(cultivator, "clear-mind") ? 8 : 0) +
+    (registration?.tribulationBonus ?? 0) -
+    (hasEffect(cultivator, "poisoned") ? 10 : 0);
   return { nextTribulationTick: cultivator.nextTribulationTick, tribulationType: tribulationType(cultivator), difficulty: tribulationDifficulty(cultivator), isWarned: cultivator.nextTribulationTick - world.tick <= 10, preparationTime: Math.max(cultivator.nextTribulationTick - world.tick, 0), supportScore };
 }
 
@@ -305,6 +556,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     recentEvents: getRecentWorldEvents(world, cultivatorId, 5),
     recentCombats: getCombatLogs(world, cultivatorId, 4),
     registration: registrationViewOf(cultivator),
+    registrationEffects: registrationEffectsViewOf(cultivator),
     agentGuidance: guidance(world, cultivator),
   };
 }
@@ -351,6 +603,7 @@ function marketSell(world: WorldState, cultivator: Cultivator, itemId: ItemId, b
   return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sold 1 ${itemId} for ${income}.` };
 }
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
+  const registration = registrationModifiersOf(cultivator);
   if (actionId === "buy-healing-pill" || actionId === "buy-qi-pill" || actionId === "buy-ward-talisman") {
     if (cultivator.locationId !== "market") throw new Error("You must be in the market."); const itemId = actionId === "buy-healing-pill" ? "healing-pill" : actionId === "buy-qi-pill" ? "qi-pill" : "ward-talisman"; const base = itemId === "healing-pill" ? 100 : itemId === "qi-pill" ? 60 : 180; const price = buyPrice(cultivator, base); if (cultivator.spiritStones < price) throw new Error("Not enough spirit stones."); cultivator.spiritStones -= price; cultivator.inventory[itemId] += 1; cultivator.factionReputation["market-guild"] += 1; return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} bought ${itemId} for ${price}.` };
   }
@@ -365,18 +618,151 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (cultivator.inventory[manual.itemId] <= 0) throw new Error(`Item not available: ${manual.itemId}`);
     cultivator.inventory[manual.itemId] -= 1;
     if (!cultivator.techniques.includes(manual.technique)) cultivator.techniques.push(manual.technique);
-    cultivator.realmProgress = clamp(cultivator.realmProgress + 8, 0, 200);
+    cultivator.realmProgress = clamp(cultivator.realmProgress + 8 + (registration?.studyBonus ?? 0), 0, 200);
     upsertEffect(cultivator, manual.effect);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} studied a manual and gained new insight.` };
   }
   if (actionId === "join-sect") { if (cultivator.locationId !== "sect-gate") throw new Error("You must be at the sect gate."); if (cultivator.sectId) throw new Error("Cultivator has already joined a sect."); const sect = world.sects["qing-yun-sect"]; cultivator.sectId = sect.id; cultivator.reputation += 10; cultivator.factionReputation["qing-yun-sect"] += 15; sect.memberIds.push(cultivator.id); addMessage(world, cultivator.id, "Sect", "Accepted", `${cultivator.name} joined ${sect.name}.`); return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${sect.name}.` }; }
   throw new Error(`Unsupported action: ${actionId}`);
 }
-function resolveJob(world: WorldState, job: ActionJob) {
+function resolveJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId); cultivator.activeJobId = null;
+  const registration = registrationModifiersOf(cultivator);
   if (job.actionId in TRAVEL_TARGETS) { cultivator.locationId = TRAVEL_TARGETS[job.actionId as keyof typeof TRAVEL_TARGETS]; return `${cultivator.name} arrived at ${world.zones[cultivator.locationId].name}.`; }
-  if (job.actionId === "meditate") { cultivator.spiritualPower = clamp(cultivator.spiritualPower + 28 + (hasEffect(cultivator, "clear-mind") ? 8 : 0), 0, cultivator.maxSpiritualPower); return `${cultivator.name} recovered spiritual power.`; }
-  if (job.actionId === "heal") { cultivator.qi = clamp(cultivator.qi + 45, 0, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - 4); cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned"); upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 }); syncWounded(cultivator); return `${cultivator.name} recovered from injuries.`; }
+  if (job.actionId === "meditate") {
+    cultivator.spiritualPower = clamp(
+      cultivator.spiritualPower + 28 + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (registration?.meditateBonus ?? 0),
+      0,
+      cultivator.maxSpiritualPower,
+    );
+    return `${cultivator.name} recovered spiritual power.`;
+  }
+  if (job.actionId === "heal") {
+    cultivator.qi = clamp(cultivator.qi + 45 + (registration?.healBonus ?? 0), 0, cultivator.maxQi);
+    cultivator.injuryTicksRemaining = Math.max(
+      0,
+      cultivator.injuryTicksRemaining - 4 - Math.floor((registration?.healBonus ?? 0) / 4),
+    );
+    cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned");
+    upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 });
+    syncWounded(cultivator);
+    return `${cultivator.name} recovered from injuries.`;
+  }
+  if (job.actionId === "cultivate") {
+    cultivator.realmProgress = clamp(
+      cultivator.realmProgress +
+        18 +
+        Math.floor(cultivator.realmLevel / 2) +
+        (hasEffect(cultivator, "clear-mind") ? 8 : 0) +
+        (hasEffect(cultivator, "qi-surge") ? 6 : 0) +
+        (registration?.cultivateBonus ?? 0) -
+        (hasEffect(cultivator, "poisoned") ? 8 : 0),
+      0,
+      200,
+    );
+    if (cultivator.realmProgress >= 100 && cultivator.realmLevel < 9) {
+      cultivator.realmProgress -= 100;
+      cultivator.realmLevel += 1;
+      cultivator.realm = cultivator.realmLevel <= 3 ? REALM_QI : cultivator.realmLevel <= 6 ? REALM_FOUNDATION : REALM_CORE;
+      cultivator.maxQi += 12;
+      cultivator.maxSpiritualPower += 12;
+      cultivator.qi = cultivator.maxQi;
+      cultivator.spiritualPower = cultivator.maxSpiritualPower;
+      cultivator.lifespan += 12;
+      return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
+    }
+    return `${cultivator.name} gained cultivation progress.`;
+  }
+  if (job.actionId === "take-mortal-task") {
+    cultivator.spiritStones += 140 + ((registration?.taskBonus ?? 0) * 10);
+    cultivator.reputation += 8 + Math.floor((registration?.taskBonus ?? 0) / 2);
+    cultivator.karma = Math.max(0, cultivator.karma - 2);
+    cultivator.factionReputation.townsfolk += 8;
+    return `${cultivator.name} finished a town task.`;
+  }
+  if (job.actionId === "take-sect-errand") {
+    cultivator.spiritStones += 180 + ((registration?.sectBonus ?? 0) * 12);
+    cultivator.reputation += 6 + Math.floor((registration?.sectBonus ?? 0) / 2);
+    cultivator.factionReputation["qing-yun-sect"] += 12 + (registration?.sectBonus ?? 0);
+    upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 });
+    return `${cultivator.name} finished a sect errand.`;
+  }
+  if (job.actionId === "mine-spirit-stones") {
+    const roll = hashString(`${world.tick}:${job.id}`);
+    cultivator.spiritStones += 110 + (roll % 80) + ((registration?.mineBonus ?? 0) * 8);
+    cultivator.inventory["spirit-ore"] += 1 + (roll % 2) + ((registration?.mineBonus ?? 0) >= 8 ? 1 : 0);
+    cultivator.qi = clamp(cultivator.qi - Math.max(6, 14 - (registration?.combatGuard ?? 0)), 1, cultivator.maxQi);
+    if (roll % 5 === 0) {
+      cultivator.injuryTicksRemaining = Math.max(
+        cultivator.injuryTicksRemaining,
+        Math.max(2, 5 - (registration?.combatGuard ?? 0)),
+      );
+      syncWounded(cultivator);
+    }
+    return `${cultivator.name} mined stones and ore.`;
+  }
+  if (job.actionId === "search-fortune") {
+    const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}`);
+    if (roll % 3 === 0) {
+      cultivator.inventory["ruin-fragment"] += (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
+    } else if (roll % 3 === 1) {
+      cultivator.realmProgress = clamp(cultivator.realmProgress + 10 + (registration?.fortuneBonus ?? 0), 0, 200);
+      upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
+    } else {
+      cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
+      cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
+    }
+    cultivator.factionReputation["rogue-cultivators"] += 3;
+    return `${cultivator.name} searched the ruins.`;
+  }
+  if (job.actionId === "hunt-mine-beast" || job.actionId === "challenge-guardian") {
+    const encounterId = job.actionId === "hunt-mine-beast" ? "mine-beast" : "ruins-guardian";
+    const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
+    const power =
+      cultivator.qi +
+      Math.floor(cultivator.spiritualPower * 0.6) +
+      cultivator.realmLevel * 10 +
+      Math.floor(cultivator.reputation / 3) +
+      (hasEffect(cultivator, "qi-surge") ? 18 : 0) +
+      (hasEffect(cultivator, "warded") ? 14 : 0) +
+      (job.actionId === "challenge-guardian" && hasEffect(cultivator, "fortune-marked") ? 12 : 0) +
+      (registration?.combatBonus ?? 0) -
+      (hasEffect(cultivator, "poisoned") ? 12 : 0) +
+      (roll % 22);
+    const threat = job.actionId === "hunt-mine-beast" ? 145 + (roll % 20) : 172 + (roll % 24);
+    cultivator.spiritualPower = clamp(cultivator.spiritualPower - (job.actionId === "hunt-mine-beast" ? 16 : 24), 0, cultivator.maxSpiritualPower);
+    if (power >= threat) {
+      if (job.actionId === "hunt-mine-beast") {
+        cultivator.inventory["spirit-ore"] += 2 + (roll % 2);
+        cultivator.spiritStones += 120 + (roll % 60);
+        if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1;
+        upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 });
+      } else {
+        cultivator.inventory["ruin-fragment"] += 1 + (roll % 2);
+        cultivator.inventory["ward-talisman"] += 1;
+        cultivator.realmProgress = clamp(cultivator.realmProgress + 12, 0, 200);
+        upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 });
+      }
+      addCombatLog(world, { cultivatorId: cultivator.id, zoneId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "victory", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} won the encounter.` });
+      return `${cultivator.name} won a combat encounter.`;
+    }
+    cultivator.qi = clamp(
+      cultivator.qi - Math.max(8, (job.actionId === "hunt-mine-beast" ? 24 + (roll % 10) : 32 + (roll % 12)) - ((registration?.combatGuard ?? 0) * 2)),
+      1,
+      cultivator.maxQi,
+    );
+    cultivator.injuryTicksRemaining = Math.max(
+      cultivator.injuryTicksRemaining,
+      Math.max(2, (job.actionId === "hunt-mine-beast" ? 5 : 7) - (registration?.combatGuard ?? 0)),
+    );
+    if (job.actionId === "challenge-guardian") upsertEffect(cultivator, { id: "poisoned", name: "Poisoned", description: "Loses qi each tick.", source: "guardian", remainingTicks: 4, intensity: 1 });
+    syncWounded(cultivator);
+    addCombatLog(world, { cultivatorId: cultivator.id, zoneId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} lost the encounter.` });
+    return `${cultivator.name} lost a combat encounter.`;
+  }
+  /* Legacy fallback block kept temporarily during the registration modifier patch.
+  if (job.actionId === "meditate") { cultivator.spiritualPower = clamp(cultivator.spiritualPower + 28 + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (registration?.meditateBonus ?? 0), 0, cultivator.maxSpiritualPower); return `${cultivator.name} recovered spiritual power.`; }
+  if (job.actionId === "heal") { cultivator.qi = clamp(cultivator.qi + 45 + (registration?.healBonus ?? 0), 0, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - 4 - Math.floor((registration?.healBonus ?? 0) / 4)); cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned"); upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 }); syncWounded(cultivator); return `${cultivator.name} recovered from injuries.`; }
   if (job.actionId === "cultivate") { cultivator.realmProgress = clamp(cultivator.realmProgress + 18 + Math.floor(cultivator.realmLevel / 2) + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (hasEffect(cultivator, "qi-surge") ? 6 : 0) - (hasEffect(cultivator, "poisoned") ? 8 : 0), 0, 200); if (cultivator.realmProgress >= 100 && cultivator.realmLevel < 9) { cultivator.realmProgress -= 100; cultivator.realmLevel += 1; cultivator.realm = cultivator.realmLevel <= 3 ? "炼气" : cultivator.realmLevel <= 6 ? "筑基" : "金丹"; cultivator.maxQi += 12; cultivator.maxSpiritualPower += 12; cultivator.qi = cultivator.maxQi; cultivator.spiritualPower = cultivator.maxSpiritualPower; cultivator.lifespan += 12; return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`; } return `${cultivator.name} gained cultivation progress.`; }
   if (job.actionId === "take-mortal-task") { cultivator.spiritStones += 140; cultivator.reputation += 8; cultivator.karma = Math.max(0, cultivator.karma - 2); cultivator.factionReputation.townsfolk += 8; return `${cultivator.name} finished a town task.`; }
   if (job.actionId === "take-sect-errand") { cultivator.spiritStones += 180; cultivator.reputation += 6; cultivator.factionReputation["qing-yun-sect"] += 12; upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 }); return `${cultivator.name} finished a sect errand.`; }
@@ -385,9 +771,13 @@ function resolveJob(world: WorldState, job: ActionJob) {
   const encounterId = job.actionId === "hunt-mine-beast" ? "mine-beast" : "ruins-guardian"; const roll = hashString(`${world.tick}:${job.id}:${encounterId}`); const power = cultivator.qi + Math.floor(cultivator.spiritualPower * 0.6) + cultivator.realmLevel * 10 + Math.floor(cultivator.reputation / 3) + (hasEffect(cultivator, "qi-surge") ? 18 : 0) + (hasEffect(cultivator, "warded") ? 14 : 0) + (job.actionId === "challenge-guardian" && hasEffect(cultivator, "fortune-marked") ? 12 : 0) - (hasEffect(cultivator, "poisoned") ? 12 : 0) + (roll % 22); const threat = job.actionId === "hunt-mine-beast" ? 145 + (roll % 20) : 172 + (roll % 24); cultivator.spiritualPower = clamp(cultivator.spiritualPower - (job.actionId === "hunt-mine-beast" ? 16 : 24), 0, cultivator.maxSpiritualPower);
   if (power >= threat) { if (job.actionId === "hunt-mine-beast") { cultivator.inventory["spirit-ore"] += 2 + (roll % 2); cultivator.spiritStones += 120 + (roll % 60); if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1; upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 }); } else { cultivator.inventory["ruin-fragment"] += 1 + (roll % 2); cultivator.inventory["ward-talisman"] += 1; cultivator.realmProgress = clamp(cultivator.realmProgress + 12, 0, 200); upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 }); } addCombatLog(world, { cultivatorId: cultivator.id, zoneId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "victory", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} won the encounter.` }); return `${cultivator.name} won a combat encounter.`; }
   cultivator.qi = clamp(cultivator.qi - (job.actionId === "hunt-mine-beast" ? 24 + (roll % 10) : 32 + (roll % 12)), 1, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, job.actionId === "hunt-mine-beast" ? 5 : 7); if (job.actionId === "challenge-guardian") upsertEffect(cultivator, { id: "poisoned", name: "Poisoned", description: "Loses qi each tick.", source: "guardian", remainingTicks: 4, intensity: 1 }); syncWounded(cultivator); addCombatLog(world, { cultivatorId: cultivator.id, zoneId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} lost the encounter.` }); return `${cultivator.name} lost a combat encounter.`; }
+  */
+  throw new Error(`Unsupported timed action: ${job.actionId}`);
+}
 
-function resolveEnhancedJob(world: WorldState, job: ActionJob) {
+function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
+  const registration = registrationModifiersOf(cultivator);
   if (job.actionId === "heal") {
     const summary = resolveJob(world, job);
     cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "deviation");
@@ -402,7 +792,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob) {
       (hasEffect(cultivator, "clear-mind") ? 8 : 0) +
       (hasEffect(cultivator, "qi-surge") ? 6 : 0) +
       (hasEffect(cultivator, "insight") ? 10 : 0) +
-      (hasEffect(cultivator, "spirit-saturated") ? 8 : 0) -
+      (hasEffect(cultivator, "spirit-saturated") ? 8 : 0) +
+      (registration?.cultivateBonus ?? 0) -
       (hasEffect(cultivator, "poisoned") ? 8 : 0) -
       (hasEffect(cultivator, "deviation") ? 12 : 0);
     cultivator.realmProgress = clamp(cultivator.realmProgress + gain, 0, 200);
@@ -439,14 +830,14 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob) {
     cultivator.activeJobId = null;
     const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}:fortune-enhanced`);
     if (roll % 4 === 0) {
-      cultivator.inventory["ruin-fragment"] += hasEffect(cultivator, "fortune-marked") ? 2 : 1;
+      cultivator.inventory["ruin-fragment"] += (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
       if (roll % 8 === 0) cultivator.inventory["sword-manual"] += 1;
     } else if (roll % 4 === 1) {
-      cultivator.realmProgress = clamp(cultivator.realmProgress + 10, 0, 200);
+      cultivator.realmProgress = clamp(cultivator.realmProgress + 10 + (registration?.fortuneBonus ?? 0), 0, 200);
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
     } else if (roll % 4 === 2) {
-      cultivator.spiritStones += 220;
-      cultivator.inventory["ruin-fragment"] += 1;
+      cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
+      cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
       if (roll % 6 === 0) cultivator.inventory["alchemy-manual"] += 1;
     } else {
       upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "ruins", remainingTicks: 5, intensity: 1 });
