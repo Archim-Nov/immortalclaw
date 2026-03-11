@@ -26,6 +26,10 @@ export function registerRuntimeMiddleware(app: Hono<RuntimeWorkerEnv>) {
     "*",
     cors({
       origin(origin, context) {
+        if (!origin) {
+          return null;
+        }
+
         return resolveCorsOrigins(context.env).includes(origin) ? origin : null;
       },
     }),

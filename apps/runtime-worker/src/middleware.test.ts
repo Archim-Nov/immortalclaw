@@ -125,3 +125,42 @@ test("cors does not allow disallowed origins", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
 });
+
+test("cors preserves allow-origin on error responses for allowed origins", async () => {
+  const repository = unusedRepository();
+  repository.getCultivatorState = async () => {
+    throw new Error("database unavailable");
+  };
+
+  const app = createApp({ repository });
+  const response = await app.request(
+    "https://runtime.test/cultivator/state?cultivatorId=yun-zhong-he",
+    {
+      headers: {
+        origin: pagesOrigin,
+      },
+    },
+    {
+      FRONTEND_ORIGIN: pagesOrigin,
+    },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get("access-control-allow-origin"), pagesOrigin);
+  assert.equal(payload.error, "database unavailable");
+});
+
+test("cors rejects browser requests when FRONTEND_ORIGIN is missing", async () => {
+  const app = createApp({ repository: unusedRepository() as never });
+
+  const response = await app.request("https://runtime.test/health", {
+    headers: {
+      origin: pagesOrigin,
+    },
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 500);
+  assert.match(payload.error, /FRONTEND_ORIGIN must be configured/);
+});

@@ -4,7 +4,6 @@ import {
   createSupabaseWorldRepository,
 } from "../../../packages/persistence/src/index.js";
 
-export const DEFAULT_FRONTEND_ORIGIN = "https://immortal-claw.pages.dev";
 export const LOCAL_VITE_DEV_ORIGIN = "http://localhost:5173";
 
 export interface RuntimeWorkerBindings {
@@ -24,17 +23,37 @@ export interface RuntimeWorkerEnv {
   Variables: RuntimeWorkerVariables;
 }
 
-function normalizeOrigin(origin: string | undefined): string | undefined {
-  const trimmed = origin?.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+function invalidFrontendOriginError() {
+  return new Error(
+    "FRONTEND_ORIGIN must be a valid absolute origin like https://immortal-claw.pages.dev",
+  );
 }
 
 export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
-  return normalizeOrigin(bindings?.FRONTEND_ORIGIN) ?? DEFAULT_FRONTEND_ORIGIN;
+  const trimmed = bindings?.FRONTEND_ORIGIN?.trim();
+  if (!trimmed) {
+    throw new Error("FRONTEND_ORIGIN must be configured.");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw invalidFrontendOriginError();
+  }
+
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    url.username !== "" ||
+    url.password !== ""
+  ) {
+    throw invalidFrontendOriginError();
+  }
+
+  return url.origin;
 }
 
 export function resolveCorsOrigins(bindings?: RuntimeWorkerBindings): string[] {
