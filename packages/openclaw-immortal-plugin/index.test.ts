@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -10,6 +10,13 @@ type RegisteredTool = {
   execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
 };
 
+type CapturedRequest = {
+  url: string;
+  method: string;
+  body?: string;
+  authorization?: string | null;
+};
+
 function createRegistrationRecord() {
   return {
     record_type: "registration_record",
@@ -18,60 +25,41 @@ function createRegistrationRecord() {
       Q1: "C",
       Q2: "C",
       Q3: "C",
-      Q4: "C",
-      Q5: "C",
-      Q6: "C",
-      Q7: "C",
-      Q8: "A",
-      Q9: "C",
-      Q10: "C",
-      Q11: "C",
-      Q12: "C",
-      Q13: "B",
-      Q14: "B",
-      Q15: "B",
-      Q16: "B",
-      Q17: "C",
-      Q18: "B",
     },
     result: {
-      core_temperament: "潜渊型",
-      secondary_temperament: "观澜型",
-      behavior_aspect: "水土 / 潜守",
-      cultivation_motive: "求真知",
-      five_element_scores: {
-        metal: 5,
-        wood: 6,
-        water: 11,
-        fire: 3,
-        earth: 9,
-      },
-      spirit_root_result: "水偏灵根",
-      confidence: {
-        core: "high",
-        behavior: "high",
-        motive: "medium",
-        overall: "high",
-      },
+      core_temperament: "Calm strategist",
+      secondary_temperament: "Patient observer",
+      spirit_root_result: "Water-biased root",
     },
-    summary: "其心性偏潜守，行路以观势为先，求知之念最重。",
+    summary: "Prefers observation before commitment.",
   };
 }
 
-test("plugin registers identity-bound tools and prompt hook", async () => {
-  const plugin = createImmortalRealmPlugin({
-    fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-  });
+function writePersonaFiles(
+  personaDir: string,
+  identityContent = "# Su Mingyue\n\n- gender: female\n- pronouns: she/her\n- origin: Frost Harbor\n- path: sword\n",
+  soulContent = "## Temperament\nCalm and exacting.\n",
+) {
+  mkdirSync(personaDir, { recursive: true });
+  writeFileSync(path.join(personaDir, "IDENTITY.md"), identityContent, "utf8");
+  writeFileSync(path.join(personaDir, "SOUL.md"), soulContent, "utf8");
+}
 
-  const tools: Array<{ name: string }> = [];
+function registerPlugin(
+  pluginConfig: Record<string, unknown>,
+  fetchImpl: typeof fetch,
+): {
+  tools: Map<string, RegisteredTool>;
+  hooks: Array<{ event: string; handler: (...args: unknown[]) => unknown }>;
+} {
+  const plugin = createImmortalRealmPlugin({ fetchImpl });
+  const tools = new Map<string, RegisteredTool>();
   const hooks: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = [];
 
   plugin.register({
-    pluginConfig: {
-      agentId: "openclaw-main",
-    },
+    pluginConfig,
     registerTool(tool) {
-      tools.push(tool);
+      tools.set(tool.name, tool);
     },
     on(event, handler) {
       hooks.push({ event, handler });
@@ -79,8 +67,20 @@ test("plugin registers identity-bound tools and prompt hook", async () => {
     logger: {},
   });
 
+  return { tools, hooks };
+}
+
+test("plugin registers expected tools and prompt hook", async () => {
+  const { tools, hooks } = registerPlugin(
+    {
+      agentId: "openclaw-main",
+      credentialsPath: path.join(tmpdir(), "immortal-plugin-test-credentials.json"),
+    },
+    async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+  );
+
   assert.deepEqual(
-    tools.map((tool) => tool.name),
+    [...tools.keys()],
     [
       "immortal_state",
       "immortal_registration",
@@ -100,50 +100,36 @@ test("plugin registers identity-bound tools and prompt hook", async () => {
   const result = await hooks[0]?.handler({}, {});
   assert.match(
     String((result as { prependSystemContext?: string }).prependSystemContext),
-    /IDENTITY\.md and SOUL\.md/,
+    /Credential cache:/,
   );
 });
 
-test("legacy defaultCultivatorId still works for state and act tools", async () => {
-  const requests: Array<{ url: string; method: string; body: string | undefined }> = [];
-  const plugin = createImmortalRealmPlugin({
-    fetchImpl: async (input, init) => {
-      requests.push({
-        url: String(input),
-        method: String(init?.method ?? "GET"),
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
-      if (String(input).includes("/cultivator/actions")) {
-        return new Response(
-          JSON.stringify({
-            actions: [{ actionId: "cultivate" }],
-          }),
-          { status: 200 },
-        );
-      }
-      return new Response(JSON.stringify({ ok: true, url: String(input) }), { status: 200 });
-    },
-  });
-
-  const tools = new Map<string, RegisteredTool>();
-
-  plugin.register({
-    pluginConfig: {
+test("legacy defaultCultivatorId still works for state act and tick tools", async () => {
+  const requests: CapturedRequest[] = [];
+  const { tools } = registerPlugin(
+    {
       worldBaseUrl: "http://127.0.0.1:8787/",
       defaultCultivatorId: "yun-zhong-he",
     },
-    registerTool(tool) {
-      tools.set(tool.name, tool);
+    async (input, init) => {
+      const url = String(input);
+      requests.push({
+        url,
+        method: String(init?.method ?? "GET"),
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (url.includes("/cultivator/actions")) {
+        return new Response(JSON.stringify({ actions: [{ actionId: "cultivate" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true, url }), { status: 200 });
     },
-    logger: {},
-  });
+  );
 
   await tools.get("immortal_state")?.execute("tool-1", {});
   await tools.get("immortal_actions")?.execute("tool-2", {});
   await tools.get("immortal_act")?.execute("tool-3", { actionId: "cultivate" });
   await tools.get("immortal_tick")?.execute("tool-4", { steps: 3 });
 
-  assert.equal(requests.length, 5);
   assert.equal(
     requests[0]?.url,
     "http://127.0.0.1:8787/cultivator/state?cultivatorId=yun-zhong-he",
@@ -161,16 +147,20 @@ test("legacy defaultCultivatorId still works for state and act tools", async () 
   assert.equal(requests[4]?.url, "http://127.0.0.1:8787/world/tick");
 });
 
-test("registration tools persist and fetch canonical registration records", async () => {
-  const requests: Array<{ url: string; method: string; body: string | undefined }> = [];
-  const plugin = createImmortalRealmPlugin({
-    fetchImpl: async (input, init) => {
+test("registration tools persist and fetch canonical records over legacy routes", async () => {
+  const requests: CapturedRequest[] = [];
+  const { tools } = registerPlugin(
+    {
+      worldBaseUrl: "http://127.0.0.1:8787",
+      defaultCultivatorId: "yun-zhong-he",
+    },
+    async (input, init) => {
       const url = String(input);
       const method = String(init?.method ?? "GET");
       const body = typeof init?.body === "string" ? init.body : undefined;
       requests.push({ url, method, body });
 
-      if (url.includes("/cultivator/registration?") || url.endsWith("/cultivator/registration?cultivatorId=yun-zhong-he")) {
+      if (url.includes("/cultivator/registration?")) {
         return new Response(
           JSON.stringify({
             ...createRegistrationRecord(),
@@ -194,19 +184,7 @@ test("registration tools persist and fetch canonical registration records", asyn
 
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     },
-  });
-
-  const tools = new Map<string, RegisteredTool>();
-  plugin.register({
-    pluginConfig: {
-      worldBaseUrl: "http://127.0.0.1:8787",
-      defaultCultivatorId: "yun-zhong-he",
-    },
-    registerTool(tool) {
-      tools.set(tool.name, tool);
-    },
-    logger: {},
-  });
+  );
 
   await tools.get("immortal_registration_save")?.execute("tool-save", {
     record: createRegistrationRecord(),
@@ -223,25 +201,17 @@ test("registration tools persist and fetch canonical registration records", asyn
     requests[1]?.url,
     "http://127.0.0.1:8787/cultivator/registration?cultivatorId=yun-zhong-he",
   );
-  assert.equal(registrationResult.details?.result?.core_temperament, "潜渊型");
+  assert.equal(registrationResult.details?.result?.core_temperament, "Calm strategist");
 });
 
 test("act tool rejects when state or actions were not checked first", async () => {
-  const plugin = createImmortalRealmPlugin({
-    fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-  });
-
-  const tools = new Map<string, RegisteredTool>();
-  plugin.register({
-    pluginConfig: {
+  const { tools } = registerPlugin(
+    {
       worldBaseUrl: "http://127.0.0.1:8787",
       defaultCultivatorId: "yun-zhong-he",
     },
-    registerTool(tool) {
-      tools.set(tool.name, tool);
-    },
-    logger: {},
-  });
+    async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+  );
 
   await assert.rejects(
     () => tools.get("immortal_act")!.execute("tool-1", { actionId: "cultivate" }),
@@ -249,29 +219,175 @@ test("act tool rejects when state or actions were not checked first", async () =
   );
 });
 
-test("agent-bound flow auto-syncs persona from bootstrap files before state lookup", async () => {
-  const personaDir = mkdtempSync(path.join(tmpdir(), "immortal-plugin-"));
+test("plugin auto-registers, caches credentials, and uses authenticated agent routes", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-agent-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
   try {
-    writeFileSync(
-      path.join(personaDir, "IDENTITY.md"),
-      "# Su Mingyue\n\n- gender: female\n- pronouns: she/her\n- origin: Frost Harbor\n- path: sword\n",
-      "utf8",
-    );
-    writeFileSync(
-      path.join(personaDir, "SOUL.md"),
-      "## Temperament\nCalm and exacting.\n",
-      "utf8",
-    );
+    writePersonaFiles(personaDir);
 
-    const requests: Array<{ url: string; method: string; body: string | undefined }> = [];
-    const plugin = createImmortalRealmPlugin({
-      fetchImpl: async (input, init) => {
+    const firstRequests: CapturedRequest[] = [];
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+        llmProvider: "openai",
+        llmModelName: "gpt-5",
+        llmModelVersion: "2026-03-01",
+      },
+      async (input, init) => {
         const url = String(input);
-        const method = String(init?.method ?? "GET");
+        const authorization =
+          init?.headers && typeof init.headers === "object" && "Authorization" in init.headers
+            ? String((init.headers as Record<string, unknown>).Authorization)
+            : null;
         const body = typeof init?.body === "string" ? init.body : undefined;
-        requests.push({ url, method, body });
+        firstRequests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body,
+          authorization,
+        });
 
-        if (url.includes("/agent/sync-persona")) {
+        if (url.endsWith("/agent/register")) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              agentId: "openclaw-main",
+              apiKey: "immortal_sk_cached",
+              selectedCultivatorId: "cultivator-9",
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "openclaw-main",
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(
+            JSON.stringify({
+              tick: 0,
+              cultivator: { id: "cultivator-9", name: "Su Mingyue" },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    const stateResult = (await tools.get("immortal_state")?.execute("tool-1", {})) as {
+      details?: { cultivator?: { id?: string } };
+    };
+
+    assert.equal(firstRequests[0]?.url, "https://runtime.example/agent/register");
+    assert.match(String(firstRequests[0]?.body), /"agentId":"openclaw-main"/);
+    assert.match(String(firstRequests[0]?.body), /"llmProvider":"openai"/);
+    assert.match(String(firstRequests[0]?.body), /"name":"Su Mingyue"/);
+    assert.equal(firstRequests[1]?.url, "https://runtime.example/agent/sync-persona");
+    assert.equal(firstRequests[1]?.authorization, "Bearer immortal_sk_cached");
+    assert.equal(firstRequests[2]?.url, "https://runtime.example/agent/state");
+    assert.equal(firstRequests[2]?.authorization, "Bearer immortal_sk_cached");
+    assert.equal(stateResult.details?.cultivator?.id, "cultivator-9");
+    assert.equal(existsSync(credentialsPath), true);
+    assert.match(readFileSync(credentialsPath, "utf8"), /immortal_sk_cached/);
+
+    const secondRequests: CapturedRequest[] = [];
+    const second = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        const authorization =
+          init?.headers && typeof init.headers === "object" && "Authorization" in init.headers
+            ? String((init.headers as Record<string, unknown>).Authorization)
+            : null;
+        secondRequests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+          authorization,
+        });
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "openclaw-main",
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(
+            JSON.stringify({
+              tick: 1,
+              cultivator: { id: "cultivator-9", name: "Su Mingyue" },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await second.tools.get("immortal_state")?.execute("tool-2", {});
+
+    assert.equal(secondRequests.some((entry) => entry.url.endsWith("/agent/register")), false);
+    assert.equal(secondRequests[0]?.url, "https://runtime.example/agent/sync-persona");
+    assert.equal(secondRequests[0]?.authorization, "Bearer immortal_sk_cached");
+    assert.equal(secondRequests[1]?.url, "https://runtime.example/agent/state");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin falls back to legacy persona sync when /agent/register is unavailable", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-legacy-"));
+  const personaDir = path.join(root, "workspace");
+  try {
+    writePersonaFiles(personaDir);
+
+    const requests: CapturedRequest[] = [];
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "http://127.0.0.1:8787",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath: path.join(root, "credentials.json"),
+      },
+      async (input, init) => {
+        const url = String(input);
+        requests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+        });
+
+        if (url.endsWith("/agent/register")) {
+          return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+        }
+
+        if (url.endsWith("/agent/sync-persona")) {
           return new Response(
             JSON.stringify({
               agentId: "openclaw-main",
@@ -294,128 +410,17 @@ test("agent-bound flow auto-syncs persona from bootstrap files before state look
 
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       },
-    });
+    );
 
-    const tools = new Map<string, RegisteredTool>();
-    plugin.register({
-      pluginConfig: {
-        worldBaseUrl: "http://127.0.0.1:8787",
-        agentId: "openclaw-main",
-        personaDir,
-      },
-      registerTool(tool) {
-        tools.set(tool.name, tool);
-      },
-      logger: {},
-    });
+    await tools.get("immortal_state")?.execute("tool-1", {});
 
-    const stateResult = (await tools.get("immortal_state")?.execute("tool-1", {})) as {
-      details?: { cultivator?: { id?: string } };
-    };
-
-    assert.equal(requests[0]?.url, "http://127.0.0.1:8787/agent/sync-persona");
-    assert.match(String(requests[0]?.body), /"agentId":"openclaw-main"/);
-    assert.match(String(requests[0]?.body), /"name":"Su Mingyue"/);
-    assert.match(String(requests[0]?.body), /"genderPresentation":"female"/);
-    assert.match(String(requests[0]?.body), /"startingPath":"sword"/);
-    assert.match(String(requests[0]?.body), /"temperament":"Calm and exacting\."/);
+    assert.equal(requests[0]?.url, "http://127.0.0.1:8787/agent/register");
+    assert.equal(requests[1]?.url, "http://127.0.0.1:8787/agent/sync-persona");
     assert.equal(
-      requests[1]?.url,
+      requests[2]?.url,
       "http://127.0.0.1:8787/cultivator/state?cultivatorId=cultivator-9",
     );
-    assert.equal(stateResult.details?.cultivator?.id, "cultivator-9");
   } finally {
-    rmSync(personaDir, { recursive: true, force: true });
-  }
-});
-
-test("persona sync supports front matter and section-based bootstrap files", async () => {
-  const personaDir = mkdtempSync(path.join(tmpdir(), "immortal-plugin-rich-"));
-  try {
-    writeFileSync(
-      path.join(personaDir, "Identity.md"),
-      [
-        "---",
-        "name: Shen Qing",
-        "gender: male",
-        "pronouns: he/him",
-        "path: array",
-        "---",
-        "",
-        "## Background",
-        "- From the northern relay forts.",
-        "- Works like a field strategist.",
-      ].join("\n"),
-      "utf8",
-    );
-    writeFileSync(
-      path.join(personaDir, "Soul.md"),
-      [
-        "## Core Values",
-        "- Precise",
-        "- Patient",
-        "",
-        "## Communication Style",
-        "- Quiet but direct.",
-      ].join("\n"),
-      "utf8",
-    );
-
-    const requests: Array<{ url: string; body: string | undefined }> = [];
-    const plugin = createImmortalRealmPlugin({
-      fetchImpl: async (input, init) => {
-        const url = String(input);
-        const body = typeof init?.body === "string" ? init.body : undefined;
-        requests.push({ url, body });
-
-        if (url.includes("/agent/sync-persona")) {
-          return new Response(
-            JSON.stringify({
-              agentId: "openclaw-rich",
-              selectedCultivatorId: "cultivator-11",
-              created: true,
-            }),
-            { status: 200 },
-          );
-        }
-
-        if (url.includes("/cultivator/state")) {
-          return new Response(
-            JSON.stringify({
-              tick: 0,
-              cultivator: { id: "cultivator-11", name: "Shen Qing" },
-            }),
-            { status: 200 },
-          );
-        }
-
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      },
-    });
-
-    const tools = new Map<string, RegisteredTool>();
-    plugin.register({
-      pluginConfig: {
-        worldBaseUrl: "http://127.0.0.1:8787",
-        agentId: "openclaw-rich",
-        personaDir,
-      },
-      registerTool(tool) {
-        tools.set(tool.name, tool);
-      },
-      logger: {},
-    });
-
-    await tools.get("immortal_state")?.execute("tool-rich", {});
-
-    assert.equal(requests[0]?.url, "http://127.0.0.1:8787/agent/sync-persona");
-    assert.match(String(requests[0]?.body), /"name":"Shen Qing"/);
-    assert.match(String(requests[0]?.body), /"genderPresentation":"male"/);
-    assert.match(String(requests[0]?.body), /"pronouns":"he\/him"/);
-    assert.match(String(requests[0]?.body), /"startingPath":"array"/);
-    assert.match(String(requests[0]?.body), /northern relay forts/);
-    assert.match(String(requests[0]?.body), /Precise; Patient; Quiet but direct\./);
-  } finally {
-    rmSync(personaDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 });

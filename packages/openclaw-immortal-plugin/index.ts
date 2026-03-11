@@ -1,5 +1,7 @@
 ﻿import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 
 type FetchLike = typeof fetch;
 type JsonSchema = Record<string, unknown>;
@@ -49,11 +51,33 @@ type PluginConfig = {
   defaultCultivatorId?: string;
   agentId?: string;
   personaDir: string;
+  credentialsPath: string;
+  llmProvider?: string;
+  llmModelName?: string;
+  llmModelVersion?: string;
   requestTimeoutMs: number;
 };
 
 type PluginFactoryOptions = {
   fetchImpl?: FetchLike;
+};
+
+type WorldRequestError = Error & {
+  status?: number;
+  payload?: unknown;
+};
+
+type AgentSession = {
+  worldBaseUrl: string;
+  agentId: string;
+  apiKey: string;
+  selectedCultivatorId?: string;
+  updatedAt: string;
+};
+
+type StoredCredentialsFile = {
+  version: 1;
+  entries: AgentSession[];
 };
 
 const GENDER_VALUES = ["male", "female", "nonbinary", "other", "unspecified"] as const;
@@ -187,6 +211,13 @@ function normalizePathValue(input: unknown): string {
   return value ? path.resolve(value) : process.cwd();
 }
 
+function normalizeCredentialsPath(input: unknown): string {
+  const value = trimString(input);
+  return value
+    ? path.resolve(value)
+    : path.join(homedir(), ".config", "immortal-claw", "credentials.json");
+}
+
 function resolvePluginConfig(pluginConfig: Record<string, unknown> | undefined): PluginConfig {
   const requestTimeoutMs =
     typeof pluginConfig?.requestTimeoutMs === "number"
@@ -198,6 +229,10 @@ function resolvePluginConfig(pluginConfig: Record<string, unknown> | undefined):
     defaultCultivatorId: trimString(pluginConfig?.defaultCultivatorId),
     agentId: trimString(pluginConfig?.agentId),
     personaDir: normalizePathValue(pluginConfig?.personaDir),
+    credentialsPath: normalizeCredentialsPath(pluginConfig?.credentialsPath),
+    llmProvider: trimString(pluginConfig?.llmProvider),
+    llmModelName: trimString(pluginConfig?.llmModelName),
+    llmModelVersion: trimString(pluginConfig?.llmModelVersion),
     requestTimeoutMs,
   };
 }
@@ -240,7 +275,10 @@ async function requestWorld(
         payload && typeof payload === "object" && "error" in payload
           ? String((payload as { error: unknown }).error)
           : `World API request failed with status ${response.status}.`;
-      throw new Error(message);
+      const error = new Error(message) as WorldRequestError;
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
     }
     return payload;
   } finally {
@@ -570,22 +608,167 @@ function loadPersonaProfile(agentId: string, config: PluginConfig): PersonaProfi
   };
 }
 
+function nowIsoString(): string {
+  return new Date().toISOString();
+}
+
+function isRequestStatus(error: unknown, ...statuses: number[]): boolean {
+  if (!error || typeof error !== "object" || !("status" in error)) {
+    return false;
+  }
+  const status = Number((error as { status?: unknown }).status);
+  return Number.isFinite(status) && statuses.includes(status);
+}
+
+function coerceAgentSession(input: unknown): AgentSession | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+
+  const worldBaseUrl = trimString((input as { worldBaseUrl?: unknown }).worldBaseUrl);
+  const agentId = trimString((input as { agentId?: unknown }).agentId);
+  const apiKey = trimString((input as { apiKey?: unknown }).apiKey);
+  if (!worldBaseUrl || !agentId || !apiKey) {
+    return null;
+  }
+
+  return {
+    worldBaseUrl: normalizeBaseUrl(worldBaseUrl),
+    agentId,
+    apiKey,
+    selectedCultivatorId: trimString((input as { selectedCultivatorId?: unknown }).selectedCultivatorId),
+    updatedAt:
+      trimString((input as { updatedAt?: unknown }).updatedAt) ??
+      trimString((input as { createdAt?: unknown }).createdAt) ??
+      nowIsoString(),
+  };
+}
+
+function readCredentialsFile(filePath: string): StoredCredentialsFile {
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as { entries?: unknown };
+    const entries = Array.isArray(parsed.entries)
+      ? parsed.entries
+          .map((entry) => coerceAgentSession(entry))
+          .filter((entry): entry is AgentSession => entry !== null)
+      : [];
+    return {
+      version: 1,
+      entries,
+    };
+  } catch {
+    return {
+      version: 1,
+      entries: [],
+    };
+  }
+}
+
+function writeCredentialsFile(filePath: string, payload: StoredCredentialsFile): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function findStoredSession(config: PluginConfig, requestedAgentId?: string): AgentSession | null {
+  const entries = readCredentialsFile(config.credentialsPath).entries
+    .filter((entry) => entry.worldBaseUrl === config.worldBaseUrl)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+  if (requestedAgentId) {
+    return entries.find((entry) => entry.agentId === requestedAgentId) ?? null;
+  }
+  if (config.agentId) {
+    return entries.find((entry) => entry.agentId === config.agentId) ?? null;
+  }
+  return entries[0] ?? null;
+}
+
+function persistSession(config: PluginConfig, session: AgentSession): AgentSession {
+  const snapshot = readCredentialsFile(config.credentialsPath);
+  const nextEntry: AgentSession = {
+    ...session,
+    worldBaseUrl: config.worldBaseUrl,
+    updatedAt: session.updatedAt || nowIsoString(),
+  };
+  const entries = snapshot.entries.filter(
+    (entry) =>
+      !(entry.worldBaseUrl === nextEntry.worldBaseUrl && entry.agentId === nextEntry.agentId),
+  );
+  entries.unshift(nextEntry);
+  writeCredentialsFile(config.credentialsPath, {
+    version: 1,
+    entries,
+  });
+  return nextEntry;
+}
+
+function removeStoredSession(config: PluginConfig, agentId: string): void {
+  const snapshot = readCredentialsFile(config.credentialsPath);
+  const entries = snapshot.entries.filter(
+    (entry) => !(entry.worldBaseUrl === config.worldBaseUrl && entry.agentId === agentId),
+  );
+  writeCredentialsFile(config.credentialsPath, {
+    version: 1,
+    entries,
+  });
+}
+
+function readSelectedCultivatorId(payload: unknown, message: string): string {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("selectedCultivatorId" in payload) ||
+    typeof (payload as { selectedCultivatorId?: unknown }).selectedCultivatorId !== "string"
+  ) {
+    throw new Error(message);
+  }
+  return (payload as { selectedCultivatorId: string }).selectedCultivatorId;
+}
+
+function readRegisteredSession(config: PluginConfig, payload: unknown): AgentSession {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Invalid agent registration response from world API.");
+  }
+
+  const agentId = trimString((payload as { agentId?: unknown }).agentId);
+  const apiKey = trimString((payload as { apiKey?: unknown }).apiKey);
+  if (!agentId || !apiKey) {
+    throw new Error("Invalid agent registration response from world API.");
+  }
+
+  return {
+    worldBaseUrl: config.worldBaseUrl,
+    agentId,
+    apiKey,
+    selectedCultivatorId: trimString((payload as { selectedCultivatorId?: unknown }).selectedCultivatorId),
+    updatedAt: nowIsoString(),
+  };
+}
+
+function readBoundCultivatorId(session: AgentSession): string {
+  if (!session.selectedCultivatorId) {
+    throw new Error("Agent session is missing selectedCultivatorId after bootstrap.");
+  }
+  return session.selectedCultivatorId;
+}
+
 function buildPromptGuidance(config: PluginConfig): string {
-  const bindingIdentity = config.agentId
-    ? `Default agentId: ${config.agentId}. Your in-world cultivator is identity-bound to this agent.`
-    : "";
+  const agentIdentity = config.agentId
+    ? `Preferred agentId: ${config.agentId}. The plugin will resume or register this agent automatically.`
+    : "The plugin will resume a cached agent for this world or register a new one automatically.";
   const defaultIdentity = config.defaultCultivatorId
-    ? `Fallback defaultCultivatorId: ${config.defaultCultivatorId}.`
+    ? `Legacy fallback defaultCultivatorId: ${config.defaultCultivatorId}.`
     : "";
 
   return [
     "You are connected to a live Immortal Realm world.",
-    bindingIdentity,
+    agentIdentity,
     defaultIdentity,
+    `Credential cache: ${config.credentialsPath}.`,
     "Rules for this world integration:",
     "- Never invent current state, inventory, sect membership, tribulation status, persona details, or action ids.",
     "- OpenClaw bootstrap files such as IDENTITY.md and SOUL.md already define the agent persona. Do not ask to create or switch characters manually.",
-    "- The plugin auto-syncs the agent persona into a single identity-bound cultivator before state lookups.",
+    "- The plugin auto-registers or resumes the agent, then syncs the persona into a single identity-bound cultivator before state lookups.",
     "- Call immortal_state, immortal_strategy, and immortal_actions before making strategic recommendations or taking actions.",
     "- Read agentGuidance, statusEffects, and recentEvents from immortal_state instead of inferring risk.",
     "- Use immortal_strategy to pick a short-term goal and recommended action sequence before acting.",
@@ -610,65 +793,7 @@ function resolveAgentId(
   }
   return agentId;
 }
-
-async function syncPersonaForAgent(
-  fetchImpl: FetchLike,
-  config: PluginConfig,
-  agentId: string,
-): Promise<{ selectedCultivatorId: string }> {
-  const persona = loadPersonaProfile(agentId, config);
-  const payload = await requestWorld(fetchImpl, config, "/agent/sync-persona", {
-    method: "POST",
-    body: JSON.stringify({
-      agentId,
-      ...persona,
-    }),
-  });
-  if (
-    !payload ||
-    typeof payload !== "object" ||
-    !("selectedCultivatorId" in payload) ||
-    typeof (payload as { selectedCultivatorId?: unknown }).selectedCultivatorId !== "string"
-  ) {
-    throw new Error("Invalid persona sync response from world API.");
-  }
-  return payload as { selectedCultivatorId: string };
-}
-async function resolveCultivatorId(
-  fetchImpl: FetchLike,
-  config: PluginConfig,
-  params: Record<string, unknown>,
-): Promise<string> {
-  const directCultivatorId = trimString(params.cultivatorId);
-  if (directCultivatorId) {
-    return directCultivatorId;
-  }
-
-  const agentId = resolveAgentId(config, params, false);
-  if (agentId) {
-    const binding = await syncPersonaForAgent(fetchImpl, config, agentId);
-    return binding.selectedCultivatorId;
-  }
-
-  if (config.defaultCultivatorId) {
-    return config.defaultCultivatorId;
-  }
-
-  throw new Error(
-    "cultivatorId is required because neither an identity-bound agent nor defaultCultivatorId is configured.",
-  );
-}
-
-async function listActionsForCultivator(
-  fetchImpl: FetchLike,
-  config: PluginConfig,
-  cultivatorId: string,
-): Promise<string[]> {
-  const payload = await requestWorld(
-    fetchImpl,
-    config,
-    `/cultivator/actions?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-  );
+function extractActionIds(payload: unknown): string[] {
   if (
     !payload ||
     typeof payload !== "object" ||
@@ -677,6 +802,7 @@ async function listActionsForCultivator(
   ) {
     throw new Error("Invalid actions response from world API.");
   }
+
   return ((payload as { actions: Array<{ actionId?: unknown }> }).actions ?? [])
     .map((entry) => (typeof entry.actionId === "string" ? entry.actionId : ""))
     .filter(Boolean);
@@ -689,35 +815,27 @@ function clampLimit(input: unknown): number | undefined {
   return Math.max(1, Math.min(50, Math.floor(input)));
 }
 
-function createGetTool(params: {
+type ResolvedTarget =
+  | {
+      mode: "agent";
+      cultivatorId: string;
+      session: AgentSession;
+    }
+  | {
+      mode: "legacy";
+      cultivatorId: string;
+      agentId?: string;
+    };
+
+type ReadToolOptions = {
   name: string;
   label: string;
   description: string;
-  pathBuilder: (cultivatorId: string) => string;
-  fetchImpl: FetchLike;
-  config: PluginConfig;
-  postProcess?: (payload: unknown, rawParams: Record<string, unknown>) => unknown;
   schema?: JsonSchema;
+  postProcess?: (payload: unknown, rawParams: Record<string, unknown>) => unknown;
   onSuccess?: (cultivatorId: string, payload: unknown) => void;
-}): ToolDefinition {
-  return {
-    name: params.name,
-    label: params.label,
-    description: params.description,
-    parameters: params.schema ?? CULTIVATOR_OR_AGENT_SCHEMA,
-    execute: async (_toolCallId, rawParams) => {
-      const cultivatorId = await resolveCultivatorId(params.fetchImpl, params.config, rawParams);
-      const payload = await requestWorld(
-        params.fetchImpl,
-        params.config,
-        params.pathBuilder(cultivatorId),
-      );
-      const finalPayload = params.postProcess ? params.postProcess(payload, rawParams) : payload;
-      params.onSuccess?.(cultivatorId, finalPayload);
-      return jsonResult(params.name, finalPayload);
-    },
-  };
-}
+  load: (target: ResolvedTarget, rawParams: Record<string, unknown>) => Promise<unknown>;
+};
 
 export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -744,6 +862,19 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           type: "string",
           description: "Workspace directory containing IDENTITY.md and SOUL.md.",
         },
+        credentialsPath: {
+          type: "string",
+          description: "Optional credentials.json path used to cache agent API keys.",
+        },
+        llmProvider: {
+          type: "string",
+        },
+        llmModelName: {
+          type: "string",
+        },
+        llmModelVersion: {
+          type: "string",
+        },
         requestTimeoutMs: {
           type: "number",
           minimum: 100,
@@ -764,6 +895,9 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           availableActionIds?: string[];
         }
       >();
+      const syncedAgents = new Set<string>();
+      let cachedSession: AgentSession | null = null;
+      let registrationRouteAvailable: boolean | undefined;
 
       function markInspection(
         cultivatorId: string,
@@ -797,36 +931,273 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         }
       }
 
-      log.info?.(
-        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} agentId=${config.agentId ?? "none"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"} personaDir=${config.personaDir}`,
-      );
-      api.registerTool(
-        createGetTool({
-          name: "immortal_state",
-          label: "Immortal State",
-          description: "Fetch the latest state snapshot for a cultivator in the Immortal Realm world.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/state?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-          onSuccess: (cultivatorId) => {
-            markInspection(cultivatorId, { stateAt: Date.now() });
-          },
-        }),
-      );
+      function cacheSession(session: AgentSession | null): AgentSession | null {
+        cachedSession = session;
+        if (!session) {
+          return null;
+        }
+        cachedSession = persistSession(config, session);
+        return cachedSession;
+      }
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_registration",
-          label: "Immortal Registration",
-          description:
-            "Read the saved OC cultivation registration record for the current cultivator.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/registration?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-        }),
+      function loadSession(agentId?: string): AgentSession | null {
+        if (
+          cachedSession &&
+          cachedSession.worldBaseUrl === config.worldBaseUrl &&
+          (!agentId || cachedSession.agentId === agentId)
+        ) {
+          return cachedSession;
+        }
+        cachedSession = findStoredSession(config, agentId);
+        return cachedSession;
+      }
+
+      function invalidateSession(agentId?: string): void {
+        const targetAgentId = agentId ?? cachedSession?.agentId;
+        if (targetAgentId) {
+          removeStoredSession(config, targetAgentId);
+          syncedAgents.delete(targetAgentId);
+        }
+        if (!agentId || cachedSession?.agentId === agentId) {
+          cachedSession = null;
+        }
+      }
+
+      async function registerAgentSession(agentId?: string): Promise<AgentSession> {
+        const persona = loadPersonaProfile(agentId ?? config.agentId ?? "openclaw-agent", config);
+        const payload = await requestWorld(fetchImpl, config, "/agent/register", {
+          method: "POST",
+          body: JSON.stringify({
+            ...(agentId ? { agentId } : {}),
+            name: persona.name,
+            ...(config.llmProvider ? { llmProvider: config.llmProvider } : {}),
+            ...(config.llmModelName ? { llmModelName: config.llmModelName } : {}),
+            ...(config.llmModelVersion ? { llmModelVersion: config.llmModelVersion } : {}),
+            ...(persona.genderPresentation ? { genderPresentation: persona.genderPresentation } : {}),
+            ...(persona.pronouns ? { pronouns: persona.pronouns } : {}),
+            ...(persona.origin ? { origin: persona.origin } : {}),
+            ...(persona.temperament ? { temperament: persona.temperament } : {}),
+            ...(persona.startingPath ? { startingPath: persona.startingPath } : {}),
+          }),
+        });
+        registrationRouteAvailable = true;
+        return cacheSession(readRegisteredSession(config, payload)) as AgentSession;
+      }
+
+      async function ensureAgentSession(
+        rawParams: Record<string, unknown>,
+        forceRefresh = false,
+      ): Promise<AgentSession | null> {
+        const agentId = resolveAgentId(config, rawParams, false);
+        if (!forceRefresh) {
+          const stored = loadSession(agentId);
+          if (stored) {
+            return stored;
+          }
+        }
+
+        if (!agentId && config.defaultCultivatorId) {
+          return null;
+        }
+
+        if (registrationRouteAvailable === false) {
+          return null;
+        }
+
+        try {
+          return await registerAgentSession(agentId);
+        } catch (error) {
+          if (isRequestStatus(error, 404, 405)) {
+            registrationRouteAvailable = false;
+            log.info?.("[immortal-realm] /agent/register unavailable, using legacy persona sync.");
+            return null;
+          }
+          throw error;
+        }
+      }
+
+      async function requestAgentWorld(
+        session: AgentSession,
+        pathSuffix: string,
+        init?: RequestInit,
+        retryOnUnauthorized = true,
+      ): Promise<unknown> {
+        try {
+          return await requestWorld(fetchImpl, config, pathSuffix, {
+            ...init,
+            headers: {
+              ...(init?.headers ?? {}),
+              Authorization: `Bearer ${session.apiKey}`,
+            },
+          });
+        } catch (error) {
+          if (retryOnUnauthorized && isRequestStatus(error, 401)) {
+            invalidateSession(session.agentId);
+            const refreshed = await ensureAgentSession({ agentId: session.agentId }, true);
+            if (refreshed) {
+              return requestAgentWorld(refreshed, pathSuffix, init, false);
+            }
+          }
+          throw error;
+        }
+      }
+
+      async function syncPersonaLegacy(agentId: string): Promise<{ selectedCultivatorId: string }> {
+        const persona = loadPersonaProfile(agentId, config);
+        const payload = await requestWorld(fetchImpl, config, "/agent/sync-persona", {
+          method: "POST",
+          body: JSON.stringify({
+            agentId,
+            ...persona,
+          }),
+        });
+        return {
+          selectedCultivatorId: readSelectedCultivatorId(
+            payload,
+            "Invalid persona sync response from world API.",
+          ),
+        };
+      }
+
+      async function syncPersonaForSession(session: AgentSession): Promise<AgentSession> {
+        if (syncedAgents.has(session.agentId)) {
+          return session;
+        }
+
+        const persona = loadPersonaProfile(session.agentId, config);
+        try {
+          const payload = await requestAgentWorld(session, "/agent/sync-persona", {
+            method: "POST",
+            body: JSON.stringify({
+              agentId: session.agentId,
+              ...persona,
+            }),
+          });
+          const current = loadSession(session.agentId) ?? session;
+          const updated = cacheSession({
+            ...current,
+            selectedCultivatorId: readSelectedCultivatorId(
+              payload,
+              "Invalid persona sync response from world API.",
+            ),
+            updatedAt: nowIsoString(),
+          }) as AgentSession;
+          syncedAgents.add(updated.agentId);
+          return updated;
+        } catch (error) {
+          if (isRequestStatus(error, 404, 405)) {
+            syncedAgents.add(session.agentId);
+            return session;
+          }
+          throw error;
+        }
+      }
+
+      async function resolveTarget(rawParams: Record<string, unknown>): Promise<ResolvedTarget> {
+        const directCultivatorId = trimString(rawParams.cultivatorId);
+        if (directCultivatorId) {
+          return {
+            mode: "legacy",
+            cultivatorId: directCultivatorId,
+            agentId: resolveAgentId(config, rawParams, false),
+          };
+        }
+
+        const session = await ensureAgentSession(rawParams);
+        if (session) {
+          const boundSession = await syncPersonaForSession(session);
+          return {
+            mode: "agent",
+            session: boundSession,
+            cultivatorId: readBoundCultivatorId(boundSession),
+          };
+        }
+
+        const agentId = resolveAgentId(config, rawParams, false);
+        if (agentId) {
+          const binding = await syncPersonaLegacy(agentId);
+          return {
+            mode: "legacy",
+            cultivatorId: binding.selectedCultivatorId,
+            agentId,
+          };
+        }
+
+        if (config.defaultCultivatorId) {
+          return {
+            mode: "legacy",
+            cultivatorId: config.defaultCultivatorId,
+          };
+        }
+
+        throw new Error(
+          "cultivatorId is required because neither an identity-bound agent nor defaultCultivatorId is configured.",
+        );
+      }
+
+      async function loadActions(target: ResolvedTarget): Promise<string[]> {
+        const payload =
+          target.mode === "agent"
+            ? await requestAgentWorld(target.session, "/agent/actions")
+            : await requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/actions?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              );
+        return extractActionIds(payload);
+      }
+
+      function registerReadTool(options: ReadToolOptions): void {
+        api.registerTool({
+          name: options.name,
+          label: options.label,
+          description: options.description,
+          parameters: options.schema ?? CULTIVATOR_OR_AGENT_SCHEMA,
+          execute: async (_toolCallId, rawParams) => {
+            const target = await resolveTarget(rawParams);
+            const payload = await options.load(target, rawParams);
+            const finalPayload = options.postProcess
+              ? options.postProcess(payload, rawParams)
+              : payload;
+            options.onSuccess?.(target.cultivatorId, finalPayload);
+            return jsonResult(options.name, finalPayload);
+          },
+        });
+      }
+
+      log.info?.(
+        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} agentId=${config.agentId ?? "auto"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"} personaDir=${config.personaDir} credentialsPath=${config.credentialsPath}`,
       );
+      registerReadTool({
+        name: "immortal_state",
+        label: "Immortal State",
+        description: "Fetch the latest state snapshot for a cultivator in the Immortal Realm world.",
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/state")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/state?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+        onSuccess: (cultivatorId) => {
+          markInspection(cultivatorId, { stateAt: Date.now() });
+        },
+      });
+
+      registerReadTool({
+        name: "immortal_registration",
+        label: "Immortal Registration",
+        description: "Read the saved OC cultivation registration record for the current cultivator.",
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/registration")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/registration?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+      });
 
       api.registerTool({
         name: "immortal_registration_save",
@@ -839,127 +1210,135 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           if (!record || typeof record !== "object" || Array.isArray(record)) {
             throw new Error("record is required and must be an object.");
           }
-          const cultivatorId = await resolveCultivatorId(fetchImpl, config, rawParams);
-          const agentId = resolveAgentId(config, rawParams, false);
-          const payload = await requestWorld(fetchImpl, config, "/cultivator/registration", {
-            method: "POST",
-            body: JSON.stringify({
-              cultivatorId,
-              ...(agentId ? { agentId } : {}),
-              record,
-            }),
-          });
+          const target = await resolveTarget(rawParams);
+          const payload =
+            target.mode === "agent"
+              ? await requestAgentWorld(target.session, "/agent/registration", {
+                  method: "POST",
+                  body: JSON.stringify({ record }),
+                })
+              : await requestWorld(fetchImpl, config, "/cultivator/registration", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    cultivatorId: target.cultivatorId,
+                    ...(target.agentId ? { agentId: target.agentId } : {}),
+                    record,
+                  }),
+                });
           return jsonResult("immortal_registration_save", payload);
         },
       });
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_strategy",
-          label: "Immortal Strategy",
-          description:
-            "Get a server-side risk assessment and recommended short-term action sequence for the current cultivator.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/strategy?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-          onSuccess: (cultivatorId) => {
-            markInspection(cultivatorId, { strategyAt: Date.now() });
-          },
-        }),
-      );
+      registerReadTool({
+        name: "immortal_strategy",
+        label: "Immortal Strategy",
+        description:
+          "Get a server-side risk assessment and recommended short-term action sequence for the current cultivator.",
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/strategy")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/strategy?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+        onSuccess: (cultivatorId) => {
+          markInspection(cultivatorId, { strategyAt: Date.now() });
+        },
+      });
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_actions",
-          label: "Immortal Actions",
-          description:
-            "List currently available actions for a cultivator. Use these action ids exactly when calling immortal_act.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/actions?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-          onSuccess: (cultivatorId, payload) => {
-            const actionIds =
-              payload &&
-              typeof payload === "object" &&
-              "actions" in payload &&
-              Array.isArray((payload as { actions?: unknown }).actions)
-                ? ((payload as { actions: Array<{ actionId?: unknown }> }).actions ?? [])
-                    .map((entry) => (typeof entry.actionId === "string" ? entry.actionId : ""))
-                    .filter(Boolean)
-                : [];
-            markInspection(cultivatorId, {
-              actionsAt: Date.now(),
-              availableActionIds: actionIds,
-            });
-          },
-        }),
-      );
+      registerReadTool({
+        name: "immortal_actions",
+        label: "Immortal Actions",
+        description:
+          "List currently available actions for a cultivator. Use these action ids exactly when calling immortal_act.",
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/actions")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/actions?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+        onSuccess: (cultivatorId, payload) => {
+          markInspection(cultivatorId, {
+            actionsAt: Date.now(),
+            availableActionIds: extractActionIds(payload),
+          });
+        },
+      });
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_messages",
-          label: "Immortal Messages",
-          description: "Read recent messages and notices for a cultivator.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/messages?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-          schema: CULTIVATOR_LIMIT_SCHEMA,
-          postProcess: (payload, rawParams) => {
-            const limit = clampLimit(rawParams.limit);
-            if (!limit || !Array.isArray(payload)) {
-              return payload;
-            }
-            return payload.slice(0, limit);
-          },
-        }),
-      );
+      registerReadTool({
+        name: "immortal_messages",
+        label: "Immortal Messages",
+        description: "Read recent messages and notices for a cultivator.",
+        schema: CULTIVATOR_LIMIT_SCHEMA,
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/messages")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/messages?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+        postProcess: (payload, rawParams) => {
+          const limit = clampLimit(rawParams.limit);
+          if (!limit || !Array.isArray(payload)) {
+            return payload;
+          }
+          return payload.slice(0, limit);
+        },
+      });
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_tribulation",
-          label: "Immortal Tribulation",
-          description: "Inspect the next tribulation preview for a cultivator.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/tribulation?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-        }),
-      );
+      registerReadTool({
+        name: "immortal_tribulation",
+        label: "Immortal Tribulation",
+        description: "Inspect the next tribulation preview for a cultivator.",
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/tribulation")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/tribulation?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+      });
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_sect",
-          label: "Immortal Sect",
-          description: "Read sect membership and sect resource information for a cultivator.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/sect?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-        }),
-      );
+      registerReadTool({
+        name: "immortal_sect",
+        label: "Immortal Sect",
+        description: "Read sect membership and sect resource information for a cultivator.",
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/sect")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/sect?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+      });
 
-      api.registerTool(
-        createGetTool({
-          name: "immortal_dao_logs",
-          label: "Immortal Dao Logs",
-          description: "Read recent dao-heart log entries for a cultivator.",
-          pathBuilder: (cultivatorId) =>
-            `/cultivator/dao-heart?cultivatorId=${encodeURIComponent(cultivatorId)}`,
-          fetchImpl,
-          config,
-          schema: CULTIVATOR_LIMIT_SCHEMA,
-          postProcess: (payload, rawParams) => {
-            const limit = clampLimit(rawParams.limit);
-            if (!limit || !Array.isArray(payload)) {
-              return payload;
-            }
-            return payload.slice(0, limit);
-          },
-        }),
-      );
+      registerReadTool({
+        name: "immortal_dao_logs",
+        label: "Immortal Dao Logs",
+        description: "Read recent dao-heart log entries for a cultivator.",
+        schema: CULTIVATOR_LIMIT_SCHEMA,
+        load: async (target) =>
+          target.mode === "agent"
+            ? requestAgentWorld(target.session, "/agent/dao-heart")
+            : requestWorld(
+                fetchImpl,
+                config,
+                `/cultivator/dao-heart?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
+              ),
+        postProcess: (payload, rawParams) => {
+          const limit = clampLimit(rawParams.limit);
+          if (!limit || !Array.isArray(payload)) {
+            return payload;
+          }
+          return payload.slice(0, limit);
+        },
+      });
 
       api.registerTool({
         name: "immortal_act",
@@ -968,26 +1347,32 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           "Execute an action for a cultivator in the Immortal Realm world. The actionId must come from immortal_actions.",
         parameters: ACT_SCHEMA,
         execute: async (_toolCallId, rawParams) => {
-          const cultivatorId = await resolveCultivatorId(fetchImpl, config, rawParams);
+          const target = await resolveTarget(rawParams);
           const actionId = trimString(rawParams.actionId);
           if (!actionId) {
             throw new Error("actionId is required.");
           }
-          ensureRecentInspection(cultivatorId);
-          const availableActionIds = await listActionsForCultivator(fetchImpl, config, cultivatorId);
+          ensureRecentInspection(target.cultivatorId);
+          const availableActionIds = await loadActions(target);
           if (!availableActionIds.includes(actionId)) {
             throw new Error(
               `actionId '${actionId}' is not currently available. Use one of: ${availableActionIds.join(", ")}`,
             );
           }
-          markInspection(cultivatorId, {
+          markInspection(target.cultivatorId, {
             actionsAt: Date.now(),
             availableActionIds,
           });
-          const payload = await requestWorld(fetchImpl, config, "/cultivator/act", {
-            method: "POST",
-            body: JSON.stringify({ cultivatorId, actionId }),
-          });
+          const payload =
+            target.mode === "agent"
+              ? await requestAgentWorld(target.session, "/agent/act", {
+                  method: "POST",
+                  body: JSON.stringify({ actionId }),
+                })
+              : await requestWorld(fetchImpl, config, "/cultivator/act", {
+                  method: "POST",
+                  body: JSON.stringify({ cultivatorId: target.cultivatorId, actionId }),
+                });
           return jsonResult("immortal_act", payload);
         },
       });
@@ -1003,6 +1388,20 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             typeof rawParams.steps === "number" && Number.isFinite(rawParams.steps)
               ? Math.max(1, Math.min(200, Math.floor(rawParams.steps)))
               : 1;
+          const session = await ensureAgentSession({});
+          if (session) {
+            try {
+              const payload = await requestAgentWorld(session, "/agent/tick", {
+                method: "POST",
+                body: JSON.stringify({ steps }),
+              });
+              return jsonResult("immortal_tick", payload);
+            } catch (error) {
+              if (!isRequestStatus(error, 404, 405)) {
+                throw error;
+              }
+            }
+          }
           const payload = await requestWorld(fetchImpl, config, "/world/tick", {
             method: "POST",
             body: JSON.stringify({ steps }),

@@ -36,7 +36,7 @@ export function registerRuntimeMiddleware(app: Hono<RuntimeWorkerEnv>) {
   );
 
   app.onError((error, context) => {
-    const status = readStatus(error) as 400 | 409 | 500;
+    const status = readStatus(error) as 400 | 401 | 409 | 500;
     return context.json({ error: readMessage(error) }, status);
   });
 }

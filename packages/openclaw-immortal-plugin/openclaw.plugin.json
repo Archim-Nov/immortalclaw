@@ -16,6 +16,23 @@
       "agentId": {
         "type": "string"
       },
+      "personaDir": {
+        "type": "string",
+        "description": "Workspace directory containing IDENTITY.md and SOUL.md."
+      },
+      "credentialsPath": {
+        "type": "string",
+        "description": "Optional credentials.json path used to cache agent API keys."
+      },
+      "llmProvider": {
+        "type": "string"
+      },
+      "llmModelName": {
+        "type": "string"
+      },
+      "llmModelVersion": {
+        "type": "string"
+      },
       "requestTimeoutMs": {
         "type": "number",
         "minimum": 100,

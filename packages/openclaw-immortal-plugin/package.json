@@ -1,7 +1,6 @@
 {
   "name": "openclaw-immortal-plugin",
   "version": "0.1.0",
-  "private": true,
+  "description": "OpenClaw plugin for self-serve onboarding into the Immortal Claw runtime.",
   "type": "module"
 }
-

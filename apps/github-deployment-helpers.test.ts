@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// shared.mjs is runtime-only JS; the test only needs its exported helpers.
+// @ts-expect-error runtime module without a TS declaration in the test build.
 const helpersModule = await import("../scripts/github-deployments/shared.mjs");
 
 const { extractPagesPreviewUrl, matchesPreviewDeployment, selectCloudflarePagesCheckRun } =

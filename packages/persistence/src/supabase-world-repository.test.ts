@@ -19,6 +19,8 @@ class FakeSupabaseRestApi {
     world_events: [] as Array<Record<string, unknown>>,
     tick_runs: [] as Array<Record<string, unknown>>,
     world_locks: new Map<string, { lock_name: string; owner_id: string; acquired_at: string }>(),
+    agent_profiles: new Map<string, Record<string, unknown>>(),
+    agent_credentials: new Map<string, Record<string, unknown>>(),
   };
 
   fetch: typeof fetch = async (input, init) => {
@@ -64,6 +66,30 @@ class FakeSupabaseRestApi {
       const rows = [...this.tables.tick_runs];
       rows.sort((left, right) => String(right.recorded_at).localeCompare(String(left.recorded_at)));
       return this.jsonResponse(rows.slice(0, Number(url.searchParams.get("limit") ?? "1")));
+    }
+
+    if (tableName === "agent_profiles") {
+      const agentId = this.readEq(url, "agent_id");
+      const row = agentId ? this.tables.agent_profiles.get(agentId) : null;
+      return this.jsonResponse(row ? [row] : []);
+    }
+
+    if (tableName === "agent_credentials") {
+      const hash = this.readEq(url, "api_key_hash");
+      if (hash) {
+        const row = this.tables.agent_credentials.get(hash);
+        return this.jsonResponse(row ? [row] : []);
+      }
+
+      const agentId = this.readEq(url, "agent_id");
+      if (!agentId) {
+        return this.jsonResponse([]);
+      }
+
+      const rows = [...this.tables.agent_credentials.values()].filter(
+        (row) => row.agent_id === agentId,
+      );
+      return this.jsonResponse(rows);
     }
 
     return this.jsonResponse({ message: `GET not supported for ${tableName}` }, 400);
@@ -122,6 +148,22 @@ class FakeSupabaseRestApi {
       return this.jsonResponse([], 201);
     }
 
+    if (tableName === "agent_profiles") {
+      const rows = Array.isArray(body) ? body : [body];
+      for (const row of rows) {
+        this.tables.agent_profiles.set(String(row.agent_id), row);
+      }
+      return this.jsonResponse([], 201);
+    }
+
+    if (tableName === "agent_credentials") {
+      const rows = Array.isArray(body) ? body : [body];
+      for (const row of rows) {
+        this.tables.agent_credentials.set(String(row.api_key_hash), row);
+      }
+      return this.jsonResponse([], 201);
+    }
+
     return this.jsonResponse({ message: `POST not supported for ${tableName}` }, 400);
   }
 
@@ -130,6 +172,21 @@ class FakeSupabaseRestApi {
     url: URL,
     request: Request,
   ) {
+    if (tableName === "agent_credentials") {
+      const agentId = this.readEq(url, "agent_id");
+      if (!agentId) {
+        return this.jsonResponse([], 200);
+      }
+
+      const body = await request.json();
+      for (const [hash, row] of this.tables.agent_credentials.entries()) {
+        if (row.agent_id === agentId) {
+          this.tables.agent_credentials.set(hash, { ...row, ...body });
+        }
+      }
+      return this.jsonResponse([], 200);
+    }
+
     if (tableName !== "world_snapshots") {
       return this.jsonResponse({ message: `PATCH not supported for ${tableName}` }, 400);
     }
@@ -215,6 +272,25 @@ test("readWorld bootstraps and persists a seed snapshot when storage is empty", 
   assert.notEqual(second, first);
   assert.equal(api.tables.world_snapshots.size, 1);
   assert.equal(api.tables.cultivator_records.size, Object.keys(first.cultivators).length);
+});
+
+test("agent registration issues credentials and authenticated lookups resolve the bound cultivator", async () => {
+  const { api, repository } = createRepository();
+
+  const registration = await repository.registerAgent({
+    agentId: "openclaw-main",
+    name: "Su Mingyue",
+    llmProvider: "openai",
+    llmModelName: "gpt-5",
+  });
+  const authenticated = await repository.authenticateAgent(registration.apiKey);
+
+  assert.equal(registration.agentId, "openclaw-main");
+  assert.equal(typeof registration.apiKey, "string");
+  assert.equal(authenticated?.agentId, "openclaw-main");
+  assert.equal(authenticated?.selectedCultivatorId, registration.selectedCultivatorId);
+  assert.equal(api.tables.agent_profiles.size, 1);
+  assert.equal(api.tables.agent_credentials.size, 1);
 });
 
 test("Supabase REST requests use the secret key as apikey without bearer auth", async () => {

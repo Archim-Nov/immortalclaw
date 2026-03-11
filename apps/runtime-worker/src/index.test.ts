@@ -19,6 +19,24 @@ test("health route returns ok", async () => {
   assert.deepEqual(payload, { ok: true });
 });
 
+test("public onboarding docs are exposed as markdown", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  const skillResponse = await app.request("https://runtime.test/skill.md");
+  const registerResponse = await app.request("https://runtime.test/register.md");
+  const heartbeatResponse = await app.request("https://runtime.test/heartbeat.md");
+
+  assert.equal(skillResponse.status, 200);
+  assert.match(String(skillResponse.headers.get("content-type")), /text\/markdown/);
+  assert.match(await skillResponse.text(), /Immortal Claw agent skill/i);
+
+  assert.equal(registerResponse.status, 200);
+  assert.match(await registerResponse.text(), /POST \/agent\/register/);
+
+  assert.equal(heartbeatResponse.status, 200);
+  assert.match(await heartbeatResponse.text(), /state -> messages -> events -> actions/i);
+});
+
 test("worker fetch allows the local vite origin", async () => {
   const response = await worker.fetch(
     new Request("https://runtime.test/health", {
@@ -64,6 +82,51 @@ test("state route returns cultivator state", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(payload.cultivator.id, cultivatorId);
+});
+
+test("agent registration issues an api key and authenticated state uses the bound cultivator", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      agentId: "openclaw-main",
+      name: "Su Mingyue",
+      llmProvider: "openai",
+      llmModelName: "gpt-5",
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+
+  assert.equal(registerResponse.status, 200);
+  assert.equal(registerPayload.agentId, "openclaw-main");
+  assert.equal(typeof registerPayload.apiKey, "string");
+  assert.equal(typeof registerPayload.selectedCultivatorId, "string");
+
+  const stateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${registerPayload.apiKey}`,
+    },
+  });
+  const statePayload = await stateResponse.json();
+
+  assert.equal(stateResponse.status, 200);
+  assert.equal(statePayload.agent.agentId, "openclaw-main");
+  assert.equal(statePayload.cultivator.id, registerPayload.selectedCultivatorId);
+});
+
+test("agent routes reject missing authorization", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  const response = await app.request("https://runtime.test/agent/state");
+  const payload = await response.json();
+
+  assert.equal(response.status, 401);
+  assert.match(payload.error, /Bearer/);
 });
 
 test("actions route returns available actions", async () => {

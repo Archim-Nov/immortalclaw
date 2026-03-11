@@ -17,7 +17,7 @@ const deploymentSpecPath = path.join(
 
 function readWorkflow(): string {
   assert.equal(existsSync(workflowPath), true, `expected workflow at ${workflowPath}`);
-  return readFileSync(workflowPath, "utf8");
+  return readFileSync(workflowPath, "utf8").replace(/\r\n/g, "\n");
 }
 
 function readDocument(documentPath: string): string {

@@ -8,3 +8,4 @@ npm-debug.log*
 .codex/
 skills-lock.json
 AGENTS.local.md
+data/

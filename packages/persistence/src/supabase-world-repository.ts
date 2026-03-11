@@ -1,20 +1,32 @@
 import {
   advanceWorld as advanceWorldState,
   createSeedWorld,
+  getCultivationRegistration,
   getCultivatorState as readCultivatorState,
   listAvailableActions as readAvailableActions,
   performAction as performWorldAction,
+  saveCultivationRegistration,
+  syncCultivatorFromPersona,
 } from "../../domain/src/runtime.js";
 import type {
   ActionExecutionResult,
   ActionId,
   AvailableAction,
+  CultivationRegistrationRecord,
   CultivatorStateView,
   TickSummary,
   WorldState,
 } from "../../domain/src/runtime.js";
 import type { WorldEvent } from "../../domain/src/model.js";
-import type { TickLockRecord, TickRunRecord, WorldRepository } from "./world-repository.js";
+import type {
+  AgentPersonaInput,
+  AgentProfileRecord,
+  AgentRegistrationInput,
+  AgentRegistrationResult,
+  TickLockRecord,
+  TickRunRecord,
+  WorldRepository,
+} from "./world-repository.js";
 
 const DEFAULT_WORLD_KEY = "primary";
 const DEFAULT_TICK_LOCK_NAME = "world-tick";
@@ -39,6 +51,45 @@ interface TickRunRow {
   trigger: TickRunRecord["trigger"];
   recorded_at: string;
   payload: TickSummary;
+}
+
+interface AgentProfileRow {
+  agent_id: string;
+  name: string;
+  selected_cultivator_id: string;
+  gender_presentation?: AgentProfileRecord["genderPresentation"] | null;
+  pronouns?: string | null;
+  origin?: string | null;
+  temperament?: string | null;
+  starting_path?: AgentProfileRecord["startingPath"] | null;
+  llm_provider?: string | null;
+  llm_model_name?: string | null;
+  llm_model_version?: string | null;
+  created_at: string;
+  updated_at: string;
+  last_seen_at?: string | null;
+}
+
+interface AgentCredentialRow {
+  agent_id: string;
+  api_key_hash: string;
+  created_at: string;
+  last_seen_at: string | null;
+  revoked_at?: string | null;
+}
+
+function normalizeAgentId(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function issueApiKey(): string {
+  return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+async function hashApiKey(apiKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(apiKey.trim()));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export class SupabaseWorldRepository implements WorldRepository {
@@ -186,6 +237,274 @@ export class SupabaseWorldRepository implements WorldRepository {
     }
   }
 
+  async registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult> {
+    const normalizedName = input.name.trim();
+    if (!normalizedName) {
+      throw new Error("Agent registration requires a name.");
+    }
+
+    const agentId = normalizeAgentId(input.agentId) ?? `agent-${crypto.randomUUID()}`;
+    const timestamp = this.now();
+    const existingProfile = await this.readAgentProfile(agentId);
+    const snapshot = await this.readSnapshot();
+    const sync = syncCultivatorFromPersona(snapshot.world, {
+      agentId,
+      name: normalizedName,
+      genderPresentation: input.genderPresentation,
+      pronouns: input.pronouns,
+      age: input.age,
+      origin: input.origin,
+      temperament: input.temperament,
+      startingPath: input.startingPath,
+    });
+
+    await this.persistWorld(snapshot.world, snapshot.revision);
+
+    const profile = {
+      agentId,
+      name: normalizedName,
+      selectedCultivatorId: sync.selectedCultivatorId,
+      genderPresentation: input.genderPresentation,
+      pronouns: input.pronouns?.trim(),
+      origin: input.origin?.trim(),
+      temperament: input.temperament?.trim(),
+      startingPath: input.startingPath,
+      llmProvider: input.llmProvider?.trim(),
+      llmModelName: input.llmModelName?.trim(),
+      llmModelVersion: input.llmModelVersion?.trim(),
+      createdAt: existingProfile?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+      lastSeenAt: timestamp,
+    } satisfies AgentProfileRecord;
+
+    await this.upsertRows("agent_profiles", [this.toAgentProfileRow(profile)], "agent_id");
+
+    await this.fetchImpl(
+      this.tableUrl("agent_credentials", {
+        agent_id: `eq.${encodeURIComponent(agentId)}`,
+      }),
+      {
+        method: "PATCH",
+        headers: this.headers({
+          Prefer: "return=minimal",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          revoked_at: timestamp,
+        }),
+      },
+    );
+
+    const apiKey = issueApiKey();
+    await this.upsertRows(
+      "agent_credentials",
+      [
+        {
+          agent_id: agentId,
+          api_key_hash: await hashApiKey(apiKey),
+          created_at: timestamp,
+          last_seen_at: timestamp,
+          revoked_at: null,
+        },
+      ],
+      "api_key_hash",
+    );
+
+    return {
+      ...profile,
+      apiKey,
+      createdCultivator: sync.created,
+    };
+  }
+
+  async authenticateAgent(apiKey: string): Promise<AgentProfileRecord | null> {
+    const normalizedApiKey = apiKey.trim();
+    if (!normalizedApiKey) {
+      return null;
+    }
+
+    const credentialRows = await this.selectRows<AgentCredentialRow>("agent_credentials", {
+      api_key_hash: `eq.${encodeURIComponent(await hashApiKey(normalizedApiKey))}`,
+      select: "agent_id,created_at,last_seen_at,revoked_at",
+      limit: "1",
+    });
+    const credential = credentialRows[0];
+    if (!credential || credential.revoked_at) {
+      return null;
+    }
+
+    const profile = await this.readAgentProfile(credential.agent_id);
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      ...profile,
+      lastSeenAt: credential.last_seen_at,
+    };
+  }
+
+  async syncAgentPersona(agentId: string, input: AgentPersonaInput): Promise<AgentProfileRecord> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+
+    const existingProfile = await this.readAgentProfile(normalizedAgentId);
+    if (!existingProfile) {
+      throw new Error(`Agent not found: ${normalizedAgentId}`);
+    }
+
+    const snapshot = await this.readSnapshot();
+    const sync = syncCultivatorFromPersona(snapshot.world, {
+      agentId: normalizedAgentId,
+      name: input.name,
+      genderPresentation: input.genderPresentation,
+      pronouns: input.pronouns,
+      age: input.age,
+      origin: input.origin,
+      temperament: input.temperament,
+      startingPath: input.startingPath,
+    });
+
+    await this.persistWorld(snapshot.world, snapshot.revision);
+
+    const updatedProfile: AgentProfileRecord = {
+      ...existingProfile,
+      name: input.name.trim(),
+      selectedCultivatorId: sync.selectedCultivatorId,
+      genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
+      pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
+      origin: input.origin?.trim() ?? existingProfile.origin,
+      temperament: input.temperament?.trim() ?? existingProfile.temperament,
+      startingPath: input.startingPath ?? existingProfile.startingPath,
+      updatedAt: this.now(),
+    };
+
+    await this.upsertRows("agent_profiles", [this.toAgentProfileRow(updatedProfile)], "agent_id");
+    return structuredClone(updatedProfile);
+  }
+
+  async touchAgent(agentId: string): Promise<void> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      return;
+    }
+
+    const response = await this.fetchImpl(
+      this.tableUrl("agent_credentials", {
+        agent_id: `eq.${encodeURIComponent(normalizedAgentId)}`,
+      }),
+      {
+        method: "PATCH",
+        headers: this.headers({
+          Prefer: "return=minimal",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          last_seen_at: this.now(),
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await this.readError(response);
+      throw new Error(`Failed to update agent activity: ${error.message}`);
+    }
+  }
+
+  async syncPersona(agentId: string, input: AgentPersonaInput) {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+
+    const snapshot = await this.readSnapshot();
+    const result = syncCultivatorFromPersona(snapshot.world, {
+      agentId: normalizedAgentId,
+      name: input.name,
+      genderPresentation: input.genderPresentation,
+      pronouns: input.pronouns,
+      age: input.age,
+      origin: input.origin,
+      temperament: input.temperament,
+      startingPath: input.startingPath,
+    });
+    await this.persistWorld(snapshot.world, snapshot.revision);
+    return structuredClone(result);
+  }
+
+  async getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null> {
+    const world = await this.readWorld();
+    return getCultivationRegistration(world, cultivatorId);
+  }
+
+  async saveCultivationRegistration(
+    cultivatorId: string,
+    record: CultivationRegistrationRecord,
+    savedByAgentId?: string | null,
+  ): Promise<CultivationRegistrationRecord> {
+    const snapshot = await this.readSnapshot();
+    const stored = saveCultivationRegistration(
+      snapshot.world,
+      cultivatorId,
+      record,
+      savedByAgentId,
+    );
+    await this.persistWorld(snapshot.world, snapshot.revision);
+    return structuredClone(stored);
+  }
+
+  private async readAgentProfile(agentId: string): Promise<AgentProfileRecord | null> {
+    const rows = await this.selectRows<AgentProfileRow>("agent_profiles", {
+      agent_id: `eq.${encodeURIComponent(agentId)}`,
+      select:
+        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,starting_path,llm_provider,llm_model_name,llm_model_version,created_at,updated_at,last_seen_at",
+      limit: "1",
+    });
+
+    const row = rows[0];
+    return row ? this.fromAgentProfileRow(row) : null;
+  }
+
+  private toAgentProfileRow(profile: AgentProfileRecord): AgentProfileRow {
+    return {
+      agent_id: profile.agentId,
+      name: profile.name,
+      selected_cultivator_id: profile.selectedCultivatorId,
+      gender_presentation: profile.genderPresentation ?? null,
+      pronouns: profile.pronouns ?? null,
+      origin: profile.origin ?? null,
+      temperament: profile.temperament ?? null,
+      starting_path: profile.startingPath ?? null,
+      llm_provider: profile.llmProvider ?? null,
+      llm_model_name: profile.llmModelName ?? null,
+      llm_model_version: profile.llmModelVersion ?? null,
+      created_at: profile.createdAt,
+      updated_at: profile.updatedAt,
+      last_seen_at: profile.lastSeenAt,
+    };
+  }
+
+  private fromAgentProfileRow(row: AgentProfileRow): AgentProfileRecord {
+    return {
+      agentId: row.agent_id,
+      name: row.name,
+      selectedCultivatorId: row.selected_cultivator_id,
+      genderPresentation: row.gender_presentation ?? undefined,
+      pronouns: row.pronouns ?? undefined,
+      origin: row.origin ?? undefined,
+      temperament: row.temperament ?? undefined,
+      startingPath: row.starting_path ?? undefined,
+      llmProvider: row.llm_provider ?? undefined,
+      llmModelName: row.llm_model_name ?? undefined,
+      llmModelVersion: row.llm_model_version ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastSeenAt: row.last_seen_at ?? null,
+    };
+  }
+
   private async readSnapshot(): Promise<{ world: WorldState; revision: number }> {
     const rows = await this.selectRows<StoredWorldSnapshotRow>("world_snapshots", {
       world_key: `eq.${encodeURIComponent(this.worldKey)}`,
@@ -310,11 +629,11 @@ export class SupabaseWorldRepository implements WorldRepository {
     return this.readJson<T[]>(response, `Failed to read rows from ${table}`);
   }
 
-  private async insertRow(table: string, row: Record<string, unknown>) {
+  private async insertRow<T extends object>(table: string, row: T) {
     await this.insertRows(table, [row]);
   }
 
-  private async insertRows(table: string, rows: Array<Record<string, unknown>>) {
+  private async insertRows<T extends object>(table: string, rows: T[]) {
     const response = await this.fetchImpl(this.tableUrl(table), {
       method: "POST",
       headers: this.headers({
@@ -332,7 +651,7 @@ export class SupabaseWorldRepository implements WorldRepository {
 
   private async upsertRows(
     table: string,
-    rows: Array<Record<string, unknown>>,
+    rows: object[],
     conflictColumn: string,
   ) {
     const response = await this.fetchImpl(

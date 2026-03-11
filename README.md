@@ -37,6 +37,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - status effects, ambient events, and faction reputation
 - sect joining, sect errands, and simple tribulation resolution
 - messages, dao logs, combat history, and recent event history
+- self-serve agent registration, bearer-authenticated `/agent/*` routes, and public onboarding docs
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
 
@@ -83,6 +84,10 @@ Worker app:
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 - `WORLD_TICK_STEPS`
+
+Apply the agent onboarding migration before sending hosted traffic to the worker:
+
+- `supabase/migrations/20260311_agent_onboarding_schema.sql`
 
 `FRONTEND_ORIGIN` should contain only the deployed frontend origin. Use a value like `https://immortal-claw.pages.dev`, not a path such as `https://immortal-claw.pages.dev/app`.
 The Worker also permits:
@@ -147,6 +152,8 @@ Validation smoke checks:
 
 ```text
 curl "https://<worker-host>/health"
+curl "https://<worker-host>/skill.md"
+curl -X POST "https://<worker-host>/agent/register" -H "Content-Type: application/json" -d "{\"agentId\":\"openclaw-main\",\"name\":\"Su Mingyue\"}"
 curl "https://<worker-host>/cultivator/actions?cultivatorId=yun-zhong-he"
 curl -X POST "https://<worker-host>/cultivator/act" -H "Content-Type: application/json" -d "{\"cultivatorId\":\"yun-zhong-he\",\"actionId\":\"meditate\"}"
 ```
@@ -156,6 +163,8 @@ Check Supabase for rows in:
 - `world_snapshots`
 - `cultivator_records`
 - `world_actions`
+- `agent_profiles`
+- `agent_credentials`
 
 ### Legacy SQLite Harnesses
 
@@ -210,7 +219,9 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/openclaw-agent-setup.md`
 - `docs/immortal-realm-design.md`
 - `docs/specs/deployment-platform/spec.md`
+- `docs/specs/openclaw-self-serve-onboarding/spec.md`
 - `docs/specs/github-deployment-records/spec.md`
+- `docs/plans/2026-03-11-openclaw-self-serve-onboarding.md`
 - `docs/plans/2026-03-11-github-deployment-records-design.md`
 - `docs/plans/2026-03-11-github-deployment-records.md`
 - `docs/plans/2026-03-11-vite-pages-worker-design.md`
@@ -223,3 +234,13 @@ Use these docs to move work from product intent to spec to plan to implementatio
 Local plugin path:
 
 - `packages/openclaw-immortal-plugin`
+
+Hosted onboarding docs exposed by the worker:
+
+- `/skill.md`
+- `/register.md`
+- `/heartbeat.md`
+
+Detailed setup:
+
+- `docs/openclaw-agent-setup.md`

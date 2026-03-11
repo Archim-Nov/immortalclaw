@@ -31,6 +31,27 @@ function unusedRepository() {
     async releaseTickLock() {
       throw new Error("not used");
     },
+    async registerAgent() {
+      throw new Error("not used");
+    },
+    async authenticateAgent() {
+      throw new Error("not used");
+    },
+    async syncAgentPersona() {
+      throw new Error("not used");
+    },
+    async touchAgent() {
+      throw new Error("not used");
+    },
+    async syncPersona() {
+      throw new Error("not used");
+    },
+    async getCultivationRegistration() {
+      throw new Error("not used");
+    },
+    async saveCultivationRegistration() {
+      throw new Error("not used");
+    },
   };
 }
 
