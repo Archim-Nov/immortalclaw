@@ -24,8 +24,7 @@
 - Modify: `tsconfig.json`
 - Create: `apps/web/package.json`
 - Create: `apps/web/tsconfig.json`
-- Create: `apps/web/next.config.ts`
-- Create: `apps/web/app/page.tsx`
+- Create: initial web workspace entrypoints for the frontend shell. These draft-era files were later replaced by the Vite Pages frontend in `apps/web/vite.config.ts` and `apps/web/src/main.tsx`.
 - Create: `apps/runtime-worker/package.json`
 - Create: `apps/runtime-worker/tsconfig.json`
 - Create: `apps/runtime-worker/wrangler.jsonc`
@@ -315,13 +314,9 @@ git commit -m "feat: move runtime API and ticks to Hono on Cloudflare Workers"
 ### Task 5: Historical draft for the web surface before the Vite Pages migration
 
 **Files:**
-- Modify: `apps/web/app/page.tsx`
-- Create: `apps/web/app/layout.tsx`
-- Create: `apps/web/lib/runtime-client.ts`
-- Create: `apps/web/lib/env.ts`
-- Create: `apps/web/app/api/health/route.ts`
-- Create: `apps/web/app/api/runtime-proxy/[...path]/route.ts`
-- Create: `apps/web/app/page.test.tsx`
+- Historical draft files for the pre-Vite web shell and helper modules.
+- Current equivalents live in the Vite Pages frontend under `apps/web/src/*`.
+- The current frontend no longer uses Next.js route handlers or `app/api/runtime-proxy/[...path]/route.ts`.
 
 **Step 1: Write the failing integration tests**
 
