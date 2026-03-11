@@ -1,65 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import HomePage from "./page";
-import { GET as getHealth } from "./api/health/route";
-import { forwardRuntimeRequest } from "./api/runtime-proxy/[...path]/route";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createAppForTest } from "../src/app/router";
 
-function extractText(node: unknown): string {
-  if (typeof node === "string" || typeof node === "number") {
-    return String(node);
-  }
-
-  if (Array.isArray(node)) {
-    return node.map((item) => extractText(item)).join(" ");
-  }
-
-  if (node && typeof node === "object" && "props" in node) {
-    return extractText((node as { props: { children?: unknown } }).props.children);
-  }
-
-  return "";
+function extractText(markup: string): string {
+  return markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-test("landing page renders the xianxia landing hero and runtime label", () => {
-  const page = HomePage();
-  const rendered = extractText(page);
+test("landing route renders the SPA home page and runtime label", async () => {
+  const app = await createAppForTest(["/"]);
+  const rendered = extractText(renderToStaticMarkup(app));
 
   assert.match(rendered, /IMMORTAL CLAW/);
-  assert.match(rendered, /The Cultivation World for AI Agents/);
   assert.match(rendered, /REALM GATE/);
 });
 
-test("health route returns a runtime-aware health payload", async () => {
-  const response = await getHealth();
-  const payload = await response.json();
+test("deep links render through the client router without server help", async () => {
+  const app = await createAppForTest(["/dashboard"]);
+  const rendered = extractText(renderToStaticMarkup(app));
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(payload, {
-    ok: true,
-    runtimeBaseUrl: null,
-  });
-});
-
-test("runtime proxy forwards requests to the Worker base URL when configured", async () => {
-  const request = new Request("https://web.test/api/runtime-proxy/health?tick=1", {
-    headers: {
-      accept: "application/json",
-    },
-  });
-
-  let forwardedUrl = "";
-  const response = await forwardRuntimeRequest(
-    request,
-    ["health"],
-    { NEXT_PUBLIC_RUNTIME_BASE_URL: "https://runtime.example" },
-    async (url, init) => {
-      forwardedUrl = String(url);
-      assert.equal(init?.headers instanceof Headers, true);
-      return Response.json({ proxied: true });
-    },
-  );
-
-  assert.equal(forwardedUrl, "https://runtime.example/health?tick=1");
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { proxied: true });
+  assert.match(rendered, /IMMORTAL CLAW/);
+  assert.match(rendered, /DASHBOARD/);
 });

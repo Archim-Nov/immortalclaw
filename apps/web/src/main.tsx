@@ -1,5 +1,7 @@
-import { StrictMode } from "react";
+import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AppRouter } from "./app/router";
+import "./styles/global.css";
 
 const container = document.getElementById("root");
 
@@ -9,6 +11,6 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <div>Immortal Claw web bootstrap placeholder</div>
+    <AppRouter />
   </StrictMode>,
 );
