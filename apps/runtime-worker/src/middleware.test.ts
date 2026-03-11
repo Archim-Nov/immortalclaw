@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createApp } from "./app.js";
-import { LOCAL_VITE_DEV_ORIGIN } from "./env.js";
+import { LOCAL_VITE_DEV_ORIGIN, LOCAL_VITE_PREVIEW_ORIGIN } from "./env.js";
 
 const pagesOrigin = "https://immortal-claw.pages.dev";
 
@@ -108,6 +108,26 @@ test("cors allows health requests from the configured pages origin", async () =>
   assert.equal(response.headers.get("access-control-allow-origin"), pagesOrigin);
 });
 
+test("cors allows pages preview deployment origins tied to the configured pages project domain", async () => {
+  const app = createApp({ repository: unusedRepository() as never });
+  const previewOrigin = "https://main.immortal-claw.pages.dev";
+
+  const response = await app.request(
+    "https://runtime.test/health",
+    {
+      headers: {
+        origin: previewOrigin,
+      },
+    },
+    {
+      FRONTEND_ORIGIN: pagesOrigin,
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), previewOrigin);
+});
+
 test("cors does not allow disallowed origins", async () => {
   const app = createApp({ repository: unusedRepository() as never });
 
@@ -125,6 +145,44 @@ test("cors does not allow disallowed origins", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
+});
+
+test("cors does not allow unrelated pages.dev preview domains", async () => {
+  const app = createApp({ repository: unusedRepository() as never });
+
+  const response = await app.request(
+    "https://runtime.test/health",
+    {
+      headers: {
+        origin: "https://main.other-project.pages.dev",
+      },
+    },
+    {
+      FRONTEND_ORIGIN: pagesOrigin,
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), null);
+});
+
+test("cors allows the pinned local vite preview origin", async () => {
+  const app = createApp({ repository: unusedRepository() as never });
+
+  const response = await app.request(
+    "https://runtime.test/health",
+    {
+      headers: {
+        origin: LOCAL_VITE_PREVIEW_ORIGIN,
+      },
+    },
+    {
+      FRONTEND_ORIGIN: pagesOrigin,
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), LOCAL_VITE_PREVIEW_ORIGIN);
 });
 
 test("cors preserves allow-origin on error responses for allowed origins", async () => {

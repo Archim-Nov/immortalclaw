@@ -4,7 +4,10 @@ import {
   createSupabaseWorldRepository,
 } from "../../../packages/persistence/src/index.js";
 
-export const LOCAL_VITE_DEV_ORIGIN = "http://localhost:5173";
+export const LOCAL_VITE_DEV_PORT = 5173;
+export const LOCAL_VITE_PREVIEW_PORT = 4173;
+export const LOCAL_VITE_DEV_ORIGIN = `http://localhost:${LOCAL_VITE_DEV_PORT}`;
+export const LOCAL_VITE_PREVIEW_ORIGIN = `http://localhost:${LOCAL_VITE_PREVIEW_PORT}`;
 
 export interface RuntimeWorkerBindings {
   FRONTEND_ORIGIN?: string;
@@ -29,17 +32,12 @@ function invalidFrontendOriginError() {
   );
 }
 
-export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
-  const trimmed = bindings?.FRONTEND_ORIGIN?.trim();
-  if (!trimmed) {
-    throw new Error("FRONTEND_ORIGIN must be configured.");
-  }
-
+function readAbsoluteOriginUrl(value: string): URL | null {
   let url: URL;
   try {
-    url = new URL(trimmed);
+    url = new URL(value.trim());
   } catch {
-    throw invalidFrontendOriginError();
+    return null;
   }
 
   if (
@@ -50,6 +48,50 @@ export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
     url.username !== "" ||
     url.password !== ""
   ) {
+    return null;
+  }
+
+  return url;
+}
+
+function isDnsLabel(value: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(value);
+}
+
+function isPagesProjectOrigin(url: URL): boolean {
+  const labels = url.hostname.split(".");
+  return labels.length === 3 && labels[1] === "pages" && labels[2] === "dev" && isDnsLabel(labels[0]);
+}
+
+function isPagesPreviewOrigin(originUrl: URL, frontendUrl: URL): boolean {
+  if (!isPagesProjectOrigin(frontendUrl)) {
+    return false;
+  }
+
+  if (originUrl.protocol !== frontendUrl.protocol || originUrl.port !== frontendUrl.port) {
+    return false;
+  }
+
+  const frontendLabels = frontendUrl.hostname.split(".");
+  const originLabels = originUrl.hostname.split(".");
+  if (originLabels.length !== frontendLabels.length + 1) {
+    return false;
+  }
+
+  return (
+    originUrl.hostname.endsWith(`.${frontendUrl.hostname}`) &&
+    isDnsLabel(originLabels[0])
+  );
+}
+
+export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
+  const trimmed = bindings?.FRONTEND_ORIGIN?.trim();
+  if (!trimmed) {
+    throw new Error("FRONTEND_ORIGIN must be configured.");
+  }
+
+  const url = readAbsoluteOriginUrl(trimmed);
+  if (!url) {
     throw invalidFrontendOriginError();
   }
 
@@ -57,7 +99,32 @@ export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
 }
 
 export function resolveCorsOrigins(bindings?: RuntimeWorkerBindings): string[] {
-  return [...new Set([readFrontendOrigin(bindings), LOCAL_VITE_DEV_ORIGIN])];
+  return [
+    ...new Set([
+      readFrontendOrigin(bindings),
+      LOCAL_VITE_DEV_ORIGIN,
+      LOCAL_VITE_PREVIEW_ORIGIN,
+    ]),
+  ];
+}
+
+export function isAllowedCorsOrigin(origin: string, bindings?: RuntimeWorkerBindings): boolean {
+  const originUrl = readAbsoluteOriginUrl(origin);
+  if (!originUrl) {
+    return false;
+  }
+
+  const normalizedOrigin = originUrl.origin;
+  const frontendOrigin = readFrontendOrigin(bindings);
+  if (
+    normalizedOrigin === frontendOrigin ||
+    normalizedOrigin === LOCAL_VITE_DEV_ORIGIN ||
+    normalizedOrigin === LOCAL_VITE_PREVIEW_ORIGIN
+  ) {
+    return true;
+  }
+
+  return isPagesPreviewOrigin(originUrl, new URL(frontendOrigin));
 }
 
 export function readTickSteps(bindings: RuntimeWorkerBindings): number {

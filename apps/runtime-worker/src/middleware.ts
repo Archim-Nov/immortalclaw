@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { cors } from "hono/cors";
-import { resolveCorsOrigins, type RuntimeWorkerEnv } from "./env.js";
+import { isAllowedCorsOrigin, type RuntimeWorkerEnv } from "./env.js";
 
 function readStatus(error: unknown) {
   if (typeof error === "object" && error !== null && "status" in error) {
@@ -30,7 +30,7 @@ export function registerRuntimeMiddleware(app: Hono<RuntimeWorkerEnv>) {
           return null;
         }
 
-        return resolveCorsOrigins(context.env).includes(origin) ? origin : null;
+        return isAllowedCorsOrigin(origin, context.env) ? origin : null;
       },
     }),
   );

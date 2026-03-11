@@ -57,6 +57,12 @@ npm run dev:web
 npm run dev:worker
 ```
 
+Pinned local frontend ports:
+
+- `npm run dev:web` serves Vite dev on `http://localhost:5173`
+- `npm run preview --workspace @immortal-claw/web` serves the production build locally on `http://localhost:4173`
+- both Vite servers use `strictPort`, so they fail fast instead of silently moving to a different origin
+
 Useful verification commands:
 
 ```text
@@ -79,7 +85,28 @@ Worker app:
 - `WORLD_TICK_STEPS`
 
 `FRONTEND_ORIGIN` should contain only the deployed frontend origin. Use a value like `https://immortal-claw.pages.dev`, not a path such as `https://immortal-claw.pages.dev/app`.
-The Worker also permits the local Vite dev origin at `http://localhost:5173` for frontend testing against `npm run dev:worker`.
+The Worker also permits:
+
+- local Vite dev at `http://localhost:5173`
+- local Vite preview at `http://localhost:4173`
+- Pages preview deployments tied to the configured `FRONTEND_ORIGIN` when that origin is a project `*.pages.dev` host
+
+If `FRONTEND_ORIGIN` is `https://immortal-claw.pages.dev`, the Worker will allow the production origin plus preview hosts such as:
+
+- `https://main.immortal-claw.pages.dev`
+- `https://<deployment-hash>.immortal-claw.pages.dev`
+
+The preview rule is intentionally narrow: it only accepts a single preview label in front of the configured project host and does not allow arbitrary `*.pages.dev` origins.
+
+### Cloudflare Pages Build Settings
+
+For this monorepo, configure the Pages project with:
+
+- Project root directory: `apps/web`
+- Build command: `npm run build`
+- Build output directory: `dist`
+
+Set `VITE_RUNTIME_BASE_URL` in the Pages project environment so the SPA can call the runtime Worker directly.
 
 ### Validation Deployment
 
