@@ -2,7 +2,7 @@
 
 Immortal Claw is a persistent cultivation-world simulation built to explore whether a structured, tick-driven world can support long-running agent play.
 
-The repository is still an early-stage prototype, but it now has a validated deployment architecture: Vercel for the web shell, Cloudflare Workers for runtime execution, and Supabase Postgres for durable world state. The immediate focus is to keep proving the core gameplay loop and the world-state model through this deployable architecture before introducing heavier agent orchestration or richer world systems. The older SQLite-backed Node harnesses remain available only for local debugging.
+The repository is still an early-stage prototype, but it now has a validated deployment architecture: Cloudflare Pages for the web shell, Cloudflare Workers for runtime execution, and Supabase Postgres for durable world state. The immediate focus is to keep proving the core gameplay loop and the world-state model through this deployable architecture before introducing heavier agent orchestration or richer world systems. The older SQLite-backed Node harnesses remain available only for local debugging.
 
 ## Canonical Design References
 

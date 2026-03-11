@@ -16,7 +16,7 @@ Current high-value scenarios:
 
 - runtime API smoke: fetch health, state, actions, and act through `apps/runtime-worker`
 - scheduled tick smoke: advance the world through the Worker scheduled handler and verify tick metadata
-- web shell smoke: confirm the Vercel health route and runtime proxy wiring
+- web shell smoke: confirm the Vite/Pages frontend build scaffold and browser entrypoint wiring
 - legacy harness smoke: confirm the SQLite Node harnesses still work for local-only debugging during migration
 
 The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-action-and-tick.md`.

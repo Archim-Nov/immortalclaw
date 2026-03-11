@@ -60,6 +60,6 @@ test("web app vite config stays buildable for the pages workspace", async () => 
 });
 
 test("web workspace scripts keep explicit typechecking in the root build path", () => {
-  assert.equal(webPackage.scripts.typecheck, "tsc --noEmit");
+  assert.equal(webPackage.scripts.typecheck, "tsc --noEmit --incremental false");
   assert.match(rootPackage.scripts["build:web"], /typecheck --workspace @immortal-claw\/web/);
 });
