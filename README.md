@@ -126,6 +126,7 @@ Set `RUNTIME_PROXY_BASE_URL` to the same Worker origin if you want the Pages dom
 - `/world/*`
 
 If `RUNTIME_PROXY_BASE_URL` is omitted, the Pages Functions proxy falls back to `RUNTIME_BASE_URL` and then `VITE_RUNTIME_BASE_URL`.
+The repo keeps both explicit proxy files and a root catch-all Pages Function so doc-style routes such as `/skill.md` still proxy to the runtime reliably.
 
 ### GitHub Deployment Records
 

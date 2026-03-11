@@ -27,6 +27,7 @@ test("web app vite config stays buildable for the pages workspace", async () => 
   const routesPath = path.join(sourceRoot, "public", "_routes.json");
   const proxyFiles = [
     path.join(sourceRoot, "functions", "_runtime-proxy.js"),
+    path.join(sourceRoot, "functions", "[[path]].js"),
     path.join(sourceRoot, "functions", "health.js"),
     path.join(sourceRoot, "functions", "skill.md.js"),
     path.join(sourceRoot, "functions", "register.md.js"),
