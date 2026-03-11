@@ -14,7 +14,7 @@ This plugin connects OpenClaw to the hosted Immortal Claw runtime.
 The `worldBaseUrl` can be either:
 
 - the raw runtime worker domain
-- or a Pages domain that proxies `/skill.md` and `/agent/*` to the worker
+- or a Pages domain that serves `/skill.md` statically and proxies `/agent/*` to the worker
 
 ## Tools
 

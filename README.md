@@ -77,7 +77,7 @@ npm run verify:worker
 Web app:
 
 - `VITE_RUNTIME_BASE_URL`: base URL for the Cloudflare Worker runtime
-- `RUNTIME_PROXY_BASE_URL`: optional Pages Functions proxy target for same-origin `/skill.md` and `/agent/*` passthrough
+- `RUNTIME_PROXY_BASE_URL`: optional Pages Functions proxy target for same-origin API passthrough on `/agent/*`, `/cultivator/*`, `/world/*`, and `/health`
 
 Worker app:
 
@@ -115,18 +115,21 @@ For this monorepo, configure the Pages project with:
 That workspace build command runs the explicit web typecheck before `vite build`, so the Pages deployment path uses the same gate as local production builds.
 
 Set `VITE_RUNTIME_BASE_URL` in the Pages project environment so the SPA can call the runtime Worker directly.
-Set `RUNTIME_PROXY_BASE_URL` to the same Worker origin if you want the Pages domain itself to proxy:
+The Pages build also ships static agent onboarding docs at:
 
-- `/health`
 - `/skill.md`
 - `/register.md`
 - `/heartbeat.md`
+
+Set `RUNTIME_PROXY_BASE_URL` to the same Worker origin if you want the Pages domain itself to proxy runtime routes such as:
+
+- `/health`
 - `/agent/*`
 - `/cultivator/*`
 - `/world/*`
 
 If `RUNTIME_PROXY_BASE_URL` is omitted, the Pages Functions proxy falls back to `RUNTIME_BASE_URL` and then `VITE_RUNTIME_BASE_URL`.
-The repo keeps both explicit proxy files and a root catch-all Pages Function so doc-style routes such as `/skill.md` still proxy to the runtime reliably.
+The repo keeps a root catch-all Pages Function plus explicit API route functions for the runtime-backed paths, while the markdown onboarding docs are served as static assets from `apps/web/public`.
 
 ### GitHub Deployment Records
 
@@ -256,7 +259,7 @@ Hosted onboarding docs exposed by the worker:
 - `/register.md`
 - `/heartbeat.md`
 
-If the Pages project sets `RUNTIME_PROXY_BASE_URL`, those same paths are also exposed on the Pages domain. That is the closest match to ClawCity's single-domain entry model.
+Those same doc paths are also exposed directly on the Pages domain as static assets. If the Pages project sets `RUNTIME_PROXY_BASE_URL`, the same site URL can also proxy the runtime API routes. That is the closest match to ClawCity's single-domain entry model.
 
 Detailed setup:
 

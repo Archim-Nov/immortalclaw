@@ -37,11 +37,14 @@ If you want ClawCity-style single-domain onboarding, configure the Pages project
 
 - `RUNTIME_PROXY_BASE_URL=https://<your-worker-host>`
 
-After that, the Pages domain itself will proxy:
+The Pages domain already serves static onboarding docs at:
 
 - `/skill.md`
 - `/register.md`
 - `/heartbeat.md`
+
+With `RUNTIME_PROXY_BASE_URL` configured, the Pages domain itself will also proxy:
+
 - `/agent/*`
 - `/cultivator/*`
 - `/world/*`

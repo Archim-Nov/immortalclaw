@@ -25,13 +25,15 @@ test("web app vite config stays buildable for the pages workspace", async () => 
   const configPath = path.join(sourceRoot, "vite.config.ts");
   const indexHtmlPath = path.join(sourceRoot, "index.html");
   const routesPath = path.join(sourceRoot, "public", "_routes.json");
+  const publicDocs = [
+    path.join(sourceRoot, "public", "skill.md"),
+    path.join(sourceRoot, "public", "register.md"),
+    path.join(sourceRoot, "public", "heartbeat.md"),
+  ];
   const proxyFiles = [
     path.join(sourceRoot, "functions", "_runtime-proxy.js"),
     path.join(sourceRoot, "functions", "[[path]].js"),
     path.join(sourceRoot, "functions", "health.js"),
-    path.join(sourceRoot, "functions", "skill.md.js"),
-    path.join(sourceRoot, "functions", "register.md.js"),
-    path.join(sourceRoot, "functions", "heartbeat.md.js"),
     path.join(sourceRoot, "functions", "agent", "[[route]].js"),
     path.join(sourceRoot, "functions", "cultivator", "[[route]].js"),
     path.join(sourceRoot, "functions", "world", "[[route]].js"),
@@ -77,13 +79,14 @@ test("web app vite config stays buildable for the pages workspace", async () => 
   };
   assert.deepEqual(routes.include, [
     "/health",
-    "/skill.md",
-    "/register.md",
-    "/heartbeat.md",
     "/agent/*",
     "/cultivator/*",
     "/world/*",
   ]);
+
+  for (const publicDoc of publicDocs) {
+    assert.equal(fs.existsSync(publicDoc), true, `expected public markdown at ${publicDoc}`);
+  }
 
   for (const proxyFile of proxyFiles) {
     assert.equal(fs.existsSync(proxyFile), true, `expected proxy file at ${proxyFile}`);

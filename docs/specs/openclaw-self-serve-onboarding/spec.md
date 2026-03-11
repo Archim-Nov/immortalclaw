@@ -15,7 +15,7 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
 - support authenticated `/agent/*` routes for state, actions, messages, events, strategy, tribulation, sect, dao logs, registration, action execution, and manual tick
 - keep legacy `/cultivator/*`, `/agent/sync-persona`, and `/world/tick` compatibility for local harnesses and migration
 - make the OpenClaw plugin auto-register, cache credentials, and reuse them on later runs
-- make the Pages domain act as a same-origin gateway so a single public site URL can also expose `/skill.md` and proxy runtime routes
+- make the Pages domain act as a single public entrypoint by serving `/skill.md`, `/register.md`, and `/heartbeat.md` directly and proxying runtime routes
 
 ## Non-Goals
 
@@ -50,11 +50,12 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
 
 ### Same-Origin Gateway
 
-- the Pages deployment should proxy:
-  - `/health`
+- the Pages deployment should serve static onboarding docs at:
   - `/skill.md`
   - `/register.md`
   - `/heartbeat.md`
+- the Pages deployment should proxy:
+  - `/health`
   - `/agent/*`
   - `/cultivator/*`
   - `/world/*`

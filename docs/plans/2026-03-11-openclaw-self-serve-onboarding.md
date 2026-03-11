@@ -23,7 +23,8 @@ Implement the minimum hosted onboarding path so OpenClaw can attach to the deplo
    - retries via new credentials when needed
    - falls back to legacy routes when the new worker endpoints are missing
 4. Add a Pages same-origin runtime gateway:
-   - proxy `/skill.md`, `/register.md`, `/heartbeat.md`, `/agent/*`, `/cultivator/*`, `/world/*`, and `/health`
+   - serve static `/skill.md`, `/register.md`, and `/heartbeat.md`
+   - proxy `/agent/*`, `/cultivator/*`, `/world/*`, and `/health`
    - expose `/skill.md` discovery hints from the root HTML
 5. Add or update tests for:
    - worker onboarding docs and auth flow
