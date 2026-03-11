@@ -106,6 +106,8 @@ For this monorepo, configure the Pages project with:
 - Build command: `npm run build`
 - Build output directory: `dist`
 
+That workspace build command runs the explicit web typecheck before `vite build`, so the Pages deployment path uses the same gate as local production builds.
+
 Set `VITE_RUNTIME_BASE_URL` in the Pages project environment so the SPA can call the runtime Worker directly.
 
 ### Validation Deployment
