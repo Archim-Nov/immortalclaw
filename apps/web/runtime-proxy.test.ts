@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRuntimeProxyUrl,
+  onRequest,
   readRuntimeProxyBaseUrl,
 } from "./functions/_runtime-proxy.js";
 
@@ -47,4 +48,45 @@ test("buildRuntimeProxyUrl preserves path and query against the runtime base url
     ),
     "https://runtime.example/skill.md",
   );
+});
+
+test("onRequest proxies registration requests to the runtime without changing method or body", async () => {
+  const originalFetch = globalThis.fetch;
+  let upstreamRequest: Request | null = null;
+
+  globalThis.fetch = (async (request: Request | URL | string) => {
+    upstreamRequest = request instanceof Request ? request : new Request(request);
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+  }) as typeof fetch;
+
+  try {
+    const response = await onRequest({
+      env: {
+        RUNTIME_PROXY_BASE_URL: "https://runtime.example/base/",
+      },
+      request: new Request("https://immortal-claw.pages.dev/agent/register", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Su Mingyue",
+        }),
+      }),
+    });
+
+    assert.ok(upstreamRequest);
+    assert.equal(upstreamRequest.url, "https://runtime.example/agent/register");
+    assert.equal(upstreamRequest.method, "POST");
+    assert.equal(await upstreamRequest.text(), JSON.stringify({ name: "Su Mingyue" }));
+    assert.equal(response.headers.get("x-immortal-proxy"), "pages");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -217,14 +217,15 @@ a {
 .landing-main {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 4rem 4rem 4rem 3rem;
 }
 
 .landing-content {
   position: relative;
   z-index: 2;
-  max-width: 50rem;
+  width: 100%;
+  max-width: 58rem;
 }
 
 .landing-runtime-pill {
@@ -280,6 +281,43 @@ a {
   opacity: 0.48;
 }
 
+.landing-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  margin: 0 0 2rem;
+}
+
+.landing-status-card {
+  min-height: 100%;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.45rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(10, 15, 20, 0.72));
+  box-shadow: 0 0.9rem 2rem rgba(0, 0, 0, 0.22);
+}
+
+.landing-card-kicker {
+  margin-bottom: 0.55rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12rem;
+  text-transform: uppercase;
+}
+
+.landing-card-title {
+  margin: 0 0 0.45rem;
+  color: var(--accent-ice);
+  font-size: 1.08rem;
+}
+
+.landing-card-copy {
+  margin: 0;
+  color: rgba(224, 242, 254, 0.82);
+  line-height: 1.6;
+}
+
 .landing-terminal {
   position: relative;
   max-width: 44rem;
@@ -314,6 +352,12 @@ a {
   font-size: 0.97rem;
   line-height: 1.7;
   color: #a3e635;
+}
+
+.landing-terminal-content--dense {
+  margin-top: 1.6rem;
+  font-size: 0.88rem;
+  line-height: 1.8;
 }
 
 .landing-terminal-comment {
@@ -375,8 +419,8 @@ a {
 
 .landing-links {
   margin-top: 2.5rem;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 1rem;
 }
 
@@ -439,6 +483,109 @@ a {
   font-family: var(--font-mono);
   font-size: 0.74rem;
   letter-spacing: 0.06rem;
+}
+
+.landing-link-card--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.landing-link-meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
+.landing-link-copy {
+  color: rgba(224, 242, 254, 0.78);
+  line-height: 1.55;
+}
+
+.landing-panel {
+  margin-top: 2.5rem;
+  padding: 1.6rem;
+  border: 1px solid rgba(0, 255, 170, 0.18);
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(180deg, rgba(10, 15, 20, 0.84), rgba(7, 18, 26, 0.72)),
+    radial-gradient(circle at top right, rgba(0, 255, 170, 0.12), transparent 12rem);
+  box-shadow:
+    0 1.2rem 2.6rem rgba(0, 0, 0, 0.25),
+    inset 0 0 1.4rem rgba(0, 255, 170, 0.04);
+}
+
+.landing-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.landing-section-title {
+  margin: 0;
+  color: var(--accent-ice);
+  font-size: clamp(1.45rem, 2vw, 1.9rem);
+}
+
+.landing-section-body {
+  margin: 0;
+  color: rgba(224, 242, 254, 0.82);
+  line-height: 1.7;
+}
+
+.landing-sequence {
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.landing-sequence-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.95rem;
+  padding: 0.95rem 1rem;
+  border-left: 2px solid rgba(251, 191, 36, 0.32);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.landing-sequence-step {
+  min-width: 2rem;
+  color: var(--accent-gold);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  letter-spacing: 0.12rem;
+}
+
+.landing-sequence-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  color: rgba(224, 242, 254, 0.82);
+  line-height: 1.55;
+}
+
+.landing-sequence-endpoint {
+  color: var(--accent-jade);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.landing-rule-list {
+  margin: 1.2rem 0 0;
+  padding-left: 1.1rem;
+  color: rgba(224, 242, 254, 0.82);
+  line-height: 1.7;
+}
+
+.landing-rule-list li + li {
+  margin-top: 0.5rem;
 }
 
 .landing-sigil {
@@ -614,11 +761,20 @@ a {
   }
 
   .landing-links {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .landing-link-card {
     width: 100%;
+  }
+
+  .landing-panel {
+    padding: 1.25rem 1rem;
+  }
+
+  .landing-sequence-row {
+    flex-direction: column;
+    gap: 0.55rem;
   }
 }
 

@@ -20,7 +20,9 @@ test("landing route renders the SPA home page and runtime label", async () => {
   const rendered = extractText(renderToStaticMarkup(app));
 
   assert.match(rendered, /IMMORTAL CLAW/);
-  assert.match(rendered, /REALM GATE/);
+  assert.match(rendered, /PUBLIC GATEWAY/);
+  assert.match(rendered, /\/skill\.md/);
+  assert.match(rendered, /Registration and first playable loop/);
 });
 
 test("landing route no longer depends on removed Next API endpoints", async () => {
@@ -29,6 +31,8 @@ test("landing route no longer depends on removed Next API endpoints", async () =
 
   assert.doesNotMatch(markup, /\/api\/health/);
   assert.doesNotMatch(markup, /\/api\/runtime-proxy/);
+  assert.doesNotMatch(markup, /\/taijian\.md/);
+  assert.doesNotMatch(markup, /\/realm/);
 });
 
 test("landing page renders direct runtime worker links when configured", () => {
@@ -38,8 +42,12 @@ test("landing page renders direct runtime worker links when configured", () => {
     </MemoryRouter>,
   );
 
+  assert.match(markup, /href="\/skill\.md"/);
+  assert.match(markup, /href="\/register\.md"/);
+  assert.match(markup, /href="\/heartbeat\.md"/);
+  assert.match(markup, /href="\/health"/);
   assert.match(markup, /href="https:\/\/runtime\.example\/health"/);
-  assert.match(markup, /href="https:\/\/runtime\.example\/cultivator\/state\?cultivatorId=yun-zhong-he"/);
+  assert.match(markup, /href="https:\/\/runtime\.example"/);
 });
 
 test("deep links render through the client router without server help", async () => {
@@ -47,7 +55,7 @@ test("deep links render through the client router without server help", async ()
   const rendered = extractText(renderToStaticMarkup(app));
 
   assert.match(rendered, /IMMORTAL CLAW/);
-  assert.match(rendered, /DASHBOARD/);
+  assert.match(rendered, /Dashboard/);
 });
 
 test("router uses AppShell as the root route element", () => {

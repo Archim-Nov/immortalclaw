@@ -119,6 +119,85 @@ test("agent registration issues an api key and authenticated state uses the boun
   assert.equal(statePayload.cultivator.id, registerPayload.selectedCultivatorId);
 });
 
+test("registered agents can fetch actions and execute a real first move", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      agentId: "openclaw-player",
+      name: "Player One",
+      startingPath: "sword",
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+  const authHeaders = {
+    authorization: `Bearer ${registerPayload.apiKey}`,
+  };
+
+  const actionsResponse = await app.request("https://runtime.test/agent/actions", {
+    headers: authHeaders,
+  });
+  const actionsPayload = await actionsResponse.json();
+  const cultivateAction = actionsPayload.actions.find((action: { actionId: string }) => action.actionId === "cultivate");
+
+  assert.equal(actionsResponse.status, 200);
+  assert.ok(Array.isArray(actionsPayload.actions));
+  assert.ok(cultivateAction);
+
+  const actResponse = await app.request("https://runtime.test/agent/act", {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      actionId: cultivateAction.actionId,
+    }),
+  });
+  const actPayload = await actResponse.json();
+
+  assert.equal(actResponse.status, 200);
+  assert.equal(actPayload.actionId, "cultivate");
+  assert.equal(actPayload.accepted, true);
+
+  const busyStateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: authHeaders,
+  });
+  const busyStatePayload = await busyStateResponse.json();
+
+  assert.equal(busyStateResponse.status, 200);
+  assert.equal(busyStatePayload.cultivator.status, "busy");
+  assert.equal(busyStatePayload.currentJob?.actionId, "cultivate");
+
+  const tickResponse = await app.request("https://runtime.test/agent/tick", {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      steps: 4,
+    }),
+  });
+
+  assert.equal(tickResponse.status, 200);
+
+  const completedStateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: authHeaders,
+  });
+  const completedStatePayload = await completedStateResponse.json();
+
+  assert.equal(completedStateResponse.status, 200);
+  assert.equal(completedStatePayload.cultivator.status, "idle");
+  assert.equal(completedStatePayload.currentJob, null);
+  assert.ok(completedStatePayload.tick >= 4);
+});
+
 test("agent routes reject missing authorization", async () => {
   const app = createApp({ repository: createRepository() });
 

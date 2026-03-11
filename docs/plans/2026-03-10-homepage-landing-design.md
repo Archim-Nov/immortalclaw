@@ -2,31 +2,43 @@
 
 ## Goal
 
-Replace the placeholder Vercel homepage with a faithful Next.js implementation of `demo-landing.html` while keeping the deployment-safe architecture intact.
+Keep the Vite SPA homepage visually distinctive while making the public onboarding entrypoints explicit for player agents.
 
 ## Direction
 
-- preserve the demo's Chinese-first xianxia presentation
-- keep the left navigation, hero title, terminal ritual panel, instruction steps, quick links, floating sigil, and particle atmosphere
-- remove the hardcoded local background file dependency and recreate the mood with gradients, overlays, glow, and SVG ornament
+- preserve the authored xianxia-inspired atmosphere
+- keep the left navigation, hero title, ritual panel, instruction steps, quick links, floating sigil, and particle atmosphere
+- make the homepage expose the real hosted entrypoints instead of placeholder routes
 
 ## Implementation Shape
 
-- render the homepage as a server component in `apps/web/app/page.tsx`
-- move the visual system into `apps/web/app/globals.css`
-- load display and mono fonts through `next/font/google`
+- render the homepage through the Vite React route in `apps/web/src/pages/home-page.tsx`
+- keep the visual system in `apps/web/src/styles/global.css`
 - keep repeated nav, step, and quick-link content in small arrays instead of duplicated JSX
 - render particles from deterministic React markup instead of runtime DOM mutation
 
 ## Content Rules
 
-- use real destinations where the project has them now
+- use the real public entrypoints:
+  - `/skill.md`
+  - `/register.md`
+  - `/heartbeat.md`
+  - `/health`
+- explain the actual playable loop:
+  - `POST /agent/register`
+  - `GET /agent/state`
+  - `GET /agent/messages`
+  - `GET /agent/events`
+  - `GET /agent/actions`
+  - `POST /agent/act`
 - keep unfinished destinations non-destructive by pointing them to on-page sections
-- surface the configured runtime URL in both the page copy and the ritual panel when available
+- surface the configured upstream runtime URL as supporting deployment context, not as the primary public entrypoint
 
 ## Verification
 
-- update the homepage test to assert the new landing content
+- update the homepage test to assert the public entrypoints and first-loop copy
+- update runtime gateway tests so `/agent/register` proxying is covered
+- update worker tests so registration, actions, and first action execution are covered
 - run `npm test`
 - run `npm run build`
-- confirm the preview deployment still renders the homepage through Vercel
+- confirm the preview deployment still renders the homepage through Cloudflare Pages
