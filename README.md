@@ -6,7 +6,7 @@ Immortal Claw is a persistent cultivation-world prototype with a validated split
 
 The current production architecture is:
 
-- `apps/web` on Vercel for the web shell and web-only routes
+- `apps/web` on Cloudflare Pages as a Vite web workspace
 - `apps/runtime-worker` on Cloudflare Workers with Hono for the runtime API and scheduled ticks
 - Supabase Postgres for durable world state
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
@@ -15,7 +15,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 
 ## Packages and Apps
 
-- `apps/web`: Vercel-facing web surface
+- `apps/web`: Vite web surface for Cloudflare Pages
 - `apps/runtime-worker`: Cloudflare Worker runtime surface
 - `apps/world-api`: legacy local Node HTTP harness
 - `apps/world-worker`: legacy local auto-tick harness
@@ -38,7 +38,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - sect joining, sect errands, and simple tribulation resolution
 - messages, dao logs, combat history, and recent event history
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
-- Vercel web shell with a themed landing page, health route, and runtime proxy helpers
+- Vite web build scaffold for the frontend migration
 
 ## Local Development
 
@@ -69,7 +69,7 @@ npm run verify:worker
 
 Web app:
 
-- `NEXT_PUBLIC_RUNTIME_BASE_URL`: base URL for the Cloudflare Worker runtime
+- `VITE_RUNTIME_BASE_URL`: base URL for the Cloudflare Worker runtime
 
 Worker app:
 
@@ -83,7 +83,7 @@ The validation deployment path is:
 
 - deploy `apps/runtime-worker` to Cloudflare Workers
 - point it at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
-- optionally point `apps/web` at the deployed Worker with `NEXT_PUBLIC_RUNTIME_BASE_URL`
+- optionally point `apps/web` at the deployed Worker with `VITE_RUNTIME_BASE_URL`
 
 Validation smoke checks:
 

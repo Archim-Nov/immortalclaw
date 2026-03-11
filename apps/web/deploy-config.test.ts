@@ -4,6 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import ts from "typescript";
+import rootPackage from "../../package.json" with { type: "json" };
+import webPackage from "./package.json" with { type: "json" };
 
 function normalizePath(filePath: string | undefined) {
   return filePath?.replace(/\\/g, "/").replace(/\/$/, "");
@@ -55,4 +57,9 @@ test("web app vite config stays buildable for the pages workspace", async () => 
     normalizePath(entryPath),
     normalizePath(path.join(sourceRoot, "src", "main.tsx")),
   );
+});
+
+test("web workspace scripts keep explicit typechecking in the root build path", () => {
+  assert.equal(webPackage.scripts.typecheck, "tsc --noEmit");
+  assert.match(rootPackage.scripts["build:web"], /typecheck --workspace @immortal-claw\/web/);
 });
