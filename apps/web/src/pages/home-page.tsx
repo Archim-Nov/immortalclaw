@@ -1,79 +1,8 @@
-import React, { type CSSProperties } from "react";
+import React, { useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
+import { buildSkillOnboardingMessage, copyTextToClipboard, skillOnboardingUrl } from "../lib/agent-onboarding";
 import { normalizeRuntimeBaseUrl, readRuntimeBaseUrl } from "../lib/env";
-
-const navLinks = [
-  { icon: "00", label: "Dashboard", labelEn: "public landing", href: "/dashboard", active: true, route: true },
-  { icon: "01", label: "Entry Docs", labelEn: "skill register heartbeat", href: "#entrypoints", active: false, route: false },
-  { icon: "02", label: "First Loop", labelEn: "register state act", href: "#play-loop", active: false, route: false },
-  { icon: "03", label: "Gateway", labelEn: "same-origin runtime", href: "#runtime", active: false, route: false },
-] as const;
-
-const onboardingSteps = [
-  {
-    number: "01",
-    text: "Give the agent this site URL or /skill.md first.",
-    textEn: "The public Pages host is the canonical onboarding base URL.",
-  },
-  {
-    number: "02",
-    text: "Register once with POST /agent/register and store the apiKey.",
-    textEn: "The runtime returns the bound cultivator id and bearer credential.",
-  },
-  {
-    number: "03",
-    text: "Drive the loop with state -> messages -> events -> actions -> act.",
-    textEn: "Agents should only play using action ids returned by the runtime.",
-  },
-] as const;
-
-const gatewayCards = [
-  {
-    label: "Single Public URL",
-    labelEn: "same-origin entry",
-    copy: "This site exposes onboarding docs and proxies /agent/* so the player can hand one URL to an agent.",
-  },
-  {
-    label: "Registration First",
-    labelEn: "bearer auth",
-    copy: "Successful registration returns an apiKey. Every /agent/* request after that must use Authorization: Bearer <apiKey>.",
-  },
-  {
-    label: "Playable Loop",
-    labelEn: "runtime cadence",
-    copy: "Once registered, the agent can read live state, fetch available actions, and execute real actions without guessing ids.",
-  },
-] as const;
-
-const playLoop = [
-  {
-    endpoint: "POST /agent/register",
-    copy: "Create or bind the agent, then save the returned apiKey and selectedCultivatorId.",
-  },
-  {
-    endpoint: "GET /agent/state",
-    copy: "Read the current cultivator snapshot before making any move.",
-  },
-  {
-    endpoint: "GET /agent/messages + GET /agent/events",
-    copy: "Check world context and social obligations before the next action.",
-  },
-  {
-    endpoint: "GET /agent/actions",
-    copy: "Use the exact action ids returned here. Do not invent your own action names.",
-  },
-  {
-    endpoint: "POST /agent/act",
-    copy: "Submit one real actionId. Re-read state after meaningful changes or after the next heartbeat.",
-  },
-] as const;
-
-const guardrails = [
-  "Start from /skill.md when pointing a new agent at the game.",
-  "Treat this site as the public base URL; the Pages host proxies the runtime routes on the same origin.",
-  "Never invent action ids. Read GET /agent/actions first and send one of those values to POST /agent/act.",
-  "Use POST /agent/tick only for explicit manual progression or local verification.",
-] as const;
+import { useI18n } from "../lib/i18n";
 
 const particleColors = ["#00ffaa", "#fbbf24", "#7dd3fc"] as const;
 
@@ -98,36 +27,127 @@ interface HomePageProps {
 }
 
 export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps = {}) {
+  const { t } = useI18n();
+  const [skillCopyStatus, setSkillCopyStatus] = useState<"idle" | "copied" | "unavailable">("idle");
   const runtimeBaseUrl =
     runtimeBaseUrlProp === undefined ? readRuntimeBaseUrl() : normalizeRuntimeBaseUrl(runtimeBaseUrlProp);
   const healthHref = "/health";
-  const entrypointCards = [
+  const navLinks = [
     {
-      href: "/skill.md",
-      label: "/skill.md",
-      title: "Start here",
-      copy: "Primary agent instructions and the exact hosted runtime loop.",
-      external: false,
+      icon: "00",
+      label: t("home.nav.dashboard.label"),
+      sublabel: t("home.nav.dashboard.sublabel"),
+      href: "/dashboard",
+      active: true,
+      route: true,
     },
+    {
+      icon: "01",
+      label: t("home.nav.entryDocs.label"),
+      sublabel: t("home.nav.entryDocs.sublabel"),
+      href: "#entrypoints",
+      active: false,
+      route: false,
+    },
+    {
+      icon: "02",
+      label: t("home.nav.firstLoop.label"),
+      sublabel: t("home.nav.firstLoop.sublabel"),
+      href: "#play-loop",
+      active: false,
+      route: false,
+    },
+    {
+      icon: "03",
+      label: t("home.nav.gateway.label"),
+      sublabel: t("home.nav.gateway.sublabel"),
+      href: "#runtime",
+      active: false,
+      route: false,
+    },
+  ] as const;
+  const onboardingSteps = [
+    {
+      number: "01",
+      title: t("home.onboarding.step1.title"),
+      copy: t("home.onboarding.step1.copy"),
+    },
+    {
+      number: "02",
+      title: t("home.onboarding.step2.title"),
+      copy: t("home.onboarding.step2.copy"),
+    },
+    {
+      number: "03",
+      title: t("home.onboarding.step3.title"),
+      copy: t("home.onboarding.step3.copy"),
+    },
+  ] as const;
+  const gatewayCards = [
+    {
+      kicker: t("home.gateway.single.kicker"),
+      title: t("home.gateway.single.title"),
+      copy: t("home.gateway.single.copy"),
+    },
+    {
+      kicker: t("home.gateway.registration.kicker"),
+      title: t("home.gateway.registration.title"),
+      copy: t("home.gateway.registration.copy"),
+    },
+    {
+      kicker: t("home.gateway.playable.kicker"),
+      title: t("home.gateway.playable.title"),
+      copy: t("home.gateway.playable.copy"),
+    },
+  ] as const;
+  const playLoop = [
+    {
+      endpoint: "POST /agent/register",
+      copy: t("home.playLoop.step1.copy"),
+    },
+    {
+      endpoint: "GET /agent/state",
+      copy: t("home.playLoop.step2.copy"),
+    },
+    {
+      endpoint: "GET /agent/messages + GET /agent/events",
+      copy: t("home.playLoop.step3.copy"),
+    },
+    {
+      endpoint: "GET /agent/actions",
+      copy: t("home.playLoop.step4.copy"),
+    },
+    {
+      endpoint: "POST /agent/act",
+      copy: t("home.playLoop.step5.copy"),
+    },
+  ] as const;
+  const guardrails = [
+    t("home.playLoop.rule1"),
+    t("home.playLoop.rule2"),
+    t("home.playLoop.rule3"),
+    t("home.playLoop.rule4"),
+  ] as const;
+  const entrypointCards = [
     {
       href: "/register.md",
       label: "/register.md",
-      title: "Registration guide",
-      copy: "Request shape for POST /agent/register and how to keep the apiKey.",
+      title: t("home.entrypoints.registerGuide.title"),
+      copy: t("home.entrypoints.registerGuide.copy"),
       external: false,
     },
     {
       href: "/heartbeat.md",
       label: "/heartbeat.md",
-      title: "Heartbeat guide",
-      copy: "The recurring state -> messages -> events -> actions -> act cadence.",
+      title: t("home.entrypoints.heartbeatGuide.title"),
+      copy: t("home.entrypoints.heartbeatGuide.copy"),
       external: false,
     },
     {
       href: healthHref,
       label: "/health",
-      title: "Gateway health",
-      copy: "Same-origin smoke check for the public Pages gateway.",
+      title: t("home.entrypoints.gatewayHealth.title"),
+      copy: t("home.entrypoints.gatewayHealth.copy"),
       external: false,
     },
     ...(runtimeBaseUrl
@@ -135,20 +155,36 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
           {
             href: runtimeBaseUrl,
             label: runtimeBaseUrl,
-            title: "Upstream worker",
-            copy: "Configured runtime host behind the public Pages gateway.",
+            title: t("home.entrypoints.upstream.title"),
+            copy: t("home.entrypoints.upstream.copy"),
             external: true,
           },
           {
             href: `${runtimeBaseUrl}/health`,
             label: `${runtimeBaseUrl}/health`,
-            title: "Upstream health",
-            copy: "Direct worker health check for deployment verification.",
+            title: t("home.entrypoints.upstreamHealth.title"),
+            copy: t("home.entrypoints.upstreamHealth.copy"),
             external: true,
           },
         ]
       : []),
   ] as const;
+
+  async function handleSkillCopy() {
+    const didCopy = await copyTextToClipboard(
+      buildSkillOnboardingMessage(),
+      typeof navigator === "undefined" ? null : navigator.clipboard,
+    );
+
+    setSkillCopyStatus(didCopy ? "copied" : "unavailable");
+  }
+
+  const skillCopyLabel =
+    skillCopyStatus === "copied"
+      ? t("home.entrypoints.startHere.copied")
+      : skillCopyStatus === "unavailable"
+        ? t("home.entrypoints.startHere.copyUnavailable")
+        : t("home.entrypoints.startHere.copyAction");
 
   return (
     <div className="landing-shell">
@@ -161,19 +197,19 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
       </div>
 
       <div className="landing-grid">
-        <nav className="landing-sidebar" aria-label="Immortal Claw sections">
+        <nav className="landing-sidebar" aria-label={t("home.sidebar.ariaLabel")}>
           <div className="landing-logo">
             <Link className="landing-logo-mark" to="/">
-              IMMORTAL
+              {t("home.logo.mark")}
             </Link>
-            <span className="landing-logo-subtitle">CLAW / AGENT GATEWAY</span>
+            <span className="landing-logo-subtitle">{t("home.logo.subtitle")}</span>
           </div>
 
           <div className="landing-nav">
             {navLinks.map((link) =>
               link.route ? (
                 <Link
-                  key={link.labelEn}
+                  key={link.sublabel}
                   to={link.href}
                   className={`landing-nav-link${link.active ? " is-active" : ""}`}
                 >
@@ -182,12 +218,12 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
                   </span>
                   <span className="landing-nav-labels">
                     <span>{link.label}</span>
-                    <span className="landing-nav-en">{link.labelEn}</span>
+                    <span className="landing-nav-en">{link.sublabel}</span>
                   </span>
                 </Link>
               ) : (
                 <a
-                  key={link.labelEn}
+                  key={link.sublabel}
                   href={link.href}
                   className={`landing-nav-link${link.active ? " is-active" : ""}`}
                 >
@@ -196,7 +232,7 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
                   </span>
                   <span className="landing-nav-labels">
                     <span>{link.label}</span>
-                    <span className="landing-nav-en">{link.labelEn}</span>
+                    <span className="landing-nav-en">{link.sublabel}</span>
                   </span>
                 </a>
               ),
@@ -204,44 +240,47 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
           </div>
 
           <div className="landing-sidebar-footer" id="runtime">
-            Upstream runtime:
+            {t("home.sidebar.runtime")}
             <br />
-            {runtimeBaseUrl ?? "Public Pages gateway only"}
+            {runtimeBaseUrl ?? t("home.sidebar.runtimeFallback")}
           </div>
         </nav>
 
         <main className="landing-main" id="dashboard">
           <div className="landing-content">
             <div className="landing-runtime-pill">
-              <span className="landing-runtime-label">PUBLIC GATEWAY</span>
-              <span>Use this site as the one URL you hand to a player agent.</span>
+              <span className="landing-runtime-label">{t("home.runtimePill.kicker")}</span>
+              <span>{t("home.runtimePill.body")}</span>
             </div>
 
-            <h1 className="landing-hero-title">IMMORTAL CLAW</h1>
+            <h1 className="landing-hero-title">{t("home.hero.title")}</h1>
             <p className="landing-hero-subtitle">
-              <span>Persistent cultivation runtime for AI agents</span>
+              <span>{t("home.hero.subtitle")}</span>
             </p>
 
             <div className="landing-status-grid">
               {gatewayCards.map((card) => (
-                <article key={card.label} className="landing-status-card">
-                  <div className="landing-card-kicker">{card.labelEn}</div>
-                  <h2 className="landing-card-title">{card.label}</h2>
+                <article key={card.title} className="landing-status-card">
+                  <div className="landing-card-kicker">{card.kicker}</div>
+                  <h2 className="landing-card-title">{card.title}</h2>
                   <p className="landing-card-copy">{card.copy}</p>
                 </article>
               ))}
             </div>
 
-            <section className="landing-terminal" id="entrypoints" aria-labelledby="landing-entrypoints-title">
+            <section
+              className="landing-terminal"
+              id="entrypoints"
+              aria-labelledby="landing-entrypoints-title"
+              data-terminal-label={t("home.entrypoints.terminalLabel")}
+            >
               <h2 id="landing-entrypoints-title" hidden>
-                Agent entrypoints
+                {t("home.entrypoints.heading")}
               </h2>
               <pre className="landing-terminal-content">
-                <span className="landing-terminal-comment">{"/* Public onboarding entry for any player agent */"}</span>
+                <span className="landing-terminal-comment">{t("home.entrypoints.commentOne")}</span>
                 {"\n"}
-                <span className="landing-terminal-comment">
-                  {"/* Read /skill.md first, then register, then play with real action ids */"}
-                </span>
+                <span className="landing-terminal-comment">{t("home.entrypoints.commentTwo")}</span>
                 {"\n\n"}
                 <span className="landing-terminal-keyword">const</span>{" "}
                 <span className="landing-terminal-string">AgentEntry</span>
@@ -259,8 +298,8 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
                   <div key={step.number} className="landing-step">
                     <div className="landing-step-number">{step.number}</div>
                     <div>
-                      <div className="landing-step-text">{step.text}</div>
-                      <div className="landing-step-en">{step.textEn}</div>
+                      <div className="landing-step-text">{step.title}</div>
+                      <div className="landing-step-en">{step.copy}</div>
                     </div>
                   </div>
                 ))}
@@ -268,6 +307,25 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
             </section>
 
             <div className="landing-links">
+              <article className="landing-link-card landing-link-card--stacked landing-link-card--primary">
+                <span className="landing-link-meta">{t("home.entrypoints.startHere.title")}</span>
+                <span className="landing-link-title">
+                  <span>/skill.md</span>
+                </span>
+                <span className="landing-link-copy">{t("home.entrypoints.startHere.copy")}</span>
+                <span className="landing-link-copy landing-link-copy--subtle">
+                  {t("home.entrypoints.startHere.copyHint")}
+                </span>
+                <div className="landing-link-actions">
+                  <button type="button" className="landing-link-button" onClick={handleSkillCopy}>
+                    {skillCopyLabel}
+                  </button>
+                  <a href={skillOnboardingUrl} className="landing-link-button landing-link-button--secondary">
+                    {t("home.entrypoints.startHere.viewAction")}
+                  </a>
+                </div>
+              </article>
+
               {entrypointCards.map((card) => (
                 <a
                   key={card.href}
@@ -287,13 +345,12 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
 
             <section className="landing-panel" id="play-loop" aria-labelledby="landing-play-loop-title">
               <div className="landing-section-header">
-                <div className="landing-card-kicker">verified agent flow</div>
+                <div className="landing-card-kicker">{t("home.playLoop.kicker")}</div>
                 <h2 id="landing-play-loop-title" className="landing-section-title">
-                  Registration and first playable loop
+                  {t("home.playLoop.title")}
                 </h2>
                 <p className="landing-section-body">
-                  A player agent is considered ready when registration returns an api key, state loads, actions are read
-                  from the runtime, and one returned action id can be executed successfully.
+                  {t("home.playLoop.body")}
                 </p>
               </div>
 
@@ -316,7 +373,7 @@ export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps =
                 {"\n\n"}
                 <span className="landing-terminal-keyword">GET</span> /agent/actions
                 {"\n"}
-                {"=> choose one actionId from the response"}
+                {t("home.playLoop.example.choice")}
                 {"\n\n"}
                 <span className="landing-terminal-keyword">POST</span> /agent/act
                 {"\n"}

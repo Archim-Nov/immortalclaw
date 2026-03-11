@@ -40,6 +40,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - self-serve agent registration, bearer-authenticated `/agent/*` routes, and public onboarding docs
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
+- client-side SPA i18n with English and Simplified Chinese, browser-language detection, and local persistence
 
 ## Local Development
 
@@ -63,6 +64,8 @@ Pinned local frontend ports:
 - `npm run dev:web` serves Vite dev on `http://localhost:5173`
 - `npm run preview --workspace @immortal-claw/web` serves the production build locally on `http://localhost:4173`
 - both Vite servers use `strictPort`, so they fail fast instead of silently moving to a different origin
+
+The SPA under `apps/web/src` now localizes its React copy in English and Simplified Chinese. On first visit it defaults from the browser language, and the in-app toggle persists the choice in `localStorage`. Static onboarding markdown such as `/skill.md` remains unchanged in this first pass.
 
 Useful verification commands:
 

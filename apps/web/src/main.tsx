@@ -1,6 +1,7 @@
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AppRouter } from "./app/router";
+import { I18nProvider } from "./lib/i18n";
 import "./styles/global.css";
 
 const container = document.getElementById("root");
@@ -11,6 +12,8 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <AppRouter />
+    <I18nProvider>
+      <AppRouter />
+    </I18nProvider>
   </StrictMode>,
 );

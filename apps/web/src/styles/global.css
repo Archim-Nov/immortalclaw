@@ -43,6 +43,71 @@ a {
   color: inherit;
 }
 
+.app-shell {
+  position: relative;
+}
+
+.app-shell-toolbar {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 5;
+}
+
+.app-shell-locale-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem 0.55rem 0.85rem;
+  border: 1px solid rgba(0, 255, 170, 0.22);
+  border-radius: 999px;
+  background: rgba(3, 7, 10, 0.72);
+  box-shadow: 0 0.9rem 2rem rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.app-shell-locale-label {
+  color: var(--accent-ice);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
+.app-shell-locale-buttons {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.app-shell-locale-button {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(224, 242, 254, 0.74);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.app-shell-locale-button:hover,
+.app-shell-locale-button:focus-visible {
+  color: var(--accent-jade);
+  border-color: rgba(0, 255, 170, 0.22);
+  transform: translateY(-1px);
+}
+
+.app-shell-locale-button.is-active {
+  color: var(--bg-deep);
+  background: linear-gradient(135deg, var(--accent-gold), var(--accent-jade));
+  box-shadow: 0 0 1rem rgba(0, 255, 170, 0.22);
+}
+
 .landing-shell {
   position: relative;
   min-height: 100vh;
@@ -332,7 +397,7 @@ a {
 }
 
 .landing-terminal::before {
-  content: "玄天玉简 / HEAVENLY SCRIPT";
+  content: attr(data-terminal-label);
   position: absolute;
   top: -0.82rem;
   left: 1.25rem;
@@ -493,6 +558,13 @@ a {
   min-width: 0;
 }
 
+.landing-link-card--primary {
+  border-color: rgba(0, 255, 170, 0.26);
+  background:
+    linear-gradient(180deg, rgba(0, 255, 170, 0.08), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.03);
+}
+
 .landing-link-meta {
   color: var(--text-muted);
   font-family: var(--font-mono);
@@ -504,6 +576,49 @@ a {
 .landing-link-copy {
   color: rgba(224, 242, 254, 0.78);
   line-height: 1.55;
+}
+
+.landing-link-copy--subtle {
+  color: rgba(125, 211, 252, 0.82);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.landing-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.landing-link-button {
+  border: 1px solid rgba(0, 255, 170, 0.28);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(0, 255, 170, 0.2));
+  color: var(--accent-ice);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 0.58rem 0.95rem;
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.landing-link-button:hover,
+.landing-link-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(251, 191, 36, 0.48);
+  box-shadow: 0 0.6rem 1.3rem rgba(0, 0, 0, 0.2);
+}
+
+.landing-link-button--secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(224, 242, 254, 0.82);
 }
 
 .landing-panel {
@@ -690,6 +805,11 @@ a {
 }
 
 @media (max-width: 980px) {
+  .app-shell-toolbar {
+    top: 0.85rem;
+    right: 0.85rem;
+  }
+
   .landing-grid {
     grid-template-columns: 1fr;
   }
@@ -732,6 +852,21 @@ a {
 }
 
 @media (max-width: 640px) {
+  .app-shell-toolbar {
+    position: sticky;
+    top: 0;
+    right: auto;
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.8rem 0.8rem 0;
+  }
+
+  .app-shell-locale-switcher {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 1rem;
+  }
+
   .landing-sidebar {
     padding: 1.25rem 0.85rem;
   }
