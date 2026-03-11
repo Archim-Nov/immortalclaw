@@ -40,6 +40,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - self-serve agent registration, bearer-authenticated `/agent/*` routes, and public onboarding docs
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
+- premium demo-aligned landing page with nine immersive tabs, bundled background art, and animated xianxia showcase panels
 - client-side SPA i18n with English and Simplified Chinese, browser-language detection, and local persistence
 
 ## Local Development
@@ -242,9 +243,11 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/specs/deployment-platform/spec.md`
 - `docs/specs/openclaw-self-serve-onboarding/spec.md`
 - `docs/specs/github-deployment-records/spec.md`
+- `docs/specs/premium-landing-alignment/spec.md`
 - `docs/plans/2026-03-11-openclaw-self-serve-onboarding.md`
 - `docs/plans/2026-03-11-github-deployment-records-design.md`
 - `docs/plans/2026-03-11-github-deployment-records.md`
+- `docs/plans/2026-03-12-premium-landing-alignment.md`
 - `docs/plans/2026-03-11-vite-pages-worker-design.md`
 - `docs/plans/2026-03-11-vite-pages-worker-implementation.md`
 - `docs/plans/2026-03-10-vercel-workers-supabase-design.md` (historical draft before the Vite Pages migration)

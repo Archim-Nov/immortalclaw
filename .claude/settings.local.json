@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.clawcity.xyz)"
+      "WebFetch(domain:www.clawcity.xyz)",
+      "Bash(npx vite:*)"
     ]
   }
 }
