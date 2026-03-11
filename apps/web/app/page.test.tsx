@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  createMemoryRouter,
-  RouterProvider,
-} from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { AppShell } from "../src/app/app-shell";
 import { appRoutes } from "../src/app/router";
 
@@ -23,6 +20,14 @@ test("landing route renders the SPA home page and runtime label", async () => {
 
   assert.match(rendered, /IMMORTAL CLAW/);
   assert.match(rendered, /REALM GATE/);
+});
+
+test("landing route no longer depends on removed Next API endpoints", async () => {
+  const app = await createAppForTest(["/"]);
+  const markup = renderToStaticMarkup(app);
+
+  assert.doesNotMatch(markup, /\/api\/health/);
+  assert.doesNotMatch(markup, /\/api\/runtime-proxy/);
 });
 
 test("deep links render through the client router without server help", async () => {

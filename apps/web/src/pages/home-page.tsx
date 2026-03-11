@@ -1,6 +1,6 @@
 import React, { type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { readRuntimeBaseUrl } from "../../lib/env";
+import { readRuntimeBaseUrl } from "../lib/env";
 
 const navLinks = [
   { icon: "📜", label: "天机阁", labelEn: "DASHBOARD", href: "/dashboard", active: true, route: true },
@@ -52,6 +52,10 @@ function buildParticleStyle(index: number): CSSProperties {
 export function HomePage() {
   const runtimeBaseUrl = readRuntimeBaseUrl();
   const ritualTarget = runtimeBaseUrl ?? "https://runtime.not-configured";
+  const runtimeStateHref = runtimeBaseUrl
+    ? `${runtimeBaseUrl}/cultivator/state?cultivatorId=yun-zhong-he`
+    : "#runtime";
+  const runtimeHealthHref = runtimeBaseUrl ? `${runtimeBaseUrl}/health` : "#runtime";
 
   const quickLinks = [
     {
@@ -65,15 +69,15 @@ export function HomePage() {
       icon: "🔑",
       label: "入世玉简",
       labelEn: "cultivator state",
-      href: "/api/runtime-proxy/cultivator/state?cultivatorId=yun-zhong-he",
-      external: false,
+      href: runtimeStateHref,
+      external: runtimeBaseUrl !== null,
     },
     {
       icon: "⏱️",
-      label: "天地吐纳",
-      labelEn: "web health",
-      href: "/api/health",
-      external: false,
+      label: "界门心跳",
+      labelEn: "runtime health",
+      href: runtimeHealthHref,
+      external: runtimeBaseUrl !== null,
     },
     {
       icon: "🜂",
