@@ -152,7 +152,7 @@ test("cors preserves allow-origin on error responses for allowed origins", async
   assert.equal(payload.error, "database unavailable");
 });
 
-test("cors still exposes config errors to the local vite origin when FRONTEND_ORIGIN is missing", async () => {
+test("cors does not expose config errors to the local vite origin when FRONTEND_ORIGIN is missing", async () => {
   const app = createApp({ repository: unusedRepository() as never });
 
   const response = await app.request("https://runtime.test/health", {
@@ -163,6 +163,6 @@ test("cors still exposes config errors to the local vite origin when FRONTEND_OR
   const payload = await response.json();
 
   assert.equal(response.status, 500);
-  assert.equal(response.headers.get("access-control-allow-origin"), LOCAL_VITE_DEV_ORIGIN);
+  assert.equal(response.headers.get("access-control-allow-origin"), null);
   assert.match(payload.error, /FRONTEND_ORIGIN must be configured/);
 });
