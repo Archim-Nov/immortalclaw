@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { setRuntimeBaseUrlMetaOverride } from "./env";
+import { setRuntimeBaseUrlImportMetaEnvForTest } from "./env";
 import { createRuntimeClient } from "./runtime-client";
 
 test("createRuntimeClient throws a clear error when the runtime base URL is missing", () => {
-  setRuntimeBaseUrlMetaOverride({ env: {} });
+  setRuntimeBaseUrlImportMetaEnvForTest({});
 
   try {
     assert.throws(() => createRuntimeClient(), /runtime base url.*not configured/i);
   } finally {
-    setRuntimeBaseUrlMetaOverride(null);
+    setRuntimeBaseUrlImportMetaEnvForTest(undefined);
   }
 });
 
