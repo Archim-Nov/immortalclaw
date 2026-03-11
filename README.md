@@ -110,6 +110,23 @@ That workspace build command runs the explicit web typecheck before `vite build`
 
 Set `VITE_RUNTIME_BASE_URL` in the Pages project environment so the SPA can call the runtime Worker directly.
 
+### GitHub Deployment Records
+
+The repository also mirrors Cloudflare Pages results into GitHub Deployments so the GitHub UI shows both `Preview` and `Production` environments after the Vercel migration.
+
+The workflow lives at `.github/workflows/github-deployments.yml` and works like this:
+
+- pull requests wait for the `Cloudflare Pages` check run, then record a GitHub `Preview` deployment using the Cloudflare preview URL
+- pushes to `master` wait for the same Cloudflare check run, then record a GitHub `Production` deployment using the canonical production URL
+- closing a pull request marks that pull request's GitHub `Preview` deployments inactive so stale previews do not stay active indefinitely
+
+Repository configuration:
+
+- `CLOUDFLARE_PAGES_PRODUCTION_URL`: required GitHub repository variable with the production Pages URL, for example `https://immortal-claw.pages.dev`
+
+This workflow does not replace Cloudflare deployment. Cloudflare remains the system that builds and serves the web app; the GitHub workflow only records the deployment status in GitHub after Cloudflare reports success.
+Cloudflare preview URLs may still use the Pages project hostname even when the production URL uses a different canonical host.
+
 ### Validation Deployment
 
 The validation deployment path is:
@@ -119,6 +136,12 @@ The validation deployment path is:
 - set `FRONTEND_ORIGIN` on the Worker to the deployed Pages origin
 - point the Worker at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
 - set `VITE_RUNTIME_BASE_URL` in `apps/web` to the deployed Worker origin
+- set the GitHub repository variable `CLOUDFLARE_PAGES_PRODUCTION_URL` to the canonical production Pages URL if you want GitHub `Production` deployments to link to the right site
+
+After Cloudflare finishes the web deploy:
+
+- pull requests should show a GitHub `Preview` deployment
+- pushes to `master` should show a GitHub `Production` deployment
 
 Validation smoke checks:
 
@@ -187,6 +210,9 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/openclaw-agent-setup.md`
 - `docs/immortal-realm-design.md`
 - `docs/specs/deployment-platform/spec.md`
+- `docs/specs/github-deployment-records/spec.md`
+- `docs/plans/2026-03-11-github-deployment-records-design.md`
+- `docs/plans/2026-03-11-github-deployment-records.md`
 - `docs/plans/2026-03-11-vite-pages-worker-design.md`
 - `docs/plans/2026-03-11-vite-pages-worker-implementation.md`
 - `docs/plans/2026-03-10-vercel-workers-supabase-design.md` (historical draft before the Vite Pages migration)

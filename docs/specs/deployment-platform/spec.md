@@ -23,6 +23,7 @@ That shape is useful for early iteration, but it does not map cleanly to the dep
 - Replace the permanent worker model with bounded scheduled execution.
 - Preserve a path to add a dedicated runtime service later without rewriting core logic.
 - Migrate the web surface from Next.js on Vercel to a Vite React SPA on Cloudflare Pages.
+- Preserve GitHub-visible deployment history for the web surface after the Vercel migration.
 
 ## Non-Goals
 
@@ -44,6 +45,8 @@ When the change is complete:
 - browser routes are handled through client-side routing instead of Next.js route handlers
 - the browser reads the runtime base URL from `VITE_RUNTIME_BASE_URL`
 - the Worker CORS allowlist is configured through `FRONTEND_ORIGIN`
+- GitHub Deployments shows `Preview` entries for pull requests and `Production` entries for `master` pushes after Cloudflare Pages reports success
+- closing a pull request marks its GitHub `Preview` deployments inactive
 
 ## Constraints
 
@@ -54,6 +57,7 @@ When the change is complete:
 - The initial architecture should favor portability over provider-specific optimization.
 - The frontend should remain client-rendered for this migration and call the Worker origin directly.
 - `FRONTEND_ORIGIN` must be a valid absolute frontend origin such as `https://immortal-claw.pages.dev`.
+- GitHub production deployment records require a repository variable such as `CLOUDFLARE_PAGES_PRODUCTION_URL` for the canonical Pages production URL.
 
 ## Acceptance Criteria
 
@@ -65,6 +69,8 @@ When the change is complete:
 - Worker deployment guidance documents `FRONTEND_ORIGIN` as a required binding for frontend CORS.
 - World mutation paths use durable coordination rather than in-memory single-process assumptions.
 - Local verification covers domain behavior, application use cases, and at least one end-to-end action-plus-tick flow.
+- A repository-managed workflow mirrors successful Cloudflare Pages results into GitHub Deployments for both `Preview` and `Production`.
+- The GitHub deployment mirroring workflow marks stale pull request previews inactive when pull requests update or close.
 
 ## Open Questions
 
