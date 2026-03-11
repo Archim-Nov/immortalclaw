@@ -15,7 +15,7 @@
     "dev:legacy-worker": "tsx apps/world-worker/src/worker.ts",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
-    "test": "node --import tsx --test apps/**/*.test.ts packages/**/*.test.ts",
+    "test": "node --import tsx --test \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"packages/**/*.test.ts\" \"packages/**/*.test.tsx\"",
     "verify:worker": "npm run deploy --workspace @immortal-claw/runtime-worker -- --dry-run"
   },
   "devDependencies": {
