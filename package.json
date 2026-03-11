@@ -17,7 +17,7 @@
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
     "test": "node --import tsx --test \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"packages/**/*.test.ts\" \"packages/**/*.test.tsx\"",
-    "verify:worker": "WRANGLER_LOG_PATH=/tmp/immortal-claw-wrangler-logs npm run deploy --workspace @immortal-claw/runtime-worker -- --dry-run"
+    "verify:worker": "node ./scripts/verify-worker.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

@@ -79,6 +79,7 @@ Worker app:
 - `WORLD_TICK_STEPS`
 
 `FRONTEND_ORIGIN` should contain only the deployed frontend origin. Use a value like `https://immortal-claw.pages.dev`, not a path such as `https://immortal-claw.pages.dev/app`.
+The Worker also permits the local Vite dev origin at `http://localhost:5173` for frontend testing against `npm run dev:worker`.
 
 ### Validation Deployment
 
@@ -157,8 +158,10 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/openclaw-agent-setup.md`
 - `docs/immortal-realm-design.md`
 - `docs/specs/deployment-platform/spec.md`
-- `docs/plans/2026-03-10-vercel-workers-supabase-design.md`
-- `docs/plans/2026-03-10-deployment-platform-implementation.md`
+- `docs/plans/2026-03-11-vite-pages-worker-design.md`
+- `docs/plans/2026-03-11-vite-pages-worker-implementation.md`
+- `docs/plans/2026-03-10-vercel-workers-supabase-design.md` (historical draft before the Vite Pages migration)
+- `docs/plans/2026-03-10-deployment-platform-implementation.md` (historical draft before the Vite Pages migration)
 
 ## OpenClaw
 
