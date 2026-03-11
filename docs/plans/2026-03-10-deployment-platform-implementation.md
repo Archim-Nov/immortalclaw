@@ -89,7 +89,7 @@ export default {
 
 Run:
 - `node --import tsx --test packages/application/src/index.test.ts`
-- `npm.cmd run build`
+- `npm run build`
 Expected: PASS for the targeted test and a clean TypeScript build.
 
 **Step 5: Commit**
@@ -166,7 +166,7 @@ Keep HTTP, SQL, Cloudflare, and Hono types out of this package.
 
 Run:
 - `node --import tsx --test packages/application/src/runtime-service.test.ts`
-- `npm.cmd test`
+- `npm test`
 Expected: PASS with existing domain behavior unchanged.
 
 **Step 5: Commit**
@@ -224,7 +224,7 @@ Use a hybrid storage model first if that is fastest, but keep all SQL behind rep
 
 Run:
 - `node --import tsx --test packages/persistence/src/*.test.ts`
-- `npm.cmd run build`
+- `npm run build`
 Expected: PASS for repository contract coverage and a clean build.
 
 **Step 5: Commit**
@@ -300,7 +300,7 @@ export default {
 
 Run:
 - `node --import tsx --test apps/runtime-worker/src/index.test.ts`
-- `npm.cmd test`
+- `npm test`
 Expected: PASS with runtime endpoints covered and no regressions in the existing domain tests.
 
 **Step 5: Commit**
@@ -344,7 +344,7 @@ Expected: FAIL because the web surface is still placeholder-only.
 
 Run:
 - `node --import tsx --test apps/web/app/page.test.tsx`
-- `npm.cmd run build`
+- `npm run build`
 Expected: PASS with the Vercel app buildable and runtime integration isolated behind a client helper.
 
 **Step 5: Commit**
@@ -388,8 +388,8 @@ Expected: FAIL until docs and transitional compatibility code are updated.
 **Step 4: Run full verification**
 
 Run:
-- `npm.cmd test`
-- `npm.cmd run build`
+- `npm test`
+- `npm run build`
 - `git diff --check`
 Expected: PASS for tests and build, and no diff hygiene issues.
 
@@ -407,8 +407,8 @@ git commit -m "docs: align repo guidance with deployable platform architecture"
 - `node --import tsx --test packages/persistence/src/*.test.ts`
 - `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 - `node --import tsx --test apps/web/app/page.test.tsx`
-- `npm.cmd test`
-- `npm.cmd run build`
+- `npm test`
+- `npm run build`
 - `git diff --check`
 
 ## Doc Updates

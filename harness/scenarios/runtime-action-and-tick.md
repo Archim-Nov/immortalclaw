@@ -6,7 +6,7 @@ Prove that the primary deployment path can seed or load world state, perform an 
 
 ## Setup
 
-- Deploy `apps/runtime-worker` to Cloudflare Workers or run it locally with `npm.cmd run dev:worker`
+- Deploy `apps/runtime-worker` to Cloudflare Workers or run it locally with `npm run dev:worker`
 - Configure `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
 - Use a known cultivator id such as `yun-zhong-he`
 

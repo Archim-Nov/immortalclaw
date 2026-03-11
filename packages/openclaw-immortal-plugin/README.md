@@ -2,6 +2,8 @@
 
 This plugin connects an OpenClaw agent to the local Immortal Claw world API.
 
+The setup examples below use shell-neutral `npm` commands and absolute paths that can be adapted for Windows, macOS, Linux, or WSL. On Windows, prefer forward slashes in JSON config values.
+
 ## Identity Binding
 
 The plugin no longer exposes manual character creation or character switching.
@@ -38,7 +40,7 @@ Supported persona formats include:
   plugins: {
     load: {
       paths: [
-        "C:/path/to/immortal claw/packages/openclaw-immortal-plugin"
+        "/absolute/path/to/immortal-claw/packages/openclaw-immortal-plugin"
       ]
     },
     entries: {
@@ -47,7 +49,7 @@ Supported persona formats include:
         config: {
           worldBaseUrl: "http://127.0.0.1:8787",
           agentId: "openclaw-main",
-          personaDir: "C:/path/to/openclaw/workspace",
+          personaDir: "/absolute/path/to/openclaw/workspace",
           requestTimeoutMs: 8000
         }
       }
@@ -56,7 +58,7 @@ Supported persona formats include:
 }
 ```
 
-`personaDir` should point at the OpenClaw workspace that contains `IDENTITY.md` and `SOUL.md`. If omitted, the plugin falls back to `process.cwd()`.
+`personaDir` should point at the OpenClaw workspace that contains `IDENTITY.md` and `SOUL.md`. If omitted, the plugin falls back to `process.cwd()`. On Windows, `C:/path/to/openclaw/workspace` is preferred over backslash-heavy variants in JSON.
 
 ## Expected Flow
 

@@ -20,10 +20,12 @@
 
 ## 启动世界服务
 
-```powershell
-npm.cmd install
-npm.cmd run dev:api
-npm.cmd run dev:worker
+这些命令是跨平台的，在 PowerShell、macOS Terminal、Linux shell 和 WSL 里都可以直接运行：
+
+```text
+npm install
+npm run dev:api
+npm run dev:worker
 ```
 
 默认地址：
@@ -34,7 +36,9 @@ npm.cmd run dev:worker
 
 把下面这个目录作为本地插件路径加入 `OpenClaw`：
 
-`C:/Users/Chris/Documents/GitHub/immoral claw/packages/openclaw-immortal-plugin`
+`/absolute/path/to/immortal-claw/packages/openclaw-immortal-plugin`
+
+如果你在 Windows 上配置 JSON 路径，推荐也统一使用正斜杠，例如 `C:/work/immortal-claw/packages/openclaw-immortal-plugin`。
 
 ## OpenClaw 配置示例
 
@@ -43,7 +47,7 @@ npm.cmd run dev:worker
   plugins: {
     load: {
       paths: [
-        "C:/Users/Chris/Documents/GitHub/immoral claw/packages/openclaw-immortal-plugin"
+        "/absolute/path/to/immortal-claw/packages/openclaw-immortal-plugin"
       ]
     },
     entries: {
@@ -52,7 +56,7 @@ npm.cmd run dev:worker
         config: {
           worldBaseUrl: "http://127.0.0.1:8787",
           agentId: "openclaw-main",
-          personaDir: "C:/path/to/openclaw/workspace",
+          personaDir: "/absolute/path/to/openclaw/workspace",
           requestTimeoutMs: 8000
         }
       }
@@ -66,7 +70,7 @@ npm.cmd run dev:worker
 - `IDENTITY.md`
 - `SOUL.md`
 
-如果不填，插件会默认读当前进程工作目录。
+如果不填，插件会默认读当前进程工作目录。Windows 示例同样建议写成 `C:/path/to/openclaw/workspace`，避免反斜杠转义问题。
 
 当前支持的人格文件格式包括：
 

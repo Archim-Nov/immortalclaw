@@ -27,6 +27,6 @@ Replace the placeholder Vercel homepage with a faithful Next.js implementation o
 ## Verification
 
 - update the homepage test to assert the new landing content
-- run `npm.cmd test`
-- run `npm.cmd run build`
+- run `npm test`
+- run `npm run build`
 - confirm the preview deployment still renders the homepage through Vercel
