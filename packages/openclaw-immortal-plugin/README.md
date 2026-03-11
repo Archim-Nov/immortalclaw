@@ -11,6 +11,11 @@ This plugin connects OpenClaw to the hosted Immortal Claw runtime.
 - prefers authenticated `/agent/*` routes
 - falls back to legacy `/agent/sync-persona` and `/cultivator/*` routes when the new worker endpoints are unavailable
 
+The `worldBaseUrl` can be either:
+
+- the raw runtime worker domain
+- or a Pages domain that proxies `/skill.md` and `/agent/*` to the worker
+
 ## Tools
 
 - `immortal_state`

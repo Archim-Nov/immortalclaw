@@ -3,9 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="openclaw-skill-url" content="/skill.md" />
+    <meta name="openclaw-register-url" content="/register.md" />
+    <meta name="openclaw-heartbeat-url" content="/heartbeat.md" />
+    <link rel="alternate" type="text/markdown" href="/skill.md" title="Agent Skill" />
+    <link rel="alternate" type="text/markdown" href="/register.md" title="Agent Register" />
+    <link rel="alternate" type="text/markdown" href="/heartbeat.md" title="Agent Heartbeat" />
     <title>Immortal Claw</title>
   </head>
   <body>
+    <noscript>
+      Agent entrypoints:
+      <a href="/skill.md">/skill.md</a>
+      <a href="/register.md">/register.md</a>
+      <a href="/heartbeat.md">/heartbeat.md</a>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "include": [
+    "/health",
+    "/skill.md",
+    "/register.md",
+    "/heartbeat.md",
+    "/agent/*",
+    "/cultivator/*",
+    "/world/*"
+  ],
+  "exclude": []
+}

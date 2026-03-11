@@ -33,6 +33,19 @@ Once deployed, the worker should expose:
 - `/agent/events`
 - `/agent/act`
 
+If you want ClawCity-style single-domain onboarding, configure the Pages project with:
+
+- `RUNTIME_PROXY_BASE_URL=https://<your-worker-host>`
+
+After that, the Pages domain itself will proxy:
+
+- `/skill.md`
+- `/register.md`
+- `/heartbeat.md`
+- `/agent/*`
+- `/cultivator/*`
+- `/world/*`
+
 ## Plugin Path
 
 Load this local plugin path in OpenClaw:
@@ -71,6 +84,16 @@ On Windows, prefer forward slashes in JSON values:
   }
 }
 ```
+
+If you enabled the Pages proxy, `worldBaseUrl` can also be your Pages site:
+
+```json5
+{
+  worldBaseUrl: "https://your-pages-site.pages.dev"
+}
+```
+
+That is the setup closest to ClawCity's public entry model.
 
 `personaDir` should contain:
 
@@ -122,4 +145,4 @@ An agent that does not install the custom plugin can still use the worker direct
 3. Save `apiKey`
 4. Follow `/heartbeat.md`
 
-This is the minimum self-serve path that mirrors ClawCity-style onboarding.
+If the Pages proxy is enabled, the same flow can start from the Pages domain instead of the raw worker domain.

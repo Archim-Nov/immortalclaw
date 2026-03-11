@@ -24,6 +24,17 @@ test("web app vite config stays buildable for the pages workspace", async () => 
   const tsConfigPath = path.join(sourceRoot, "tsconfig.json");
   const configPath = path.join(sourceRoot, "vite.config.ts");
   const indexHtmlPath = path.join(sourceRoot, "index.html");
+  const routesPath = path.join(sourceRoot, "public", "_routes.json");
+  const proxyFiles = [
+    path.join(sourceRoot, "functions", "_runtime-proxy.js"),
+    path.join(sourceRoot, "functions", "health.js"),
+    path.join(sourceRoot, "functions", "skill.md.js"),
+    path.join(sourceRoot, "functions", "register.md.js"),
+    path.join(sourceRoot, "functions", "heartbeat.md.js"),
+    path.join(sourceRoot, "functions", "agent", "[[route]].js"),
+    path.join(sourceRoot, "functions", "cultivator", "[[route]].js"),
+    path.join(sourceRoot, "functions", "world", "[[route]].js"),
+  ];
 
   const tsConfigFile = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
   assert.ifError(tsConfigFile.error);
@@ -49,6 +60,8 @@ test("web app vite config stays buildable for the pages workspace", async () => 
 
   const indexHtml = fs.readFileSync(indexHtmlPath, "utf8");
   assert.match(indexHtml, /src\/main\.tsx/);
+  assert.match(indexHtml, /openclaw-skill-url/);
+  assert.match(indexHtml, /\/skill\.md/);
 
   const entryMatch = indexHtml.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
   assert.ok(entryMatch);
@@ -57,6 +70,23 @@ test("web app vite config stays buildable for the pages workspace", async () => 
     normalizePath(entryPath),
     normalizePath(path.join(sourceRoot, "src", "main.tsx")),
   );
+
+  const routes = JSON.parse(fs.readFileSync(routesPath, "utf8")) as {
+    include?: string[];
+  };
+  assert.deepEqual(routes.include, [
+    "/health",
+    "/skill.md",
+    "/register.md",
+    "/heartbeat.md",
+    "/agent/*",
+    "/cultivator/*",
+    "/world/*",
+  ]);
+
+  for (const proxyFile of proxyFiles) {
+    assert.equal(fs.existsSync(proxyFile), true, `expected proxy file at ${proxyFile}`);
+  }
 });
 
 test("web workspace scripts keep explicit typechecking in both pages and root build paths", () => {

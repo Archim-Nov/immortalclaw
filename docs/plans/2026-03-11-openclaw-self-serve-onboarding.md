@@ -22,11 +22,15 @@ Implement the minimum hosted onboarding path so OpenClaw can attach to the deplo
    - auto-registers on first use
    - retries via new credentials when needed
    - falls back to legacy routes when the new worker endpoints are missing
-4. Add or update tests for:
+4. Add a Pages same-origin runtime gateway:
+   - proxy `/skill.md`, `/register.md`, `/heartbeat.md`, `/agent/*`, `/cultivator/*`, `/world/*`, and `/health`
+   - expose `/skill.md` discovery hints from the root HTML
+5. Add or update tests for:
    - worker onboarding docs and auth flow
    - Supabase repository registration/auth flow
    - plugin auto-registration and fallback behavior
-5. Sync repo docs:
+   - Pages gateway discovery and proxy config
+6. Sync repo docs:
    - root `README.md`
    - `docs/openclaw-agent-setup.md`
    - plugin README
