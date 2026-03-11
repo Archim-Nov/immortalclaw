@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createApp } from "./app.js";
+import { LOCAL_VITE_DEV_ORIGIN } from "./env.js";
 
 const pagesOrigin = "https://immortal-claw.pages.dev";
 
@@ -151,16 +152,17 @@ test("cors preserves allow-origin on error responses for allowed origins", async
   assert.equal(payload.error, "database unavailable");
 });
 
-test("cors rejects browser requests when FRONTEND_ORIGIN is missing", async () => {
+test("cors still exposes config errors to the local vite origin when FRONTEND_ORIGIN is missing", async () => {
   const app = createApp({ repository: unusedRepository() as never });
 
   const response = await app.request("https://runtime.test/health", {
     headers: {
-      origin: pagesOrigin,
+      origin: LOCAL_VITE_DEV_ORIGIN,
     },
   });
   const payload = await response.json();
 
   assert.equal(response.status, 500);
+  assert.equal(response.headers.get("access-control-allow-origin"), LOCAL_VITE_DEV_ORIGIN);
   assert.match(payload.error, /FRONTEND_ORIGIN must be configured/);
 });

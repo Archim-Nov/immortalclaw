@@ -25,7 +25,7 @@ export interface RuntimeWorkerEnv {
 
 function invalidFrontendOriginError() {
   return new Error(
-    "FRONTEND_ORIGIN must be a valid absolute origin like https://immortal-claw.pages.dev",
+    "FRONTEND_ORIGIN must be a valid absolute http:// or https:// origin like https://immortal-claw.pages.dev",
   );
 }
 

@@ -34,7 +34,7 @@ test("readFrontendOrigin rejects values that are not absolute origins", () => {
       readFrontendOrigin({
         FRONTEND_ORIGIN: "immortal-claw.pages.dev",
       }),
-    /FRONTEND_ORIGIN must be a valid absolute origin/,
+    /FRONTEND_ORIGIN must be a valid absolute http:\/\/ or https:\/\/ origin/,
   );
 });
 
@@ -44,6 +44,6 @@ test("readFrontendOrigin rejects values with a path", () => {
       readFrontendOrigin({
         FRONTEND_ORIGIN: "https://immortal-claw.pages.dev/app",
       }),
-    /FRONTEND_ORIGIN must be a valid absolute origin/,
+    /FRONTEND_ORIGIN must be a valid absolute http:\/\/ or https:\/\/ origin/,
   );
 });
