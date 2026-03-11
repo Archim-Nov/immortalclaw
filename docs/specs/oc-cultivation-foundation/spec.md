@@ -1,5 +1,9 @@
 # Immortal Claw OC 修仙角色基础系统策划案
 
+> 注：本文件保留为角色与战斗相关的专项策划摘要，不再作为仓库的最新玩法总基线。
+>
+> 当前最新玩法基线请优先参考：`docs/specs/clawcity-gameplay-alignment/spec.md`
+
 ## 拆分阅读索引
 
 为便于后续继续扩展，本总纲已拆分出两份子文档：
