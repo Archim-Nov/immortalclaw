@@ -8,7 +8,7 @@ import {
 import { AppShell } from "./app-shell";
 import { HomePage } from "../pages/home-page";
 
-const routes: RouteObject[] = [
+export const appRoutes: RouteObject[] = [
   {
     element: <AppShell />,
     children: [
@@ -27,7 +27,7 @@ const routes: RouteObject[] = [
 let browserRouter: ReturnType<typeof createBrowserRouter> | null = null;
 
 export function createAppRouter() {
-  return createBrowserRouter(routes);
+  return createBrowserRouter(appRoutes);
 }
 
 export function AppRouter() {
@@ -36,5 +36,5 @@ export function AppRouter() {
 }
 
 export function createAppForTest(initialEntries: string[] = ["/"]): ReactElement {
-  return <RouterProvider router={createMemoryRouter(routes, { initialEntries })} />;
+  return <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries })} />;
 }

@@ -5,33 +5,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   createMemoryRouter,
   RouterProvider,
-  type RouteObject,
 } from "react-router-dom";
 import { AppShell } from "../src/app/app-shell";
-import { HomePage } from "../src/pages/home-page";
+import { appRoutes } from "../src/app/router";
 
 function extractText(markup: string): string {
   return markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function createAppForTest(initialEntries: string[] = ["/"]) {
-  const routes: RouteObject[] = [
-    {
-      element: <AppShell />,
-      children: [
-        {
-          path: "/",
-          element: <HomePage />,
-        },
-        {
-          path: "/dashboard",
-          element: <HomePage />,
-        },
-      ],
-    },
-  ];
-
-  return <RouterProvider router={createMemoryRouter(routes, { initialEntries })} />;
+  return <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries })} />;
 }
 
 test("landing route renders the SPA home page and runtime label", async () => {
@@ -48,4 +31,11 @@ test("deep links render through the client router without server help", async ()
 
   assert.match(rendered, /IMMORTAL CLAW/);
   assert.match(rendered, /DASHBOARD/);
+});
+
+test("router uses AppShell as the root route element", () => {
+  const rootElement = appRoutes[0]?.element;
+
+  assert.ok(rootElement);
+  assert.equal(rootElement.type, AppShell);
 });

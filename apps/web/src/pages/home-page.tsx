@@ -1,5 +1,6 @@
 import React, { type CSSProperties } from "react";
 import { Link } from "react-router-dom";
+import { readRuntimeBaseUrl } from "../../lib/env";
 
 const navLinks = [
   { icon: "📜", label: "天机阁", labelEn: "DASHBOARD", href: "/dashboard", active: true, route: true },
@@ -31,20 +32,6 @@ const steps = [
 ] as const;
 
 const particleColors = ["#00ffaa", "#fbbf24", "#7dd3fc"] as const;
-
-function readRuntimeBaseUrl(): string | null {
-  const processEnv =
-    typeof globalThis === "object" &&
-    "process" in globalThis &&
-    globalThis.process &&
-    typeof globalThis.process === "object" &&
-    "env" in globalThis.process
-      ? (globalThis.process.env as { NEXT_PUBLIC_RUNTIME_BASE_URL?: string })
-      : undefined;
-
-  const value = processEnv?.NEXT_PUBLIC_RUNTIME_BASE_URL?.trim();
-  return value ? value.replace(/\/$/, "") : null;
-}
 
 function buildParticleStyle(index: number): CSSProperties {
   const size = `${(index % 4) + 1}px`;
