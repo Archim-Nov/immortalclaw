@@ -2,6 +2,10 @@
 
 This file is the agent entrypoint for repository structure, process, and required document updates.
 
+## Developer-Local Preferences
+
+After reading this file, check for `AGENTS.local.md` in the repo root. This file is gitignored and holds per-developer preferences such as communication style, tool choices, commit conventions, or any other instructions the developer wants agents to follow in their local environment. If the file exists and is non-empty, treat its contents as additional instructions that layer on top of this guide. Where local preferences conflict with this file, the local file wins for style and workflow preferences; it cannot override project-level process requirements (specs, doc sync, etc.).
+
 ## Repo Map
 
 - `README.md`: developer-facing project overview and local run instructions
@@ -13,11 +17,12 @@ This file is the agent entrypoint for repository structure, process, and require
 - `docs/process/harness-engineering.md`: repo-specific harness engineering guidance
 - `docs/templates/`: reusable templates for specs, plans, and harness checklists
 - `harness/README.md`: future home for scenarios, fixtures, and evals
+- `AGENTS.local.md` (gitignored): optional per-developer agent preferences
 - `apps/world-api` and `packages/domain`: current runnable prototype
 
 ## Default Workflow
 
-1. Read this file before starting work.
+1. Read this file before starting work. Then check for `AGENTS.local.md` and follow any developer-local preferences found there.
 2. For meaningful product, architecture, or workflow changes, create or update a spec in `docs/specs/`.
 3. Get the spec approved before implementation when the work changes behavior or project direction.
 4. Write or update an implementation plan in `docs/plans/`.
