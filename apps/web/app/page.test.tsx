@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router-dom";
 import { AppShell } from "../src/app/app-shell";
 import { appRoutes } from "../src/app/router";
+import { HomePage } from "../src/pages/home-page";
 
 function extractText(markup: string): string {
   return markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -28,6 +29,17 @@ test("landing route no longer depends on removed Next API endpoints", async () =
 
   assert.doesNotMatch(markup, /\/api\/health/);
   assert.doesNotMatch(markup, /\/api\/runtime-proxy/);
+});
+
+test("landing page renders direct runtime worker links when configured", () => {
+  const markup = renderToStaticMarkup(
+    <MemoryRouter>
+      <HomePage runtimeBaseUrl="https://runtime.example" />
+    </MemoryRouter>,
+  );
+
+  assert.match(markup, /href="https:\/\/runtime\.example\/health"/);
+  assert.match(markup, /href="https:\/\/runtime\.example\/cultivator\/state\?cultivatorId=yun-zhong-he"/);
 });
 
 test("deep links render through the client router without server help", async () => {

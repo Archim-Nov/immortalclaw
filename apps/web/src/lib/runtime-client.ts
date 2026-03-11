@@ -1,4 +1,4 @@
-import { readRuntimeBaseUrl, type RuntimeBaseUrlMeta } from "./env";
+import { normalizeRuntimeBaseUrl, type RuntimeBaseUrlMeta } from "./env";
 
 export interface RuntimeClientOptions {
   baseUrl?: string | null;
@@ -11,9 +11,8 @@ export interface RuntimeClientError extends Error {
   status: number;
 }
 
-function normalizeRuntimeBaseUrl(value: string | null | undefined): string | null {
-  const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue.replace(/\/$/, "") : null;
+function readRuntimeBaseUrlInput(meta: RuntimeBaseUrlMeta | undefined): string | undefined {
+  return (meta ?? (import.meta as RuntimeBaseUrlMeta)).env?.VITE_RUNTIME_BASE_URL;
 }
 
 async function createRuntimeClientError(response: Response): Promise<RuntimeClientError> {
@@ -49,10 +48,15 @@ async function createRuntimeClientError(response: Response): Promise<RuntimeClie
 }
 
 export function createRuntimeClient(options: RuntimeClientOptions = {}) {
-  const baseUrl = normalizeRuntimeBaseUrl(options.baseUrl ?? readRuntimeBaseUrl(options.meta));
+  const rawBaseUrl = options.baseUrl ?? readRuntimeBaseUrlInput(options.meta);
+  const baseUrl = normalizeRuntimeBaseUrl(rawBaseUrl);
+
+  if (!rawBaseUrl?.trim()) {
+    throw new Error("Runtime base URL is not configured.");
+  }
 
   if (!baseUrl) {
-    throw new Error("Runtime base URL is not configured.");
+    throw new Error("Runtime base URL must be an absolute http/https URL.");
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;

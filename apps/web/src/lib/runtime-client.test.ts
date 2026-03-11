@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { setRuntimeBaseUrlImportMetaEnvForTest } from "./env";
 import { createRuntimeClient } from "./runtime-client";
 
 test("createRuntimeClient throws a clear error when the runtime base URL is missing", () => {
-  setRuntimeBaseUrlImportMetaEnvForTest({});
+  assert.throws(() => createRuntimeClient({ meta: { env: {} } }), /runtime base url.*not configured/i);
+});
 
-  try {
-    assert.throws(() => createRuntimeClient(), /runtime base url.*not configured/i);
-  } finally {
-    setRuntimeBaseUrlImportMetaEnvForTest(undefined);
-  }
+test("createRuntimeClient rejects malformed runtime base URLs from the env path", () => {
+  assert.throws(
+    () => createRuntimeClient({ meta: { env: { VITE_RUNTIME_BASE_URL: "runtime.example" } } }),
+    /absolute http\/https url/i,
+  );
 });
 
 test("createRuntimeClient requests the runtime worker URL for a relative path", async () => {

@@ -1,6 +1,6 @@
 import React, { type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { readRuntimeBaseUrl } from "../lib/env";
+import { normalizeRuntimeBaseUrl, readRuntimeBaseUrl } from "../lib/env";
 
 const navLinks = [
   { icon: "📜", label: "天机阁", labelEn: "DASHBOARD", href: "/dashboard", active: true, route: true },
@@ -49,8 +49,13 @@ function buildParticleStyle(index: number): CSSProperties {
   } as CSSProperties;
 }
 
-export function HomePage() {
-  const runtimeBaseUrl = readRuntimeBaseUrl();
+interface HomePageProps {
+  runtimeBaseUrl?: string | null;
+}
+
+export function HomePage({ runtimeBaseUrl: runtimeBaseUrlProp }: HomePageProps = {}) {
+  const runtimeBaseUrl =
+    runtimeBaseUrlProp === undefined ? readRuntimeBaseUrl() : normalizeRuntimeBaseUrl(runtimeBaseUrlProp);
   const ritualTarget = runtimeBaseUrl ?? "https://runtime.not-configured";
   const runtimeStateHref = runtimeBaseUrl
     ? `${runtimeBaseUrl}/cultivator/state?cultivatorId=yun-zhong-he`

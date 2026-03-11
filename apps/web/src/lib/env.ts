@@ -6,13 +6,25 @@ export interface RuntimeBaseUrlMeta {
   env?: RuntimeBaseUrlEnv;
 }
 
-function normalizeRuntimeBaseUrl(value: string | undefined): string | null {
+export function normalizeRuntimeBaseUrl(value: string | null | undefined): string | null {
   const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue.replace(/\/$/, "") : null;
-}
+  if (!trimmedValue) {
+    return null;
+  }
 
-export function setRuntimeBaseUrlImportMetaEnvForTest(env: RuntimeBaseUrlEnv | undefined) {
-  (import.meta as RuntimeBaseUrlMeta).env = env;
+  const normalizedValue = trimmedValue.replace(/\/$/, "");
+
+  try {
+    const url = new URL(normalizedValue);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    return normalizedValue;
+  } catch {
+    return null;
+  }
 }
 
 export function readRuntimeBaseUrl(meta: RuntimeBaseUrlMeta = import.meta as RuntimeBaseUrlMeta): string | null {

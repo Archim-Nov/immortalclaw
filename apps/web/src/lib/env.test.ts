@@ -1,15 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readRuntimeBaseUrl, setRuntimeBaseUrlImportMetaEnvForTest } from "./env";
+import { readRuntimeBaseUrl } from "./env";
 
-test("readRuntimeBaseUrl uses the default import.meta.env path, trims whitespace, and strips a trailing slash", () => {
-  setRuntimeBaseUrlImportMetaEnvForTest({
-    VITE_RUNTIME_BASE_URL: " https://runtime.example/ ",
-  });
+test("readRuntimeBaseUrl trims the Vite runtime base URL and strips a trailing slash", () => {
+  assert.equal(
+    readRuntimeBaseUrl({
+      env: {
+        VITE_RUNTIME_BASE_URL: " https://runtime.example/ ",
+      },
+    }),
+    "https://runtime.example",
+  );
+});
 
-  try {
-    assert.equal(readRuntimeBaseUrl(), "https://runtime.example");
-  } finally {
-    setRuntimeBaseUrlImportMetaEnvForTest(undefined);
-  }
+test("readRuntimeBaseUrl ignores malformed runtime base URLs", () => {
+  assert.equal(
+    readRuntimeBaseUrl({
+      env: {
+        VITE_RUNTIME_BASE_URL: " runtime.example ",
+      },
+    }),
+    null,
+  );
 });
