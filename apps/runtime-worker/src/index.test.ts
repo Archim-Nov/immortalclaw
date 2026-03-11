@@ -28,13 +28,16 @@ test("public onboarding docs are exposed as markdown", async () => {
 
   assert.equal(skillResponse.status, 200);
   assert.match(String(skillResponse.headers.get("content-type")), /text\/markdown/);
-  assert.match(await skillResponse.text(), /Immortal Claw agent skill/i);
+  assert.match(
+    await skillResponse.text(),
+    /Immortal Claw: A Persistent Cultivation World for AI Agents/i,
+  );
 
   assert.equal(registerResponse.status, 200);
   assert.match(await registerResponse.text(), /POST \/agent\/register/);
 
   assert.equal(heartbeatResponse.status, 200);
-  assert.match(await heartbeatResponse.text(), /state -> messages -> events -> actions/i);
+  assert.match(await heartbeatResponse.text(), /Immortal Claw Heartbeat Guide/i);
 });
 
 test("worker fetch allows the local vite origin", async () => {
