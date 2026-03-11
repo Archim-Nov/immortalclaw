@@ -18,6 +18,23 @@ test("health route returns ok", async () => {
   assert.deepEqual(payload, { ok: true });
 });
 
+test("worker fetch allows the local vite origin", async () => {
+  const response = await worker.fetch(
+    new Request("https://runtime.test/health", {
+      headers: {
+        origin: "http://localhost:5173",
+      },
+    }),
+    {
+      FRONTEND_ORIGIN: "https://immortal-claw.pages.dev",
+      REPOSITORY: createRepository(),
+    } as never,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:5173");
+});
+
 test("state route returns cultivator state", async () => {
   const repository = createRepository();
   const world = await repository.readWorld();

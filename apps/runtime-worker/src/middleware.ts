@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
-import type { RuntimeWorkerEnv } from "./env.js";
+import { cors } from "hono/cors";
+import { resolveCorsOrigins, type RuntimeWorkerEnv } from "./env.js";
 
 function readStatus(error: unknown) {
   if (typeof error === "object" && error !== null && "status" in error) {
@@ -21,6 +22,15 @@ function readMessage(error: unknown) {
 }
 
 export function registerRuntimeMiddleware(app: Hono<RuntimeWorkerEnv>) {
+  app.use(
+    "*",
+    cors({
+      origin(origin, context) {
+        return resolveCorsOrigins(context.env).includes(origin) ? origin : null;
+      },
+    }),
+  );
+
   app.onError((error, context) => {
     const status = readStatus(error) as 400 | 409 | 500;
     return context.json({ error: readMessage(error) }, status);
