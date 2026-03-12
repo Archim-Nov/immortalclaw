@@ -23,6 +23,46 @@ export type RegistrationQuestionId =
   | "Q18";
 export type RegistrationAnswer = "A" | "B" | "C" | "D";
 export type RegistrationConfidenceLevel = "high" | "medium" | "low";
+export type RegistrationLocale = "zh-CN" | "en";
+export type RegistrationTemperamentId =
+  | "shou_jie"
+  | "duan_feng"
+  | "fu_sheng"
+  | "xiang_rong"
+  | "qian_yuan"
+  | "guan_lan"
+  | "chi_xin"
+  | "zheng_sheng"
+  | "zhen_yue"
+  | "shou_cheng";
+export type RegistrationBehaviorAspectId =
+  | "metal"
+  | "wood"
+  | "water"
+  | "fire"
+  | "earth"
+  | "metal-wood"
+  | "metal-water"
+  | "metal-fire"
+  | "metal-earth"
+  | "wood-water"
+  | "wood-fire"
+  | "wood-earth"
+  | "water-fire"
+  | "water-earth"
+  | "fire-earth";
+export type RegistrationCultivationMotiveId =
+  | "seek-longevity"
+  | "prove-the-great-dao"
+  | "seek-truth"
+  | "protect-the-beloved"
+  | "serve-the-world"
+  | "avenge-old-grudges"
+  | "compete-for-supremacy"
+  | "honor-the-clan"
+  | "defy-fate"
+  | "seek-freedom";
+export type RegistrationSpiritRootKindId = "single-root" | "dual-root";
 
 export type ZoneId =
   | "mortal-town"
@@ -163,11 +203,17 @@ export interface Cultivator {
 }
 
 export interface CultivationRegistrationResult {
+  label_locale?: RegistrationLocale;
+  core_temperament_id?: RegistrationTemperamentId;
   core_temperament: string;
+  secondary_temperament_id?: RegistrationTemperamentId;
   secondary_temperament: string;
+  behavior_aspect_id?: RegistrationBehaviorAspectId;
   behavior_aspect: string;
+  cultivation_motive_id?: RegistrationCultivationMotiveId;
   cultivation_motive: string;
   five_element_scores: Record<FiveElementId, number>;
+  spirit_root_kind_id?: RegistrationSpiritRootKindId;
   spirit_root_result: string;
   confidence: {
     core: RegistrationConfidenceLevel;
@@ -190,10 +236,16 @@ export interface CultivationRegistrationRecord {
 
 export interface CultivationRegistrationView {
   saved_at: string | null;
+  label_locale: RegistrationLocale;
+  core_temperament_id: RegistrationTemperamentId;
   core_temperament: string;
+  secondary_temperament_id: RegistrationTemperamentId;
   secondary_temperament: string;
+  behavior_aspect_id: RegistrationBehaviorAspectId;
   behavior_aspect: string;
+  cultivation_motive_id: RegistrationCultivationMotiveId;
   cultivation_motive: string;
+  spirit_root_kind_id: RegistrationSpiritRootKindId;
   spirit_root_result: string;
   overall_confidence: RegistrationConfidenceLevel;
 }
