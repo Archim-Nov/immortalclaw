@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { createRuntimeClient } from "../lib/runtime-client";
 import { isPremiumLandingTabId, premiumLandingMarkup, type PremiumLandingTabId } from "./premium-landing-markup";
 
 export interface PublicAgentDirectoryEntry {
@@ -35,6 +34,16 @@ type AgentDirectoryStatus = "loading" | "success" | "error";
 interface AgentDirectoryViewModel {
   status: AgentDirectoryStatus;
   agents: PublicAgentDirectoryEntry[];
+}
+
+export async function requestPublicAgentDirectory(): Promise<PublicAgentDirectoryResponse> {
+  const response = await fetch("/world/agents");
+
+  if (!response.ok) {
+    throw new Error(`Agent directory request failed with status ${response.status}.`);
+  }
+
+  return (await response.json()) as PublicAgentDirectoryResponse;
 }
 
 function escapeHtml(value: string): string {
@@ -226,9 +235,7 @@ export function HomePage() {
 
     void (async () => {
       try {
-        const client = createRuntimeClient();
-        const response = await client.request("/world/agents");
-        const payload = (await response.json()) as PublicAgentDirectoryResponse;
+        const payload = await requestPublicAgentDirectory();
 
         if (isCancelled) {
           return;

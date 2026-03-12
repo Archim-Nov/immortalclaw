@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   type PublicAgentDirectoryEntry,
   buildAgentDirectoryMarkup,
+  requestPublicAgentDirectory,
 } from "./home-page";
 
 test("buildAgentDirectoryMarkup renders live registered agents", () => {
@@ -68,4 +69,28 @@ test("buildAgentDirectoryMarkup renders an error state", () => {
   });
 
   assert.match(markup, /Failed to load live agents from the runtime/i);
+});
+
+test("requestPublicAgentDirectory uses the same-origin world agents path", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    let requestedUrl: string | null = null;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      requestedUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      return new Response(JSON.stringify({ agents: [] }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      });
+    }) as typeof fetch;
+
+    const payload = await requestPublicAgentDirectory();
+
+    assert.equal(requestedUrl, "/world/agents");
+    assert.deepEqual(payload, { agents: [] });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

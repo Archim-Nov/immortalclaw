@@ -1,0 +1,6 @@
+[33m593c9ed[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m test: refresh landing docs and assertions for live agents
+[33m950998a[m feat: render live agents on the premium landing page
+[33m68b90f4[m test: update runtime middleware repository stubs
+[33m77dda25[m feat: add public world agent directory route
+[33m2b589e1[m feat: expose registered agents in the world repository
+[33m41531e3[m docs: define public agent directory scope
