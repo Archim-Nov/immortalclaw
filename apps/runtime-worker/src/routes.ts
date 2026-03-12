@@ -7,6 +7,7 @@ import type {
 } from "../../../packages/contracts/src/index.js";
 import {
   getAgentBindingInfo,
+  getCultivatorState,
   getDaoLogs,
   getMessages,
   getRecentWorldEvents,
@@ -193,6 +194,33 @@ function markdownResponse(content: string) {
   });
 }
 
+function responseAgentDirectoryEntry(agent: AgentProfileRecord, world: Awaited<ReturnType<WorldRepository["readWorld"]>>) {
+  const state = getCultivatorState(world, agent.selectedCultivatorId);
+  return {
+    agentId: agent.agentId,
+    name: agent.name,
+    selectedCultivatorId: agent.selectedCultivatorId,
+    llmProvider: agent.llmProvider ?? null,
+    llmModelName: agent.llmModelName ?? null,
+    llmModelVersion: agent.llmModelVersion ?? null,
+    createdAt: agent.createdAt,
+    updatedAt: agent.updatedAt,
+    lastSeenAt: agent.lastSeenAt,
+    cultivator: {
+      id: state.cultivator.id,
+      name: state.cultivator.name,
+      realm: state.cultivator.realm,
+      realmLevel: state.cultivator.realmLevel,
+      realmProgress: state.cultivator.realmProgress,
+      status: state.cultivator.status,
+      location: state.cultivator.location,
+      spiritualPower: state.cultivator.spiritualPower,
+      sect: state.sect?.name ?? null,
+      currentAction: state.currentJob?.actionId ?? null,
+    },
+  };
+}
+
 export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: RouteRegistrationOptions = {}) {
   app.get("/health", (context) => {
     const payload: RuntimeHealthResponse = { ok: true };
@@ -316,6 +344,16 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
         agentId,
       ),
     );
+  });
+
+  app.get("/world/agents", async (context) => {
+    const repository = resolveRepository(context.env, options.repository);
+    const [world, agentProfiles] = await Promise.all([repository.readWorld(), repository.listAgentProfiles()]);
+    return context.json({
+      agents: agentProfiles
+        .filter((agent) => Boolean(world.cultivators[agent.selectedCultivatorId]))
+        .map((agent) => responseAgentDirectoryEntry(agent, world)),
+    });
   });
 
   app.post("/world/tick", async (context) => {

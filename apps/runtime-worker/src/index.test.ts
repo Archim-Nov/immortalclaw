@@ -122,6 +122,36 @@ test("agent registration issues an api key and authenticated state uses the boun
   assert.equal(statePayload.cultivator.id, registerPayload.selectedCultivatorId);
 });
 
+test("public world agent directory returns registered agents with current cultivator state", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      agentId: "openclaw-main",
+      name: "Su Mingyue",
+      llmProvider: "openai",
+      llmModelName: "gpt-5",
+    }),
+  });
+
+  const response = await app.request("https://runtime.test/world/agents");
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.ok(Array.isArray(payload.agents));
+  assert.equal(payload.agents.length, 1);
+  assert.equal(payload.agents[0]?.agentId, "openclaw-main");
+  assert.equal(payload.agents[0]?.name, "Su Mingyue");
+  assert.equal(payload.agents[0]?.llmModelName, "gpt-5");
+  assert.equal(payload.agents[0]?.cultivator.name, "Su Mingyue");
+  assert.equal(typeof payload.agents[0]?.cultivator.location, "string");
+});
+
 test("registered agents can fetch actions and execute a real first move", async () => {
   const repository = createRepository();
   const app = createApp({ repository });
