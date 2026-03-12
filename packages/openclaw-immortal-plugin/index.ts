@@ -2,6 +2,7 @@
 import path from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import type { CultivationRegistrationRecord } from "../domain/src/runtime.js";
 
 type FetchLike = typeof fetch;
 type JsonSchema = Record<string, unknown>;
@@ -52,6 +53,7 @@ type PluginConfig = {
   agentId?: string;
   personaDir: string;
   credentialsPath: string;
+  registrationRecordPath?: string;
   llmProvider?: string;
   llmModelName?: string;
   llmModelVersion?: string;
@@ -85,6 +87,12 @@ const GENDER_VALUES = ["male", "female", "nonbinary", "other", "unspecified"] as
 const STARTING_PATH_VALUES = ["sword", "alchemy", "array", "wanderer"] as const;
 const IDENTITY_FILE_NAMES = ["IDENTITY.md", "Identity.md", "identity.md"] as const;
 const SOUL_FILE_NAMES = ["SOUL.md", "Soul.md", "soul.md"] as const;
+const REGISTRATION_RECORD_FILE_NAMES = [
+  "registration-record.json",
+  "registration_record.json",
+  "registration.json",
+] as const;
+const DEFAULT_REGISTRATION_RECORD_FILE_NAME = REGISTRATION_RECORD_FILE_NAMES[0];
 const INSPECTION_WINDOW_MS = 2 * 60 * 1000;
 const ZH_NAME = "\u540d\u5b57";
 const ZH_FULL_NAME = "\u59d3\u540d";
@@ -219,18 +227,25 @@ function normalizeCredentialsPath(input: unknown): string {
     : path.join(homedir(), ".config", "immortal-claw", "credentials.json");
 }
 
+function normalizeOptionalFilePath(input: unknown): string | undefined {
+  const value = trimString(input);
+  return value ? path.resolve(value) : undefined;
+}
+
 function resolvePluginConfig(pluginConfig: Record<string, unknown> | undefined): PluginConfig {
   const requestTimeoutMs =
     typeof pluginConfig?.requestTimeoutMs === "number"
       ? Math.max(100, Math.min(30000, Math.floor(pluginConfig.requestTimeoutMs)))
       : 8000;
+  const personaDir = normalizePathValue(pluginConfig?.personaDir);
 
   return {
     worldBaseUrl: normalizeBaseUrl(pluginConfig?.worldBaseUrl),
     defaultCultivatorId: trimString(pluginConfig?.defaultCultivatorId),
     agentId: trimString(pluginConfig?.agentId),
-    personaDir: normalizePathValue(pluginConfig?.personaDir),
+    personaDir,
     credentialsPath: normalizeCredentialsPath(pluginConfig?.credentialsPath),
+    registrationRecordPath: normalizeOptionalFilePath(pluginConfig?.registrationRecordPath),
     llmProvider: trimString(pluginConfig?.llmProvider),
     llmModelName: trimString(pluginConfig?.llmModelName),
     llmModelVersion: trimString(pluginConfig?.llmModelVersion),
@@ -693,6 +708,57 @@ function writeCredentialsFile(filePath: string, payload: StoredCredentialsFile):
   writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+function findLocalRegistrationRecordPath(config: PluginConfig): string | undefined {
+  if (config.registrationRecordPath) {
+    return config.registrationRecordPath;
+  }
+  return findFirstExistingFile(config.personaDir, REGISTRATION_RECORD_FILE_NAMES);
+}
+
+function resolveRegistrationRecordWritePath(config: PluginConfig): string {
+  return (
+    config.registrationRecordPath ??
+    findFirstExistingFile(config.personaDir, REGISTRATION_RECORD_FILE_NAMES) ??
+    path.join(config.personaDir, DEFAULT_REGISTRATION_RECORD_FILE_NAME)
+  );
+}
+
+function loadLocalRegistrationRecord(
+  config: PluginConfig,
+  log: PluginLogger,
+): CultivationRegistrationRecord | undefined {
+  const filePath = findLocalRegistrationRecordPath(config);
+  if (!filePath) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("expected a JSON object.");
+    }
+    log.info?.(`[immortal-realm] using local registration record from ${filePath} during bootstrap.`);
+    return parsed as CultivationRegistrationRecord;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+      return undefined;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid registration record file at ${filePath}: ${message}`);
+  }
+}
+
+function persistLocalRegistrationRecord(
+  config: PluginConfig,
+  record: CultivationRegistrationRecord,
+  log: PluginLogger,
+): void {
+  const filePath = resolveRegistrationRecordWritePath(config);
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  log.info?.(`[immortal-realm] wrote local registration record to ${filePath}.`);
+}
+
 function findStoredSession(config: PluginConfig, requestedAgentId?: string): AgentSession | null {
   const entries = readCredentialsFile(config.credentialsPath).entries
     .filter((entry) => entry.worldBaseUrl === config.worldBaseUrl)
@@ -774,12 +840,16 @@ function buildPromptGuidance(config: PluginConfig): string {
   const defaultIdentity = config.defaultCultivatorId
     ? `Legacy fallback defaultCultivatorId: ${config.defaultCultivatorId}.`
     : "";
+  const registrationRecordIdentity = config.registrationRecordPath
+    ? `Canonical registration record file: ${config.registrationRecordPath}.`
+    : `Canonical registration record file (auto-detected if present): ${path.join(config.personaDir, DEFAULT_REGISTRATION_RECORD_FILE_NAME)}.`;
 
   return [
     "You are connected to a live Immortal Realm world.",
     agentIdentity,
     defaultIdentity,
     `Credential cache: ${config.credentialsPath}.`,
+    registrationRecordIdentity,
     "Rules for this world integration:",
     "- Never invent current state, inventory, sect membership, tribulation status, persona details, or action ids.",
     "- OpenClaw bootstrap files such as IDENTITY.md and SOUL.md already define the agent persona. Do not ask to create or switch characters manually.",
@@ -790,7 +860,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- Use immortal_strategy to pick a short-term goal and recommended action sequence before acting.",
     "- Use the exact actionId returned by immortal_actions when calling immortal_act.",
     "- Timed actions are not complete until later state or tick results confirm completion.",
-    "- When an OC questionnaire returns a canonical registration_record, persist it with immortal_registration_save and read it back with immortal_registration or immortal_state.registration.",
+    "- If a local canonical registration_record file is present, the plugin will include it during first registration automatically. If the record is produced later, persist it with immortal_registration_save and read it back with immortal_registration or immortal_state.registration.",
     "- Use immortal_messages, immortal_tribulation, immortal_sect, and immortal_dao_logs for supporting context instead of guessing.",
     "- immortal_tick is an operator or GM action. Only use it when the user explicitly wants to advance time or when you are running the simulation for testing.",
   ]
@@ -883,6 +953,11 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           type: "string",
           description: "Optional credentials.json path used to cache agent credentials.",
         },
+        registrationRecordPath: {
+          type: "string",
+          description:
+            "Optional JSON file path for the canonical registration_record. If present during first bootstrap, it is included in POST /agent/register automatically.",
+        },
         llmProvider: {
           type: "string",
         },
@@ -971,6 +1046,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
 
       async function registerAgentSession(agentId?: string): Promise<AgentSession> {
         const persona = loadPersonaProfile(agentId ?? config.agentId ?? "openclaw-agent", config);
+        const record = loadLocalRegistrationRecord(config, log);
         const payload = await requestWorld(fetchImpl, config, "/agent/register", {
           method: "POST",
           body: JSON.stringify({
@@ -983,6 +1059,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             ...(persona.origin ? { origin: persona.origin } : {}),
             ...(persona.temperament ? { temperament: persona.temperament } : {}),
             ...(persona.startingPath ? { startingPath: persona.startingPath } : {}),
+            ...(record ? { record } : {}),
           }),
         });
         registrationRouteAvailable = true;
@@ -1166,7 +1243,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       }
 
       log.info?.(
-        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} agentId=${config.agentId ?? "auto"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"} personaDir=${config.personaDir} credentialsPath=${config.credentialsPath}`,
+        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} agentId=${config.agentId ?? "auto"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"} personaDir=${config.personaDir} credentialsPath=${config.credentialsPath} registrationRecordPath=${config.registrationRecordPath ?? "auto"}`,
       );
       registerReadTool({
         name: "immortal_state",
@@ -1225,6 +1302,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
                     record,
                   }),
                 });
+          persistLocalRegistrationRecord(config, record as CultivationRegistrationRecord, log);
           return jsonResult("immortal_registration_save", payload);
         },
       });

@@ -25,6 +25,10 @@
         "type": "string",
         "description": "Optional credentials.json path used to cache agent credentials."
       },
+      "registrationRecordPath": {
+        "type": "string",
+        "description": "Optional JSON file path for the canonical registration_record. If present during first bootstrap, it is included in POST /agent/register automatically."
+      },
       "llmProvider": {
         "type": "string"
       },

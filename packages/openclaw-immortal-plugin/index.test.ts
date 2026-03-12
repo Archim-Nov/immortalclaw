@@ -45,6 +45,15 @@ function writePersonaFiles(
   writeFileSync(path.join(personaDir, "SOUL.md"), soulContent, "utf8");
 }
 
+function writeRegistrationRecordFile(personaDir: string, record = createRegistrationRecord()) {
+  mkdirSync(personaDir, { recursive: true });
+  writeFileSync(
+    path.join(personaDir, "registration-record.json"),
+    `${JSON.stringify(record, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 function registerPlugin(
   pluginConfig: Record<string, unknown>,
   fetchImpl: typeof fetch,
@@ -148,60 +157,102 @@ test("legacy defaultCultivatorId still works for state act and tick tools", asyn
 });
 
 test("registration tools persist and fetch canonical records over legacy routes", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-registration-"));
+  const personaDir = path.join(root, "workspace");
   const requests: CapturedRequest[] = [];
-  const { tools } = registerPlugin(
-    {
-      worldBaseUrl: "http://127.0.0.1:8787",
-      defaultCultivatorId: "yun-zhong-he",
-    },
-    async (input, init) => {
-      const url = String(input);
-      const method = String(init?.method ?? "GET");
-      const body = typeof init?.body === "string" ? init.body : undefined;
-      requests.push({ url, method, body });
+  try {
+    writePersonaFiles(personaDir);
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "http://127.0.0.1:8787",
+        defaultCultivatorId: "yun-zhong-he",
+        personaDir,
+      },
+      async (input, init) => {
+        const url = String(input);
+        const method = String(init?.method ?? "GET");
+        const body = typeof init?.body === "string" ? init.body : undefined;
+        requests.push({ url, method, body });
 
-      if (url.includes("/cultivator/registration?")) {
-        return new Response(
+        if (url.includes("/cultivator/registration?")) {
+          return new Response(
+            JSON.stringify({
+              ...createRegistrationRecord(),
+              saved_at: "2026-03-09T00:00:00.000Z",
+              cultivator_id: "yun-zhong-he",
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/cultivator/registration")) {
+          return new Response(
+            JSON.stringify({
+              ...createRegistrationRecord(),
+              saved_at: "2026-03-09T00:00:00.000Z",
+              cultivator_id: "yun-zhong-he",
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await tools.get("immortal_registration_save")?.execute("tool-save", {
+      record: createRegistrationRecord(),
+    });
+    const registrationResult = (await tools.get("immortal_registration")?.execute("tool-get", {})) as {
+      details?: { result?: { core_temperament?: string } };
+    };
+
+    assert.equal(requests[0]?.url, "http://127.0.0.1:8787/cultivator/registration");
+    assert.equal(requests[0]?.method, "POST");
+    assert.match(String(requests[0]?.body), /"cultivatorId":"yun-zhong-he"/);
+    assert.match(String(requests[0]?.body), /"record_type":"registration_record"/);
+    assert.equal(
+      requests[1]?.url,
+      "http://127.0.0.1:8787/cultivator/registration?cultivatorId=yun-zhong-he",
+    );
+    assert.equal(registrationResult.details?.result?.core_temperament, "Calm strategist");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("registration save writes the canonical record into the local workspace file", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-record-write-"));
+  const personaDir = path.join(root, "workspace");
+  const registrationRecordPath = path.join(personaDir, "registration-record.json");
+  try {
+    writePersonaFiles(personaDir);
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "http://127.0.0.1:8787",
+        defaultCultivatorId: "yun-zhong-he",
+        personaDir,
+      },
+      async () =>
+        new Response(
           JSON.stringify({
             ...createRegistrationRecord(),
             saved_at: "2026-03-09T00:00:00.000Z",
             cultivator_id: "yun-zhong-he",
           }),
           { status: 200 },
-        );
-      }
+        ),
+    );
 
-      if (url.endsWith("/cultivator/registration")) {
-        return new Response(
-          JSON.stringify({
-            ...createRegistrationRecord(),
-            saved_at: "2026-03-09T00:00:00.000Z",
-            cultivator_id: "yun-zhong-he",
-          }),
-          { status: 200 },
-        );
-      }
+    await tools.get("immortal_registration_save")?.execute("tool-save", {
+      record: createRegistrationRecord(),
+    });
 
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    },
-  );
-
-  await tools.get("immortal_registration_save")?.execute("tool-save", {
-    record: createRegistrationRecord(),
-  });
-  const registrationResult = (await tools.get("immortal_registration")?.execute("tool-get", {})) as {
-    details?: { result?: { core_temperament?: string } };
-  };
-
-  assert.equal(requests[0]?.url, "http://127.0.0.1:8787/cultivator/registration");
-  assert.equal(requests[0]?.method, "POST");
-  assert.match(String(requests[0]?.body), /"cultivatorId":"yun-zhong-he"/);
-  assert.match(String(requests[0]?.body), /"record_type":"registration_record"/);
-  assert.equal(
-    requests[1]?.url,
-    "http://127.0.0.1:8787/cultivator/registration?cultivatorId=yun-zhong-he",
-  );
-  assert.equal(registrationResult.details?.result?.core_temperament, "Calm strategist");
+    assert.equal(existsSync(registrationRecordPath), true);
+    assert.match(readFileSync(registrationRecordPath, "utf8"), /"record_type": "registration_record"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("act tool rejects when state or actions were not checked first", async () => {
@@ -297,6 +348,7 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
     assert.doesNotMatch(String(firstRequests[0]?.body), /"agentId":/);
     assert.match(String(firstRequests[0]?.body), /"llmProvider":"openai"/);
     assert.match(String(firstRequests[0]?.body), /"name":"Su Mingyue"/);
+    assert.doesNotMatch(String(firstRequests[0]?.body), /"record_type":"registration_record"/);
     assert.equal(firstRequests[1]?.url, "https://runtime.example/agent/sync-persona");
     assert.equal(firstRequests[1]?.authorization, "Bearer immortal_sk_cached");
     assert.doesNotMatch(String(firstRequests[1]?.body), /"agentId":/);
@@ -370,6 +422,86 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
     assert.equal(secondRequests[0]?.authorization, "Bearer immortal_sk_cached");
     assert.doesNotMatch(String(secondRequests[0]?.body), /"agentId":/);
     assert.equal(secondRequests[1]?.url, "https://runtime.example/agent/state");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin auto-registers with a local canonical registration record when available", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-agent-record-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
+  try {
+    writePersonaFiles(personaDir);
+    writeRegistrationRecordFile(personaDir);
+
+    const requests: CapturedRequest[] = [];
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        const authorization =
+          init?.headers && typeof init.headers === "object" && "Authorization" in init.headers
+            ? String((init.headers as Record<string, unknown>).Authorization)
+            : null;
+        requests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+          authorization,
+        });
+
+        if (url.endsWith("/agent/register")) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              agentId: "550e8400-e29b-41d4-a716-446655440004",
+              credential: "immortal_sk_recorded",
+              selectedCultivatorId: "cultivator-9",
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "550e8400-e29b-41d4-a716-446655440004",
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(
+            JSON.stringify({
+              tick: 0,
+              cultivator: { id: "cultivator-9", name: "Su Mingyue" },
+              registration: {
+                core_temperament: "Calm strategist",
+              },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await tools.get("immortal_state")?.execute("tool-record-bootstrap", {});
+
+    assert.equal(requests[0]?.url, "https://runtime.example/agent/register");
+    assert.match(String(requests[0]?.body), /"record_type":"registration_record"/);
+    assert.match(String(requests[0]?.body), /"questionnaire_version":"immortal-claw-oc-v1"/);
+    assert.equal(requests[1]?.authorization, "Bearer immortal_sk_recorded");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

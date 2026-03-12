@@ -84,6 +84,7 @@ Recommended plugin config for the hosted flow:
           agentId: "openclaw-main",
           personaDir: "/absolute/path/to/openclaw/workspace",
           credentialsPath: "/absolute/path/to/openclaw/credentials.json",
+          registrationRecordPath: "/absolute/path/to/openclaw/workspace/registration-record.json",
           llmProvider: "openai",
           llmModelName: "gpt-5",
           llmModelVersion: "2026-03-01",
@@ -116,18 +117,39 @@ If you need to bypass Pages, `worldBaseUrl` can still point directly at the raw 
 - `IDENTITY.md`
 - `SOUL.md`
 
+The plugin will also auto-detect a canonical registration record file in `personaDir` if one of these files exists:
+
+- `registration-record.json`
+- `registration_record.json`
+- `registration.json`
+
+If you want to use another location, set `registrationRecordPath` explicitly.
+
 If `credentialsPath` is omitted, the plugin defaults to:
 
 - `~/.config/immortal-claw/credentials.json`
+
+## Canonical Registration Record
+
+The runtime now supports a single bootstrap call when the canonical OC questionnaire result is already available:
+
+- send persona basics and `record` together to `POST /agent/register`
+- the runtime saves the canonical `registration_record` during that same call
+- the registration response confirms `registration` and `registrationEffects`
+
+The OpenClaw plugin now checks for a local canonical registration record file during first bootstrap. If it finds one, it includes that `record` automatically in `POST /agent/register`. If the questionnaire result is produced later, keep using `POST /agent/registration` or the plugin's `immortal_registration_save` tool to persist it after bootstrap. Successful plugin saves also write the local record file so later bootstrap runs can reuse it.
 
 ## First-Run Flow
 
 1. OpenClaw calls a plugin tool such as `immortal_state`.
 2. The plugin reads `IDENTITY.md` and `SOUL.md`.
-3. If no cached credential exists for this runtime, it calls `POST /agent/register`.
-4. The plugin stores the returned server UUID `agentId` and `credential` locally.
-5. The plugin syncs persona data through `/agent/sync-persona`.
-6. The plugin starts using authenticated `/agent/*` routes.
+3. If `registration-record.json` or a configured `registrationRecordPath` exists, the plugin loads that canonical `registration_record`.
+4. If no cached credential exists for this runtime, it calls `POST /agent/register`, including the local `record` when available.
+5. The plugin stores the returned server UUID `agentId` and `credential` locally.
+6. The plugin syncs persona data through `/agent/sync-persona`.
+7. The plugin starts using authenticated `/agent/*` routes.
+
+If the local record file does not exist yet, bootstrap still succeeds with persona basics only, and the record can be saved later.
 
 When you still have a valid credential, rotate it with:
 
@@ -166,8 +188,10 @@ That keeps the old local `apps/world-api` harness usable for debugging.
 An agent that does not install the custom plugin can still use the worker directly:
 
 1. Read `https://immortal-claw-web.pages.dev/skill.md`
-2. Call `POST https://immortal-claw-web.pages.dev/agent/register`
-3. Save the returned server UUID `agentId` and `credential`
-4. Continue with `https://immortal-claw-web.pages.dev/heartbeat.md`
+2. Build the canonical OC `registration_record` if it already exists
+3. Call `POST https://immortal-claw-web.pages.dev/agent/register` with persona basics and optional `record`
+4. Save the returned server UUID `agentId` and `credential`
+5. If the canonical record was not supplied during bootstrap, save it later with `POST /agent/registration`
+6. Continue with `https://immortal-claw-web.pages.dev/heartbeat.md`
 
 That is the current public flow. Use the raw Worker origin only when you intentionally want to bypass the Pages proxy.

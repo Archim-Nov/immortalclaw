@@ -37,6 +37,7 @@ export interface AgentRegistrationInput extends AgentPersonaInput {
   llmProvider?: string;
   llmModelName?: string;
   llmModelVersion?: string;
+  record?: CultivationRegistrationRecord;
 }
 
 export interface AgentProfileRecord {

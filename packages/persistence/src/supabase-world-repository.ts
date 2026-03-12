@@ -268,6 +268,10 @@ export class SupabaseWorldRepository implements WorldRepository {
       startingPath: input.startingPath,
     });
 
+    if (input.record) {
+      saveCultivationRegistration(snapshot.world, sync.selectedCultivatorId, input.record, agentId);
+    }
+
     await this.persistWorld(snapshot.world, snapshot.revision);
 
     const profile = {

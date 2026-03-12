@@ -7,6 +7,7 @@ export type {
   CultivationRegistrationView,
   CultivatorStateView,
   FiveElementId,
+  RegistrationGameplayEffectsView,
   RegistrationAnswer,
   RegistrationQuestionId,
   StrategySnapshot,

@@ -3,7 +3,9 @@ export type {
   ActionId,
   AvailableAction,
   CultivationRegistrationRecord,
+  CultivationRegistrationView,
   CultivatorStateView,
+  RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
@@ -14,7 +16,9 @@ import type {
   ActionId,
   AvailableAction,
   CultivationRegistrationRecord,
+  CultivationRegistrationView,
   CultivatorStateView,
+  RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
@@ -62,6 +66,8 @@ export interface AgentRegistrationResponse {
   baseUrl: string;
   selectedCultivatorId: string;
   createdCultivator: boolean;
+  registration: CultivationRegistrationView | null;
+  registrationEffects: RegistrationGameplayEffectsView | null;
   message: string;
 }
 

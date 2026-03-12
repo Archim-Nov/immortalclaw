@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { CultivationRegistrationRecord } from "../../../packages/domain/src/runtime.js";
 import worker from "./index.js";
 import { createApp } from "./app.js";
 import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
@@ -9,6 +10,54 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 function createRepository() {
   return createInMemoryWorldRepository();
+}
+
+function createRegistrationRecord(): CultivationRegistrationRecord {
+  return {
+    record_type: "registration_record",
+    questionnaire_version: "immortal-claw-oc-v1",
+    answers: {
+      Q1: "A",
+      Q2: "B",
+      Q3: "C",
+      Q4: "D",
+      Q5: "A",
+      Q6: "B",
+      Q7: "C",
+      Q8: "D",
+      Q9: "A",
+      Q10: "B",
+      Q11: "C",
+      Q12: "D",
+      Q13: "A",
+      Q14: "B",
+      Q15: "C",
+      Q16: "D",
+      Q17: "A",
+      Q18: "B",
+    },
+    result: {
+      core_temperament: "Calm strategist",
+      secondary_temperament: "Patient observer",
+      behavior_aspect: "Water / Observation",
+      cultivation_motive: "Seek truth",
+      five_element_scores: {
+        metal: 5,
+        wood: 6,
+        water: 11,
+        fire: 3,
+        earth: 8,
+      },
+      spirit_root_result: "Water-biased root",
+      confidence: {
+        core: "high",
+        behavior: "high",
+        motive: "medium",
+        overall: "high",
+      },
+    },
+    summary: "A cautious cultivator with a strong water leaning.",
+  };
 }
 
 test("health route returns ok", async () => {
@@ -123,6 +172,44 @@ test("agent registration response uses the credential contract", async () => {
   assert.equal(typeof payload.credential, "string");
   assert.equal(Object.hasOwn(payload, "credential"), true);
   assert.equal(Object.hasOwn(payload, "apiKey"), false);
+  assert.equal(payload.registration, null);
+  assert.equal(payload.registrationEffects, null);
+});
+
+test("agent registration can save a canonical registration record in the same call", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+      llmProvider: "openai",
+      llmModelName: "gpt-5",
+      record: createRegistrationRecord(),
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+
+  assert.equal(registerResponse.status, 200);
+  assert.equal(registerPayload.registration?.core_temperament, "Calm strategist");
+  assert.ok(registerPayload.registrationEffects);
+  assert.ok(registerPayload.registrationEffects?.dominantElements.some((element: { id: string }) => element.id === "water"));
+  assert.match(registerPayload.message, /cultivation record saved/i);
+
+  const stateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const statePayload = await stateResponse.json();
+
+  assert.equal(stateResponse.status, 200);
+  assert.equal(statePayload.registration?.core_temperament, "Calm strategist");
+  assert.ok(statePayload.registrationEffects);
 });
 
 test("agent registration ignores caller-supplied identity and authenticated state uses the bound cultivator", async () => {

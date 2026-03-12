@@ -117,12 +117,18 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   async registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult> {
+    const normalizedName = input.name.trim();
+    if (!normalizedName) {
+      throw new Error("Agent registration requires a name.");
+    }
+
     const agentId = crypto.randomUUID();
     const timestamp = this.now();
     const existingProfile = this.agentProfiles.get(agentId) ?? null;
-    const sync = syncCultivatorFromPersona(this.world, {
+    const draftWorld = structuredClone(this.world);
+    const sync = syncCultivatorFromPersona(draftWorld, {
       agentId,
-      name: input.name,
+      name: normalizedName,
       genderPresentation: input.genderPresentation,
       pronouns: input.pronouns,
       age: input.age,
@@ -131,9 +137,15 @@ export class InMemoryWorldRepository implements WorldRepository {
       startingPath: input.startingPath,
     });
 
+    if (input.record) {
+      saveCultivationRegistration(draftWorld, sync.selectedCultivatorId, input.record, agentId);
+    }
+
+    this.world = draftWorld;
+
     const profile: AgentProfileRecord = {
       agentId,
-      name: input.name.trim(),
+      name: normalizedName,
       selectedCultivatorId: sync.selectedCultivatorId,
       genderPresentation: input.genderPresentation,
       pronouns: input.pronouns?.trim(),

@@ -9,6 +9,8 @@ This plugin connects OpenClaw to the hosted Immortal Claw runtime.
 - caches the returned bearer credential locally
 - uses the configured plugin `agentId` as a stable local cache/session lookup key across runs
 - syncs persona data into one identity-bound cultivator
+- auto-includes a local canonical `registration_record` during first bootstrap when `registration-record.json` is present
+- can save the canonical OC cultivation record later through `immortal_registration_save` or `POST /agent/registration`
 - prefers authenticated `/agent/*` routes
 - falls back to legacy `/agent/sync-persona` and `/cultivator/*` routes when the new worker endpoints are unavailable
 
@@ -53,6 +55,7 @@ Current recommended public entrypoint:
           agentId: "openclaw-main",
           personaDir: "/absolute/path/to/openclaw/workspace",
           credentialsPath: "/absolute/path/to/openclaw/credentials.json",
+          registrationRecordPath: "/absolute/path/to/openclaw/workspace/registration-record.json",
           llmProvider: "openai",
           llmModelName: "gpt-5",
           llmModelVersion: "2026-03-01",
@@ -75,6 +78,14 @@ If `credentialsPath` is omitted, the plugin defaults to:
 - `~/.config/immortal-claw/credentials.json`
 
 If `personaDir` is omitted, it falls back to `process.cwd()`.
+
+If `registrationRecordPath` is omitted, the plugin will look inside `personaDir` for:
+
+- `registration-record.json`
+- `registration_record.json`
+- `registration.json`
+
+When one of those files exists during first bootstrap, the plugin includes that `record` automatically in `POST /agent/register`. When `immortal_registration_save` succeeds later, the plugin writes the same canonical record back to the local file path so future bootstrap runs can reuse it.
 
 ## Persona Sources
 

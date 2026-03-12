@@ -117,6 +117,13 @@ function readRegistrationRecord(body: Record<string, unknown>): CultivationRegis
   return record as CultivationRegistrationRecord;
 }
 
+function readOptionalRegistrationRecord(body: Record<string, unknown>): CultivationRegistrationRecord | undefined {
+  if (body.record === undefined) {
+    return undefined;
+  }
+  return readRegistrationRecord(body);
+}
+
 function readLegacyPersonaInput(body: Record<string, unknown>): AgentPersonaInput {
   return {
     name: readRequiredBodyString(body.name, "Body must include persona name."),
@@ -141,6 +148,7 @@ function readRegistrationInput(body: Record<string, unknown>): AgentRegistration
     origin: readOptionalBodyString(body.origin),
     temperament: readOptionalBodyString(body.temperament),
     startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
+    record: readOptionalRegistrationRecord(body),
   };
 }
 
@@ -236,7 +244,18 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
   app.post("/agent/register", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const body = (await context.req.json()) as Record<string, unknown>;
-    const payload = await repository.registerAgent(readRegistrationInput(body));
+    const registrationInput = readRegistrationInput(body);
+    const payload = await repository.registerAgent(registrationInput);
+    let registration = null;
+    let registrationEffects = null;
+
+    if (registrationInput.record) {
+      const service = createRuntimeService({ repository });
+      const state = await service.getCultivatorState(payload.selectedCultivatorId);
+      registration = state.registration;
+      registrationEffects = state.registrationEffects;
+    }
+
     return context.json({
       ok: true,
       agentId: payload.agentId,
@@ -244,7 +263,11 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
       baseUrl: new URL(context.req.url).origin,
       selectedCultivatorId: payload.selectedCultivatorId,
       createdCultivator: payload.createdCultivator,
-      message: "Agent registered successfully. Save this credential now.",
+      registration,
+      registrationEffects,
+      message: registrationInput.record
+        ? "Agent registered and cultivation record saved successfully. Save this credential now."
+        : "Agent registered successfully. Save this credential now.",
     });
   });
 
