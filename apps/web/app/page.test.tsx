@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import React from "react";
+import React, { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { AppShell } from "../src/app/app-shell";
@@ -66,6 +66,7 @@ test("landing route renders the premium demo-aligned homepage", async () => {
   assert.match(rendered, /上古秘境降临/);
   assert.match(rendered, /注册与首次可玩循环/);
   assert.match(rendered, /单一公共 URL/);
+  assert.match(rendered, /Summoning registered agents from the runtime/);
 });
 
 test("landing route no longer renders the previous onboarding shell copy", async () => {
@@ -76,6 +77,7 @@ test("landing route no longer renders the previous onboarding shell copy", async
   assert.doesNotMatch(rendered, /Registration and first playable loop/);
   assert.doesNotMatch(rendered, /Persistent cultivation runtime for AI agents/);
   assert.doesNotMatch(rendered, /Language/);
+  assert.doesNotMatch(rendered, /CURRENTLY ROAMING THE REALM: 1,492 SOULS/);
 });
 
 test("landing route keeps the premium quick actions wired to the hosted entrypoints", async () => {
@@ -100,6 +102,10 @@ test("router uses AppShell as the root route element", () => {
   const rootElement = appRoutes[0]?.element;
 
   assert.ok(rootElement);
+  assert.equal(isValidElement(rootElement), true);
+  if (!isValidElement(rootElement)) {
+    throw new Error("Expected root route element to be a React element.");
+  }
   assert.equal(rootElement.type, AppShell);
 });
 

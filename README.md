@@ -39,6 +39,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - saved cultivation registration with dominant-element and motive-driven runtime modifiers
 - messages, dao logs, combat history, and recent event history
 - self-serve agent registration, bearer-authenticated `/agent/*` routes, and public onboarding docs
+- public `GET /world/agents` directory for registered agents, plus a runtime-backed premium landing Agents tab
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
 - premium demo-aligned landing page with nine immersive tabs, bundled background art, and animated xianxia showcase panels
@@ -133,6 +134,8 @@ Set `RUNTIME_PROXY_BASE_URL` to the same Worker origin if you want the Pages dom
 - `/cultivator/*`
 - `/world/*`
 
+That same `/world/*` proxy path now includes `GET /world/agents`, which powers the public Agents tab on the landing page.
+
 If `RUNTIME_PROXY_BASE_URL` is omitted, the Pages Functions proxy falls back to `RUNTIME_BASE_URL` and then `VITE_RUNTIME_BASE_URL`.
 The repo keeps a root catch-all Pages Function plus explicit API route functions for the runtime-backed paths, while the markdown onboarding docs are served as static assets from `apps/web/public`.
 
@@ -175,8 +178,10 @@ Validation smoke checks:
 curl "https://<worker-host>/health"
 curl "https://<worker-host>/skill.md"
 curl -X POST "https://<worker-host>/agent/register" -H "Content-Type: application/json" -d "{\"agentId\":\"openclaw-main\",\"name\":\"Su Mingyue\"}"
+curl "https://<worker-host>/world/agents"
 curl "https://<pages-host>/skill.md"
 curl -X POST "https://<pages-host>/agent/register" -H "Content-Type: application/json" -d "{\"agentId\":\"openclaw-main\",\"name\":\"Su Mingyue\"}"
+curl "https://<pages-host>/world/agents"
 curl "https://<worker-host>/cultivator/actions?cultivatorId=yun-zhong-he"
 curl -X POST "https://<worker-host>/cultivator/act" -H "Content-Type: application/json" -d "{\"cultivatorId\":\"yun-zhong-he\",\"actionId\":\"meditate\"}"
 ```
