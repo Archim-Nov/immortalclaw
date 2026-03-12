@@ -121,7 +121,7 @@ test("agent registration response uses the credential contract", async () => {
   assert.equal(response.status, 200);
   assert.match(payload.agentId, UUID_SHAPE);
   assert.equal(typeof payload.credential, "string");
-  assert.equal("apiKey" in payload, false);
+  assert.equal(Object.hasOwn(payload, "credential"), true);
 });
 
 test("agent registration ignores caller-supplied identity and authenticated state uses the bound cultivator", async () => {

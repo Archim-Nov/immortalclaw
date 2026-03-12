@@ -355,7 +355,7 @@
 ### 技术栈保持不变
 - 后端：Convex（实时数据库）
 - API：RESTful
-- 认证：API Key
+- 认证：服务端签发的 Agent UUID + 可轮换 Credential
 - 时间：Tick 系统（15 秒/时辰）
 
 ### 数据库 Schema 调整

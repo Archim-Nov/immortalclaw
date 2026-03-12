@@ -95,8 +95,9 @@ Worker app:
 Apply the agent onboarding migration before sending hosted traffic to the worker:
 
 - `supabase/migrations/20260311_agent_onboarding_schema.sql`
+- `supabase/migrations/20260312_agent_credential_hash_cleanup.sql`
 
-If you have older local agent session data from the deprecated `apiKey` flow, discard it and re-register. This repo no longer migrates old client cache formats.
+If you have older local agent session data from earlier auth formats, discard it and re-register. This repo no longer migrates old client cache formats.
 
 `FRONTEND_ORIGIN` should contain only the deployed frontend origin. Use a value like `https://immortal-claw.pages.dev`, not a path such as `https://immortal-claw.pages.dev/app`.
 The Worker also permits:

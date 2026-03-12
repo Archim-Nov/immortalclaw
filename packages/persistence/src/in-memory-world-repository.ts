@@ -35,14 +35,14 @@ function normalizeAgentId(value: string | undefined): string | undefined {
   return normalized ? normalized : undefined;
 }
 
-function issueApiKey(): string {
+function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-function clearAgentApiKeys(agentApiKeys: Map<string, string>, agentId: string) {
-  for (const [apiKey, storedAgentId] of agentApiKeys.entries()) {
+function clearAgentCredentials(agentCredentials: Map<string, string>, agentId: string) {
+  for (const [credential, storedAgentId] of agentCredentials.entries()) {
     if (storedAgentId === agentId) {
-      agentApiKeys.delete(apiKey);
+      agentCredentials.delete(credential);
     }
   }
 }
@@ -53,7 +53,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private activeLock: TickLockRecord | null = null;
   private readonly now: () => string;
   private readonly agentProfiles = new Map<string, AgentProfileRecord>();
-  private readonly agentApiKeys = new Map<string, string>();
+  private readonly agentCredentials = new Map<string, string>();
 
   constructor(options: InMemoryWorldRepositoryOptions = {}) {
     this.world = structuredClone(options.world ?? createSeedWorld());
@@ -149,13 +149,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     };
     this.agentProfiles.set(agentId, profile);
 
-    clearAgentApiKeys(this.agentApiKeys, agentId);
-    const apiKey = issueApiKey();
-    this.agentApiKeys.set(apiKey, agentId);
+    clearAgentCredentials(this.agentCredentials, agentId);
+    const credential = issueCredential();
+    this.agentCredentials.set(credential, agentId);
 
     return {
       ...structuredClone(profile),
-      credential: apiKey,
+      credential,
       createdCultivator: sync.created,
     };
   }
@@ -173,13 +173,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!existingProfile) {
       throw new Error(`Agent not found: ${normalizedAgentId}`);
     }
-    if (this.agentApiKeys.get(currentCredential.trim()) !== normalizedAgentId) {
+    if (this.agentCredentials.get(currentCredential.trim()) !== normalizedAgentId) {
       throw new Error("Current credential does not belong to the requested agent.");
     }
 
-    clearAgentApiKeys(this.agentApiKeys, normalizedAgentId);
-    const credential = issueApiKey();
-    this.agentApiKeys.set(credential, normalizedAgentId);
+    clearAgentCredentials(this.agentCredentials, normalizedAgentId);
+    const credential = issueCredential();
+    this.agentCredentials.set(credential, normalizedAgentId);
 
     const timestamp = this.now();
     existingProfile.lastSeenAt = timestamp;
@@ -191,8 +191,8 @@ export class InMemoryWorldRepository implements WorldRepository {
     };
   }
 
-  async authenticateAgent(apiKey: string): Promise<AgentProfileRecord | null> {
-    const agentId = this.agentApiKeys.get(apiKey.trim());
+  async authenticateAgent(credential: string): Promise<AgentProfileRecord | null> {
+    const agentId = this.agentCredentials.get(credential.trim());
     if (!agentId) {
       return null;
     }

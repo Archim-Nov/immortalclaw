@@ -78,7 +78,7 @@ export interface WorldRepository {
   releaseTickLock(lockId: string): Promise<void>;
   registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult>;
   resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult>;
-  authenticateAgent(apiKey: string): Promise<AgentProfileRecord | null>;
+  authenticateAgent(credential: string): Promise<AgentProfileRecord | null>;
   syncAgentPersona(agentId: string, input: AgentPersonaInput): Promise<AgentProfileRecord>;
   touchAgent(agentId: string): Promise<void>;
   syncPersona(agentId: string, input: AgentPersonaInput): Promise<AgentPersonaSyncResult>;

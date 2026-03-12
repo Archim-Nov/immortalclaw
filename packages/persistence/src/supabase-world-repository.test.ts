@@ -86,7 +86,7 @@ class FakeSupabaseRestApi {
     }
 
     if (tableName === "agent_credentials") {
-      const hash = this.readEq(url, "api_key_hash");
+      const hash = this.readEq(url, "credential_hash");
       if (hash) {
         const row = this.tables.agent_credentials.get(hash);
         return this.jsonResponse(row ? [row] : []);
@@ -175,7 +175,7 @@ class FakeSupabaseRestApi {
 
       const rows = Array.isArray(body) ? body : [body];
       for (const row of rows) {
-        this.tables.agent_credentials.set(String(row.api_key_hash), row);
+        this.tables.agent_credentials.set(String(row.credential_hash), row);
       }
       return this.jsonResponse([], 201);
     }
@@ -408,7 +408,7 @@ test("resetAgentCredential restores the current credential when replacement inse
   );
 });
 
-test("Supabase REST requests use the secret key as apikey without bearer auth", async () => {
+test("Supabase REST requests use the Supabase secret key header without bearer auth", async () => {
   const { api, repository } = createRepository();
 
   await repository.readWorld();

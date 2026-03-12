@@ -62,7 +62,7 @@ The `worldBaseUrl` can be either:
 
 `agentId` in plugin config is a local lookup key used to find the cached session on later runs. The runtime still returns the canonical server `agentId` as a UUID plus a bearer `credential`, and authenticated requests use `Authorization: Bearer <credential>`.
 
-Older local session files from the deprecated `apiKey` flow are no longer supported. Delete them and re-register so the plugin can cache the server-issued UUID `agentId` plus `credential`.
+Older local session files from earlier auth formats are no longer supported. Delete them and re-register so the plugin can cache the server-issued UUID `agentId` plus `credential`.
 
 If `credentialsPath` is omitted, the plugin defaults to:
 

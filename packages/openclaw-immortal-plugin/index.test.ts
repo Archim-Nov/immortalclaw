@@ -308,10 +308,14 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
       entries?: Array<Record<string, unknown>>;
     };
     assert.equal(storedCredentials.entries?.length, 1);
-    assert.equal(storedCredentials.entries?.[0]?.credential, "immortal_sk_cached");
-    assert.equal(storedCredentials.entries?.[0]?.apiKey, undefined);
-    assert.equal(storedCredentials.entries?.[0]?.agentId, serverAgentId);
-    assert.equal(storedCredentials.entries?.[0]?.requestedAgentId, "openclaw-main");
+    assert.deepEqual(storedCredentials.entries?.[0], {
+      worldBaseUrl: "https://runtime.example",
+      agentId: serverAgentId,
+      requestedAgentId: "openclaw-main",
+      credential: "immortal_sk_cached",
+      selectedCultivatorId: "cultivator-9",
+      updatedAt: storedCredentials.entries?.[0]?.updatedAt,
+    });
 
     const secondRequests: CapturedRequest[] = [];
     const second = registerPlugin(
@@ -371,7 +375,7 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
   }
 });
 
-test("plugin ignores legacy apiKey-only cache entries and registers a fresh credential", async () => {
+test("plugin ignores incomplete cached entries and registers a fresh credential", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-legacy-cache-"));
   const personaDir = path.join(root, "workspace");
   const credentialsPath = path.join(root, "credentials.json");
@@ -387,7 +391,6 @@ test("plugin ignores legacy apiKey-only cache entries and registers a fresh cred
               worldBaseUrl: "https://runtime.example",
               agentId: "550e8400-e29b-41d4-a716-446655440002",
               requestedAgentId: "openclaw-main",
-              apiKey: "immortal_sk_legacy_cache",
               selectedCultivatorId: "cultivator-9",
               updatedAt: "2026-03-12T00:00:00.000Z",
             },
@@ -463,8 +466,14 @@ test("plugin ignores legacy apiKey-only cache entries and registers a fresh cred
     const storedCredentials = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
       entries?: Array<Record<string, unknown>>;
     };
-    assert.equal(storedCredentials.entries?.[0]?.credential, "immortal_sk_fresh");
-    assert.equal(storedCredentials.entries?.[0]?.apiKey, undefined);
+    assert.deepEqual(storedCredentials.entries?.[0], {
+      worldBaseUrl: "https://runtime.example",
+      agentId: "550e8400-e29b-41d4-a716-446655440003",
+      requestedAgentId: "openclaw-main",
+      credential: "immortal_sk_fresh",
+      selectedCultivatorId: "cultivator-9",
+      updatedAt: storedCredentials.entries?.[0]?.updatedAt,
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

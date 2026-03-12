@@ -20,6 +20,7 @@ Deploy the worker with:
 Run the new migration before pointing traffic at the worker:
 
 - `supabase/migrations/20260311_agent_onboarding_schema.sql`
+- `supabase/migrations/20260312_agent_credential_hash_cleanup.sql`
 
 Once deployed, the worker should expose:
 
