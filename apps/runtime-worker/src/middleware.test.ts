@@ -10,6 +10,9 @@ function unusedRepository() {
     async readWorld() {
       throw new Error("not used");
     },
+    async listAgentProfiles() {
+      throw new Error("not used");
+    },
     async getCultivatorState() {
       throw new Error("not used");
     },
