@@ -5,6 +5,13 @@ import type {
   RegistrationGameplayModifierView, RegistrationQuestionId, StatusEffect,
   StrategySnapshot, TickSummary, TribulationPreview, WorldEvent, WorldState,
 } from "./model.js";
+import {
+  resolveBehaviorAspectId,
+  normalizeCultivationRegistrationRecord,
+  resolveCultivationMotiveId,
+  resolveSpiritRootKindId,
+  resolveTemperamentId,
+} from "./registration-taxonomy.js";
 import { createEmptyInventory, createFactionReputation } from "./seed.js";
 
 const TICKS_PER_YEAR = 4380;
@@ -201,10 +208,11 @@ function dominantElementsOf(record: CultivationRegistrationRecord): Registration
   ];
 }
 function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeModifiers | null {
-  const record = cultivator.registrationRecord;
-  if (!record) {
+  const storedRecord = cultivator.registrationRecord;
+  if (!storedRecord) {
     return null;
   }
+  const record = normalizeCultivationRegistrationRecord(structuredClone(storedRecord));
   const modifiers = createRegistrationRuntimeModifiers();
   modifiers.dominantElements = dominantElementsOf(record);
   for (const element of modifiers.dominantElements) {
@@ -212,25 +220,26 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   }
 
   const coreTemperament = record.result.core_temperament;
-  if (coreTemperament.includes("守戒")) {
+  const coreTemperamentId = record.result.core_temperament_id ?? resolveTemperamentId(coreTemperament);
+  if (coreTemperamentId === "shou_jie") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A rule-bound core steadies defense, recovery discipline, and tribulation prep.", { combatGuard: 3, tribulationBonus: 3 });
-  } else if (coreTemperament.includes("断锋")) {
+  } else if (coreTemperamentId === "duan_feng") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A cutting core sharpens decisive combat and manual study.", { combatBonus: 4, studyBonus: 2 });
-  } else if (coreTemperament.includes("扶生")) {
+  } else if (coreTemperamentId === "fu_sheng") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A nurturing core favors healing, low-risk errands, and team utility.", { healBonus: 4, taskBonus: 2 });
-  } else if (coreTemperament.includes("向荣")) {
+  } else if (coreTemperamentId === "xiang_rong") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A growth-oriented core turns stable sessions into stronger cultivation gains.", { cultivateBonus: 4, meditateBonus: 2 });
-  } else if (coreTemperament.includes("潜渊")) {
+  } else if (coreTemperamentId === "qian_yuan") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A patient core improves scouting, judgment, and safer risk-taking.", { fortuneBonus: 4, combatGuard: 2 });
-  } else if (coreTemperament.includes("观澜")) {
+  } else if (coreTemperamentId === "guan_lan") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "An observant core improves study efficiency and opportunistic play.", { fortuneBonus: 3, studyBonus: 3 });
-  } else if (coreTemperament.includes("炽心")) {
+  } else if (coreTemperamentId === "chi_xin") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A driven core converts pressure into cultivation momentum and combat force.", { cultivateBonus: 3, combatBonus: 3 });
-  } else if (coreTemperament.includes("争胜")) {
+  } else if (coreTemperamentId === "zheng_sheng") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A competitive core leans into direct encounters and forceful progress.", { combatBonus: 4, studyBonus: 1 });
-  } else if (coreTemperament.includes("镇岳")) {
+  } else if (coreTemperamentId === "zhen_yue") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A mountain-like core reinforces frontline stability, mining resilience, and tribulation support.", { combatGuard: 4, mineBonus: 3, tribulationBonus: 2 });
-  } else if (coreTemperament.includes("守成")) {
+  } else if (coreTemperamentId === "shou_cheng") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A conservative core protects recovery and long-cycle stability.", { healBonus: 3, tribulationBonus: 3 });
   }
 
@@ -250,34 +259,34 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   }
 
   const motive = record.result.cultivation_motive;
-  if (motive.includes("求长生")) {
+  const cultivationMotiveId = record.result.cultivation_motive_id ?? resolveCultivationMotiveId(motive);
+  if (cultivationMotiveId === "seek-longevity") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Longevity-driven cultivation improves recovery and tribulation preparation.", { healBonus: 4, tribulationBonus: 2 });
-  } else if (motive.includes("证大道")) {
+  } else if (cultivationMotiveId === "prove-the-great-dao") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A path-seeking motive rewards sustained cultivation and hard breakthroughs.", { cultivateBonus: 4, combatBonus: 2 });
-  } else if (motive.includes("求真知")) {
+  } else if (cultivationMotiveId === "seek-truth") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Truth-seeking improves manual study, ruins scouting, and measured growth.", { studyBonus: 4, fortuneBonus: 3, cultivateBonus: 1 });
-  } else if (motive.includes("护所爱")) {
+  } else if (cultivationMotiveId === "protect-the-beloved") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Protective intent favors healing and reliable problem-solving work.", { taskBonus: 3, healBonus: 2 });
-  } else if (motive.includes("济世人")) {
+  } else if (cultivationMotiveId === "serve-the-world") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A public-serving motive improves steady task income and support actions.", { taskBonus: 4, healBonus: 2 });
-  } else if (motive.includes("雪旧恨")) {
+  } else if (cultivationMotiveId === "avenge-old-grudges") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Old grudges turn effort into sharper direct combat results.", { combatBonus: 4 });
-  } else if (motive.includes("争高低")) {
+  } else if (cultivationMotiveId === "compete-for-supremacy") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Competitive intent improves clashes and the study needed to win them.", { combatBonus: 3, studyBonus: 1 });
-  } else if (motive.includes("振门庭")) {
+  } else if (cultivationMotiveId === "honor-the-clan") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Family or sect pride rewards contribution-focused play.", { sectBonus: 4, taskBonus: 2 });
-  } else if (motive.includes("逆天命")) {
+  } else if (cultivationMotiveId === "defy-fate") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Defying fate improves dangerous exploration and hard fights.", { combatBonus: 3, fortuneBonus: 2 });
-  } else if (motive.includes("求逍遥")) {
+  } else if (cultivationMotiveId === "seek-freedom") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A freedom-seeking motive favors meditation and open-ended exploration.", { meditateBonus: 3, fortuneBonus: 2 });
   }
 
   const spiritRoot = record.result.spirit_root_result;
-  if (spiritRoot.includes("单灵根")) {
+  const spiritRootKindId = record.result.spirit_root_kind_id ?? resolveSpiritRootKindId(spiritRoot);
+  if (spiritRootKindId === "single-root") {
     applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A focused root converts effort into cleaner cultivation, combat, and tribulation support.", { cultivateBonus: 4, combatBonus: 2, tribulationBonus: 2 });
-  } else if (spiritRoot.includes("偏灵根")) {
-    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A leaning root keeps cultivation efficient while preserving adaptability.", { cultivateBonus: 3, fortuneBonus: 2 });
-  } else if (spiritRoot.includes("双灵根")) {
+  } else if (spiritRootKindId === "dual-root") {
     applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A dual root supports flexible exploration and safer encounters.", { fortuneBonus: 3, combatGuard: 2 });
   }
 
@@ -330,43 +339,60 @@ function validateRegistrationRecord(record: CultivationRegistrationRecord): Cult
       throw new Error(`registration record is missing a valid answer for ${questionId}.`);
     }
   }
-  if (typeof record.result?.core_temperament !== "string" || !record.result.core_temperament.trim()) {
-    throw new Error("registration record must include result.core_temperament.");
-  }
-  if (typeof record.result?.secondary_temperament !== "string" || !record.result.secondary_temperament.trim()) {
-    throw new Error("registration record must include result.secondary_temperament.");
-  }
-  if (typeof record.result?.behavior_aspect !== "string" || !record.result.behavior_aspect.trim()) {
-    throw new Error("registration record must include result.behavior_aspect.");
-  }
-  if (typeof record.result?.cultivation_motive !== "string" || !record.result.cultivation_motive.trim()) {
-    throw new Error("registration record must include result.cultivation_motive.");
-  }
   for (const elementId of ["metal", "wood", "water", "fire", "earth"] as const) {
     const value = record.result?.five_element_scores?.[elementId];
     if (typeof value !== "number" || !Number.isFinite(value)) {
       throw new Error(`registration record must include numeric result.five_element_scores.${elementId}.`);
     }
   }
-  if (typeof record.result?.spirit_root_result !== "string" || !record.result.spirit_root_result.trim()) {
-    throw new Error("registration record must include result.spirit_root_result.");
+  if (!record.result?.confidence) {
+    throw new Error("registration record must include result.confidence.");
+  }
+  for (const key of ["core", "behavior", "motive", "overall"] as const) {
+    const value = record.result.confidence[key];
+    if (value !== "high" && value !== "medium" && value !== "low") {
+      throw new Error(`registration record must include result.confidence.${key}.`);
+    }
   }
   if (typeof record.summary !== "string" || !record.summary.trim()) {
     throw new Error("registration record must include summary.");
   }
-  return record;
+  const normalized = normalizeCultivationRegistrationRecord(record);
+  if (!normalized.result.core_temperament.trim()) {
+    throw new Error("registration record must include result.core_temperament.");
+  }
+  if (!normalized.result.secondary_temperament.trim()) {
+    throw new Error("registration record must include result.secondary_temperament.");
+  }
+  if (!normalized.result.behavior_aspect.trim()) {
+    throw new Error("registration record must include result.behavior_aspect.");
+  }
+  if (!normalized.result.cultivation_motive.trim()) {
+    throw new Error("registration record must include result.cultivation_motive.");
+  }
+  if (!normalized.result.spirit_root_result.trim()) {
+    throw new Error("registration record must include result.spirit_root_result.");
+  }
+  return normalized;
 }
 function registrationViewOf(cultivator: Cultivator): CultivationRegistrationView | null {
-  const record = cultivator.registrationRecord;
-  if (!record) {
+  const storedRecord = cultivator.registrationRecord;
+  if (!storedRecord) {
     return null;
   }
+  const record = normalizeCultivationRegistrationRecord(structuredClone(storedRecord));
   return {
     saved_at: record.saved_at ?? null,
+    label_locale: record.result.label_locale ?? "zh-CN",
+    core_temperament_id: record.result.core_temperament_id ?? resolveTemperamentId(record.result.core_temperament) ?? "qian_yuan",
     core_temperament: record.result.core_temperament,
+    secondary_temperament_id: record.result.secondary_temperament_id ?? resolveTemperamentId(record.result.secondary_temperament) ?? "guan_lan",
     secondary_temperament: record.result.secondary_temperament,
+    behavior_aspect_id: record.result.behavior_aspect_id ?? resolveBehaviorAspectId(record.result.behavior_aspect) ?? "water",
     behavior_aspect: record.result.behavior_aspect,
+    cultivation_motive_id: record.result.cultivation_motive_id ?? resolveCultivationMotiveId(record.result.cultivation_motive) ?? "seek-truth",
     cultivation_motive: record.result.cultivation_motive,
+    spirit_root_kind_id: record.result.spirit_root_kind_id ?? resolveSpiritRootKindId(record.result.spirit_root_result) ?? "dual-root",
     spirit_root_result: record.result.spirit_root_result,
     overall_confidence: record.result.confidence.overall,
   };

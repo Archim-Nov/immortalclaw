@@ -49,7 +49,7 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         fire: 3,
         earth: 9,
       },
-      spirit_root_result: "水偏灵根",
+      spirit_root_result: "水土双灵根",
       confidence: {
         core: "high" as const,
         behavior: "high" as const,
@@ -78,7 +78,7 @@ function createCultivationFocusedRegistrationRecord(): CultivationRegistrationRe
         fire: 10,
         earth: 5,
       },
-      spirit_root_result: "\u6728\u504f\u7075\u6839",
+      spirit_root_result: "\u6728\u706b\u53cc\u7075\u6839",
     },
     summary: "\u751f\u957f\u4e0e\u6267\u884c\u5fc3\u8f83\u5f3a\uff0c\u9002\u5408\u7a33\u5b9a\u4fee\u70bc\u4e0e\u7834\u5883\u3002",
   };
@@ -207,15 +207,23 @@ test("registration records save and surface through cultivator state", () => {
   assert.equal(stored?.saved_at, saved.saved_at);
   assert.equal(stored?.result.core_temperament, "潜渊型");
   assert.equal(stored?.result.behavior_aspect, "水土 / 潜守");
+  assert.equal(stored?.result.core_temperament_id, "qian_yuan");
+  assert.equal(stored?.result.cultivation_motive_id, "seek-truth");
 
   const state = getCultivatorState(world, "yun-zhong-he");
   assert.deepEqual(state.registration, {
     saved_at: saved.saved_at ?? null,
+    label_locale: "zh-CN",
+    core_temperament_id: "qian_yuan",
     core_temperament: "潜渊型",
+    secondary_temperament_id: "guan_lan",
     secondary_temperament: "观澜型",
+    behavior_aspect_id: "water-earth",
     behavior_aspect: "水土 / 潜守",
+    cultivation_motive_id: "seek-truth",
     cultivation_motive: "求真知",
-    spirit_root_result: "水偏灵根",
+    spirit_root_kind_id: "dual-root",
+    spirit_root_result: "水土双灵根",
     overall_confidence: "high",
   });
 });
