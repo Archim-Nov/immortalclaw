@@ -34,7 +34,6 @@ export interface AgentPersonaInput
   > {}
 
 export interface AgentRegistrationInput extends AgentPersonaInput {
-  agentId?: string;
   llmProvider?: string;
   llmModelName?: string;
   llmModelVersion?: string;
@@ -58,8 +57,13 @@ export interface AgentProfileRecord {
 }
 
 export interface AgentRegistrationResult extends AgentProfileRecord {
-  apiKey: string;
+  credential: string;
   createdCultivator: boolean;
+}
+
+export interface AgentCredentialResetResult {
+  agentId: string;
+  credential: string;
 }
 
 export interface WorldRepository {
@@ -73,6 +77,7 @@ export interface WorldRepository {
   acquireTickLock(ownerId: string): Promise<TickLockRecord | null>;
   releaseTickLock(lockId: string): Promise<void>;
   registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult>;
+  resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult>;
   authenticateAgent(apiKey: string): Promise<AgentProfileRecord | null>;
   syncAgentPersona(agentId: string, input: AgentPersonaInput): Promise<AgentProfileRecord>;
   touchAgent(agentId: string): Promise<void>;

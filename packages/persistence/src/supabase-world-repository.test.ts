@@ -5,6 +5,8 @@ import { createSupabaseWorldRepository } from "./supabase-world-repository.js";
 
 class FakeSupabaseRestApi {
   failNextWorldSnapshotUpdateAsConflict = false;
+  failNextAgentCredentialRevoke = false;
+  failNextAgentCredentialInsert = false;
 
   readonly requests: Array<{
     method: string;
@@ -166,6 +168,11 @@ class FakeSupabaseRestApi {
     }
 
     if (tableName === "agent_credentials") {
+      if (this.failNextAgentCredentialInsert) {
+        this.failNextAgentCredentialInsert = false;
+        return this.jsonResponse({ message: "credential insert failed" }, 500);
+      }
+
       const rows = Array.isArray(body) ? body : [body];
       for (const row of rows) {
         this.tables.agent_credentials.set(String(row.api_key_hash), row);
@@ -185,6 +192,11 @@ class FakeSupabaseRestApi {
       const agentId = this.readEq(url, "agent_id");
       if (!agentId) {
         return this.jsonResponse([], 200);
+      }
+
+      if (this.failNextAgentCredentialRevoke) {
+        this.failNextAgentCredentialRevoke = false;
+        return this.jsonResponse({ message: "credential revoke failed" }, 500);
       }
 
       const body = await request.json();
@@ -271,6 +283,8 @@ async function firstCultivatorId(repository: ReturnType<typeof createRepository>
   return cultivatorId;
 }
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 test("readWorld bootstraps and persists a seed snapshot when storage is empty", async () => {
   const { api, repository } = createRepository();
 
@@ -287,16 +301,16 @@ test("agent registration issues credentials and authenticated lookups resolve th
   const { api, repository } = createRepository();
 
   const registration = await repository.registerAgent({
-    agentId: "openclaw-main",
     name: "Su Mingyue",
     llmProvider: "openai",
     llmModelName: "gpt-5",
   });
-  const authenticated = await repository.authenticateAgent(registration.apiKey);
+  const authenticated = await repository.authenticateAgent(registration.credential);
 
-  assert.equal(registration.agentId, "openclaw-main");
-  assert.equal(typeof registration.apiKey, "string");
-  assert.equal(authenticated?.agentId, "openclaw-main");
+  assert.match(registration.agentId, UUID_SHAPE);
+  assert.notEqual(registration.agentId, "openclaw-main");
+  assert.equal(typeof registration.credential, "string");
+  assert.equal(authenticated?.agentId, registration.agentId);
   assert.equal(authenticated?.selectedCultivatorId, registration.selectedCultivatorId);
   assert.equal(api.tables.agent_profiles.size, 1);
   assert.equal(api.tables.agent_credentials.size, 1);
@@ -306,7 +320,6 @@ test("listAgentProfiles returns registered agent profiles from storage", async (
   const { repository } = createRepository();
 
   await repository.registerAgent({
-    agentId: "openclaw-main",
     name: "Su Mingyue",
     llmProvider: "openai",
     llmModelName: "gpt-5",
@@ -315,9 +328,84 @@ test("listAgentProfiles returns registered agent profiles from storage", async (
   const profiles = await repository.listAgentProfiles();
 
   assert.equal(profiles.length, 1);
-  assert.equal(profiles[0]?.agentId, "openclaw-main");
+  assert.match(String(profiles[0]?.agentId), UUID_SHAPE);
   assert.equal(profiles[0]?.name, "Su Mingyue");
   assert.equal(profiles[0]?.selectedCultivatorId.startsWith("cultivator-"), true);
+});
+
+test("resetAgentCredential revokes the previous credential and preserves the selected cultivator", async () => {
+  const { api, repository } = createRepository();
+
+  const registration = await repository.registerAgent({
+    name: "Su Mingyue",
+    llmProvider: "openai",
+    llmModelName: "gpt-5",
+  });
+  const originalProfileRow = api.tables.agent_profiles.get(registration.agentId);
+  const reset = await repository.resetAgentCredential(registration.agentId, registration.credential);
+  const staleAuthentication = await repository.authenticateAgent(registration.credential);
+  const refreshedAuthentication = await repository.authenticateAgent(reset.credential);
+
+  assert.equal(reset.agentId, registration.agentId);
+  assert.notEqual(reset.credential, registration.credential);
+  assert.equal(staleAuthentication, null);
+  assert.equal(refreshedAuthentication?.agentId, registration.agentId);
+  assert.equal(refreshedAuthentication?.selectedCultivatorId, registration.selectedCultivatorId);
+  assert.notEqual(api.tables.agent_profiles.get(registration.agentId)?.updated_at, originalProfileRow?.updated_at);
+  assert.equal(
+    api.tables.agent_profiles.get(registration.agentId)?.updated_at,
+    api.tables.agent_profiles.get(registration.agentId)?.last_seen_at,
+  );
+});
+
+test("resetAgentCredential fails when revoking existing credentials fails", async () => {
+  const { api, repository } = createRepository();
+
+  const registration = await repository.registerAgent({
+    name: "Su Mingyue",
+    llmProvider: "openai",
+    llmModelName: "gpt-5",
+  });
+  const originalProfileRow = api.tables.agent_profiles.get(registration.agentId);
+
+  api.failNextAgentCredentialRevoke = true;
+
+  await assert.rejects(
+    repository.resetAgentCredential(registration.agentId, registration.credential),
+    /credential revoke failed/,
+  );
+  assert.equal(api.tables.agent_credentials.size, 1);
+  assert.equal((await repository.authenticateAgent(registration.credential))?.agentId, registration.agentId);
+  assert.notEqual(api.tables.agent_profiles.get(registration.agentId)?.updated_at, originalProfileRow?.updated_at);
+  assert.equal(
+    api.tables.agent_profiles.get(registration.agentId)?.updated_at,
+    api.tables.agent_profiles.get(registration.agentId)?.last_seen_at,
+  );
+});
+
+test("resetAgentCredential restores the current credential when replacement insert fails", async () => {
+  const { api, repository } = createRepository();
+
+  const registration = await repository.registerAgent({
+    name: "Su Mingyue",
+    llmProvider: "openai",
+    llmModelName: "gpt-5",
+  });
+  const originalProfileRow = api.tables.agent_profiles.get(registration.agentId);
+
+  api.failNextAgentCredentialInsert = true;
+
+  await assert.rejects(
+    repository.resetAgentCredential(registration.agentId, registration.credential),
+    /credential insert failed/,
+  );
+  assert.equal(api.tables.agent_credentials.size, 1);
+  assert.equal((await repository.authenticateAgent(registration.credential))?.agentId, registration.agentId);
+  assert.notEqual(api.tables.agent_profiles.get(registration.agentId)?.updated_at, originalProfileRow?.updated_at);
+  assert.equal(
+    api.tables.agent_profiles.get(registration.agentId)?.updated_at,
+    api.tables.agent_profiles.get(registration.agentId)?.last_seen_at,
+  );
 });
 
 test("Supabase REST requests use the secret key as apikey without bearer auth", async () => {

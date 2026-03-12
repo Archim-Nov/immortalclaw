@@ -39,6 +39,8 @@ export interface RouteRegistrationOptions {
   repository?: WorldRepository;
 }
 
+const INVALID_CREDENTIAL_MESSAGE = "Invalid or expired credential.";
+
 function createStatusError(status: number, message: string) {
   return Object.assign(new Error(message), { status });
 }
@@ -62,12 +64,12 @@ function readAgentId(value: string | undefined): string {
 function readBearerToken(headerValue: string | undefined): string {
   const value = headerValue?.trim();
   if (!value?.startsWith("Bearer ")) {
-    throw createStatusError(401, "Missing Authorization: Bearer <apiKey> header.");
+    throw createStatusError(401, INVALID_CREDENTIAL_MESSAGE);
   }
 
   const token = value.slice("Bearer ".length).trim();
   if (!token) {
-    throw createStatusError(401, "Missing API key in Authorization header.");
+    throw createStatusError(401, INVALID_CREDENTIAL_MESSAGE);
   }
 
   return token;
@@ -129,7 +131,6 @@ function readLegacyPersonaInput(body: Record<string, unknown>): AgentPersonaInpu
 
 function readRegistrationInput(body: Record<string, unknown>): AgentRegistrationInput {
   return {
-    agentId: readOptionalBodyString(body.agentId),
     name: readRequiredBodyString(body.name, "Body must include name."),
     llmProvider: readOptionalBodyString(body.llmProvider),
     llmModelName: readOptionalBodyString(body.llmModelName),
@@ -176,10 +177,10 @@ async function readAuthenticatedAgent(
   request: Request,
   repository: WorldRepository,
 ): Promise<AgentProfileRecord> {
-  const apiKey = readBearerToken(request.headers.get("authorization") ?? undefined);
-  const agent = await repository.authenticateAgent(apiKey);
+  const credential = readBearerToken(request.headers.get("authorization") ?? undefined);
+  const agent = await repository.authenticateAgent(credential);
   if (!agent) {
-    throw createStatusError(401, "Invalid or expired API key.");
+    throw createStatusError(401, INVALID_CREDENTIAL_MESSAGE);
   }
   await repository.touchAgent(agent.agentId);
   return agent;
@@ -239,11 +240,11 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     return context.json({
       ok: true,
       agentId: payload.agentId,
-      apiKey: payload.apiKey,
+      credential: payload.credential,
       baseUrl: new URL(context.req.url).origin,
       selectedCultivatorId: payload.selectedCultivatorId,
       createdCultivator: payload.createdCultivator,
-      message: "Agent registered successfully. Save your API key now.",
+      message: "Agent registered successfully. Save this credential now.",
     });
   });
 
@@ -445,6 +446,19 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     return context.json(await repository.getCultivationRegistration(agent.selectedCultivatorId));
+  });
+
+  app.post("/agent/credential/reset", async (context) => {
+    const repository = resolveRepository(context.env, options.repository);
+    const currentCredential = readBearerToken(context.req.header("authorization") ?? undefined);
+    const agent = await readAuthenticatedAgent(context.req.raw, repository);
+    const payload = await repository.resetAgentCredential(agent.agentId, currentCredential);
+    return context.json({
+      ok: true,
+      agentId: payload.agentId,
+      credential: payload.credential,
+      message: "Agent credential reset successfully. Save the new credential now.",
+    });
   });
 
   app.post("/agent/registration", async (context) => {

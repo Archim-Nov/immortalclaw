@@ -19,6 +19,7 @@ import type {
 } from "../../domain/src/runtime.js";
 import type { WorldEvent } from "../../domain/src/model.js";
 import type {
+  AgentCredentialResetResult,
   AgentPersonaInput,
   AgentProfileRecord,
   AgentRegistrationInput,
@@ -252,7 +253,7 @@ export class SupabaseWorldRepository implements WorldRepository {
       throw new Error("Agent registration requires a name.");
     }
 
-    const agentId = normalizeAgentId(input.agentId) ?? `agent-${crypto.randomUUID()}`;
+    const agentId = crypto.randomUUID();
     const timestamp = this.now();
     const existingProfile = await this.readAgentProfile(agentId);
     const snapshot = await this.readSnapshot();
@@ -321,8 +322,116 @@ export class SupabaseWorldRepository implements WorldRepository {
 
     return {
       ...profile,
-      apiKey,
+      credential: apiKey,
       createdCultivator: sync.created,
+    };
+  }
+
+  async resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+    const normalizedCurrentCredential = currentCredential.trim();
+    if (!normalizedCurrentCredential) {
+      throw new Error("currentCredential is required.");
+    }
+
+    const existingProfile = await this.readAgentProfile(normalizedAgentId);
+    if (!existingProfile) {
+      throw new Error(`Agent not found: ${normalizedAgentId}`);
+    }
+
+    const currentCredentialHash = await hashApiKey(normalizedCurrentCredential);
+    const currentCredentialRows = await this.selectRows<AgentCredentialRow>("agent_credentials", {
+      api_key_hash: `eq.${encodeURIComponent(currentCredentialHash)}`,
+      select: "agent_id,api_key_hash,created_at,last_seen_at,revoked_at",
+      limit: "1",
+    });
+    const currentCredentialRow = currentCredentialRows[0];
+    if (
+      !currentCredentialRow ||
+      currentCredentialRow.revoked_at ||
+      currentCredentialRow.agent_id !== normalizedAgentId
+    ) {
+      throw new Error("Current credential does not belong to the requested agent.");
+    }
+
+    const timestamp = this.now();
+    const updatedProfile: AgentProfileRecord = {
+      ...existingProfile,
+      updatedAt: timestamp,
+      lastSeenAt: timestamp,
+    };
+    await this.upsertRows("agent_profiles", [this.toAgentProfileRow(updatedProfile)], "agent_id");
+
+    const revokeResponse = await this.fetchImpl(
+      this.tableUrl("agent_credentials", {
+        agent_id: `eq.${encodeURIComponent(normalizedAgentId)}`,
+      }),
+      {
+        method: "PATCH",
+        headers: this.headers({
+          Prefer: "return=minimal",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          revoked_at: timestamp,
+        }),
+      },
+    );
+    if (!revokeResponse.ok) {
+      const error = await this.readError(revokeResponse);
+      throw new Error(`Failed to revoke existing agent credentials: ${error.message}`);
+    }
+
+    const credential = issueApiKey();
+    try {
+      await this.upsertRows(
+        "agent_credentials",
+        [
+          {
+            agent_id: normalizedAgentId,
+            api_key_hash: await hashApiKey(credential),
+            created_at: timestamp,
+            last_seen_at: timestamp,
+            revoked_at: null,
+          },
+        ],
+        "api_key_hash",
+      );
+    } catch (error) {
+      try {
+        await this.upsertRows(
+          "agent_credentials",
+          [
+            {
+              agent_id: currentCredentialRow.agent_id,
+              api_key_hash: currentCredentialRow.api_key_hash,
+              created_at: currentCredentialRow.created_at,
+              last_seen_at: timestamp,
+              revoked_at: null,
+            },
+          ],
+          "api_key_hash",
+        );
+      } catch (restoreError) {
+        throw new Error(
+          `Failed to issue replacement agent credential and failed to restore the current credential: ${
+            restoreError instanceof Error ? restoreError.message : String(restoreError)
+          }`,
+        );
+      }
+      throw new Error(
+        `Failed to issue replacement agent credential: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    return {
+      agentId: updatedProfile.agentId,
+      credential,
     };
   }
 

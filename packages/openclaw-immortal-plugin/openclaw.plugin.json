@@ -14,7 +14,8 @@
         "type": "string"
       },
       "agentId": {
-        "type": "string"
+        "type": "string",
+        "description": "Optional local cache key used to resume the same agent session across runs."
       },
       "personaDir": {
         "type": "string",
@@ -22,7 +23,7 @@
       },
       "credentialsPath": {
         "type": "string",
-        "description": "Optional credentials.json path used to cache agent API keys."
+        "description": "Optional credentials.json path used to cache agent credentials."
       },
       "llmProvider": {
         "type": "string"
