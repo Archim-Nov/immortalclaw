@@ -223,6 +223,7 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
   const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-agent-"));
   const personaDir = path.join(root, "workspace");
   const credentialsPath = path.join(root, "credentials.json");
+  const serverAgentId = "550e8400-e29b-41d4-a716-446655440000";
   try {
     writePersonaFiles(personaDir);
 
@@ -255,8 +256,8 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
           return new Response(
             JSON.stringify({
               ok: true,
-              agentId: "openclaw-main",
-              apiKey: "immortal_sk_cached",
+              agentId: serverAgentId,
+              credential: "immortal_sk_cached",
               selectedCultivatorId: "cultivator-9",
             }),
             { status: 200 },
@@ -266,7 +267,7 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
         if (url.endsWith("/agent/sync-persona")) {
           return new Response(
             JSON.stringify({
-              agentId: "openclaw-main",
+              agentId: serverAgentId,
               selectedCultivatorId: "cultivator-9",
               created: false,
             }),
@@ -293,16 +294,24 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
     };
 
     assert.equal(firstRequests[0]?.url, "https://runtime.example/agent/register");
-    assert.match(String(firstRequests[0]?.body), /"agentId":"openclaw-main"/);
+    assert.doesNotMatch(String(firstRequests[0]?.body), /"agentId":/);
     assert.match(String(firstRequests[0]?.body), /"llmProvider":"openai"/);
     assert.match(String(firstRequests[0]?.body), /"name":"Su Mingyue"/);
     assert.equal(firstRequests[1]?.url, "https://runtime.example/agent/sync-persona");
     assert.equal(firstRequests[1]?.authorization, "Bearer immortal_sk_cached");
+    assert.doesNotMatch(String(firstRequests[1]?.body), /"agentId":/);
     assert.equal(firstRequests[2]?.url, "https://runtime.example/agent/state");
     assert.equal(firstRequests[2]?.authorization, "Bearer immortal_sk_cached");
     assert.equal(stateResult.details?.cultivator?.id, "cultivator-9");
     assert.equal(existsSync(credentialsPath), true);
-    assert.match(readFileSync(credentialsPath, "utf8"), /immortal_sk_cached/);
+    const storedCredentials = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
+      entries?: Array<Record<string, unknown>>;
+    };
+    assert.equal(storedCredentials.entries?.length, 1);
+    assert.equal(storedCredentials.entries?.[0]?.credential, "immortal_sk_cached");
+    assert.equal(storedCredentials.entries?.[0]?.apiKey, undefined);
+    assert.equal(storedCredentials.entries?.[0]?.agentId, serverAgentId);
+    assert.equal(storedCredentials.entries?.[0]?.requestedAgentId, "openclaw-main");
 
     const secondRequests: CapturedRequest[] = [];
     const second = registerPlugin(
@@ -328,7 +337,7 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
         if (url.endsWith("/agent/sync-persona")) {
           return new Response(
             JSON.stringify({
-              agentId: "openclaw-main",
+              agentId: serverAgentId,
               selectedCultivatorId: "cultivator-9",
               created: false,
             }),
@@ -355,7 +364,186 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
     assert.equal(secondRequests.some((entry) => entry.url.endsWith("/agent/register")), false);
     assert.equal(secondRequests[0]?.url, "https://runtime.example/agent/sync-persona");
     assert.equal(secondRequests[0]?.authorization, "Bearer immortal_sk_cached");
+    assert.doesNotMatch(String(secondRequests[0]?.body), /"agentId":/);
     assert.equal(secondRequests[1]?.url, "https://runtime.example/agent/state");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin ignores legacy apiKey-only cache entries and registers a fresh credential", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-legacy-cache-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
+  try {
+    writePersonaFiles(personaDir);
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId: "550e8400-e29b-41d4-a716-446655440002",
+              requestedAgentId: "openclaw-main",
+              apiKey: "immortal_sk_legacy_cache",
+              selectedCultivatorId: "cultivator-9",
+              updatedAt: "2026-03-12T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const requests: CapturedRequest[] = [];
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        const authorization =
+          init?.headers && typeof init.headers === "object" && "Authorization" in init.headers
+            ? String((init.headers as Record<string, unknown>).Authorization)
+            : null;
+        requests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+          authorization,
+        });
+
+        if (url.endsWith("/agent/register")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "550e8400-e29b-41d4-a716-446655440003",
+              credential: "immortal_sk_fresh",
+              selectedCultivatorId: "cultivator-9",
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "550e8400-e29b-41d4-a716-446655440003",
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(
+            JSON.stringify({
+              tick: 0,
+              cultivator: { id: "cultivator-9", name: "Su Mingyue" },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await tools.get("immortal_state")?.execute("tool-legacy-cache", {});
+
+    assert.equal(requests[0]?.url, "https://runtime.example/agent/register");
+    assert.equal(requests[1]?.authorization, "Bearer immortal_sk_fresh");
+    const storedCredentials = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
+      entries?: Array<Record<string, unknown>>;
+    };
+    assert.equal(storedCredentials.entries?.[0]?.credential, "immortal_sk_fresh");
+    assert.equal(storedCredentials.entries?.[0]?.apiKey, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin surfaces a clear error on unauthorized cached credentials without re-registering", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-unauthorized-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
+  try {
+    writePersonaFiles(personaDir);
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId: "550e8400-e29b-41d4-a716-446655440000",
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_stale",
+              selectedCultivatorId: "cultivator-9",
+              updatedAt: "2026-03-12T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const requests: CapturedRequest[] = [];
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        const authorization =
+          init?.headers && typeof init.headers === "object" && "Authorization" in init.headers
+            ? String((init.headers as Record<string, unknown>).Authorization)
+            : null;
+        requests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+          authorization,
+        });
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(JSON.stringify({ error: "Invalid or expired credential." }), {
+            status: 401,
+          });
+        }
+
+        if (url.endsWith("/agent/register")) {
+          return new Response(JSON.stringify({ error: "should not re-register" }), {
+            status: 500,
+          });
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await assert.rejects(
+      () => tools.get("immortal_state")!.execute("tool-1", {}),
+      /Automatic re-registration is disabled|Lost-credential recovery is not implemented/i,
+    );
+
+    assert.equal(requests.some((entry) => entry.url.endsWith("/agent/register")), false);
+    assert.equal(requests[0]?.url, "https://runtime.example/agent/sync-persona");
+    assert.equal(requests[0]?.authorization, "Bearer immortal_sk_stale");
+    assert.match(readFileSync(credentialsPath, "utf8"), /immortal_sk_stale/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

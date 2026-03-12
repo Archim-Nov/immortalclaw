@@ -5,6 +5,8 @@ import { createApp } from "./app.js";
 import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
 import { LOCAL_VITE_PREVIEW_ORIGIN } from "./env.js";
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function createRepository() {
   return createInMemoryWorldRepository();
 }
@@ -87,7 +89,42 @@ test("state route returns cultivator state", async () => {
   assert.equal(payload.cultivator.id, cultivatorId);
 });
 
-test("agent registration issues an api key and authenticated state uses the bound cultivator", async () => {
+test("agent registration response uses the credential contract", async () => {
+  const app = createApp({
+    repository: {
+      async registerAgent() {
+        return {
+          agentId: "6c3ee3f8-d64f-425d-9617-f633660fb22c",
+          name: "Su Mingyue",
+          selectedCultivatorId: "cultivator-9",
+          createdAt: "2026-03-12T00:00:00.000Z",
+          updatedAt: "2026-03-12T00:00:00.000Z",
+          lastSeenAt: "2026-03-12T00:00:00.000Z",
+          credential: "immortal_sk_contract",
+          createdCultivator: true,
+        };
+      },
+    } as never,
+  });
+
+  const response = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.match(payload.agentId, UUID_SHAPE);
+  assert.equal(typeof payload.credential, "string");
+  assert.equal("apiKey" in payload, false);
+});
+
+test("agent registration ignores caller-supplied identity and authenticated state uses the bound cultivator", async () => {
   const repository = createRepository();
   const app = createApp({ repository });
 
@@ -106,19 +143,20 @@ test("agent registration issues an api key and authenticated state uses the boun
   const registerPayload = await registerResponse.json();
 
   assert.equal(registerResponse.status, 200);
-  assert.equal(registerPayload.agentId, "openclaw-main");
-  assert.equal(typeof registerPayload.apiKey, "string");
+  assert.match(registerPayload.agentId, UUID_SHAPE);
+  assert.notEqual(registerPayload.agentId, "openclaw-main");
+  assert.equal(typeof registerPayload.credential, "string");
   assert.equal(typeof registerPayload.selectedCultivatorId, "string");
 
   const stateResponse = await app.request("https://runtime.test/agent/state", {
     headers: {
-      authorization: `Bearer ${registerPayload.apiKey}`,
+      authorization: `Bearer ${registerPayload.credential}`,
     },
   });
   const statePayload = await stateResponse.json();
 
   assert.equal(stateResponse.status, 200);
-  assert.equal(statePayload.agent.agentId, "openclaw-main");
+  assert.equal(statePayload.agent.agentId, registerPayload.agentId);
   assert.equal(statePayload.cultivator.id, registerPayload.selectedCultivatorId);
 });
 
@@ -145,11 +183,62 @@ test("public world agent directory returns registered agents with current cultiv
   assert.equal(response.status, 200);
   assert.ok(Array.isArray(payload.agents));
   assert.equal(payload.agents.length, 1);
-  assert.equal(payload.agents[0]?.agentId, "openclaw-main");
+  assert.match(String(payload.agents[0]?.agentId), UUID_SHAPE);
   assert.equal(payload.agents[0]?.name, "Su Mingyue");
   assert.equal(payload.agents[0]?.llmModelName, "gpt-5");
   assert.equal(payload.agents[0]?.cultivator.name, "Su Mingyue");
   assert.equal(typeof payload.agents[0]?.cultivator.location, "string");
+});
+
+test("credential reset revokes the previous credential and keeps the bound cultivator", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+      llmProvider: "openai",
+      llmModelName: "gpt-5",
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+
+  const resetResponse = await app.request("https://runtime.test/agent/credential/reset", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const resetPayload = await resetResponse.json();
+
+  assert.equal(resetResponse.status, 200);
+  assert.equal(resetPayload.agentId, registerPayload.agentId);
+  assert.equal(typeof resetPayload.credential, "string");
+  assert.notEqual(resetPayload.credential, registerPayload.credential);
+
+  const staleStateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const staleStatePayload = await staleStateResponse.json();
+  assert.equal(staleStateResponse.status, 401);
+  assert.equal(staleStatePayload.error, "Invalid or expired credential.");
+
+  const stateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${resetPayload.credential}`,
+    },
+  });
+  const statePayload = await stateResponse.json();
+
+  assert.equal(stateResponse.status, 200);
+  assert.equal(statePayload.agent.agentId, registerPayload.agentId);
+  assert.equal(statePayload.cultivator.id, registerPayload.selectedCultivatorId);
 });
 
 test("registered agents can fetch actions and execute a real first move", async () => {
@@ -169,7 +258,7 @@ test("registered agents can fetch actions and execute a real first move", async 
   });
   const registerPayload = await registerResponse.json();
   const authHeaders = {
-    authorization: `Bearer ${registerPayload.apiKey}`,
+    authorization: `Bearer ${registerPayload.credential}`,
   };
 
   const actionsResponse = await app.request("https://runtime.test/agent/actions", {
@@ -238,7 +327,21 @@ test("agent routes reject missing authorization", async () => {
   const payload = await response.json();
 
   assert.equal(response.status, 401);
-  assert.match(payload.error, /Bearer/);
+  assert.equal(payload.error, "Invalid or expired credential.");
+});
+
+test("agent routes reject malformed authorization with the same generic error", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  const response = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: "Token definitely-not-valid",
+    },
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 401);
+  assert.equal(payload.error, "Invalid or expired credential.");
 });
 
 test("actions route returns available actions", async () => {

@@ -8,7 +8,8 @@ Implement the minimum hosted onboarding path so OpenClaw can attach to the deplo
 
 1. Extend `WorldRepository` plus the in-memory and Supabase adapters with:
    - agent registration
-   - API key authentication
+   - credential authentication
+   - credential reset
    - persona sync
    - registration record persistence helpers
 2. Expand `apps/runtime-worker` routes with:
@@ -20,7 +21,9 @@ Implement the minimum hosted onboarding path so OpenClaw can attach to the deplo
    - reads persona files
    - caches credentials locally
    - auto-registers on first use
-   - retries via new credentials when needed
+   - persists the server-issued UUID `agentId` and `credential`
+   - treats configured plugin `agentId` only as a local cache key
+   - stops on invalid cached credentials instead of implicitly re-registering
    - falls back to legacy routes when the new worker endpoints are missing
 4. Add a Pages same-origin runtime gateway:
    - serve static `/skill.md`, `/register.md`, and `/heartbeat.md`

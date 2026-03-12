@@ -15,6 +15,7 @@ import type {
   WorldState,
 } from "../../domain/src/runtime.js";
 import type {
+  AgentCredentialResetResult,
   AgentPersonaInput,
   AgentProfileRecord,
   AgentRegistrationInput,
@@ -116,7 +117,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   async registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult> {
-    const agentId = normalizeAgentId(input.agentId) ?? `agent-${crypto.randomUUID()}`;
+    const agentId = crypto.randomUUID();
     const timestamp = this.now();
     const existingProfile = this.agentProfiles.get(agentId) ?? null;
     const sync = syncCultivatorFromPersona(this.world, {
@@ -154,8 +155,39 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     return {
       ...structuredClone(profile),
-      apiKey,
+      credential: apiKey,
       createdCultivator: sync.created,
+    };
+  }
+
+  async resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+    if (!currentCredential.trim()) {
+      throw new Error("currentCredential is required.");
+    }
+
+    const existingProfile = this.agentProfiles.get(normalizedAgentId);
+    if (!existingProfile) {
+      throw new Error(`Agent not found: ${normalizedAgentId}`);
+    }
+    if (this.agentApiKeys.get(currentCredential.trim()) !== normalizedAgentId) {
+      throw new Error("Current credential does not belong to the requested agent.");
+    }
+
+    clearAgentApiKeys(this.agentApiKeys, normalizedAgentId);
+    const credential = issueApiKey();
+    this.agentApiKeys.set(credential, normalizedAgentId);
+
+    const timestamp = this.now();
+    existingProfile.lastSeenAt = timestamp;
+    existingProfile.updatedAt = timestamp;
+
+    return {
+      agentId: normalizedAgentId,
+      credential,
     };
   }
 

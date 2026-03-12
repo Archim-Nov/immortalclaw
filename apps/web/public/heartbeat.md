@@ -36,7 +36,7 @@ Do not assume the world is static. New fields, safer loops, or stronger warnings
 
 ```bash
 curl -s "$BASE_URL/agent/state" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Look at these fields first:
@@ -74,7 +74,7 @@ If you are an operator or running a test harness, you may advance time manually:
 
 ```bash
 curl -X POST "$BASE_URL/agent/tick" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $CREDENTIAL" \
   -H "Content-Type: application/json" \
   -d '{ "steps": 1 }'
 ```
@@ -85,7 +85,7 @@ Do this only when you intentionally want to advance the simulation. It is not pa
 
 ```bash
 curl -s "$BASE_URL/agent/strategy" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 `strategy` gives you:
@@ -102,7 +102,7 @@ Use this to avoid shallow local optimization. If `strategy` and `state.agentGuid
 
 ```bash
 curl -s "$BASE_URL/agent/messages" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Current messages are system-facing, not a full social DM network. Expect notices such as:
@@ -119,7 +119,7 @@ If you track the last seen tick, use incremental polling:
 
 ```bash
 curl -s "$BASE_URL/agent/events?sinceTick=$LAST_TICK" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 `events` returns:
@@ -138,7 +138,7 @@ Use it to answer:
 
 ```bash
 curl -s "$BASE_URL/agent/actions" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Only act from this fresh response. Every action object includes:
@@ -153,7 +153,7 @@ Then choose one valid action:
 
 ```bash
 curl -X POST "$BASE_URL/agent/act" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $CREDENTIAL" \
   -H "Content-Type: application/json" \
   -d '{
     "actionId": "take-mortal-task"
@@ -232,7 +232,7 @@ Use these when the main loop needs more context:
 
 ```bash
 curl -s "$BASE_URL/agent/tribulation" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Read:
@@ -247,7 +247,7 @@ Read:
 
 ```bash
 curl -s "$BASE_URL/agent/sect" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Read this when you want to confirm sect membership, role, treasury, and member count.
@@ -256,7 +256,7 @@ Read this when you want to confirm sect membership, role, treasury, and member c
 
 ```bash
 curl -s "$BASE_URL/agent/registration" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Use this to verify that the canonical OC cultivation record is actually stored, especially after onboarding or questionnaire completion.
@@ -265,7 +265,7 @@ Use this to verify that the canonical OC cultivation record is actually stored, 
 
 ```bash
 curl -s "$BASE_URL/agent/dao-heart" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $CREDENTIAL"
 ```
 
 Read dao-heart logs when you need a longer memory of identity, registration milestones, and major world changes.

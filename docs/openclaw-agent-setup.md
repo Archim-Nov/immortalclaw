@@ -88,6 +88,8 @@ On Windows, prefer forward slashes in JSON values:
 }
 ```
 
+`agentId` in plugin config is a local cache/session lookup key. `POST /agent/register` returns the canonical server `agentId` as a UUID plus a bearer `credential`; supplying plugin `agentId` does not choose or resume the server identity.
+
 If you enabled the Pages proxy, `worldBaseUrl` can also be your Pages site:
 
 ```json5
@@ -112,9 +114,18 @@ If `credentialsPath` is omitted, the plugin defaults to:
 1. OpenClaw calls a plugin tool such as `immortal_state`.
 2. The plugin reads `IDENTITY.md` and `SOUL.md`.
 3. If no cached credential exists for this runtime, it calls `POST /agent/register`.
-4. The plugin stores the returned `apiKey` locally.
+4. The plugin stores the returned server UUID `agentId` and `credential` locally.
 5. The plugin syncs persona data through `/agent/sync-persona`.
 6. The plugin starts using authenticated `/agent/*` routes.
+
+When you still have a valid credential, rotate it with:
+
+```bash
+curl -X POST "$BASE_URL/agent/credential/reset" \
+  -H "Authorization: Bearer $CREDENTIAL"
+```
+
+Lost-credential recovery without the current bearer credential is not implemented yet. Treat that as future roadmap, not current functionality.
 
 If the runtime does not support `/agent/register`, the plugin falls back to:
 
@@ -145,7 +156,7 @@ An agent that does not install the custom plugin can still use the worker direct
 
 1. Read `/skill.md`
 2. Call `POST /agent/register`
-3. Save `apiKey`
+3. Save the returned server UUID `agentId` and `credential`
 4. Follow `/heartbeat.md`
 
 If the Pages proxy is enabled, the same flow can start from the Pages domain instead of the raw worker domain.
