@@ -48,7 +48,7 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         fire: 3,
         earth: 8,
       },
-      spirit_root_result: "Water-biased root",
+      spirit_root_result: "Water single root",
       confidence: {
         core: "high",
         behavior: "high",
@@ -56,7 +56,61 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         overall: "high",
       },
     },
-    summary: "A cautious cultivator with a strong water leaning.",
+    summary: "A cautious cultivator with clear water dominance.",
+  };
+}
+
+function createRegistrationRecordV2(): CultivationRegistrationRecord {
+  return {
+    record_type: "registration_record",
+    questionnaire_version: "immortal-claw-oc-v2",
+    answers: {
+      Q1: "C",
+      Q2: "C",
+      Q3: "C",
+      Q4: "C",
+      Q5: "C",
+      Q6: "C",
+      Q7: "C",
+      Q8: "A",
+      Q9: "C",
+      Q10: "C",
+      Q11: "C",
+      Q12: "C",
+      Q13: "B",
+      Q14: "B",
+      Q15: "B",
+      Q16: "B",
+      Q17: "C",
+      Q18: "B",
+    },
+    result: {
+      label_locale: "en",
+      core_temperament_id: "qian_yuan",
+      core_temperament: "",
+      secondary_temperament_id: "guan_lan",
+      secondary_temperament: "",
+      behavior_aspect_id: "water-earth",
+      behavior_aspect: "",
+      cultivation_motive_id: "seek-truth",
+      cultivation_motive: "",
+      five_element_scores: {
+        metal: 5,
+        wood: 6,
+        water: 11,
+        fire: 3,
+        earth: 9,
+      },
+      spirit_root_kind_id: "dual-root",
+      spirit_root_result: "",
+      confidence: {
+        core: "high",
+        behavior: "high",
+        motive: "medium",
+        overall: "high",
+      },
+    },
+    summary: "A cautious cultivator whose answers map cleanly onto the stable taxonomy ids.",
   };
 }
 
@@ -210,6 +264,45 @@ test("agent registration can save a canonical registration record in the same ca
   assert.equal(stateResponse.status, 200);
   assert.equal(statePayload.registration?.core_temperament, "Calm strategist");
   assert.ok(statePayload.registrationEffects);
+});
+
+test("agent registration accepts v2 taxonomy ids and surfaces localized labels", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Lin Xianlan",
+      record: createRegistrationRecordV2(),
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+
+  assert.equal(registerResponse.status, 200);
+  assert.equal(registerPayload.registration?.label_locale, "en");
+  assert.equal(registerPayload.registration?.core_temperament_id, "qian_yuan");
+  assert.equal(registerPayload.registration?.core_temperament, "Calm strategist");
+  assert.equal(registerPayload.registration?.behavior_aspect_id, "water-earth");
+  assert.equal(registerPayload.registration?.behavior_aspect, "Water-Earth / Latent Guard");
+  assert.equal(registerPayload.registration?.cultivation_motive_id, "seek-truth");
+  assert.equal(registerPayload.registration?.spirit_root_kind_id, "dual-root");
+  assert.equal(registerPayload.registration?.spirit_root_result, "Water-Earth dual root");
+
+  const stateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const statePayload = await stateResponse.json();
+
+  assert.equal(stateResponse.status, 200);
+  assert.equal(statePayload.registration?.label_locale, "en");
+  assert.equal(statePayload.registration?.core_temperament_id, "qian_yuan");
+  assert.equal(statePayload.registration?.spirit_root_kind_id, "dual-root");
 });
 
 test("agent registration ignores caller-supplied identity and authenticated state uses the bound cultivator", async () => {
