@@ -29,7 +29,7 @@ function createRegistrationRecord() {
     result: {
       core_temperament: "Calm strategist",
       secondary_temperament: "Patient observer",
-      spirit_root_result: "Water-biased root",
+      spirit_root_result: "Water single root",
     },
     summary: "Prefers observation before commitment.",
   };

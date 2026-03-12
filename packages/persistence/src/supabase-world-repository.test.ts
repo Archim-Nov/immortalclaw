@@ -39,7 +39,7 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         fire: 3,
         earth: 8,
       },
-      spirit_root_result: "Water-biased root",
+      spirit_root_result: "Water single root",
       confidence: {
         core: "high",
         behavior: "high",
@@ -47,7 +47,7 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         overall: "high",
       },
     },
-    summary: "A cautious cultivator with a strong water leaning.",
+    summary: "A cautious cultivator with clear water dominance.",
   };
 }
 
@@ -379,7 +379,10 @@ test("agent registration can save a canonical registration record in the same ca
   assert.ok(savedRecord);
   assert.equal(savedRecord?.cultivator_id, registration.selectedCultivatorId);
   assert.equal(savedRecord?.agent_id, registration.agentId);
+  assert.equal(savedRecord?.result.label_locale, "en");
+  assert.equal(savedRecord?.result.core_temperament_id, "qian_yuan");
   assert.equal(savedRecord?.result.core_temperament, "Calm strategist");
+  assert.equal(state.registration?.core_temperament_id, "qian_yuan");
   assert.equal(state.registration?.core_temperament, "Calm strategist");
   assert.ok(state.registrationEffects);
   assert.ok(state.registrationEffects?.dominantElements.some((element) => element.id === "water"));

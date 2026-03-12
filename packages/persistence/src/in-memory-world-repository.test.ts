@@ -39,7 +39,7 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         fire: 3,
         earth: 8,
       },
-      spirit_root_result: "Water-biased root",
+      spirit_root_result: "Water single root",
       confidence: {
         core: "high",
         behavior: "high",
@@ -47,7 +47,61 @@ function createRegistrationRecord(): CultivationRegistrationRecord {
         overall: "high",
       },
     },
-    summary: "A cautious cultivator with a strong water leaning.",
+    summary: "A cautious cultivator with clear water dominance.",
+  };
+}
+
+function createRegistrationRecordV2(): CultivationRegistrationRecord {
+  return {
+    record_type: "registration_record",
+    questionnaire_version: "immortal-claw-oc-v2",
+    answers: {
+      Q1: "C",
+      Q2: "C",
+      Q3: "C",
+      Q4: "C",
+      Q5: "C",
+      Q6: "C",
+      Q7: "C",
+      Q8: "A",
+      Q9: "C",
+      Q10: "C",
+      Q11: "C",
+      Q12: "C",
+      Q13: "B",
+      Q14: "B",
+      Q15: "B",
+      Q16: "B",
+      Q17: "C",
+      Q18: "B",
+    },
+    result: {
+      label_locale: "zh-CN",
+      core_temperament_id: "qian_yuan",
+      core_temperament: "",
+      secondary_temperament_id: "guan_lan",
+      secondary_temperament: "",
+      behavior_aspect_id: "water-earth",
+      behavior_aspect: "",
+      cultivation_motive_id: "seek-truth",
+      cultivation_motive: "",
+      five_element_scores: {
+        metal: 5,
+        wood: 6,
+        water: 11,
+        fire: 3,
+        earth: 9,
+      },
+      spirit_root_kind_id: "dual-root",
+      spirit_root_result: "",
+      confidence: {
+        core: "high",
+        behavior: "high",
+        motive: "medium",
+        overall: "high",
+      },
+    },
+    summary: "以稳定 id 保存、由运行时补足中文展示文案的登记档案。",
   };
 }
 
@@ -70,4 +124,25 @@ test("registerAgent can persist a canonical registration record in the same call
   assert.equal(state.registration?.core_temperament, "Calm strategist");
   assert.ok(state.registrationEffects);
   assert.ok(state.registrationEffects?.dominantElements.some((element) => element.id === "water"));
+});
+
+test("registerAgent normalizes v2 taxonomy ids into stored labels and ids", async () => {
+  const repository = createInMemoryWorldRepository();
+
+  const registration = await repository.registerAgent({
+    name: "Lin Xianlan",
+    record: createRegistrationRecordV2(),
+  });
+  const savedRecord = await repository.getCultivationRegistration(registration.selectedCultivatorId);
+  const state = await repository.getCultivatorState(registration.selectedCultivatorId);
+
+  assert.equal(savedRecord?.result.label_locale, "zh-CN");
+  assert.equal(savedRecord?.result.core_temperament_id, "qian_yuan");
+  assert.equal(savedRecord?.result.core_temperament, "潜渊型");
+  assert.equal(savedRecord?.result.behavior_aspect_id, "water-earth");
+  assert.equal(savedRecord?.result.behavior_aspect, "水土 / 潜守");
+  assert.equal(savedRecord?.result.spirit_root_kind_id, "dual-root");
+  assert.equal(savedRecord?.result.spirit_root_result, "水土双灵根");
+  assert.equal(state.registration?.core_temperament_id, "qian_yuan");
+  assert.equal(state.registration?.behavior_aspect_id, "water-earth");
 });
