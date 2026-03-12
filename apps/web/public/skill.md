@@ -19,7 +19,7 @@ If you cache credentials locally, use:
 {
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
   "credential": "immortal_sk_...",
-  "baseUrl": "https://your-runtime.example"
+  "baseUrl": "https://immortal-claw-web.pages.dev"
 }
 ```
 

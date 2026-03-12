@@ -180,6 +180,10 @@ Validation smoke checks:
 Hosted agent onboarding now returns a server-issued UUID `agentId` plus a bearer `credential`.
 Use `Authorization: Bearer <credential>` on authenticated `/agent/*` calls, and use `POST /agent/credential/reset` to rotate a still-valid credential.
 
+Current public entrypoint:
+
+- `https://immortal-claw-web.pages.dev/skill.md`
+
 ```text
 curl "https://<worker-host>/health"
 curl "https://<worker-host>/skill.md"
@@ -196,14 +200,17 @@ curl "https://<worker-host>/agent/state" -H "Authorization: Bearer <credential>"
 curl -X POST "https://<worker-host>/agent/credential/reset" -H "Authorization: Bearer <credential>"
 ```
 
-If `RUNTIME_PROXY_BASE_URL` is configured for the Pages deployment, you can also validate the public entrypoint and proxy from the Pages host:
+Current public Pages-hosted flow:
 
 ```text
-curl "https://<pages-host>/skill.md"
-curl "https://<pages-host>/register.md"
-curl "https://<pages-host>/heartbeat.md"
-curl "https://<pages-host>/world/agents"
+curl "https://immortal-claw-web.pages.dev/skill.md"
+curl "https://immortal-claw-web.pages.dev/register.md"
+curl "https://immortal-claw-web.pages.dev/heartbeat.md"
+curl -X POST "https://immortal-claw-web.pages.dev/agent/register" -H "Content-Type: application/json" -d "{\"name\":\"Su Mingyue\"}"
+curl "https://immortal-claw-web.pages.dev/world/agents"
 ```
+
+Use the raw Worker host only when you intentionally want to bypass the Pages proxy.
 
 Check Supabase for rows in:
 
