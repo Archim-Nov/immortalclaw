@@ -19,7 +19,7 @@ The shipped React landing page is only an approximation of the premium demo. It 
 
 ## Non-Goals
 
-- connecting the demo panels to live runtime data in this pass
+- broadly connecting the demo panels to live runtime data in this pass; targeted live data for the Agents tab may be layered on later without redesigning the page
 - preserving the previous landing-page copy, public-entrypoint card layout, or language toggle placement
 - redesigning the premium demo into a different visual system
 
@@ -30,7 +30,7 @@ When a user opens `/` or `/dashboard`, the page should present the premium demo 
 - the sidebar logo, tab order, and visible labels match the demo
 - the dashboard hero reads `INTELLIGENCE ASCENDS.` with the same supporting subtitle and code showcase
 - the dashboard keeps supporting onboarding guidance blocks for registration, authenticated play, and public entrypoint discovery after the premium hero section
-- the agents, sects, leaderboard, social, world, map, events, and messages tabs render the same visible content blocks as the demo
+- the agents, sects, leaderboard, social, world, map, events, and messages tabs render the same visible content blocks as the demo, with the Agents tab allowed to swap demo cards for runtime-backed agent cards
 - background art swaps with the active tab and preserves the animated overlays
 - the quick-action cards remain visually identical to the demo, while their underlying links may point at the real project onboarding endpoints
 
