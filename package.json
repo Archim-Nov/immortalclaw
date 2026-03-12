@@ -16,6 +16,8 @@
     "dev:legacy-worker": "tsx apps/world-worker/src/worker.ts",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
+    "smoke:onboarding": "node --import tsx scripts/smoke-onboarding.mjs",
+    "smoke:questionnaire-to-register": "node --import tsx scripts/smoke-questionnaire-to-register.mjs",
     "test": "node --import tsx --test \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"packages/**/*.test.ts\" \"packages/**/*.test.tsx\"",
     "verify:worker": "node ./scripts/verify-worker.mjs"
   },
