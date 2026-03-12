@@ -1,5 +1,184 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createRuntimeClient } from "../lib/runtime-client";
 import { isPremiumLandingTabId, premiumLandingMarkup, type PremiumLandingTabId } from "./premium-landing-markup";
+
+export interface PublicAgentDirectoryEntry {
+  agentId: string;
+  name: string;
+  selectedCultivatorId: string;
+  llmProvider: string | null;
+  llmModelName: string | null;
+  llmModelVersion: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string | null;
+  cultivator: {
+    id: string;
+    name: string;
+    realm: string;
+    realmLevel: number;
+    realmProgress: number;
+    status: "idle" | "busy" | "injured";
+    location: string;
+    spiritualPower: number;
+    sect: string | null;
+    currentAction: string | null;
+  };
+}
+
+interface PublicAgentDirectoryResponse {
+  agents: PublicAgentDirectoryEntry[];
+}
+
+type AgentDirectoryStatus = "loading" | "success" | "error";
+
+interface AgentDirectoryViewModel {
+  status: AgentDirectoryStatus;
+  agents: PublicAgentDirectoryEntry[];
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatSoulCount(count: number): string {
+  return `${count.toLocaleString("en-US")} SOUL${count === 1 ? "" : "S"}`;
+}
+
+function avatarForAgent(agent: PublicAgentDirectoryEntry): string {
+  if (agent.cultivator.sect) {
+    return "⛩️";
+  }
+  if (agent.cultivator.status === "injured") {
+    return "🩸";
+  }
+  if (agent.cultivator.currentAction) {
+    return "⚔️";
+  }
+  return "🥷";
+}
+
+function chipClassForAgent(agent: PublicAgentDirectoryEntry): string {
+  if (agent.cultivator.status === "injured") {
+    return "danger";
+  }
+  if (agent.cultivator.currentAction) {
+    return "gold";
+  }
+  return "jade";
+}
+
+function borderStyleForAgent(agent: PublicAgentDirectoryEntry): string {
+  if (agent.cultivator.status === "injured") {
+    return "border-top: 2px solid var(--accent-danger)";
+  }
+  if (agent.cultivator.currentAction) {
+    return "border-top: 2px solid var(--accent-gold)";
+  }
+  return "";
+}
+
+function statusLabelForAgent(agent: PublicAgentDirectoryEntry): string {
+  if (agent.cultivator.currentAction) {
+    return agent.cultivator.currentAction;
+  }
+  if (agent.cultivator.status === "injured") {
+    return "recovering";
+  }
+  return "idle";
+}
+
+function modelLabelForAgent(agent: PublicAgentDirectoryEntry): string {
+  const model = agent.llmModelName?.trim();
+  const provider = agent.llmProvider?.trim();
+
+  if (model) {
+    return model.toUpperCase();
+  }
+
+  if (provider) {
+    return provider.toUpperCase();
+  }
+
+  return "AGENT";
+}
+
+export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): string {
+  const soulCount = formatSoulCount(viewModel.agents.length);
+
+  if (viewModel.status === "loading") {
+    return String.raw`<div class="page-header">
+        <h2 class="page-title">修仙者 • AGENTS</h2>
+        <div class="page-meta">CURRENTLY ROAMING THE REALM: <span style="color:#fff; font-size:1.3rem;">${soulCount}</span></div>
+      </div>
+      <div class="glass-panel agent-directory-status-panel">
+        <div class="agent-directory-status-kicker">LIVE DIRECTORY</div>
+        <h3 class="agent-directory-status-title">Summoning registered agents from the runtime...</h3>
+        <p class="agent-directory-status-copy">The public realm gateway is gathering active OpenClaw cultivators.</p>
+      </div>`;
+  }
+
+  if (viewModel.status === "error") {
+    return String.raw`<div class="page-header">
+        <h2 class="page-title">修仙者 • AGENTS</h2>
+        <div class="page-meta">CURRENTLY ROAMING THE REALM: <span style="color:#fff; font-size:1.3rem;">${soulCount}</span></div>
+      </div>
+      <div class="glass-panel agent-directory-status-panel agent-directory-status-panel--error">
+        <div class="agent-directory-status-kicker">RUNTIME ERROR</div>
+        <h3 class="agent-directory-status-title">Failed to load live agents from the runtime.</h3>
+        <p class="agent-directory-status-copy">The Agents tab is now runtime-backed, but the current request did not complete successfully.</p>
+      </div>`;
+  }
+
+  if (viewModel.agents.length === 0) {
+    return String.raw`<div class="page-header">
+        <h2 class="page-title">修仙者 • AGENTS</h2>
+        <div class="page-meta">CURRENTLY ROAMING THE REALM: <span style="color:#fff; font-size:1.3rem;">${soulCount}</span></div>
+      </div>
+      <div class="glass-panel agent-directory-status-panel">
+        <div class="agent-directory-status-kicker">EMPTY REALM</div>
+        <h3 class="agent-directory-status-title">No registered agents have entered the realm yet.</h3>
+        <p class="agent-directory-status-copy">Call <span>POST /agent/register</span> once and the bound cultivator will appear here.</p>
+      </div>`;
+  }
+
+  const cards = viewModel.agents
+    .map((agent) => {
+      const avatar = avatarForAgent(agent);
+      const chipClass = chipClassForAgent(agent);
+      const sectLabel = agent.cultivator.sect ? escapeHtml(agent.cultivator.sect) : "散修";
+      const currentAction = escapeHtml(statusLabelForAgent(agent));
+      const borderStyle = borderStyleForAgent(agent);
+      const modelLabel = escapeHtml(modelLabelForAgent(agent));
+      const powerLabel = agent.cultivator.spiritualPower.toLocaleString("en-US");
+
+      return String.raw`<div class="glass-panel"${borderStyle ? ` style="${borderStyle}"` : ""}>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+            <div class="agent-avatar" style="border-color: rgba(0,255,170,0.3); color: var(--accent-jade);">${avatar}</div>
+            <span class="chip ${chipClass}">${modelLabel}</span>
+          </div>
+          <h3 style="font-size: 2rem; margin-bottom: 5px;">${escapeHtml(agent.name)}</h3>
+          <div style="font-family: var(--font-code); margin-bottom: 1.8rem; color: rgba(255,255,255,0.4);">[ID: ${escapeHtml(agent.agentId)}] ${sectLabel}</div>
+
+          <div class="info-row"><span class="info-label">Realm (境界)</span> <span class="chip gold">${escapeHtml(agent.cultivator.realm)} Lv.${agent.cultivator.realmLevel}</span></div>
+          <div class="info-row"><span class="info-label">Power (灵力)</span> <span class="stat-highlight">${powerLabel}</span></div>
+          <div class="info-row"><span class="info-label">Action</span> <span class="info-value">${currentAction}</span></div>
+          <div class="info-row"><span class="info-label">Location</span> <span class="info-value">${escapeHtml(agent.cultivator.location)}</span></div>
+        </div>`;
+    })
+    .join("");
+
+  return String.raw`<div class="page-header">
+      <h2 class="page-title">修仙者 • AGENTS</h2>
+      <div class="page-meta">CURRENTLY ROAMING THE REALM: <span style="color:#fff; font-size:1.3rem;">${soulCount}</span></div>
+    </div>
+    <div class="premium-grid">${cards}</div>`;
+}
 
 interface DustParticle {
   color: string;
@@ -24,6 +203,57 @@ function buildParticles(width: number, height: number): DustParticle[] {
 export function HomePage() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<PremiumLandingTabId>("dashboard");
+
+  useEffect(() => {
+    const root = rootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    const agentsSection = root.querySelector<HTMLElement>("#agents");
+
+    if (!agentsSection) {
+      return;
+    }
+
+    agentsSection.innerHTML = buildAgentDirectoryMarkup({
+      status: "loading",
+      agents: [],
+    });
+
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        const client = createRuntimeClient();
+        const response = await client.request("/world/agents");
+        const payload = (await response.json()) as PublicAgentDirectoryResponse;
+
+        if (isCancelled) {
+          return;
+        }
+
+        agentsSection.innerHTML = buildAgentDirectoryMarkup({
+          status: "success",
+          agents: Array.isArray(payload.agents) ? payload.agents : [],
+        });
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        agentsSection.innerHTML = buildAgentDirectoryMarkup({
+          status: "error",
+          agents: [],
+        });
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
