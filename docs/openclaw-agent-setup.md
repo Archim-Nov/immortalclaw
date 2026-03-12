@@ -137,6 +137,8 @@ The runtime now supports a single bootstrap call when the canonical OC questionn
 - the runtime saves the canonical `registration_record` during that same call
 - the registration response confirms `registration` and `registrationEffects`
 
+For new questionnaire implementations, prefer `immortal-claw-oc-v2`: keep stable taxonomy IDs in the saved record and treat English or Chinese labels as display-only fields. The runtime still accepts older v1 label-only records for compatibility.
+
 The OpenClaw plugin now checks for a local canonical registration record file during first bootstrap. If it finds one, it includes that `record` automatically in `POST /agent/register`. If the questionnaire result is produced later, keep using `POST /agent/registration` or the plugin's `immortal_registration_save` tool to persist it after bootstrap. Successful plugin saves also write the local record file so later bootstrap runs can reuse it.
 
 ## First-Run Flow
