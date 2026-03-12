@@ -15,6 +15,7 @@ import type {
   WorldState,
 } from "../../domain/src/runtime.js";
 import type {
+  AgentCredentialResetResult,
   AgentPersonaInput,
   AgentProfileRecord,
   AgentRegistrationInput,
@@ -34,14 +35,14 @@ function normalizeAgentId(value: string | undefined): string | undefined {
   return normalized ? normalized : undefined;
 }
 
-function issueApiKey(): string {
+function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-function clearAgentApiKeys(agentApiKeys: Map<string, string>, agentId: string) {
-  for (const [apiKey, storedAgentId] of agentApiKeys.entries()) {
+function clearAgentCredentials(agentCredentials: Map<string, string>, agentId: string) {
+  for (const [credential, storedAgentId] of agentCredentials.entries()) {
     if (storedAgentId === agentId) {
-      agentApiKeys.delete(apiKey);
+      agentCredentials.delete(credential);
     }
   }
 }
@@ -52,7 +53,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private activeLock: TickLockRecord | null = null;
   private readonly now: () => string;
   private readonly agentProfiles = new Map<string, AgentProfileRecord>();
-  private readonly agentApiKeys = new Map<string, string>();
+  private readonly agentCredentials = new Map<string, string>();
 
   constructor(options: InMemoryWorldRepositoryOptions = {}) {
     this.world = structuredClone(options.world ?? createSeedWorld());
@@ -116,7 +117,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   async registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult> {
-    const agentId = normalizeAgentId(input.agentId) ?? `agent-${crypto.randomUUID()}`;
+    const agentId = crypto.randomUUID();
     const timestamp = this.now();
     const existingProfile = this.agentProfiles.get(agentId) ?? null;
     const sync = syncCultivatorFromPersona(this.world, {
@@ -148,19 +149,50 @@ export class InMemoryWorldRepository implements WorldRepository {
     };
     this.agentProfiles.set(agentId, profile);
 
-    clearAgentApiKeys(this.agentApiKeys, agentId);
-    const apiKey = issueApiKey();
-    this.agentApiKeys.set(apiKey, agentId);
+    clearAgentCredentials(this.agentCredentials, agentId);
+    const credential = issueCredential();
+    this.agentCredentials.set(credential, agentId);
 
     return {
       ...structuredClone(profile),
-      apiKey,
+      credential,
       createdCultivator: sync.created,
     };
   }
 
-  async authenticateAgent(apiKey: string): Promise<AgentProfileRecord | null> {
-    const agentId = this.agentApiKeys.get(apiKey.trim());
+  async resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+    if (!currentCredential.trim()) {
+      throw new Error("currentCredential is required.");
+    }
+
+    const existingProfile = this.agentProfiles.get(normalizedAgentId);
+    if (!existingProfile) {
+      throw new Error(`Agent not found: ${normalizedAgentId}`);
+    }
+    if (this.agentCredentials.get(currentCredential.trim()) !== normalizedAgentId) {
+      throw new Error("Current credential does not belong to the requested agent.");
+    }
+
+    clearAgentCredentials(this.agentCredentials, normalizedAgentId);
+    const credential = issueCredential();
+    this.agentCredentials.set(credential, normalizedAgentId);
+
+    const timestamp = this.now();
+    existingProfile.lastSeenAt = timestamp;
+    existingProfile.updatedAt = timestamp;
+
+    return {
+      agentId: normalizedAgentId,
+      credential,
+    };
+  }
+
+  async authenticateAgent(credential: string): Promise<AgentProfileRecord | null> {
+    const agentId = this.agentCredentials.get(credential.trim());
     if (!agentId) {
       return null;
     }

@@ -40,6 +40,9 @@ function unusedRepository() {
     async authenticateAgent() {
       throw new Error("not used");
     },
+    async resetAgentCredential() {
+      throw new Error("not used");
+    },
     async syncAgentPersona() {
       throw new Error("not used");
     },

@@ -19,6 +19,7 @@ import type {
 } from "../../domain/src/runtime.js";
 import type { WorldEvent } from "../../domain/src/model.js";
 import type {
+  AgentCredentialResetResult,
   AgentPersonaInput,
   AgentProfileRecord,
   AgentRegistrationInput,
@@ -72,7 +73,7 @@ interface AgentProfileRow {
 
 interface AgentCredentialRow {
   agent_id: string;
-  api_key_hash: string;
+  credential_hash: string;
   created_at: string;
   last_seen_at: string | null;
   revoked_at?: string | null;
@@ -83,12 +84,12 @@ function normalizeAgentId(value: string | undefined): string | undefined {
   return normalized ? normalized : undefined;
 }
 
-function issueApiKey(): string {
+function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-async function hashApiKey(apiKey: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(apiKey.trim()));
+async function hashCredential(credential: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential.trim()));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -252,7 +253,7 @@ export class SupabaseWorldRepository implements WorldRepository {
       throw new Error("Agent registration requires a name.");
     }
 
-    const agentId = normalizeAgentId(input.agentId) ?? `agent-${crypto.randomUUID()}`;
+    const agentId = crypto.randomUUID();
     const timestamp = this.now();
     const existingProfile = await this.readAgentProfile(agentId);
     const snapshot = await this.readSnapshot();
@@ -304,52 +305,160 @@ export class SupabaseWorldRepository implements WorldRepository {
       },
     );
 
-    const apiKey = issueApiKey();
+    const credential = issueCredential();
     await this.upsertRows(
       "agent_credentials",
       [
         {
           agent_id: agentId,
-          api_key_hash: await hashApiKey(apiKey),
+          credential_hash: await hashCredential(credential),
           created_at: timestamp,
           last_seen_at: timestamp,
           revoked_at: null,
         },
       ],
-      "api_key_hash",
+      "credential_hash",
     );
 
     return {
       ...profile,
-      apiKey,
+      credential,
       createdCultivator: sync.created,
     };
   }
 
-  async authenticateAgent(apiKey: string): Promise<AgentProfileRecord | null> {
-    const normalizedApiKey = apiKey.trim();
-    if (!normalizedApiKey) {
+  async resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+    const normalizedCurrentCredential = currentCredential.trim();
+    if (!normalizedCurrentCredential) {
+      throw new Error("currentCredential is required.");
+    }
+
+    const existingProfile = await this.readAgentProfile(normalizedAgentId);
+    if (!existingProfile) {
+      throw new Error(`Agent not found: ${normalizedAgentId}`);
+    }
+
+    const currentCredentialHash = await hashCredential(normalizedCurrentCredential);
+    const currentCredentialRows = await this.selectRows<AgentCredentialRow>("agent_credentials", {
+      credential_hash: `eq.${encodeURIComponent(currentCredentialHash)}`,
+      select: "agent_id,credential_hash,created_at,last_seen_at,revoked_at",
+      limit: "1",
+    });
+    const currentCredentialRow = currentCredentialRows[0];
+    if (
+      !currentCredentialRow ||
+      currentCredentialRow.revoked_at ||
+      currentCredentialRow.agent_id !== normalizedAgentId
+    ) {
+      throw new Error("Current credential does not belong to the requested agent.");
+    }
+
+    const timestamp = this.now();
+    const updatedProfile: AgentProfileRecord = {
+      ...existingProfile,
+      updatedAt: timestamp,
+      lastSeenAt: timestamp,
+    };
+    await this.upsertRows("agent_profiles", [this.toAgentProfileRow(updatedProfile)], "agent_id");
+
+    const revokeResponse = await this.fetchImpl(
+      this.tableUrl("agent_credentials", {
+        agent_id: `eq.${encodeURIComponent(normalizedAgentId)}`,
+      }),
+      {
+        method: "PATCH",
+        headers: this.headers({
+          Prefer: "return=minimal",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          revoked_at: timestamp,
+        }),
+      },
+    );
+    if (!revokeResponse.ok) {
+      const error = await this.readError(revokeResponse);
+      throw new Error(`Failed to revoke existing agent credentials: ${error.message}`);
+    }
+
+    const credential = issueCredential();
+    try {
+      await this.upsertRows(
+        "agent_credentials",
+        [
+          {
+            agent_id: normalizedAgentId,
+            credential_hash: await hashCredential(credential),
+            created_at: timestamp,
+            last_seen_at: timestamp,
+            revoked_at: null,
+          },
+        ],
+        "credential_hash",
+      );
+    } catch (error) {
+      try {
+        await this.upsertRows(
+          "agent_credentials",
+          [
+            {
+              agent_id: currentCredentialRow.agent_id,
+              credential_hash: currentCredentialRow.credential_hash,
+              created_at: currentCredentialRow.created_at,
+              last_seen_at: timestamp,
+              revoked_at: null,
+            },
+          ],
+          "credential_hash",
+        );
+      } catch (restoreError) {
+        throw new Error(
+          `Failed to issue replacement agent credential and failed to restore the current credential: ${
+            restoreError instanceof Error ? restoreError.message : String(restoreError)
+          }`,
+        );
+      }
+      throw new Error(
+        `Failed to issue replacement agent credential: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    return {
+      agentId: updatedProfile.agentId,
+      credential,
+    };
+  }
+
+  async authenticateAgent(credential: string): Promise<AgentProfileRecord | null> {
+    const normalizedCredential = credential.trim();
+    if (!normalizedCredential) {
       return null;
     }
 
     const credentialRows = await this.selectRows<AgentCredentialRow>("agent_credentials", {
-      api_key_hash: `eq.${encodeURIComponent(await hashApiKey(normalizedApiKey))}`,
+      credential_hash: `eq.${encodeURIComponent(await hashCredential(normalizedCredential))}`,
       select: "agent_id,created_at,last_seen_at,revoked_at",
       limit: "1",
     });
-    const credential = credentialRows[0];
-    if (!credential || credential.revoked_at) {
+    const credentialRow = credentialRows[0];
+    if (!credentialRow || credentialRow.revoked_at) {
       return null;
     }
 
-    const profile = await this.readAgentProfile(credential.agent_id);
+    const profile = await this.readAgentProfile(credentialRow.agent_id);
     if (!profile) {
       return null;
     }
 
     return {
       ...profile,
-      lastSeenAt: credential.last_seen_at,
+      lastSeenAt: credentialRow.last_seen_at,
     };
   }
 

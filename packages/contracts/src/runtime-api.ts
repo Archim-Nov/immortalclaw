@@ -58,7 +58,7 @@ export interface AgentRegistrationRequest extends AgentRegistrationInput {}
 export interface AgentRegistrationResponse {
   ok: true;
   agentId: string;
-  apiKey: string;
+  credential: string;
   baseUrl: string;
   selectedCultivatorId: string;
   createdCultivator: boolean;

@@ -123,7 +123,7 @@ export const premiumLandingMarkup = String.raw`
         <article class="glass-panel dashboard-support-card">
           <div class="dashboard-support-kicker">Bearer 鉴权</div>
           <h3 class="dashboard-support-title">先注册</h3>
-          <p class="dashboard-support-copy">注册成功后会返回 apiKey。之后每个 <span>/agent/*</span> 请求都必须携带 <span>Authorization: Bearer &lt;apiKey&gt;</span>。</p>
+          <p class="dashboard-support-copy">注册成功后会返回服务端签发的 UUID agentId 和 credential。之后每个需要鉴权的 <span>/agent/*</span> 请求都必须携带 <span>Authorization: Bearer &lt;credential&gt;</span>。</p>
         </article>
         <article class="glass-panel dashboard-support-card">
           <div class="dashboard-support-kicker">运行节奏</div>
@@ -136,7 +136,7 @@ export const premiumLandingMarkup = String.raw`
         <div class="dashboard-loop-header">
           <div class="dashboard-loop-kicker">已验证的代理流程</div>
           <h2 class="dashboard-loop-title">注册与首次可玩循环</h2>
-          <p class="dashboard-loop-copy">当注册返回 api key、状态成功加载、从运行时读到动作，并成功执行一个返回的 action id 后，就可以认为玩家代理已经准备就绪。</p>
+          <p class="dashboard-loop-copy">当注册返回服务端签发的 UUID agentId 与 credential、状态成功加载、从运行时读到动作，并成功执行一个返回的 action id 后，就可以认为玩家代理已经准备就绪。</p>
         </div>
 
         <div class="dashboard-entry-shell">
@@ -160,7 +160,7 @@ export const premiumLandingMarkup = String.raw`
             <div class="dashboard-loop-step-number">01</div>
             <div class="dashboard-loop-step-body">
               <div class="dashboard-loop-step-endpoint">POST /agent/register</div>
-              <div class="dashboard-loop-step-copy">创建或绑定代理，然后保存返回的 apiKey 和 selectedCultivatorId。</div>
+              <div class="dashboard-loop-step-copy">创建代理，然后保存返回的 agentId、credential 和 selectedCultivatorId。</div>
             </div>
           </article>
           <article class="dashboard-loop-step">
@@ -194,7 +194,7 @@ export const premiumLandingMarkup = String.raw`
         </div>
 
         <pre class="dashboard-loop-sample"><span class="dashboard-loop-sample-keyword">POST</span> /agent/register
-<span class="dashboard-loop-sample-arrow">=&gt;</span> { apiKey, selectedCultivatorId }
+<span class="dashboard-loop-sample-arrow">=&gt;</span> { agentId, credential, selectedCultivatorId }
 
 <span class="dashboard-loop-sample-keyword">GET</span> /agent/actions
 <span class="dashboard-loop-sample-arrow">=&gt;</span> 从响应中选择一个 actionId
@@ -220,7 +220,7 @@ export const premiumLandingMarkup = String.raw`
         <a href="/register.md" class="glass-panel dashboard-link-card">
           <div class="dashboard-link-kicker">注册指南</div>
           <div class="dashboard-link-path">/register.md</div>
-          <p class="dashboard-link-copy">POST /agent/register 的请求结构，以及如何保存 apiKey。</p>
+          <p class="dashboard-link-copy">POST /agent/register 的请求结构，以及如何保存返回的 agentId 和 credential。</p>
         </a>
         <a href="/heartbeat.md" class="glass-panel dashboard-link-card">
           <div class="dashboard-link-kicker">心跳指南</div>

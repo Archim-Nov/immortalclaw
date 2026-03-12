@@ -70,7 +70,8 @@ type WorldRequestError = Error & {
 type AgentSession = {
   worldBaseUrl: string;
   agentId: string;
-  apiKey: string;
+  requestedAgentId?: string;
+  credential: string;
   selectedCultivatorId?: string;
   updatedAt: string;
 };
@@ -627,21 +628,44 @@ function coerceAgentSession(input: unknown): AgentSession | null {
 
   const worldBaseUrl = trimString((input as { worldBaseUrl?: unknown }).worldBaseUrl);
   const agentId = trimString((input as { agentId?: unknown }).agentId);
-  const apiKey = trimString((input as { apiKey?: unknown }).apiKey);
-  if (!worldBaseUrl || !agentId || !apiKey) {
+  const credential = trimString((input as { credential?: unknown }).credential);
+  if (!worldBaseUrl || !agentId || !credential) {
     return null;
   }
 
   return {
     worldBaseUrl: normalizeBaseUrl(worldBaseUrl),
     agentId,
-    apiKey,
+    requestedAgentId: trimString((input as { requestedAgentId?: unknown }).requestedAgentId),
+    credential,
     selectedCultivatorId: trimString((input as { selectedCultivatorId?: unknown }).selectedCultivatorId),
     updatedAt:
       trimString((input as { updatedAt?: unknown }).updatedAt) ??
       trimString((input as { createdAt?: unknown }).createdAt) ??
       nowIsoString(),
   };
+}
+
+function getSessionLookupKeys(session: AgentSession): string[] {
+  const keys = [session.requestedAgentId, session.agentId]
+    .map((value) => trimString(value))
+    .filter((value): value is string => Boolean(value));
+  return [...new Set(keys)];
+}
+
+function matchesSessionLookup(session: AgentSession, lookupId: string | undefined): boolean {
+  const normalizedLookupId = trimString(lookupId);
+  if (!normalizedLookupId) {
+    return true;
+  }
+  return getSessionLookupKeys(session).includes(normalizedLookupId);
+}
+
+function isSameStoredSession(left: AgentSession, right: AgentSession): boolean {
+  if (left.worldBaseUrl !== right.worldBaseUrl) {
+    return false;
+  }
+  return getSessionLookupKeys(left).some((key) => matchesSessionLookup(right, key));
 }
 
 function readCredentialsFile(filePath: string): StoredCredentialsFile {
@@ -675,10 +699,10 @@ function findStoredSession(config: PluginConfig, requestedAgentId?: string): Age
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
   if (requestedAgentId) {
-    return entries.find((entry) => entry.agentId === requestedAgentId) ?? null;
+    return entries.find((entry) => matchesSessionLookup(entry, requestedAgentId)) ?? null;
   }
   if (config.agentId) {
-    return entries.find((entry) => entry.agentId === config.agentId) ?? null;
+    return entries.find((entry) => matchesSessionLookup(entry, config.agentId)) ?? null;
   }
   return entries[0] ?? null;
 }
@@ -690,27 +714,13 @@ function persistSession(config: PluginConfig, session: AgentSession): AgentSessi
     worldBaseUrl: config.worldBaseUrl,
     updatedAt: session.updatedAt || nowIsoString(),
   };
-  const entries = snapshot.entries.filter(
-    (entry) =>
-      !(entry.worldBaseUrl === nextEntry.worldBaseUrl && entry.agentId === nextEntry.agentId),
-  );
+  const entries = snapshot.entries.filter((entry) => !isSameStoredSession(entry, nextEntry));
   entries.unshift(nextEntry);
   writeCredentialsFile(config.credentialsPath, {
     version: 1,
     entries,
   });
   return nextEntry;
-}
-
-function removeStoredSession(config: PluginConfig, agentId: string): void {
-  const snapshot = readCredentialsFile(config.credentialsPath);
-  const entries = snapshot.entries.filter(
-    (entry) => !(entry.worldBaseUrl === config.worldBaseUrl && entry.agentId === agentId),
-  );
-  writeCredentialsFile(config.credentialsPath, {
-    version: 1,
-    entries,
-  });
 }
 
 function readSelectedCultivatorId(payload: unknown, message: string): string {
@@ -725,21 +735,26 @@ function readSelectedCultivatorId(payload: unknown, message: string): string {
   return (payload as { selectedCultivatorId: string }).selectedCultivatorId;
 }
 
-function readRegisteredSession(config: PluginConfig, payload: unknown): AgentSession {
+function readRegisteredSession(
+  config: PluginConfig,
+  payload: unknown,
+  requestedAgentId?: string,
+): AgentSession {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Invalid agent registration response from world API.");
   }
 
   const agentId = trimString((payload as { agentId?: unknown }).agentId);
-  const apiKey = trimString((payload as { apiKey?: unknown }).apiKey);
-  if (!agentId || !apiKey) {
+  const credential = trimString((payload as { credential?: unknown }).credential);
+  if (!agentId || !credential) {
     throw new Error("Invalid agent registration response from world API.");
   }
 
   return {
     worldBaseUrl: config.worldBaseUrl,
     agentId,
-    apiKey,
+    requestedAgentId: trimString(requestedAgentId),
+    credential,
     selectedCultivatorId: trimString((payload as { selectedCultivatorId?: unknown }).selectedCultivatorId),
     updatedAt: nowIsoString(),
   };
@@ -754,8 +769,8 @@ function readBoundCultivatorId(session: AgentSession): string {
 
 function buildPromptGuidance(config: PluginConfig): string {
   const agentIdentity = config.agentId
-    ? `Preferred agentId: ${config.agentId}. The plugin will resume or register this agent automatically.`
-    : "The plugin will resume a cached agent for this world or register a new one automatically.";
+    ? `Configured agentId: ${config.agentId}. The plugin uses this as a stable local cache key while the runtime assigns the canonical server agent UUID.`
+    : "The plugin will resume a cached agent for this world or register a new one with a server-issued agent UUID automatically.";
   const defaultIdentity = config.defaultCultivatorId
     ? `Legacy fallback defaultCultivatorId: ${config.defaultCultivatorId}.`
     : "";
@@ -769,6 +784,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- Never invent current state, inventory, sect membership, tribulation status, persona details, or action ids.",
     "- OpenClaw bootstrap files such as IDENTITY.md and SOUL.md already define the agent persona. Do not ask to create or switch characters manually.",
     "- The plugin auto-registers or resumes the agent, then syncs the persona into a single identity-bound cultivator before state lookups.",
+    "- If the cached credential is rejected, stop and surface the auth error. Do not implicitly re-register because that would create a new server identity.",
     "- Call immortal_state, immortal_strategy, and immortal_actions before making strategic recommendations or taking actions.",
     "- Read agentGuidance, statusEffects, and recentEvents from immortal_state instead of inferring risk.",
     "- Use immortal_strategy to pick a short-term goal and recommended action sequence before acting.",
@@ -857,6 +873,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         },
         agentId: {
           type: "string",
+          description: "Optional local cache key used to resume the same agent session across runs.",
         },
         personaDir: {
           type: "string",
@@ -864,7 +881,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         },
         credentialsPath: {
           type: "string",
-          description: "Optional credentials.json path used to cache agent API keys.",
+          description: "Optional credentials.json path used to cache agent credentials.",
         },
         llmProvider: {
           type: "string",
@@ -944,7 +961,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         if (
           cachedSession &&
           cachedSession.worldBaseUrl === config.worldBaseUrl &&
-          (!agentId || cachedSession.agentId === agentId)
+          matchesSessionLookup(cachedSession, agentId)
         ) {
           return cachedSession;
         }
@@ -952,23 +969,11 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         return cachedSession;
       }
 
-      function invalidateSession(agentId?: string): void {
-        const targetAgentId = agentId ?? cachedSession?.agentId;
-        if (targetAgentId) {
-          removeStoredSession(config, targetAgentId);
-          syncedAgents.delete(targetAgentId);
-        }
-        if (!agentId || cachedSession?.agentId === agentId) {
-          cachedSession = null;
-        }
-      }
-
       async function registerAgentSession(agentId?: string): Promise<AgentSession> {
         const persona = loadPersonaProfile(agentId ?? config.agentId ?? "openclaw-agent", config);
         const payload = await requestWorld(fetchImpl, config, "/agent/register", {
           method: "POST",
           body: JSON.stringify({
-            ...(agentId ? { agentId } : {}),
             name: persona.name,
             ...(config.llmProvider ? { llmProvider: config.llmProvider } : {}),
             ...(config.llmModelName ? { llmModelName: config.llmModelName } : {}),
@@ -981,7 +986,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           }),
         });
         registrationRouteAvailable = true;
-        return cacheSession(readRegisteredSession(config, payload)) as AgentSession;
+        return cacheSession(readRegisteredSession(config, payload, agentId)) as AgentSession;
       }
 
       async function ensureAgentSession(
@@ -1020,23 +1025,21 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         session: AgentSession,
         pathSuffix: string,
         init?: RequestInit,
-        retryOnUnauthorized = true,
       ): Promise<unknown> {
         try {
           return await requestWorld(fetchImpl, config, pathSuffix, {
             ...init,
             headers: {
               ...(init?.headers ?? {}),
-              Authorization: `Bearer ${session.apiKey}`,
+              Authorization: `Bearer ${session.credential}`,
             },
           });
         } catch (error) {
-          if (retryOnUnauthorized && isRequestStatus(error, 401)) {
-            invalidateSession(session.agentId);
-            const refreshed = await ensureAgentSession({ agentId: session.agentId }, true);
-            if (refreshed) {
-              return requestAgentWorld(refreshed, pathSuffix, init, false);
-            }
+          if (isRequestStatus(error, 401)) {
+            const lookupId = session.requestedAgentId ?? session.agentId;
+            throw new Error(
+              `Stored credential for agent '${lookupId}' was rejected by the server. Automatic re-registration is disabled because it would create a new server identity. Lost-credential recovery is not implemented yet.`,
+            );
           }
           throw error;
         }
@@ -1064,14 +1067,11 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           return session;
         }
 
-        const persona = loadPersonaProfile(session.agentId, config);
+        const persona = loadPersonaProfile(session.requestedAgentId ?? session.agentId, config);
         try {
           const payload = await requestAgentWorld(session, "/agent/sync-persona", {
             method: "POST",
-            body: JSON.stringify({
-              agentId: session.agentId,
-              ...persona,
-            }),
+            body: JSON.stringify(persona),
           });
           const current = loadSession(session.agentId) ?? session;
           const updated = cacheSession({
