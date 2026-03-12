@@ -64,6 +64,7 @@ export interface AgentRegistrationResult extends AgentProfileRecord {
 
 export interface WorldRepository {
   readWorld(): Promise<WorldState>;
+  listAgentProfiles(): Promise<AgentProfileRecord[]>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listAvailableActions(cultivatorId: string): Promise<AvailableAction[]>;
   performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult>;

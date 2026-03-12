@@ -70,8 +70,17 @@ class FakeSupabaseRestApi {
 
     if (tableName === "agent_profiles") {
       const agentId = this.readEq(url, "agent_id");
-      const row = agentId ? this.tables.agent_profiles.get(agentId) : null;
-      return this.jsonResponse(row ? [row] : []);
+      if (agentId) {
+        const row = this.tables.agent_profiles.get(agentId);
+        return this.jsonResponse(row ? [row] : []);
+      }
+
+      const rows = [...this.tables.agent_profiles.values()];
+      const order = url.searchParams.get("order");
+      if (order === "updated_at.desc") {
+        rows.sort((left, right) => String(right.updated_at ?? "").localeCompare(String(left.updated_at ?? "")));
+      }
+      return this.jsonResponse(rows);
     }
 
     if (tableName === "agent_credentials") {
@@ -291,6 +300,24 @@ test("agent registration issues credentials and authenticated lookups resolve th
   assert.equal(authenticated?.selectedCultivatorId, registration.selectedCultivatorId);
   assert.equal(api.tables.agent_profiles.size, 1);
   assert.equal(api.tables.agent_credentials.size, 1);
+});
+
+test("listAgentProfiles returns registered agent profiles from storage", async () => {
+  const { repository } = createRepository();
+
+  await repository.registerAgent({
+    agentId: "openclaw-main",
+    name: "Su Mingyue",
+    llmProvider: "openai",
+    llmModelName: "gpt-5",
+  });
+
+  const profiles = await repository.listAgentProfiles();
+
+  assert.equal(profiles.length, 1);
+  assert.equal(profiles[0]?.agentId, "openclaw-main");
+  assert.equal(profiles[0]?.name, "Su Mingyue");
+  assert.equal(profiles[0]?.selectedCultivatorId.startsWith("cultivator-"), true);
 });
 
 test("Supabase REST requests use the secret key as apikey without bearer auth", async () => {
