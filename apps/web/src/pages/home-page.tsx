@@ -209,29 +209,32 @@ function buildParticles(width: number, height: number): DustParticle[] {
   }));
 }
 
+export function syncAgentMarkup(root: HTMLElement | null, markup: string | null): void {
+  if (!root || !markup) {
+    return;
+  }
+
+  const agentsSection = root.querySelector<HTMLElement>("#agents");
+
+  if (agentsSection && agentsSection.innerHTML !== markup) {
+    agentsSection.innerHTML = markup;
+  }
+}
+
 export function HomePage() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<PremiumLandingTabId>("dashboard");
+  const agentMarkupRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const root = rootRef.current;
+    let isCancelled = false;
 
-    if (!root) {
-      return;
-    }
-
-    const agentsSection = root.querySelector<HTMLElement>("#agents");
-
-    if (!agentsSection) {
-      return;
-    }
-
-    agentsSection.innerHTML = buildAgentDirectoryMarkup({
+    agentMarkupRef.current = buildAgentDirectoryMarkup({
       status: "loading",
       agents: [],
     });
 
-    let isCancelled = false;
+    syncAgentMarkup(rootRef.current, agentMarkupRef.current);
 
     void (async () => {
       try {
@@ -241,7 +244,7 @@ export function HomePage() {
           return;
         }
 
-        agentsSection.innerHTML = buildAgentDirectoryMarkup({
+        agentMarkupRef.current = buildAgentDirectoryMarkup({
           status: "success",
           agents: Array.isArray(payload.agents) ? payload.agents : [],
         });
@@ -250,17 +253,25 @@ export function HomePage() {
           return;
         }
 
-        agentsSection.innerHTML = buildAgentDirectoryMarkup({
+        agentMarkupRef.current = buildAgentDirectoryMarkup({
           status: "error",
           agents: [],
         });
       }
+
+      // Re-query in case React replaced the node during a re-render
+      syncAgentMarkup(rootRef.current, agentMarkupRef.current);
     })();
 
     return () => {
       isCancelled = true;
     };
   }, []);
+
+  // Ensure our imperative agent markup survives React re-renders that might revert dangerouslySetInnerHTML
+  useEffect(() => {
+    syncAgentMarkup(rootRef.current, agentMarkupRef.current);
+  });
 
   useEffect(() => {
     const root = rootRef.current;

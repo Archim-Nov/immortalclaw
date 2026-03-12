@@ -4,7 +4,76 @@ import {
   type PublicAgentDirectoryEntry,
   buildAgentDirectoryMarkup,
   requestPublicAgentDirectory,
+  syncAgentMarkup,
 } from "./home-page";
+
+test("syncAgentMarkup preserves agent data across simulated tab render resets (regression)", () => {
+  const agentsSection = {
+    // Simulate React reverting the DOM to the initial premiumLandingMarkup string after a tab switch re-render
+    innerHTML: '<div class="agent-directory-status-panel">Summoning registered agents from the runtime...</div>',
+  };
+
+  const root = {
+    querySelector(selector: string) {
+      if (selector === "#agents") {
+        return agentsSection;
+      }
+      return null;
+    },
+  } as unknown as HTMLElement;
+
+  const liveDataMarkup = '<div class="premium-grid">Live Agent Data</div>';
+
+  // The hook calls this on every render, including tab switches
+  syncAgentMarkup(root, liveDataMarkup);
+
+  // The live data should overwrite the reverted loading panel
+  assert.equal(agentsSection.innerHTML, liveDataMarkup);
+});
+
+test("syncAgentMarkup does not mutate if the markup already matches", () => {
+  let setterCount = 0;
+  const agentsSection = {
+    _innerHTML: "matching-markup",
+    get innerHTML() {
+      return this._innerHTML;
+    },
+    set innerHTML(value: string) {
+      setterCount++;
+      this._innerHTML = value;
+    },
+  };
+
+  const root = {
+    querySelector(selector: string) {
+      if (selector === "#agents") {
+        return agentsSection;
+      }
+      return null;
+    },
+  } as unknown as HTMLElement;
+
+  syncAgentMarkup(root, "matching-markup");
+
+  assert.equal(agentsSection.innerHTML, "matching-markup");
+  assert.equal(setterCount, 0); // Should not have triggered the setter
+});
+
+test("syncAgentMarkup safely ignores null root or missing agents section", () => {
+  assert.doesNotThrow(() => {
+    syncAgentMarkup(null, "markup");
+  });
+
+  const rootWithoutAgents = {
+    querySelector() {
+      return null;
+    },
+  } as unknown as HTMLElement;
+
+  assert.doesNotThrow(() => {
+    syncAgentMarkup(rootWithoutAgents, "markup");
+  });
+});
 
 test("buildAgentDirectoryMarkup renders live registered agents", () => {
   const markup = buildAgentDirectoryMarkup({
