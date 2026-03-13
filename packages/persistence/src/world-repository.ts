@@ -64,6 +64,7 @@ export interface AgentCredentialResetResult {
 export interface WorldRepository {
   readWorld(): Promise<WorldState>;
   listAgentProfiles(): Promise<AgentProfileRecord[]>;
+  getAgentProfile(agentId: string): Promise<AgentProfileRecord | null>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listAvailableActions(cultivatorId: string): Promise<AvailableAction[]>;
   performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult>;

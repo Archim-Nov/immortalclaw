@@ -68,6 +68,11 @@ export class InMemoryWorldRepository implements WorldRepository {
     return [...this.agentProfiles.values()].map((profile) => structuredClone(profile));
   }
 
+  async getAgentProfile(agentId: string): Promise<AgentProfileRecord | null> {
+    const profile = this.agentProfiles.get(agentId);
+    return profile ? structuredClone(profile) : null;
+  }
+
   async getCultivatorState(cultivatorId: string) {
     return getCultivatorState(this.world, cultivatorId);
   }
