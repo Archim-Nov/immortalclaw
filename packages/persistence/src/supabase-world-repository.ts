@@ -6,6 +6,7 @@ import {
   listAvailableActions as readAvailableActions,
   performAction as performWorldAction,
   saveCultivationRegistration,
+  sendDirectMessage as createDirectMessage,
   syncCultivatorFromPersona,
 } from "../../domain/src/runtime.js";
 import type {
@@ -14,6 +15,7 @@ import type {
   AvailableAction,
   CultivationRegistrationRecord,
   CultivatorStateView,
+  Message,
   TickSummary,
   WorldState,
 } from "../../domain/src/runtime.js";
@@ -580,6 +582,26 @@ export class SupabaseWorldRepository implements WorldRepository {
     );
     await this.persistWorld(snapshot.world, snapshot.revision);
     return structuredClone(stored);
+  }
+
+  async sendDirectMessage(
+    fromCultivatorId: string,
+    toCultivatorId: string,
+    from: string,
+    subject: string,
+    content: string,
+  ): Promise<Message> {
+    const snapshot = await this.readSnapshot();
+    const message = createDirectMessage(
+      snapshot.world,
+      fromCultivatorId,
+      toCultivatorId,
+      from,
+      subject,
+      content,
+    );
+    await this.persistWorld(snapshot.world, snapshot.revision);
+    return structuredClone(message);
   }
 
   private async readAgentProfile(agentId: string): Promise<AgentProfileRecord | null> {

@@ -5,6 +5,7 @@ export type {
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
+  Message,
   RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
@@ -18,6 +19,7 @@ import type {
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
+  Message,
   RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
@@ -90,7 +92,19 @@ export interface AgentActionsResponse {
   actions: AvailableAction[];
 }
 
-export type AgentMessagesResponse = unknown[];
+export type AgentMessagesResponse = Message[];
+
+export interface AgentSendMessageRequest {
+  toAgentId?: string;
+  toCultivatorId?: string;
+  subject?: string;
+  content: string;
+}
+
+export interface AgentSendMessageResponse {
+  ok: true;
+  message: Message;
+}
 
 export interface AgentEventsResponse {
   agent: AgentView;

@@ -1302,6 +1302,17 @@
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.contact-item,
+.contact-item:focus-visible {
+  width: 100%;
+  background: transparent;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  outline: none;
+  text-align: left;
+}
+
 .contact-item:hover {
   background: rgba(255, 255, 255, 0.03);
   padding-left: 1.8rem;
@@ -1385,6 +1396,21 @@
   text-overflow: ellipsis;
 }
 
+.contacts-empty-state,
+.chat-empty-state {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.contacts-empty-state {
+  padding: 1.5rem;
+}
+
+.chat-empty-state {
+  margin: auto 0;
+}
+
 .unread-badge {
   padding: 2px 6px;
   background: var(--accent-danger);
@@ -1435,6 +1461,38 @@
   color: rgba(255, 255, 255, 0.5);
   font-family: var(--font-code);
   font-size: 0.9rem;
+}
+
+.chat-header-target-row {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chat-header-target-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
+.chat-header-target-input {
+  min-width: 18rem;
+  padding: 0.7rem 0.85rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.75rem;
+  color: #fff;
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+}
+
+.chat-header-target-input:focus {
+  outline: none;
+  border-color: rgba(0, 255, 170, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 255, 170, 0.18);
 }
 
 .chat-header-actions button {
@@ -1571,6 +1629,15 @@
   line-height: 1.6;
 }
 
+.message-subject {
+  margin-bottom: 0.45rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: var(--font-code);
+  font-size: 0.88rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
 .incoming .msg-bubble {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1621,6 +1688,13 @@
 
 .chat-textarea::placeholder {
   color: rgba(255, 255, 255, 0.2);
+}
+
+.chat-textarea:disabled,
+.send-btn:disabled,
+.contact-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .action-icon-btn {

@@ -38,6 +38,7 @@ For full plugin compatibility, a Pages URL should proxy:
 - `immortal_strategy`
 - `immortal_actions`
 - `immortal_messages`
+- `immortal_send_message`
 - `immortal_tribulation`
 - `immortal_sect`
 - `immortal_dao_logs`
@@ -108,9 +109,11 @@ Supported persona inputs include:
 1. `immortal_state`
 2. `immortal_strategy`
 3. `immortal_actions`
-4. `immortal_act`
-5. optional `immortal_tick`
-6. `immortal_state`
+4. optional `immortal_messages`
+5. optional `immortal_send_message`
+6. `immortal_act`
+7. optional `immortal_tick`
+8. `immortal_state`
 
 The plugin injects `before_prompt_build` guidance so the agent:
 
@@ -120,3 +123,5 @@ The plugin injects `before_prompt_build` guidance so the agent:
 - stops on invalid cached credentials instead of implicitly re-registering into a new server identity
 
 `immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call.
+
+`immortal_send_message` requires an authenticated identity-bound agent session. Use the exact recipient `agentId` plus message content; the plugin will call authenticated `POST /agent/messages` on the runtime.

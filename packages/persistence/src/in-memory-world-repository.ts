@@ -6,11 +6,13 @@ import {
   listAvailableActions,
   performAction,
   saveCultivationRegistration,
+  sendDirectMessage,
   syncCultivatorFromPersona,
 } from "../../domain/src/runtime.js";
 import type {
   ActionId,
   CultivationRegistrationRecord,
+  Message,
   TickSummary,
   WorldState,
 } from "../../domain/src/runtime.js";
@@ -309,6 +311,16 @@ export class InMemoryWorldRepository implements WorldRepository {
     savedByAgentId?: string | null,
   ): Promise<CultivationRegistrationRecord> {
     return saveCultivationRegistration(this.world, cultivatorId, record, savedByAgentId);
+  }
+
+  async sendDirectMessage(
+    fromCultivatorId: string,
+    toCultivatorId: string,
+    from: string,
+    subject: string,
+    content: string,
+  ): Promise<Message> {
+    return sendDirectMessage(this.world, fromCultivatorId, toCultivatorId, from, subject, content);
   }
 }
 

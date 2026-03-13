@@ -7,6 +7,7 @@ export type {
   CultivationRegistrationView,
   CultivatorStateView,
   FiveElementId,
+  Message,
   RegistrationAnswer,
   RegistrationQuestionId,
   StrategySnapshot,
@@ -32,6 +33,7 @@ export {
   performAction,
   resolveCultivatorIdForAgent,
   saveCultivationRegistration,
+  sendDirectMessage,
   selectCultivatorForAgent,
   syncCultivatorFromPersona,
 } from "./engine.js";

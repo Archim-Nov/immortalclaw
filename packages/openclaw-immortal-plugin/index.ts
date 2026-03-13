@@ -197,6 +197,26 @@ const REGISTRATION_SAVE_SCHEMA = {
   },
 };
 
+const SEND_MESSAGE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["targetAgentId", "content"],
+  properties: {
+    targetAgentId: {
+      type: "string",
+      description: "Exact recipient agentId to receive the private message.",
+    },
+    content: {
+      type: "string",
+      description: "Private message content to send to the target agent.",
+    },
+    subject: {
+      type: "string",
+      description: "Optional subject line. Defaults to Private Telepathy.",
+    },
+  },
+};
+
 function normalizeBaseUrl(input: unknown): string {
   if (typeof input !== "string" || input.trim().length === 0) {
     return "http://127.0.0.1:8787";
@@ -1347,6 +1367,46 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             return payload;
           }
           return payload.slice(0, limit);
+        },
+      });
+
+      api.registerTool({
+        name: "immortal_send_message",
+        label: "Immortal Send Message",
+        description:
+          "Send a private message to another registered agent by exact targetAgentId using the authenticated /agent/messages route.",
+        parameters: SEND_MESSAGE_SCHEMA,
+        execute: async (_toolCallId, rawParams) => {
+          const session = await ensureAgentSession(rawParams);
+          if (!session) {
+            throw new Error(
+              "immortal_send_message requires an identity-bound agent session. Configure plugin agentId and authenticate first.",
+            );
+          }
+
+          const boundSession = await syncPersonaForSession(session);
+          const targetAgentId = trimString(rawParams.targetAgentId);
+          const content = trimString(rawParams.content);
+          const subject = trimString(rawParams.subject);
+
+          if (!targetAgentId) {
+            throw new Error("targetAgentId is required.");
+          }
+
+          if (!content) {
+            throw new Error("content is required.");
+          }
+
+          const payload = await requestAgentWorld(boundSession, "/agent/messages", {
+            method: "POST",
+            body: JSON.stringify({
+              toAgentId: targetAgentId,
+              content,
+              ...(subject ? { subject } : {}),
+            }),
+          });
+
+          return jsonResult("immortal_send_message", payload);
         },
       });
 

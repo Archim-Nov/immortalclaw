@@ -61,6 +61,9 @@ function unusedRepository() {
     async saveCultivationRegistration() {
       throw new Error("not used");
     },
+    async sendDirectMessage() {
+      throw new Error("not used");
+    },
   };
 }
 

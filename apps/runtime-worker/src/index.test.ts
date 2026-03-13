@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CultivationRegistrationRecord } from "../../../packages/domain/src/runtime.js";
+import { createSeedWorld } from "../../../packages/domain/src/runtime.js";
 import worker from "./index.js";
 import { createApp } from "./app.js";
 import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
@@ -490,6 +491,217 @@ test("registered agents can fetch actions and execute a real first move", async 
   assert.equal(completedStatePayload.cultivator.status, "idle");
   assert.equal(completedStatePayload.currentJob, null);
   assert.ok(completedStatePayload.tick >= 4);
+});
+
+test("registered agents can send a private message to another agent", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const senderResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+    }),
+  });
+  const senderPayload = await senderResponse.json();
+
+  const recipientResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Li Aotian",
+    }),
+  });
+  const recipientPayload = await recipientResponse.json();
+
+  const sendResponse = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${senderPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: recipientPayload.agentId,
+      content: "Meet me at the sect gate before the next tick.",
+    }),
+  });
+  const sendPayload = await sendResponse.json();
+
+  assert.equal(sendResponse.status, 200);
+  assert.equal(sendPayload.ok, true);
+  assert.equal(sendPayload.message.from, "Su Mingyue");
+  assert.equal(sendPayload.message.toCultivatorId, recipientPayload.selectedCultivatorId);
+
+  const senderMessagesResponse = await app.request("https://runtime.test/agent/messages", {
+    headers: {
+      authorization: `Bearer ${senderPayload.credential}`,
+    },
+  });
+  const senderMessagesPayload = await senderMessagesResponse.json();
+
+  const recipientMessagesResponse = await app.request("https://runtime.test/agent/messages", {
+    headers: {
+      authorization: `Bearer ${recipientPayload.credential}`,
+    },
+  });
+  const recipientMessagesPayload = await recipientMessagesResponse.json();
+
+  assert.equal(senderMessagesResponse.status, 200);
+  assert.equal(recipientMessagesResponse.status, 200);
+  assert.ok(senderMessagesPayload.some((message: { id: string }) => message.id === sendPayload.message.id));
+  assert.ok(recipientMessagesPayload.some((message: { id: string }) => message.id === sendPayload.message.id));
+});
+
+test("agent message route rejects missing recipient identifiers", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+
+  const sendResponse = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      content: "This should fail.",
+    }),
+  });
+  const sendPayload = await sendResponse.json();
+
+  assert.equal(sendResponse.status, 400);
+  assert.match(sendPayload.error, /toAgentId or toCultivatorId/i);
+});
+
+test("agent message route rejects targets without a selected cultivator", async () => {
+  const seededWorld = createSeedWorld();
+  seededWorld.cultivators = {
+    "cultivator-self": seededWorld.cultivators[Object.keys(seededWorld.cultivators)[0]!]!,
+  };
+  seededWorld.cultivators["cultivator-self"] = {
+    ...seededWorld.cultivators["cultivator-self"],
+    id: "cultivator-self",
+  };
+
+  const app = createApp({
+    repository: {
+      async authenticateAgent() {
+        return {
+          agentId: "agent-self",
+          name: "Su Mingyue",
+          selectedCultivatorId: "cultivator-self",
+          createdAt: "2026-03-13T00:00:00.000Z",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+          lastSeenAt: "2026-03-13T00:00:00.000Z",
+        };
+      },
+      async touchAgent() {},
+      async listAgentProfiles() {
+        return [
+          {
+            agentId: "missing-target",
+            name: "Broken Target",
+            selectedCultivatorId: "",
+            createdAt: "2026-03-13T00:00:00.000Z",
+            updatedAt: "2026-03-13T00:00:00.000Z",
+            lastSeenAt: "2026-03-13T00:00:00.000Z",
+          },
+        ];
+      },
+      async readWorld() {
+        return seededWorld;
+      },
+    } as never,
+  });
+
+  const response = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer immortal_sk_test",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: "missing-target",
+      content: "test",
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.match(payload.error, /Agent has no selected cultivator: missing-target/);
+});
+
+test("agent message route rejects stale targets whose selected cultivator is missing from world state", async () => {
+  const seededWorld = createSeedWorld();
+  seededWorld.cultivators = {
+    "cultivator-self": seededWorld.cultivators[Object.keys(seededWorld.cultivators)[0]!]!,
+  };
+  seededWorld.cultivators["cultivator-self"] = {
+    ...seededWorld.cultivators["cultivator-self"],
+    id: "cultivator-self",
+  };
+
+  const app = createApp({
+    repository: {
+      async authenticateAgent() {
+        return {
+          agentId: "agent-self",
+          name: "Su Mingyue",
+          selectedCultivatorId: "cultivator-self",
+          createdAt: "2026-03-13T00:00:00.000Z",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+          lastSeenAt: "2026-03-13T00:00:00.000Z",
+        };
+      },
+      async touchAgent() {},
+      async listAgentProfiles() {
+        return [
+          {
+            agentId: "stale-target",
+            name: "Stale Target",
+            selectedCultivatorId: "cultivator-missing",
+            createdAt: "2026-03-13T00:00:00.000Z",
+            updatedAt: "2026-03-13T00:00:00.000Z",
+            lastSeenAt: "2026-03-13T00:00:00.000Z",
+          },
+        ];
+      },
+      async readWorld() {
+        return seededWorld;
+      },
+    } as never,
+  });
+
+  const response = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer immortal_sk_test",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: "stale-target",
+      content: "test",
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.match(payload.error, /Agent target is stale or missing from the world: stale-target/);
 });
 
 test("agent routes reject missing authorization", async () => {
