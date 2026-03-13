@@ -552,6 +552,76 @@ test("act route performs an action", async () => {
   assert.equal(payload.accepted, true);
 });
 
+test("GET /world/agent/:agentId returns full cultivator state for registered agent", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  // Register an agent with registration record
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Stat Page Test", record: createRegistrationRecord() }),
+  });
+  assert.equal(registerResponse.status, 200);
+  const registered = await registerResponse.json();
+
+  // Fetch the public agent state
+  const response = await app.request(`https://runtime.test/world/agent/${registered.agentId}`);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  // Agent view fields
+  assert.equal(payload.agent.agentId, registered.agentId);
+  assert.equal(payload.agent.name, "Stat Page Test");
+
+  // CultivatorStateView fields
+  assert.ok(typeof payload.tick === "number");
+  assert.ok(payload.cultivator);
+  assert.ok(payload.cultivation);
+  assert.ok(payload.factionReputation);
+
+  // Stubbed main attributes (8 keys, all 50)
+  assert.equal(Object.keys(payload.mainAttributes).length, 8);
+  assert.equal(payload.mainAttributes.gengu, 50);
+  assert.equal(payload.mainAttributes.bingpo, 50);
+
+  // Stubbed detailed attributes (15 keys)
+  assert.equal(Object.keys(payload.detailedAttributes).length, 15);
+  assert.equal(payload.detailedAttributes.qixue_shangxian, 600);
+  assert.equal(payload.detailedAttributes.huxin, 6);
+
+  // Five-element scores from registration
+  assert.deepEqual(payload.fiveElementScores, { metal: 5, wood: 6, water: 11, fire: 3, earth: 8 });
+});
+
+test("GET /world/agent/:agentId returns default five-element scores when agent has no registration", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  // Register an agent WITHOUT a registration record
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "No Registration Agent" }),
+  });
+  assert.equal(registerResponse.status, 200);
+  const registered = await registerResponse.json();
+
+  const response = await app.request(`https://runtime.test/world/agent/${registered.agentId}`);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  // Five-element scores should default to 50 each
+  assert.deepEqual(payload.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
+
+  // Registration field should be null
+  assert.equal(payload.registration, null);
+});
+
+test("GET /world/agent/:agentId returns 404 for unknown agent", async () => {
+  const app = createApp({ repository: createRepository() });
+  const response = await app.request("https://runtime.test/world/agent/nonexistent-id");
+  assert.equal(response.status, 404);
+});
+
 test("scheduled tick advances the world through the worker entrypoint", async () => {
   const repository = createRepository();
   const before = await repository.readWorld();
