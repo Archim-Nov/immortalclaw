@@ -33,6 +33,7 @@ export {
   performAction,
   resolveCultivatorIdForAgent,
   saveCultivationRegistration,
+  statusOf,
   selectCultivatorForAgent,
   syncCultivatorFromPersona,
 } from "./engine.js";

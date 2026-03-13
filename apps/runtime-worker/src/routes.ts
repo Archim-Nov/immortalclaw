@@ -15,6 +15,7 @@ import {
   getStrategySnapshot,
   getTribulationPreview,
   resolveCultivatorIdForAgent,
+  statusOf,
 } from "../../../packages/domain/src/runtime.js";
 import type {
   ActionId,
@@ -204,7 +205,11 @@ function markdownResponse(content: string) {
 }
 
 function responseAgentDirectoryEntry(agent: AgentProfileRecord, world: Awaited<ReturnType<WorldRepository["readWorld"]>>) {
-  const state = getCultivatorState(world, agent.selectedCultivatorId);
+  const cultivator = world.cultivators[agent.selectedCultivatorId];
+  const zone = world.zones[cultivator.locationId];
+  const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
+  const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null;
+
   return {
     agentId: agent.agentId,
     name: agent.name,
@@ -216,16 +221,16 @@ function responseAgentDirectoryEntry(agent: AgentProfileRecord, world: Awaited<R
     updatedAt: agent.updatedAt,
     lastSeenAt: agent.lastSeenAt,
     cultivator: {
-      id: state.cultivator.id,
-      name: state.cultivator.name,
-      realm: state.cultivator.realm,
-      realmLevel: state.cultivator.realmLevel,
-      realmProgress: state.cultivator.realmProgress,
-      status: state.cultivator.status,
-      location: state.cultivator.location,
-      spiritualPower: state.cultivator.spiritualPower,
-      sect: state.sect?.name ?? null,
-      currentAction: state.currentJob?.actionId ?? null,
+      id: cultivator.id,
+      name: cultivator.name,
+      realm: cultivator.realm,
+      realmLevel: cultivator.realmLevel,
+      realmProgress: cultivator.realmProgress,
+      status: statusOf(cultivator),
+      location: zone.name,
+      spiritualPower: cultivator.spiritualPower,
+      sect: sect?.name ?? null,
+      currentAction: job?.actionId ?? null,
     },
   };
 }
