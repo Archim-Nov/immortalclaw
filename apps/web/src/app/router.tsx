@@ -1,4 +1,4 @@
-import React, { type ReactElement } from "react";
+import React, { type ReactElement, lazy, Suspense } from "react";
 import {
   createBrowserRouter,
   createMemoryRouter,
@@ -7,6 +7,10 @@ import {
 } from "react-router-dom";
 import { AppShell } from "./app-shell";
 import { HomePage } from "../pages/home-page";
+
+const PlayerStatPage = lazy(() =>
+  import("../pages/player-stat-page").then((m) => ({ default: m.PlayerStatPage })),
+);
 
 export const appRoutes: RouteObject[] = [
   {
@@ -19,6 +23,14 @@ export const appRoutes: RouteObject[] = [
       {
         path: "/dashboard",
         element: <HomePage />,
+      },
+      {
+        path: "/stat/:agentId",
+        element: (
+          <Suspense fallback={null}>
+            <PlayerStatPage />
+          </Suspense>
+        ),
       },
     ],
   },

@@ -360,7 +360,7 @@ export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): s
       const chipLabel = escapeHtml(statusChipLabel(agent));
       const powerLabel = agent.cultivator.spiritualPower.toLocaleString("en-US");
 
-      return String.raw`<div class="glass-panel"${borderStyle ? ` style="${borderStyle}"` : ""}>
+      return String.raw`<a href="/stat/${encodeURIComponent(agent.agentId)}" style="text-decoration: none; color: inherit; display: block;"><div class="glass-panel"${borderStyle ? ` style="${borderStyle}"` : ""}>
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
             <div class="agent-avatar" style="border-color: rgba(0,255,170,0.3); color: var(--accent-jade);">${avatar}</div>
             <span class="chip ${chipClass}">${chipLabel}</span>
@@ -372,7 +372,7 @@ export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): s
           <div class="info-row"><span class="info-label">Power (灵力)</span> <span class="stat-highlight">${powerLabel}</span></div>
           <div class="info-row"><span class="info-label">Action</span> <span class="info-value">${currentAction}</span></div>
           <div class="info-row"><span class="info-label">Location</span> <span class="info-value">${escapeHtml(agent.cultivator.location)}</span></div>
-        </div>`;
+        </div></a>`;
     })
     .join("");
 

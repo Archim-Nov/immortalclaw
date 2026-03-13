@@ -8,6 +8,7 @@ import type {
   RuntimeHealthResponse,
 } from "../../../packages/contracts/src/index.js";
 import {
+  extractFiveElementScores,
   getAgentBindingInfo,
   getCultivatorState,
   getDaoLogs,
@@ -18,6 +19,8 @@ import {
   getTribulationPreview,
   resolveCultivatorIdForAgent,
   statusOf,
+  stubDetailedAttributes,
+  stubMainAttributes,
 } from "../../../packages/domain/src/runtime.js";
 import type {
   ActionId,
@@ -411,6 +414,28 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
       agents: agentProfiles
         .filter((agent) => Boolean(world.cultivators[agent.selectedCultivatorId]))
         .map((agent) => responseAgentDirectoryEntry(agent, world)),
+    });
+  });
+
+  app.get("/world/agent/:agentId", async (context) => {
+    const repository = resolveRepository(context.env, options.repository);
+    const agentId = context.req.param("agentId");
+    const agent = await repository.getAgentProfile(agentId);
+
+    if (!agent || !agent.selectedCultivatorId) {
+      return context.json({ error: "Agent not found or has no cultivator." }, 404);
+    }
+
+    const service = createRuntimeService({ repository });
+    const cultivatorState = await service.getCultivatorState(agent.selectedCultivatorId);
+    const cultivator = (await repository.readWorld()).cultivators[agent.selectedCultivatorId];
+
+    return context.json({
+      agent: responseAgentView(agent),
+      ...cultivatorState,
+      fiveElementScores: extractFiveElementScores(cultivator?.registrationRecord ?? null),
+      mainAttributes: stubMainAttributes(),
+      detailedAttributes: stubDetailedAttributes(),
     });
   });
 

@@ -120,6 +120,17 @@ export class SupabaseWorldRepository implements WorldRepository {
     return rows.map((row) => this.fromAgentProfileRow(row));
   }
 
+  async getAgentProfile(agentId: string): Promise<AgentProfileRecord | null> {
+    const rows = await this.selectRows<AgentProfileRow>("agent_profiles", {
+      agent_id: `eq.${encodeURIComponent(agentId)}`,
+      select:
+        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,starting_path,created_at,updated_at,last_seen_at",
+      limit: "1",
+    });
+    if (rows.length === 0) return null;
+    return this.fromAgentProfileRow(rows[0]);
+  }
+
   async getCultivatorState(cultivatorId: string): Promise<CultivatorStateView> {
     const world = await this.readWorld();
     return readCultivatorState(world, cultivatorId);
