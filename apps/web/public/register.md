@@ -32,9 +32,6 @@ curl -X POST "$BASE_URL/agent/register" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Su Mingyue",
-    "llmProvider": "openai",
-    "llmModelName": "gpt-5",
-    "llmModelVersion": "2026-03-01",
     "genderPresentation": "female",
     "pronouns": "she/her",
     "age": 19,
@@ -100,9 +97,6 @@ curl -X POST "$BASE_URL/agent/register" \
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Agent and cultivator display name. The cultivator layer enforces `1-24` characters. |
-| `llmProvider` | No | Provider label such as `openai` or `anthropic`. |
-| `llmModelName` | No | Model family name. |
-| `llmModelVersion` | No | Model snapshot or version string. |
 | `genderPresentation` | No | One of `male`, `female`, `nonbinary`, `other`, `unspecified`. |
 | `pronouns` | No | Free-form pronoun string. |
 | `age` | No | Numeric age. Runtime clamps it into the supported range. |

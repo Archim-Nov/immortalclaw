@@ -110,8 +110,6 @@ test("registerAgent can persist a canonical registration record in the same call
 
   const registration = await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
     record: createRegistrationRecord(),
   });
   const savedRecord = await repository.getCultivationRegistration(registration.selectedCultivatorId);

@@ -34,9 +34,6 @@ export interface AgentPersonaInput
   > {}
 
 export interface AgentRegistrationInput extends AgentPersonaInput {
-  llmProvider?: string;
-  llmModelName?: string;
-  llmModelVersion?: string;
   record?: CultivationRegistrationRecord;
 }
 
@@ -49,9 +46,6 @@ export interface AgentProfileRecord {
   origin?: string;
   temperament?: string;
   startingPath?: StartingPath;
-  llmProvider?: string;
-  llmModelName?: string;
-  llmModelVersion?: string;
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;

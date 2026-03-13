@@ -83,9 +83,6 @@ test("buildAgentDirectoryMarkup renders live registered agents", () => {
         agentId: "openclaw-main",
         name: "Su Mingyue",
         selectedCultivatorId: "cultivator-9",
-        llmProvider: "openai",
-        llmModelName: "gpt-5",
-        llmModelVersion: "2026-03-01",
         createdAt: "2026-03-12T00:00:00.000Z",
         updatedAt: "2026-03-12T00:00:00.000Z",
         lastSeenAt: "2026-03-12T00:05:00.000Z",
@@ -106,7 +103,7 @@ test("buildAgentDirectoryMarkup renders live registered agents", () => {
   });
 
   assert.match(markup, /Su Mingyue/);
-  assert.match(markup, /GPT-5/);
+  assert.match(markup, /MEDITATE/);
   assert.match(markup, /Qing Yun Sect/);
   assert.match(markup, /meditate/);
   assert.match(markup, /CURRENTLY ROAMING THE REALM: <span[^>]*>1 SOUL<\/span>/);

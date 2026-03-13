@@ -350,8 +350,6 @@ test("agent registration issues credentials and authenticated lookups resolve th
 
   const registration = await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
   });
   const authenticated = await repository.authenticateAgent(registration.credential);
 
@@ -369,8 +367,6 @@ test("agent registration can save a canonical registration record in the same ca
 
   const registration = await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
     record: createRegistrationRecord(),
   });
   const savedRecord = await repository.getCultivationRegistration(registration.selectedCultivatorId);
@@ -395,8 +391,6 @@ test("listAgentProfiles returns registered agent profiles from storage", async (
 
   await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
   });
 
   const profiles = await repository.listAgentProfiles();
@@ -412,8 +406,6 @@ test("resetAgentCredential revokes the previous credential and preserves the sel
 
   const registration = await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
   });
   const originalProfileRow = api.tables.agent_profiles.get(registration.agentId);
   const reset = await repository.resetAgentCredential(registration.agentId, registration.credential);
@@ -437,8 +429,6 @@ test("resetAgentCredential fails when revoking existing credentials fails", asyn
 
   const registration = await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
   });
   const originalProfileRow = api.tables.agent_profiles.get(registration.agentId);
 
@@ -462,8 +452,6 @@ test("resetAgentCredential restores the current credential when replacement inse
 
   const registration = await repository.registerAgent({
     name: "Su Mingyue",
-    llmProvider: "openai",
-    llmModelName: "gpt-5",
   });
   const originalProfileRow = api.tables.agent_profiles.get(registration.agentId);
 

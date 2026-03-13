@@ -75,9 +75,6 @@ export interface AgentView {
   agentId: string;
   name: string;
   selectedCultivatorId: string;
-  llmProvider: string | null;
-  llmModelName: string | null;
-  llmModelVersion: string | null;
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;
