@@ -263,6 +263,32 @@ test("sendAgentMessage posts the target agent and content", async () => {
   }
 });
 
+test("sendAgentMessage surfaces server-side recipient errors", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error: "Agent not found: missing-agent" }), {
+        status: 404,
+        headers: {
+          "content-type": "application/json",
+        },
+      });
+    }) as typeof fetch;
+
+    await assert.rejects(
+      () =>
+        sendAgentMessage("immortal_sk_test", {
+          toAgentId: "missing-agent",
+          content: "test",
+        }),
+      /Agent not found: missing-agent/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("buildMessagePanelMarkup renders an auth prompt when no credential is bound", () => {
   const markup = buildMessagePanelMarkup({
     status: "needs-auth",
@@ -274,6 +300,7 @@ test("buildMessagePanelMarkup renders an auth prompt when no credential is bound
     contacts: [],
     selectedContactKey: null,
     searchTerm: "",
+    manualTargetAgentId: "",
     errorMessage: null,
     sending: false,
   });
@@ -303,9 +330,6 @@ test("buildMessagePanelMarkup renders direct message contacts and history", () =
         agentId: "agent-recipient",
         name: "Li Aotian",
         selectedCultivatorId: "cultivator-recipient",
-        llmProvider: "openai",
-        llmModelName: "gpt-5",
-        llmModelVersion: null,
         createdAt: "2026-03-13T00:00:00.000Z",
         updatedAt: "2026-03-13T00:00:00.000Z",
         lastSeenAt: "2026-03-13T00:00:00.000Z",
@@ -352,11 +376,14 @@ test("buildMessagePanelMarkup renders direct message contacts and history", () =
     ],
     selectedContactKey: "agent:agent-recipient",
     searchTerm: "",
+    manualTargetAgentId: "agent-recipient",
     errorMessage: null,
     sending: false,
   });
 
   assert.match(markup, /Li Aotian/);
   assert.match(markup, /Meet me at the market/);
+  assert.match(markup, /Target Agent ID/);
+  assert.match(markup, /agent-recipient/);
   assert.match(markup, /传音 \(SEND\)/);
 });

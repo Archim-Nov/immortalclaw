@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CultivationRegistrationRecord } from "../../../packages/domain/src/runtime.js";
+import { createSeedWorld } from "../../../packages/domain/src/runtime.js";
 import worker from "./index.js";
 import { createApp } from "./app.js";
 import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
@@ -585,6 +586,122 @@ test("agent message route rejects missing recipient identifiers", async () => {
 
   assert.equal(sendResponse.status, 400);
   assert.match(sendPayload.error, /toAgentId or toCultivatorId/i);
+});
+
+test("agent message route rejects targets without a selected cultivator", async () => {
+  const seededWorld = createSeedWorld();
+  seededWorld.cultivators = {
+    "cultivator-self": seededWorld.cultivators[Object.keys(seededWorld.cultivators)[0]!]!,
+  };
+  seededWorld.cultivators["cultivator-self"] = {
+    ...seededWorld.cultivators["cultivator-self"],
+    id: "cultivator-self",
+  };
+
+  const app = createApp({
+    repository: {
+      async authenticateAgent() {
+        return {
+          agentId: "agent-self",
+          name: "Su Mingyue",
+          selectedCultivatorId: "cultivator-self",
+          createdAt: "2026-03-13T00:00:00.000Z",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+          lastSeenAt: "2026-03-13T00:00:00.000Z",
+        };
+      },
+      async touchAgent() {},
+      async listAgentProfiles() {
+        return [
+          {
+            agentId: "missing-target",
+            name: "Broken Target",
+            selectedCultivatorId: "",
+            createdAt: "2026-03-13T00:00:00.000Z",
+            updatedAt: "2026-03-13T00:00:00.000Z",
+            lastSeenAt: "2026-03-13T00:00:00.000Z",
+          },
+        ];
+      },
+      async readWorld() {
+        return seededWorld;
+      },
+    } as never,
+  });
+
+  const response = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer immortal_sk_test",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: "missing-target",
+      content: "test",
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.match(payload.error, /Agent has no selected cultivator: missing-target/);
+});
+
+test("agent message route rejects stale targets whose selected cultivator is missing from world state", async () => {
+  const seededWorld = createSeedWorld();
+  seededWorld.cultivators = {
+    "cultivator-self": seededWorld.cultivators[Object.keys(seededWorld.cultivators)[0]!]!,
+  };
+  seededWorld.cultivators["cultivator-self"] = {
+    ...seededWorld.cultivators["cultivator-self"],
+    id: "cultivator-self",
+  };
+
+  const app = createApp({
+    repository: {
+      async authenticateAgent() {
+        return {
+          agentId: "agent-self",
+          name: "Su Mingyue",
+          selectedCultivatorId: "cultivator-self",
+          createdAt: "2026-03-13T00:00:00.000Z",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+          lastSeenAt: "2026-03-13T00:00:00.000Z",
+        };
+      },
+      async touchAgent() {},
+      async listAgentProfiles() {
+        return [
+          {
+            agentId: "stale-target",
+            name: "Stale Target",
+            selectedCultivatorId: "cultivator-missing",
+            createdAt: "2026-03-13T00:00:00.000Z",
+            updatedAt: "2026-03-13T00:00:00.000Z",
+            lastSeenAt: "2026-03-13T00:00:00.000Z",
+          },
+        ];
+      },
+      async readWorld() {
+        return seededWorld;
+      },
+    } as never,
+  });
+
+  const response = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer immortal_sk_test",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: "stale-target",
+      content: "test",
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.match(payload.error, /Agent target is stale or missing from the world: stale-target/);
 });
 
 test("agent routes reject missing authorization", async () => {

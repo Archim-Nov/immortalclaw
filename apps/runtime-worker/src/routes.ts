@@ -185,7 +185,18 @@ async function resolveMessageRecipientCultivatorId(
     throw createStatusError(404, `Agent not found: ${targetAgentId}`);
   }
 
-  return targetAgent.selectedCultivatorId;
+  const world = await repository.readWorld();
+  const selectedCultivatorId = readOptionalBodyString(targetAgent.selectedCultivatorId);
+
+  if (!selectedCultivatorId) {
+    throw createStatusError(409, `Agent has no selected cultivator: ${targetAgentId}`);
+  }
+
+  if (!world.cultivators[selectedCultivatorId]) {
+    throw createStatusError(409, `Agent target is stale or missing from the world: ${targetAgentId}`);
+  }
+
+  return selectedCultivatorId;
 }
 
 function readLegacyCultivatorIdFromQuery(

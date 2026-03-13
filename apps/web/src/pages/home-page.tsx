@@ -104,8 +104,27 @@ interface MessagePanelViewModel {
   contacts: MessageContactView[];
   selectedContactKey: string | null;
   searchTerm: string;
+  manualTargetAgentId: string;
   errorMessage: string | null;
   sending: boolean;
+}
+
+async function readResponseError(response: Response, fallbackMessage: string): Promise<string> {
+  try {
+    const payload = (await response.json()) as { error?: string; message?: string };
+
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error;
+    }
+
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message;
+    }
+  } catch {
+    // ignore invalid response bodies
+  }
+
+  return fallbackMessage;
 }
 
 function readBrowserStorage(): Storage | null {
@@ -166,7 +185,7 @@ export async function requestPublicAgentDirectory(): Promise<PublicAgentDirector
   const response = await fetch("/world/agents");
 
   if (!response.ok) {
-    throw new Error(`Agent directory request failed with status ${response.status}.`);
+    throw new Error(await readResponseError(response, `Agent directory request failed with status ${response.status}.`));
   }
 
   return (await response.json()) as PublicAgentDirectoryResponse;
@@ -180,7 +199,7 @@ export async function requestAgentState(credential: string): Promise<AgentStateR
   });
 
   if (!response.ok) {
-    throw new Error(`Agent state request failed with status ${response.status}.`);
+    throw new Error(await readResponseError(response, `Agent state request failed with status ${response.status}.`));
   }
 
   return (await response.json()) as AgentStateResponse;
@@ -194,7 +213,7 @@ export async function requestAgentMessages(credential: string): Promise<AgentMes
   });
 
   if (!response.ok) {
-    throw new Error(`Agent messages request failed with status ${response.status}.`);
+    throw new Error(await readResponseError(response, `Agent messages request failed with status ${response.status}.`));
   }
 
   const payload = await response.json();
@@ -215,7 +234,7 @@ export async function sendAgentMessage(
   });
 
   if (!response.ok) {
-    throw new Error(`Send agent message request failed with status ${response.status}.`);
+    throw new Error(await readResponseError(response, `Send agent message request failed with status ${response.status}.`));
   }
 
   const body = (await response.json()) as { message: AgentMessage };
@@ -562,6 +581,7 @@ export function buildMessagePanelMarkup(viewModel: MessagePanelViewModel): strin
 
   const selectedContact = findContact(viewModel);
   const conversationMessages = conversationMessagesForContact(viewModel.messages, viewModel.selfCultivatorId, selectedContact);
+  const resolvedTargetAgentId = viewModel.manualTargetAgentId.trim() || selectedContact?.targetAgentId || "";
   const contactsMarkup =
     viewModel.contacts.length === 0
       ? `<div class="contacts-empty-state">No agents or message threads match the current search.</div>`
@@ -614,6 +634,7 @@ export function buildMessagePanelMarkup(viewModel: MessagePanelViewModel): strin
             .join("");
 
   const composerDisabled = !selectedContact || !selectedContact.canSend || viewModel.sending;
+  const sendDisabled = !resolvedTargetAgentId || viewModel.sending;
   const headerSubtitle = selectedContact
     ? selectedContact.subtitle
     : "Choose a registered agent or a system thread.";
@@ -638,6 +659,10 @@ export function buildMessagePanelMarkup(viewModel: MessagePanelViewModel): strin
             <div class="chat-header-info">
               <h2>${escapeHtml(selectedContact?.label ?? "私密传音")}</h2>
               <div class="chat-header-meta">${escapeHtml(headerSubtitle)}</div>
+              <div class="chat-header-target-row">
+                <span class="chat-header-target-label">Target Agent ID</span>
+                <input type="text" class="chat-header-target-input" data-message-target-agent-input placeholder="Paste a specific agentId..." value="${escapeHtml(viewModel.manualTargetAgentId)}">
+              </div>
             </div>
           </div>
           <div class="chat-header-actions">
@@ -653,7 +678,7 @@ export function buildMessagePanelMarkup(viewModel: MessagePanelViewModel): strin
             <button class="action-icon-btn" type="button" title="Bound Agent">🥷</button>
             <button class="action-icon-btn" type="button" title="Selected Target">🧭</button>
             <textarea class="chat-textarea" data-message-composer placeholder="输入神念传音内容 (Type your ethereal message here...)" ${composerDisabled ? "disabled" : ""}></textarea>
-            <button type="button" class="send-btn" data-message-send ${composerDisabled ? "disabled" : ""}>${viewModel.sending ? "SENDING..." : "传音 (SEND)"}</button>
+            <button type="button" class="send-btn" data-message-send ${sendDisabled ? "disabled" : ""}>${viewModel.sending ? "SENDING..." : "传音 (SEND)"}</button>
           </div>
         </div>
       </div>
@@ -719,6 +744,7 @@ export function HomePage() {
     contacts: [],
     selectedContactKey: null,
     searchTerm: "",
+    manualTargetAgentId: "",
     errorMessage: null,
     sending: false,
   });
@@ -757,6 +783,7 @@ export function HomePage() {
           contacts,
           selectedContactKey: selectContactKey(contacts, preferredContactKey ?? current.selectedContactKey),
           searchTerm: current.searchTerm,
+          manualTargetAgentId: current.manualTargetAgentId,
           errorMessage: null,
           sending: false,
         };
@@ -872,6 +899,8 @@ export function HomePage() {
         setMessageViewModel((current) => ({
           ...current,
           selectedContactKey: nextContactKey,
+          manualTargetAgentId:
+            current.contacts.find((contact) => contact.key === nextContactKey)?.targetAgentId ?? current.manualTargetAgentId,
         }));
         return;
       }
@@ -888,6 +917,7 @@ export function HomePage() {
           contacts: [],
           selectedContactKey: null,
           searchTerm: "",
+          manualTargetAgentId: "",
           errorMessage: null,
           sending: false,
         });
@@ -925,8 +955,9 @@ export function HomePage() {
         const selectedContact = findContact(currentView);
         const textarea = currentRoot.querySelector<HTMLTextAreaElement>("[data-message-composer]");
         const content = textarea?.value.trim() ?? "";
+        const targetAgentId = currentView.manualTargetAgentId.trim() || selectedContact?.targetAgentId || "";
 
-        if (!currentView.credential || !selectedContact?.canSend || !selectedContact.targetAgentId || !content) {
+        if (!currentView.credential || !content || !targetAgentId) {
           return;
         }
 
@@ -938,13 +969,13 @@ export function HomePage() {
         void (async () => {
           try {
             await sendAgentMessage(currentView.credential!, {
-              toAgentId: selectedContact.targetAgentId,
+              toAgentId: targetAgentId,
               content,
             });
             if (textarea) {
               textarea.value = "";
             }
-            await refreshMessagePanel(currentView.credential!, selectedContact.key);
+            await refreshMessagePanel(currentView.credential!, selectedContact?.key ?? currentView.selectedContactKey);
           } catch (error) {
             setMessageViewModel((current) => ({
               ...current,
@@ -962,23 +993,30 @@ export function HomePage() {
         return;
       }
 
-      if (!event.target.matches("[data-message-search-input]")) {
+      if (event.target.matches("[data-message-search-input]")) {
+        const searchTerm = event.target.value;
+        setMessageViewModel((current) => {
+          const contacts = current.selfCultivatorId
+            ? deriveMessageContacts(current.selfCultivatorId, current.publicAgents, current.messages, searchTerm)
+            : current.contacts;
+
+          return {
+            ...current,
+            searchTerm,
+            contacts,
+            selectedContactKey: selectContactKey(contacts, current.selectedContactKey),
+          };
+        });
         return;
       }
 
-      const searchTerm = event.target.value;
-      setMessageViewModel((current) => {
-        const contacts = current.selfCultivatorId
-          ? deriveMessageContacts(current.selfCultivatorId, current.publicAgents, current.messages, searchTerm)
-          : current.contacts;
-
-        return {
+      if (event.target.matches("[data-message-target-agent-input]")) {
+        const manualTargetAgentId = event.target.value;
+        setMessageViewModel((current) => ({
           ...current,
-          searchTerm,
-          contacts,
-          selectedContactKey: selectContactKey(contacts, current.selectedContactKey),
-        };
-      });
+          manualTargetAgentId,
+        }));
+      }
     }
 
     currentRoot.addEventListener("click", handleClick);
