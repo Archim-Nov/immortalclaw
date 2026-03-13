@@ -1,7 +1,7 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, FactionId, FiveElementId, ItemId, RegistrationAnswer, RegistrationGameplayEffectsView,
+  CreateCultivatorInput, FactionId, FiveElementId, ItemId, Message, RegistrationAnswer, RegistrationGameplayEffectsView,
   RegistrationGameplayModifierView, RegistrationQuestionId, StatusEffect,
   StrategySnapshot, TickSummary, TribulationPreview, WorldEvent, WorldState,
 } from "./model.js";
@@ -62,12 +62,36 @@ const getAgentBinding = (world: WorldState, agentId: string) => world.agentBindi
 function ensureAgentBinding(world: WorldState, agentId: string): AgentBinding {
   const existing = getAgentBinding(world, agentId);
   if (existing) return existing;
-  return (world.agentBindings[agentId] = { agentId, cultivatorIds: [], selectedCultivatorId: null });
+  const binding: AgentBinding = { agentId, cultivatorIds: [], selectedCultivatorId: null };
+  world.agentBindings[agentId] = binding;
+  return binding;
 }
 const addDaoLog = (world: WorldState, cultivatorId: string, title: string, content: string, tags: string[]) =>
   world.daoLogs.unshift({ id: `log-${world.nextLogSequence++}`, cultivatorId, tick: world.tick, title, content, tags });
-const addMessage = (world: WorldState, cultivatorId: string, from: string, subject: string, content: string) =>
-  world.messages.unshift({ id: `msg-${world.nextMessageSequence++}`, cultivatorId, tick: world.tick, from, subject, content });
+const addMessage = (
+  world: WorldState,
+  cultivatorId: string,
+  from: string,
+  subject: string,
+  content: string,
+  options: {
+    fromCultivatorId?: string | null;
+    toCultivatorId?: string | null;
+  } = {},
+) => {
+  const message = {
+    id: `msg-${world.nextMessageSequence++}`,
+    cultivatorId,
+    tick: world.tick,
+    from,
+    fromCultivatorId: options.fromCultivatorId ?? null,
+    toCultivatorId: options.toCultivatorId ?? cultivatorId,
+    subject,
+    content,
+  } satisfies Message;
+  world.messages.unshift(message);
+  return message;
+};
 const addWorldEvent = (world: WorldState, event: Omit<WorldEvent, "id" | "tick">): WorldEvent =>
   (world.worldEvents.unshift({ id: `event-${world.nextEventSequence++}`, tick: world.tick, ...event }), world.worldEvents[0]!);
 const addCombatLog = (world: WorldState, entry: Omit<CombatLogEntry, "id" | "tick">): CombatLogEntry =>
@@ -456,10 +480,46 @@ export function resolveCultivatorIdForAgent(world: WorldState, agentId: string):
   const binding = getAgentBindingInfo(world, agentId); if (!binding.selectedCultivatorId) throw new Error("This agent has no selected cultivator."); return binding.selectedCultivatorId;
 }
 
-export function getMessages(world: WorldState, cultivatorId: string) { getCultivatorOrThrow(world, cultivatorId); return world.messages.filter((m) => m.cultivatorId === cultivatorId); }
+export function getMessages(world: WorldState, cultivatorId: string) {
+  getCultivatorOrThrow(world, cultivatorId);
+  return structuredClone(
+    world.messages.filter(
+      (message) =>
+        message.cultivatorId === cultivatorId ||
+        message.fromCultivatorId === cultivatorId ||
+        message.toCultivatorId === cultivatorId,
+    ),
+  );
+}
 export function getDaoLogs(world: WorldState, cultivatorId: string) { getCultivatorOrThrow(world, cultivatorId); return world.daoLogs.filter((e) => e.cultivatorId === cultivatorId); }
 export function getCombatLogs(world: WorldState, cultivatorId: string, limit = 10) { getCultivatorOrThrow(world, cultivatorId); return world.combatLogs.filter((e) => e.cultivatorId === cultivatorId).slice(0, clamp(limit, 1, 50)); }
 export function getRecentWorldEvents(world: WorldState, cultivatorId?: string, limit = 10) { return (cultivatorId ? world.worldEvents.filter((e) => e.cultivatorId === null || e.cultivatorId === cultivatorId) : world.worldEvents).slice(0, clamp(limit, 1, 50)); }
+export function sendDirectMessage(
+  world: WorldState,
+  fromCultivatorId: string,
+  toCultivatorId: string,
+  from: string,
+  subject: string,
+  content: string,
+): Message {
+  const sender = getCultivatorOrThrow(world, fromCultivatorId);
+  const recipient = getCultivatorOrThrow(world, toCultivatorId);
+  if (sender.id === recipient.id) {
+    throw new Error("A cultivator cannot send a private message to themselves.");
+  }
+  if (!subject.trim()) {
+    throw new Error("Direct message subject is required.");
+  }
+  if (!content.trim()) {
+    throw new Error("Direct message content is required.");
+  }
+  return structuredClone(
+    addMessage(world, recipient.id, from.trim(), subject.trim(), content.trim(), {
+      fromCultivatorId: sender.id,
+      toCultivatorId: recipient.id,
+    }),
+  );
+}
 export function getCultivationRegistration(world: WorldState, cultivatorId: string): CultivationRegistrationRecord | null {
   return structuredClone(getCultivatorOrThrow(world, cultivatorId).registrationRecord ?? null);
 }
@@ -908,7 +968,22 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
     world.tick += 1;
     for (const cultivator of Object.values(world.cultivators)) {
       cultivator.age += 1 / TICKS_PER_YEAR; if (!cultivator.activeJobId && cultivator.injuryTicksRemaining > 0) cultivator.injuryTicksRemaining -= 1; if (cultivator.locationId === "healing-sanctuary" && !cultivator.activeJobId) { cultivator.qi = clamp(cultivator.qi + 3, 1, cultivator.maxQi); cultivator.spiritualPower = clamp(cultivator.spiritualPower + 3, 0, cultivator.maxSpiritualPower); }
-      cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id === "wounded" || ((effect.id !== "poisoned" || (cultivator.qi = clamp(cultivator.qi - 4 * effect.intensity, 1, cultivator.maxQi))) && (effect.id !== "clear-mind" || (cultivator.spiritualPower = clamp(cultivator.spiritualPower + 3 * effect.intensity, 0, cultivator.maxSpiritualPower))) && (effect.id !== "spirit-saturated" || (cultivator.spiritualPower = clamp(cultivator.spiritualPower + 2 * effect.intensity, 0, cultivator.maxSpiritualPower))) && --effect.remainingTicks > 0));
+      cultivator.statusEffects = cultivator.statusEffects.filter((effect) => {
+        if (effect.id === "wounded") {
+          return true;
+        }
+        if (effect.id === "poisoned") {
+          cultivator.qi = clamp(cultivator.qi - 4 * effect.intensity, 1, cultivator.maxQi);
+        }
+        if (effect.id === "clear-mind") {
+          cultivator.spiritualPower = clamp(cultivator.spiritualPower + 3 * effect.intensity, 0, cultivator.maxSpiritualPower);
+        }
+        if (effect.id === "spirit-saturated") {
+          cultivator.spiritualPower = clamp(cultivator.spiritualPower + 2 * effect.intensity, 0, cultivator.maxSpiritualPower);
+        }
+        effect.remainingTicks -= 1;
+        return effect.remainingTicks > 0;
+      });
       syncWounded(cultivator);
     }
     for (const job of Object.values(world.jobs)) { job.remainingTicks -= 1; if (job.remainingTicks > 0) continue; const summary = resolveEnhancedJob(world, job); completedJobs.push({ cultivatorId: job.cultivatorId, actionId: job.actionId, summary }); delete world.jobs[job.id]; }

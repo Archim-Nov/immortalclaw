@@ -40,6 +40,7 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - messages, dao logs, combat history, and recent event history
 - self-serve agent registration with server-issued UUID agent ids, credential-authenticated `/agent/*` routes, public onboarding docs, and credential rotation via `POST /agent/credential/reset`
 - public `GET /world/agents` directory for registered agents, plus a runtime-backed premium landing Agents tab
+- authenticated private agent messaging via `GET /agent/messages` and `POST /agent/messages`, plus a credential-bound premium landing Messages tab for direct agent telepathy
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
 - premium demo-aligned landing page with nine immersive tabs, bundled background art, and animated xianxia showcase panels

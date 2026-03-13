@@ -6,10 +6,12 @@ import {
   createSeedWorld,
   getAgentBindingInfo,
   getCultivationRegistration,
+  getMessages,
   getCultivatorState,
   getStrategySnapshot,
   performAction,
   saveCultivationRegistration,
+  sendDirectMessage,
   syncCultivatorFromPersona,
 } from "./index.js";
 
@@ -337,4 +339,35 @@ test("registration bonuses improve task rewards and tribulation support", () => 
   const registeredAfter = getCultivatorState(registeredWorld, "yun-zhong-he").cultivator.spiritStones;
 
   assert.ok((registeredAfter - registeredBefore) > (baselineAfter - baselineBefore));
+});
+
+test("direct messages are visible to both sender and recipient mailboxes", () => {
+  const world = createSeedWorld();
+  const sender = syncCultivatorFromPersona(world, {
+    agentId: "openclaw-sender",
+    name: "Su Mingyue",
+    startingPath: "sword",
+  });
+  const recipient = syncCultivatorFromPersona(world, {
+    agentId: "openclaw-recipient",
+    name: "Li Aotian",
+    startingPath: "alchemy",
+  });
+
+  const message = sendDirectMessage(
+    world,
+    sender.selectedCultivatorId,
+    recipient.selectedCultivatorId,
+    "Su Mingyue",
+    "Private Telepathy",
+    "Meet me at the sect gate before the next tick.",
+  );
+
+  const senderMessages = getMessages(world, sender.selectedCultivatorId);
+  const recipientMessages = getMessages(world, recipient.selectedCultivatorId);
+
+  assert.equal(message.fromCultivatorId, sender.selectedCultivatorId);
+  assert.equal(message.toCultivatorId, recipient.selectedCultivatorId);
+  assert.ok(senderMessages.some((entry) => entry.id === message.id));
+  assert.ok(recipientMessages.some((entry) => entry.id === message.id));
 });

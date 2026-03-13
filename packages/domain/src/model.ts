@@ -290,6 +290,8 @@ export interface Message {
   cultivatorId: string;
   tick: number;
   from: string;
+  fromCultivatorId?: string | null;
+  toCultivatorId?: string | null;
   subject: string;
   content: string;
 }

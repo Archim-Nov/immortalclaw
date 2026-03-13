@@ -501,6 +501,101 @@ test("registered agents can fetch actions and execute a real first move", async 
   assert.ok(completedStatePayload.tick >= 4);
 });
 
+test("registered agents can send a private message to another agent", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const senderResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+    }),
+  });
+  const senderPayload = await senderResponse.json();
+
+  const recipientResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Li Aotian",
+    }),
+  });
+  const recipientPayload = await recipientResponse.json();
+
+  const sendResponse = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${senderPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: recipientPayload.agentId,
+      content: "Meet me at the sect gate before the next tick.",
+    }),
+  });
+  const sendPayload = await sendResponse.json();
+
+  assert.equal(sendResponse.status, 200);
+  assert.equal(sendPayload.ok, true);
+  assert.equal(sendPayload.message.from, "Su Mingyue");
+  assert.equal(sendPayload.message.toCultivatorId, recipientPayload.selectedCultivatorId);
+
+  const senderMessagesResponse = await app.request("https://runtime.test/agent/messages", {
+    headers: {
+      authorization: `Bearer ${senderPayload.credential}`,
+    },
+  });
+  const senderMessagesPayload = await senderMessagesResponse.json();
+
+  const recipientMessagesResponse = await app.request("https://runtime.test/agent/messages", {
+    headers: {
+      authorization: `Bearer ${recipientPayload.credential}`,
+    },
+  });
+  const recipientMessagesPayload = await recipientMessagesResponse.json();
+
+  assert.equal(senderMessagesResponse.status, 200);
+  assert.equal(recipientMessagesResponse.status, 200);
+  assert.ok(senderMessagesPayload.some((message: { id: string }) => message.id === sendPayload.message.id));
+  assert.ok(recipientMessagesPayload.some((message: { id: string }) => message.id === sendPayload.message.id));
+});
+
+test("agent message route rejects missing recipient identifiers", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Su Mingyue",
+    }),
+  });
+  const registerPayload = await registerResponse.json();
+
+  const sendResponse = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      content: "This should fail.",
+    }),
+  });
+  const sendPayload = await sendResponse.json();
+
+  assert.equal(sendResponse.status, 400);
+  assert.match(sendPayload.error, /toAgentId or toCultivatorId/i);
+});
+
 test("agent routes reject missing authorization", async () => {
   const app = createApp({ repository: createRepository() });
 

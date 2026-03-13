@@ -482,6 +482,26 @@ test("resetAgentCredential restores the current credential when replacement inse
   );
 });
 
+test("sendDirectMessage persists a private message into the stored world snapshot", async () => {
+  const { repository } = createRepository();
+
+  const sender = await repository.registerAgent({ name: "Su Mingyue" });
+  const recipient = await repository.registerAgent({ name: "Li Aotian" });
+
+  const message = await repository.sendDirectMessage(
+    sender.selectedCultivatorId,
+    recipient.selectedCultivatorId,
+    "Su Mingyue",
+    "Private Telepathy",
+    "Bring the ward talisman.",
+  );
+  const world = await repository.readWorld();
+
+  assert.equal(message.fromCultivatorId, sender.selectedCultivatorId);
+  assert.equal(message.toCultivatorId, recipient.selectedCultivatorId);
+  assert.ok(world.messages.some((entry) => entry.id === message.id));
+});
+
 test("Supabase REST requests use the Supabase secret key header without bearer auth", async () => {
   const { api, repository } = createRepository();
 

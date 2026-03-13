@@ -11,6 +11,7 @@ import type {
   CreateCultivatorInput,
   CultivationRegistrationRecord,
   GenderPresentation,
+  Message,
   StartingPath,
 } from "../../domain/src/model.js";
 
@@ -89,4 +90,11 @@ export interface WorldRepository {
     record: CultivationRegistrationRecord,
     savedByAgentId?: string | null,
   ): Promise<CultivationRegistrationRecord>;
+  sendDirectMessage(
+    fromCultivatorId: string,
+    toCultivatorId: string,
+    from: string,
+    subject: string,
+    content: string,
+  ): Promise<Message>;
 }

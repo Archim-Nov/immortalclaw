@@ -1,6 +1,8 @@
 import { createRuntimeService } from "../../../packages/application/src/index.js";
 import type {
   AdvanceWorldRequest,
+  AgentSendMessageRequest,
+  AgentSendMessageResponse,
   CultivatorActionsResponse,
   PerformActionRequest,
   RuntimeHealthResponse,
@@ -165,6 +167,31 @@ function responseAgentView(agent: AgentProfileRecord) {
     updatedAt: agent.updatedAt,
     lastSeenAt: agent.lastSeenAt,
   };
+}
+
+async function resolveMessageRecipientCultivatorId(
+  repository: WorldRepository,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const directCultivatorId = readOptionalBodyString(body.toCultivatorId);
+
+  if (directCultivatorId) {
+    return directCultivatorId;
+  }
+
+  const targetAgentId = readOptionalBodyString(body.toAgentId);
+
+  if (!targetAgentId) {
+    throw createStatusError(400, "Body must include toAgentId or toCultivatorId.");
+  }
+
+  const targetAgent = (await repository.listAgentProfiles()).find((agent) => agent.agentId === targetAgentId);
+
+  if (!targetAgent) {
+    throw createStatusError(404, `Agent not found: ${targetAgentId}`);
+  }
+
+  return targetAgent.selectedCultivatorId;
 }
 
 function readLegacyCultivatorIdFromQuery(
@@ -420,6 +447,27 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const world = await repository.readWorld();
     return context.json(getMessages(world, agent.selectedCultivatorId));
+  });
+
+  app.post("/agent/messages", async (context) => {
+    const repository = resolveRepository(context.env, options.repository);
+    const agent = await readAuthenticatedAgent(context.req.raw, repository);
+    const body = (await context.req.json()) as AgentSendMessageRequest & Record<string, unknown>;
+    const targetCultivatorId = await resolveMessageRecipientCultivatorId(repository, body);
+    const subject = readOptionalBodyString(body.subject) ?? "Private Telepathy";
+    const content = readRequiredBodyString(body.content, "Body must include content.");
+    const message = await repository.sendDirectMessage(
+      agent.selectedCultivatorId,
+      targetCultivatorId,
+      agent.name,
+      subject,
+      content,
+    );
+    const payload: AgentSendMessageResponse = {
+      ok: true,
+      message,
+    };
+    return context.json(payload);
   });
 
   app.get("/agent/events", async (context) => {

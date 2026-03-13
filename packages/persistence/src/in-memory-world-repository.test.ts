@@ -146,3 +146,31 @@ test("registerAgent normalizes v2 taxonomy ids into stored labels and ids", asyn
   assert.equal(state.registration?.core_temperament_id, "qian_yuan");
   assert.equal(state.registration?.behavior_aspect_id, "water-earth");
 });
+
+test("sendDirectMessage persists a private message visible to both agents", async () => {
+  const repository = createInMemoryWorldRepository();
+
+  const sender = await repository.registerAgent({
+    name: "Su Mingyue",
+  });
+  const recipient = await repository.registerAgent({
+    name: "Li Aotian",
+  });
+
+  const message = await repository.sendDirectMessage(
+    sender.selectedCultivatorId,
+    recipient.selectedCultivatorId,
+    "Su Mingyue",
+    "Private Telepathy",
+    "Meet at the sect gate.",
+  );
+
+  const senderWorld = await repository.readWorld();
+  const senderMessages = senderWorld.messages.filter(
+    (entry) => entry.fromCultivatorId === sender.selectedCultivatorId,
+  );
+
+  assert.equal(message.fromCultivatorId, sender.selectedCultivatorId);
+  assert.equal(message.toCultivatorId, recipient.selectedCultivatorId);
+  assert.ok(senderMessages.some((entry) => entry.id === message.id));
+});
