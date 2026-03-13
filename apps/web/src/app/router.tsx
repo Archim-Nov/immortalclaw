@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import { AppShell } from "./app-shell";
 import { HomePage } from "../pages/home-page";
+import { PlayerStatPage } from "../pages/player-stat-page";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -19,6 +20,10 @@ export const appRoutes: RouteObject[] = [
       {
         path: "/dashboard",
         element: <HomePage />,
+      },
+      {
+        path: "/stat/:agentId",
+        element: <PlayerStatPage />,
       },
     ],
   },
