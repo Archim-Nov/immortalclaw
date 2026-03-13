@@ -208,11 +208,10 @@ function dominantElementsOf(record: CultivationRegistrationRecord): Registration
   ];
 }
 function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeModifiers | null {
-  const storedRecord = cultivator.registrationRecord;
-  if (!storedRecord) {
+  const record = cultivator.registrationRecord;
+  if (!record) {
     return null;
   }
-  const record = normalizeCultivationRegistrationRecord(structuredClone(storedRecord));
   const modifiers = createRegistrationRuntimeModifiers();
   modifiers.dominantElements = dominantElementsOf(record);
   for (const element of modifiers.dominantElements) {
@@ -376,23 +375,33 @@ function validateRegistrationRecord(record: CultivationRegistrationRecord): Cult
   return normalized;
 }
 function registrationViewOf(cultivator: Cultivator): CultivationRegistrationView | null {
-  const storedRecord = cultivator.registrationRecord;
-  if (!storedRecord) {
+  const record = cultivator.registrationRecord;
+  if (!record) {
     return null;
   }
-  const record = normalizeCultivationRegistrationRecord(structuredClone(storedRecord));
+  // Stored records are normalized at write time by validateRegistrationRecord(),
+  // so all *_id fields are guaranteed present. The ?? resolve chains are defensive
+  // fallbacks that satisfy the optional type signature without masking errors.
+  const coreTemperamentId = record.result.core_temperament_id ?? resolveTemperamentId(record.result.core_temperament);
+  const secondaryTemperamentId = record.result.secondary_temperament_id ?? resolveTemperamentId(record.result.secondary_temperament);
+  const behaviorAspectId = record.result.behavior_aspect_id ?? resolveBehaviorAspectId(record.result.behavior_aspect);
+  const cultivationMotiveId = record.result.cultivation_motive_id ?? resolveCultivationMotiveId(record.result.cultivation_motive);
+  const spiritRootKindId = record.result.spirit_root_kind_id ?? resolveSpiritRootKindId(record.result.spirit_root_result);
+  if (!coreTemperamentId || !secondaryTemperamentId || !behaviorAspectId || !cultivationMotiveId || !spiritRootKindId) {
+    throw new Error("stored registration record is missing required taxonomy IDs — record may not have been normalized at save time.");
+  }
   return {
     saved_at: record.saved_at ?? null,
     label_locale: record.result.label_locale ?? "zh-CN",
-    core_temperament_id: record.result.core_temperament_id ?? resolveTemperamentId(record.result.core_temperament) ?? "qian_yuan",
+    core_temperament_id: coreTemperamentId,
     core_temperament: record.result.core_temperament,
-    secondary_temperament_id: record.result.secondary_temperament_id ?? resolveTemperamentId(record.result.secondary_temperament) ?? "guan_lan",
+    secondary_temperament_id: secondaryTemperamentId,
     secondary_temperament: record.result.secondary_temperament,
-    behavior_aspect_id: record.result.behavior_aspect_id ?? resolveBehaviorAspectId(record.result.behavior_aspect) ?? "water",
+    behavior_aspect_id: behaviorAspectId,
     behavior_aspect: record.result.behavior_aspect,
-    cultivation_motive_id: record.result.cultivation_motive_id ?? resolveCultivationMotiveId(record.result.cultivation_motive) ?? "seek-truth",
+    cultivation_motive_id: cultivationMotiveId,
     cultivation_motive: record.result.cultivation_motive,
-    spirit_root_kind_id: record.result.spirit_root_kind_id ?? resolveSpiritRootKindId(record.result.spirit_root_result) ?? "dual-root",
+    spirit_root_kind_id: spiritRootKindId,
     spirit_root_result: record.result.spirit_root_result,
     overall_confidence: record.result.confidence.overall,
   };

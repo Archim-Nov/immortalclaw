@@ -228,6 +228,61 @@ test("registration records save and surface through cultivator state", () => {
   });
 });
 
+test("v2 registration records preserve explicit taxonomy IDs through save and read", () => {
+  const world = createSeedWorld();
+
+  const v2Record: CultivationRegistrationRecord = {
+    record_type: "registration_record" as const,
+    questionnaire_version: "immortal-claw-oc-v2",
+    answers: {
+      Q1: "C", Q2: "C", Q3: "C", Q4: "C", Q5: "C", Q6: "C",
+      Q7: "C", Q8: "A", Q9: "C", Q10: "C", Q11: "C", Q12: "C",
+      Q13: "B", Q14: "B", Q15: "B", Q16: "B", Q17: "C", Q18: "B",
+    },
+    result: {
+      label_locale: "en",
+      core_temperament_id: "qian_yuan",
+      core_temperament: "Calm strategist",
+      secondary_temperament_id: "guan_lan",
+      secondary_temperament: "Patient observer",
+      behavior_aspect_id: "water-earth",
+      behavior_aspect: "Water-Earth / Latent Guard",
+      cultivation_motive_id: "seek-truth",
+      cultivation_motive: "Seek truth",
+      five_element_scores: { metal: 5, wood: 6, water: 11, fire: 3, earth: 9 },
+      spirit_root_kind_id: "dual-root",
+      spirit_root_result: "Water-Earth dual root",
+      confidence: { core: "high" as const, behavior: "high" as const, motive: "medium" as const, overall: "high" as const },
+    },
+    summary: "A cautious cultivator whose water and earth tendencies stay closely paired.",
+  };
+
+  const saved = saveCultivationRegistration(world, "yun-zhong-he", v2Record, "openclaw-main");
+
+  assert.equal(saved.result.core_temperament_id, "qian_yuan");
+  assert.equal(saved.result.core_temperament, "Calm strategist");
+  assert.equal(saved.result.spirit_root_kind_id, "dual-root");
+  assert.equal(saved.result.spirit_root_result, "Water-Earth dual root");
+  assert.equal(saved.result.label_locale, "en");
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+  assert.deepEqual(state.registration, {
+    saved_at: saved.saved_at ?? null,
+    label_locale: "en",
+    core_temperament_id: "qian_yuan",
+    core_temperament: "Calm strategist",
+    secondary_temperament_id: "guan_lan",
+    secondary_temperament: "Patient observer",
+    behavior_aspect_id: "water-earth",
+    behavior_aspect: "Water-Earth / Latent Guard",
+    cultivation_motive_id: "seek-truth",
+    cultivation_motive: "Seek truth",
+    spirit_root_kind_id: "dual-root",
+    spirit_root_result: "Water-Earth dual root",
+    overall_confidence: "high",
+  });
+});
+
 test("registration effects surface and improve cultivation output", () => {
   const baselineWorld = createSeedWorld();
   const registeredWorld = createSeedWorld();

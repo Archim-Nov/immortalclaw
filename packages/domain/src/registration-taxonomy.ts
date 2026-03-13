@@ -300,7 +300,7 @@ export function normalizeCultivationRegistrationRecord(
   if (!cultivationMotiveId) {
     throw new Error("registration record must include a recognized cultivation motive id or label.");
   }
-  const spiritRootKindId = deriveSpiritRootKindId(record.result.five_element_scores);
+  const spiritRootKindId = record.result.spirit_root_kind_id ?? deriveSpiritRootKindId(record.result.five_element_scores);
 
   return {
     ...record,
@@ -316,7 +316,7 @@ export function normalizeCultivationRegistrationRecord(
       cultivation_motive_id: cultivationMotiveId,
       cultivation_motive: record.result.cultivation_motive?.trim() || motiveLabel(cultivationMotiveId, locale),
       spirit_root_kind_id: spiritRootKindId,
-      spirit_root_result: spiritRootLabel(
+      spirit_root_result: record.result.spirit_root_result?.trim() || spiritRootLabel(
         spiritRootKindId,
         record.result.five_element_scores,
         locale,
