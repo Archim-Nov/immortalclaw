@@ -9,16 +9,26 @@ interface StatResponse {
   tick: number;
   cultivator: {
     id: string; name: string; realm: string; realmLevel: number; realmProgress: number;
-    qi: number; maxQi: number; spiritualPower: number; maxSpiritualPower: number;
-    spiritStones: number; karma: number; reputation: number;
-    location: string; currentZone: string | null; status: string; statusEffects: any[];
-    inventory: Record<string, number>; techniques: string[];
-    lifespan: number; age: number;
-    origin: string; temperament: string; startingPath: string; genderPresentation: string; sectId: string | null;
+    status: "idle" | "busy" | "injured"; location: string;
+    spiritStones: number; qi: number; maxQi: number;
+    spiritualPower: number; maxSpiritualPower: number;
+    karma: number; reputation: number; lifespan: number; age: number;
+    genderPresentation: string; pronouns: string; origin: string; temperament: string; startingPath: string;
   };
-  cultivation: Record<string, any>;
-  factionReputation: { righteous_path: number; demonic_path: number; beast_alliance: number; mortal_kingdom: number };
-  registration: { coreTemperament?: string; secondaryTemperament?: string; behaviorAspect?: string; cultivationMotive?: string; spiritRoot?: string } | null;
+  cultivation: { mainTechnique: string; techniques: string[] };
+  sect: { id: string; name: string; role: string; treasury: number; memberCount: number } | null;
+  tribulation: { nextTribulationTick: number; tribulationType: string; difficulty: number; isWarned: boolean; preparationTime: number; supportScore: number };
+  inventory: Record<string, number>;
+  inventoryDetails: Array<{ id: string; name: string; count: number; kind: string; description: string }>;
+  currentJob: { id: string; cultivatorId: string; actionId: string; label: string; remainingTicks: number; totalTicks: number } | null;
+  nearbyOpportunities: string[];
+  statusEffects: Array<{ id: string; name: string; description: string; remainingTicks: number; source: string }>;
+  factionReputation: Array<{ factionId: string; name: string; value: number; standing: "hostile" | "cold" | "neutral" | "trusted" | "favored" }>;
+  recentEvents: Array<unknown>;
+  recentCombats: Array<unknown>;
+  registration: { saved_at: string | null; label_locale: string; core_temperament_id: string; core_temperament: string; secondary_temperament_id: string; secondary_temperament: string; behavior_aspect_id: string; behavior_aspect: string; cultivation_motive_id: string; cultivation_motive: string; spirit_root_kind_id: string; spirit_root_result: string; overall_confidence: string } | null;
+  registrationEffects: unknown | null;
+  agentGuidance: { warnings: string[]; priorities: string[]; suggestedActions: string[] };
   fiveElementScores: { metal: number; wood: number; water: number; fire: number; earth: number };
   mainAttributes: { gengu: number; tipu: number; lingyuan: number; shenshi: number; wuxing: number; daoxin: number; shenfa: number; bingpo: number };
   detailedAttributes: { 
@@ -95,14 +105,26 @@ export function PlayerStatPage() {
     );
   }
 
-  const { cultivator, registration, mainAttributes, detailedAttributes, fiveElementScores, factionReputation } = data;
+  const { 
+    cultivator, 
+    registration, 
+    mainAttributes, 
+    detailedAttributes, 
+    fiveElementScores, 
+    factionReputation,
+    cultivation,
+    sect,
+    tribulation,
+    statusEffects,
+    inventory 
+  } = data;
 
   const calculatePercent = (current: number, max: number) => {
     if (max <= 0) return 0;
     return Math.min(100, Math.max(0, (current / max) * 100));
   };
 
-  const inventoryEntries = Object.entries(cultivator.inventory || {}).filter(([_, count]) => count > 0);
+  const inventoryEntries = Object.entries(inventory || {}).filter(([_, count]) => count > 0);
 
   return (
     <div className="stat-page">
@@ -114,7 +136,7 @@ export function PlayerStatPage() {
         <div className="stat-header-meta">
           <span className="stat-chip gold">{cultivator.realm} Lv.{cultivator.realmLevel}</span>
           <span className="stat-chip">{cultivator.origin || "Unknown Origin"}</span>
-          <span className="stat-chip jade">{cultivator.sectId || "散修 (Rogue Cultivator)"}</span>
+          <span className="stat-chip jade">{sect?.name || "散修 (Rogue Cultivator)"}</span>
         </div>
         <div className="stat-header-meta" style={{ marginTop: "1rem", opacity: 0.8 }}>
           <span style={{ fontSize: "0.9rem" }}>{cultivator.temperament} • {cultivator.startingPath} • {cultivator.genderPresentation}</span>
@@ -137,6 +159,10 @@ export function PlayerStatPage() {
           <div className="stat-info-row" style={{ marginTop: "1rem" }}>
             <span className="stat-info-label">Age / Lifespan</span>
             <span className="stat-info-value">{cultivator.age} / {cultivator.lifespan} years</span>
+          </div>
+          <div className="stat-info-row" style={{ marginTop: "0.5rem" }}>
+            <span className="stat-info-label">Next Tribulation</span>
+            <span className="stat-info-value">Tick {tribulation.nextTribulationTick} ({tribulation.tribulationType})</span>
           </div>
         </section>
 
@@ -244,22 +270,12 @@ export function PlayerStatPage() {
         {/* 7. Faction Standings */}
         <section className="stat-panel">
           <h3 className="stat-panel-title">Faction Standings</h3>
-          <div className="stat-info-row">
-            <span className="stat-info-label">Righteous Path</span>
-            <span className="stat-info-value">{factionReputation.righteous_path}</span>
-          </div>
-          <div className="stat-info-row">
-            <span className="stat-info-label">Demonic Path</span>
-            <span className="stat-info-value">{factionReputation.demonic_path}</span>
-          </div>
-          <div className="stat-info-row">
-            <span className="stat-info-label">Beast Alliance</span>
-            <span className="stat-info-value">{factionReputation.beast_alliance}</span>
-          </div>
-          <div className="stat-info-row">
-            <span className="stat-info-label">Mortal Kingdom</span>
-            <span className="stat-info-value">{factionReputation.mortal_kingdom}</span>
-          </div>
+          {factionReputation.map(faction => (
+            <div key={faction.factionId} className="stat-info-row">
+              <span className="stat-info-label">{faction.name}</span>
+              <span className="stat-info-value">{faction.value} ({faction.standing})</span>
+            </div>
+          ))}
         </section>
 
         {/* 8. Registration Profile */}
@@ -267,11 +283,11 @@ export function PlayerStatPage() {
           <h3 className="stat-panel-title">Registration Profile</h3>
           {registration ? (
             <>
-              <div className="stat-info-row"><span className="stat-info-label">Core Temperament</span><span className="stat-info-value">{registration.coreTemperament || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Secondary</span><span className="stat-info-value">{registration.secondaryTemperament || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Behavior Aspect</span><span className="stat-info-value">{registration.behaviorAspect || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Motive</span><span className="stat-info-value">{registration.cultivationMotive || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Spirit Root</span><span className="stat-info-value">{registration.spiritRoot || "N/A"}</span></div>
+              <div className="stat-info-row"><span className="stat-info-label">Core Temperament</span><span className="stat-info-value">{registration.core_temperament || "N/A"}</span></div>
+              <div className="stat-info-row"><span className="stat-info-label">Secondary</span><span className="stat-info-value">{registration.secondary_temperament || "N/A"}</span></div>
+              <div className="stat-info-row"><span className="stat-info-label">Behavior Aspect</span><span className="stat-info-value">{registration.behavior_aspect || "N/A"}</span></div>
+              <div className="stat-info-row"><span className="stat-info-label">Motive</span><span className="stat-info-value">{registration.cultivation_motive || "N/A"}</span></div>
+              <div className="stat-info-row"><span className="stat-info-label">Spirit Root</span><span className="stat-info-value">{registration.spirit_root_result || "N/A"}</span></div>
             </>
           ) : (
             <p className="stat-empty">Not registered in Heavenly Records</p>
@@ -281,11 +297,11 @@ export function PlayerStatPage() {
         {/* 9. Status Effects */}
         <section className="stat-panel">
           <h3 className="stat-panel-title">Status Effects</h3>
-          {cultivator.statusEffects && cultivator.statusEffects.length > 0 ? (
+          {statusEffects && statusEffects.length > 0 ? (
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {cultivator.statusEffects.map((effect, idx) => (
+              {statusEffects.map((effect, idx) => (
                 <span key={idx} className="stat-chip danger">
-                  {typeof effect === "string" ? effect : effect.name || "Unknown Effect"}
+                  {effect.name || "Unknown Effect"}
                 </span>
               ))}
             </div>
@@ -314,9 +330,9 @@ export function PlayerStatPage() {
         {/* 11. Techniques */}
         <section className="stat-panel">
           <h3 className="stat-panel-title">Techniques</h3>
-          {cultivator.techniques && cultivator.techniques.length > 0 ? (
+          {cultivation.techniques && cultivation.techniques.length > 0 ? (
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {cultivator.techniques.map((tech, idx) => (
+              {cultivation.techniques.map((tech, idx) => (
                 <span key={idx} className="stat-chip purple">{tech}</span>
               ))}
             </div>
