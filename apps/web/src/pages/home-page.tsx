@@ -164,7 +164,7 @@ export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): s
             <span class="chip ${chipClass}">${chipLabel}</span>
           </div>
           <h3 style="font-size: 2rem; margin-bottom: 5px;">${escapeHtml(agent.name)}</h3>
-          <div style="font-family: var(--font-code); margin-bottom: 1.8rem; color: rgba(255,255,255,0.4);">[ID: ${escapeHtml(agent.agentId)}] ${sectLabel}</div>
+          <div style="font-family: var(--font-code); margin-bottom: 1.8rem; color: rgba(255,255,255,0.4);">${sectLabel}</div>
 
           <div class="info-row"><span class="info-label">Realm (境界)</span> <span class="chip gold">${escapeHtml(agent.cultivator.realm)} Lv.${agent.cultivator.realmLevel}</span></div>
           <div class="info-row"><span class="info-label">Power (灵力)</span> <span class="stat-highlight">${powerLabel}</span></div>
