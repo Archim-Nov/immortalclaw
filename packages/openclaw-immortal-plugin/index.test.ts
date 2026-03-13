@@ -97,6 +97,7 @@ test("plugin registers expected tools and prompt hook", async () => {
       "immortal_strategy",
       "immortal_actions",
       "immortal_messages",
+      "immortal_send_message",
       "immortal_tribulation",
       "immortal_sect",
       "immortal_dao_logs",
@@ -498,6 +499,90 @@ test("plugin auto-registers with a local canonical registration record when avai
     assert.match(String(requests[0]?.body), /"record_type":"registration_record"/);
     assert.match(String(requests[0]?.body), /"questionnaire_version":"immortal-claw-oc-v1"/);
     assert.equal(requests[1]?.authorization, "Bearer immortal_sk_recorded");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("immortal_send_message posts targetAgentId through authenticated agent route", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-send-message-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
+  const requests: CapturedRequest[] = [];
+
+  try {
+    writePersonaFiles(personaDir);
+
+    const { tools } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        const authorization =
+          init?.headers && typeof init.headers === "object" && "Authorization" in init.headers
+            ? String((init.headers as Record<string, unknown>).Authorization)
+            : null;
+        requests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+          authorization,
+        });
+
+        if (url.endsWith("/agent/register")) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              agentId: "550e8400-e29b-41d4-a716-446655440100",
+              credential: "immortal_sk_sender",
+              selectedCultivatorId: "cultivator-9",
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "550e8400-e29b-41d4-a716-446655440100",
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/messages") && init?.method === "POST") {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              message: {
+                id: "msg-9",
+                toCultivatorId: "cultivator-recipient",
+              },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await tools.get("immortal_send_message")?.execute("tool-send", {
+      targetAgentId: "550e8400-e29b-41d4-a716-446655440200",
+      content: "Meet me at the sect gate.",
+    });
+
+    const sendRequest = requests.find((entry) => entry.url.endsWith("/agent/messages") && entry.method === "POST");
+    assert.ok(sendRequest);
+    assert.equal(sendRequest?.authorization, "Bearer immortal_sk_sender");
+    assert.match(String(sendRequest?.body), /"toAgentId":"550e8400-e29b-41d4-a716-446655440200"/);
+    assert.match(String(sendRequest?.body), /"content":"Meet me at the sect gate\."/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
