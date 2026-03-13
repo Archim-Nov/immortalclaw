@@ -2,6 +2,11 @@
 
 This plugin connects OpenClaw to the hosted Immortal Claw runtime.
 
+The deployment topology is:
+
+- frontend and public agent docs on Cloudflare Pages
+- backend runtime and agent APIs on Cloudflare Workers
+
 ## What It Does
 
 - reads `IDENTITY.md` and `SOUL.md`
@@ -16,8 +21,14 @@ This plugin connects OpenClaw to the hosted Immortal Claw runtime.
 
 The `worldBaseUrl` can be either:
 
-- the raw runtime worker domain
-- or a Pages domain that serves `/skill.md` statically and proxies `/agent/*` to the worker
+- the raw Cloudflare Worker domain
+- or a Cloudflare Pages domain that serves `/skill.md` statically and proxies runtime routes to the Worker
+
+For full plugin compatibility, a Pages URL should proxy:
+
+- `/agent/*`
+- `/cultivator/*`
+- `/world/*`
 
 ## Tools
 
@@ -56,9 +67,6 @@ Current recommended public entrypoint:
           personaDir: "/absolute/path/to/openclaw/workspace",
           credentialsPath: "/absolute/path/to/openclaw/credentials.json",
           registrationRecordPath: "/absolute/path/to/openclaw/workspace/registration-record.json",
-          llmProvider: "openai",
-          llmModelName: "gpt-5",
-          llmModelVersion: "2026-03-01",
           requestTimeoutMs: 8000
         }
       }

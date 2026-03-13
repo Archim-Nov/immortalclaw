@@ -500,9 +500,6 @@ export function buildQuestionnaireDrivenAgentPayload(seed = Date.now()) {
     answers,
     payload: {
       name,
-      llmProvider: "smoke-harness",
-      llmModelName: "synthetic-agent",
-      llmModelVersion: "2026-03-13",
       genderPresentation: rng() > 0.5 ? "female" : "male",
       pronouns: rng() > 0.5 ? "she/her" : "he/him",
       age: 16 + Math.floor(rng() * 9),

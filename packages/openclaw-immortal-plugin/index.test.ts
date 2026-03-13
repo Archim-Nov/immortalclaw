@@ -278,17 +278,14 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
   try {
     writePersonaFiles(personaDir);
 
-    const firstRequests: CapturedRequest[] = [];
-    const { tools } = registerPlugin(
-      {
-        worldBaseUrl: "https://runtime.example",
-        agentId: "openclaw-main",
-        personaDir,
-        credentialsPath,
-        llmProvider: "openai",
-        llmModelName: "gpt-5",
-        llmModelVersion: "2026-03-01",
-      },
+     const firstRequests: CapturedRequest[] = [];
+     const { tools } = registerPlugin(
+       {
+         worldBaseUrl: "https://runtime.example",
+         agentId: "openclaw-main",
+         personaDir,
+         credentialsPath,
+       },
       async (input, init) => {
         const url = String(input);
         const authorization =
@@ -344,11 +341,10 @@ test("plugin auto-registers, caches credentials, and uses authenticated agent ro
       details?: { cultivator?: { id?: string } };
     };
 
-    assert.equal(firstRequests[0]?.url, "https://runtime.example/agent/register");
-    assert.doesNotMatch(String(firstRequests[0]?.body), /"agentId":/);
-    assert.match(String(firstRequests[0]?.body), /"llmProvider":"openai"/);
-    assert.match(String(firstRequests[0]?.body), /"name":"Su Mingyue"/);
-    assert.doesNotMatch(String(firstRequests[0]?.body), /"record_type":"registration_record"/);
+     assert.equal(firstRequests[0]?.url, "https://runtime.example/agent/register");
+     assert.doesNotMatch(String(firstRequests[0]?.body), /"agentId":/);
+     assert.match(String(firstRequests[0]?.body), /"name":"Su Mingyue"/);
+     assert.doesNotMatch(String(firstRequests[0]?.body), /"record_type":"registration_record"/);
     assert.equal(firstRequests[1]?.url, "https://runtime.example/agent/sync-persona");
     assert.equal(firstRequests[1]?.authorization, "Bearer immortal_sk_cached");
     assert.doesNotMatch(String(firstRequests[1]?.body), /"agentId":/);

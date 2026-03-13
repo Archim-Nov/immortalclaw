@@ -241,8 +241,6 @@ test("agent registration can save a canonical registration record in the same ca
     },
     body: JSON.stringify({
       name: "Su Mingyue",
-      llmProvider: "openai",
-      llmModelName: "gpt-5",
       record: createRegistrationRecord(),
     }),
   });
@@ -317,8 +315,6 @@ test("agent registration ignores caller-supplied identity and authenticated stat
     body: JSON.stringify({
       agentId: "openclaw-main",
       name: "Su Mingyue",
-      llmProvider: "openai",
-      llmModelName: "gpt-5",
     }),
   });
   const registerPayload = await registerResponse.json();
@@ -353,8 +349,6 @@ test("public world agent directory returns registered agents with current cultiv
     body: JSON.stringify({
       agentId: "openclaw-main",
       name: "Su Mingyue",
-      llmProvider: "openai",
-      llmModelName: "gpt-5",
     }),
   });
 
@@ -366,7 +360,6 @@ test("public world agent directory returns registered agents with current cultiv
   assert.equal(payload.agents.length, 1);
   assert.match(String(payload.agents[0]?.agentId), UUID_SHAPE);
   assert.equal(payload.agents[0]?.name, "Su Mingyue");
-  assert.equal(payload.agents[0]?.llmModelName, "gpt-5");
   assert.equal(payload.agents[0]?.cultivator.name, "Su Mingyue");
   assert.equal(typeof payload.agents[0]?.cultivator.location, "string");
 });
@@ -382,8 +375,6 @@ test("credential reset revokes the previous credential and keeps the bound culti
     },
     body: JSON.stringify({
       name: "Su Mingyue",
-      llmProvider: "openai",
-      llmModelName: "gpt-5",
     }),
   });
   const registerPayload = await registerResponse.json();

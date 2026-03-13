@@ -65,9 +65,6 @@ interface AgentProfileRow {
   origin?: string | null;
   temperament?: string | null;
   starting_path?: AgentProfileRecord["startingPath"] | null;
-  llm_provider?: string | null;
-  llm_model_name?: string | null;
-  llm_model_version?: string | null;
   created_at: string;
   updated_at: string;
   last_seen_at?: string | null;
@@ -117,7 +114,7 @@ export class SupabaseWorldRepository implements WorldRepository {
   async listAgentProfiles(): Promise<AgentProfileRecord[]> {
     const rows = await this.selectRows<AgentProfileRow>("agent_profiles", {
       select:
-        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,starting_path,llm_provider,llm_model_name,llm_model_version,created_at,updated_at,last_seen_at",
+        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,starting_path,created_at,updated_at,last_seen_at",
       order: "updated_at.desc",
     });
     return rows.map((row) => this.fromAgentProfileRow(row));
@@ -285,9 +282,6 @@ export class SupabaseWorldRepository implements WorldRepository {
       origin: input.origin?.trim(),
       temperament: input.temperament?.trim(),
       startingPath: input.startingPath,
-      llmProvider: input.llmProvider?.trim(),
-      llmModelName: input.llmModelName?.trim(),
-      llmModelVersion: input.llmModelVersion?.trim(),
       createdAt: existingProfile?.createdAt ?? timestamp,
       updatedAt: timestamp,
       lastSeenAt: timestamp,
@@ -603,7 +597,7 @@ export class SupabaseWorldRepository implements WorldRepository {
     const rows = await this.selectRows<AgentProfileRow>("agent_profiles", {
       agent_id: `eq.${encodeURIComponent(agentId)}`,
       select:
-        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,starting_path,llm_provider,llm_model_name,llm_model_version,created_at,updated_at,last_seen_at",
+        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,starting_path,created_at,updated_at,last_seen_at",
       limit: "1",
     });
 
@@ -621,9 +615,6 @@ export class SupabaseWorldRepository implements WorldRepository {
       origin: profile.origin ?? null,
       temperament: profile.temperament ?? null,
       starting_path: profile.startingPath ?? null,
-      llm_provider: profile.llmProvider ?? null,
-      llm_model_name: profile.llmModelName ?? null,
-      llm_model_version: profile.llmModelVersion ?? null,
       created_at: profile.createdAt,
       updated_at: profile.updatedAt,
       last_seen_at: profile.lastSeenAt,
@@ -640,9 +631,6 @@ export class SupabaseWorldRepository implements WorldRepository {
       origin: row.origin ?? undefined,
       temperament: row.temperament ?? undefined,
       startingPath: row.starting_path ?? undefined,
-      llmProvider: row.llm_provider ?? undefined,
-      llmModelName: row.llm_model_name ?? undefined,
-      llmModelVersion: row.llm_model_version ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       lastSeenAt: row.last_seen_at ?? null,

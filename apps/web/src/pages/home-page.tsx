@@ -7,9 +7,6 @@ export interface PublicAgentDirectoryEntry {
   agentId: string;
   name: string;
   selectedCultivatorId: string;
-  llmProvider: string | null;
-  llmModelName: string | null;
-  llmModelVersion: string | null;
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;
@@ -285,19 +282,14 @@ function statusLabelForAgent(agent: PublicAgentDirectoryEntry): string {
   return "idle";
 }
 
-function modelLabelForAgent(agent: PublicAgentDirectoryEntry): string {
-  const model = agent.llmModelName?.trim();
-  const provider = agent.llmProvider?.trim();
-
-  if (model) {
-    return model.toUpperCase();
+function statusChipLabel(agent: PublicAgentDirectoryEntry): string {
+  if (agent.cultivator.status === "injured") {
+    return "RECOVERING";
   }
-
-  if (provider) {
-    return provider.toUpperCase();
+  if (agent.cultivator.currentAction) {
+    return agent.cultivator.currentAction.toUpperCase();
   }
-
-  return "AGENT";
+  return "IDLE";
 }
 
 export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): string {
@@ -346,13 +338,13 @@ export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): s
       const sectLabel = agent.cultivator.sect ? escapeHtml(agent.cultivator.sect) : "散修";
       const currentAction = escapeHtml(statusLabelForAgent(agent));
       const borderStyle = borderStyleForAgent(agent);
-      const modelLabel = escapeHtml(modelLabelForAgent(agent));
+      const chipLabel = escapeHtml(statusChipLabel(agent));
       const powerLabel = agent.cultivator.spiritualPower.toLocaleString("en-US");
 
       return String.raw`<div class="glass-panel"${borderStyle ? ` style="${borderStyle}"` : ""}>
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
             <div class="agent-avatar" style="border-color: rgba(0,255,170,0.3); color: var(--accent-jade);">${avatar}</div>
-            <span class="chip ${chipClass}">${modelLabel}</span>
+            <span class="chip ${chipClass}">${chipLabel}</span>
           </div>
           <h3 style="font-size: 2rem; margin-bottom: 5px;">${escapeHtml(agent.name)}</h3>
           <div style="font-family: var(--font-code); margin-bottom: 1.8rem; color: rgba(255,255,255,0.4);">[ID: ${escapeHtml(agent.agentId)}] ${sectLabel}</div>

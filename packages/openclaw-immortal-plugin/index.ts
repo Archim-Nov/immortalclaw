@@ -54,9 +54,6 @@ type PluginConfig = {
   personaDir: string;
   credentialsPath: string;
   registrationRecordPath?: string;
-  llmProvider?: string;
-  llmModelName?: string;
-  llmModelVersion?: string;
   requestTimeoutMs: number;
 };
 
@@ -246,9 +243,6 @@ function resolvePluginConfig(pluginConfig: Record<string, unknown> | undefined):
     personaDir,
     credentialsPath: normalizeCredentialsPath(pluginConfig?.credentialsPath),
     registrationRecordPath: normalizeOptionalFilePath(pluginConfig?.registrationRecordPath),
-    llmProvider: trimString(pluginConfig?.llmProvider),
-    llmModelName: trimString(pluginConfig?.llmModelName),
-    llmModelVersion: trimString(pluginConfig?.llmModelVersion),
     requestTimeoutMs,
   };
 }
@@ -958,15 +952,6 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           description:
             "Optional JSON file path for the canonical registration_record. If present during first bootstrap, it is included in POST /agent/register automatically.",
         },
-        llmProvider: {
-          type: "string",
-        },
-        llmModelName: {
-          type: "string",
-        },
-        llmModelVersion: {
-          type: "string",
-        },
         requestTimeoutMs: {
           type: "number",
           minimum: 100,
@@ -1047,21 +1032,18 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       async function registerAgentSession(agentId?: string): Promise<AgentSession> {
         const persona = loadPersonaProfile(agentId ?? config.agentId ?? "openclaw-agent", config);
         const record = loadLocalRegistrationRecord(config, log);
-        const payload = await requestWorld(fetchImpl, config, "/agent/register", {
-          method: "POST",
-          body: JSON.stringify({
-            name: persona.name,
-            ...(config.llmProvider ? { llmProvider: config.llmProvider } : {}),
-            ...(config.llmModelName ? { llmModelName: config.llmModelName } : {}),
-            ...(config.llmModelVersion ? { llmModelVersion: config.llmModelVersion } : {}),
-            ...(persona.genderPresentation ? { genderPresentation: persona.genderPresentation } : {}),
-            ...(persona.pronouns ? { pronouns: persona.pronouns } : {}),
-            ...(persona.origin ? { origin: persona.origin } : {}),
-            ...(persona.temperament ? { temperament: persona.temperament } : {}),
-            ...(persona.startingPath ? { startingPath: persona.startingPath } : {}),
-            ...(record ? { record } : {}),
-          }),
-        });
+         const payload = await requestWorld(fetchImpl, config, "/agent/register", {
+           method: "POST",
+           body: JSON.stringify({
+             name: persona.name,
+             ...(persona.genderPresentation ? { genderPresentation: persona.genderPresentation } : {}),
+             ...(persona.pronouns ? { pronouns: persona.pronouns } : {}),
+             ...(persona.origin ? { origin: persona.origin } : {}),
+             ...(persona.temperament ? { temperament: persona.temperament } : {}),
+             ...(persona.startingPath ? { startingPath: persona.startingPath } : {}),
+             ...(record ? { record } : {}),
+           }),
+         });
         registrationRouteAvailable = true;
         return cacheSession(readRegisteredSession(config, payload, agentId)) as AgentSession;
       }
