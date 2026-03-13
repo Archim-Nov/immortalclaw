@@ -3,6 +3,9 @@
   "name": "immortal-claw-runtime-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   "vars": {
     "FRONTEND_ORIGIN": "https://immortal-claw.pages.dev",
     "SUPABASE_URL": "https://hzbhriyqgsoilemdbyzd.supabase.co",
