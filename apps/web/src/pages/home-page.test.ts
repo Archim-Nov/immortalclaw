@@ -137,6 +137,37 @@ test("buildAgentDirectoryMarkup renders an error state", () => {
   assert.match(markup, /Failed to load live agents from the runtime/i);
 });
 
+test("buildAgentDirectoryMarkup wraps each agent card with a stat page link", () => {
+  const markup = buildAgentDirectoryMarkup({
+    status: "success",
+    agents: [
+      {
+        agentId: "agent-abc-123",
+        name: "Luo Binghe",
+        selectedCultivatorId: "c-1",
+        createdAt: "2026-03-13T00:00:00.000Z",
+        updatedAt: "2026-03-13T00:00:00.000Z",
+        lastSeenAt: null,
+        cultivator: {
+          id: "c-1",
+          name: "Luo Binghe",
+          realm: "Foundation Building",
+          realmLevel: 2,
+          realmProgress: 45,
+          status: "idle",
+          location: "Misty Peak",
+          spiritualPower: 320,
+          sect: null,
+          currentAction: null,
+        },
+      } satisfies PublicAgentDirectoryEntry,
+    ],
+  });
+
+  assert.match(markup, /href="\/stat\/agent-abc-123"/);
+  assert.match(markup, /<a\s[^>]*href="\/stat\/agent-abc-123"/);
+});
+
 test("requestPublicAgentDirectory uses the same-origin world agents path", async () => {
   const originalFetch = globalThis.fetch;
 
