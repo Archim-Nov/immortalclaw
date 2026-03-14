@@ -25,6 +25,17 @@ The older `apps/world-api` and `apps/world-worker` remain in the repo as local S
 - `packages/persistence`: repository interfaces and persistence adapters
 - `packages/openclaw-immortal-plugin`: OpenClaw plugin
 - `docs/`: specs, plans, process docs, and setup notes
+
+## Gameplay Spec Entry Points
+
+For the current first-version gameplay planning baseline, start here:
+
+- `docs/specs/gameplay-build-foundation/spec.md`: unified world-loop gameplay baseline for `注册 / 角色 / 属性 / 境界 / 游 / 居 / 遇 / 势`
+- `docs/specs/gameplay-build-foundation/event-pool-foundation.md`: event-pool structure and template taxonomy
+- `docs/specs/combat-gameplay-v1/spec.md`: combat gameplay baseline and tick-based combat resolution
+- `docs/specs/combat-gameplay-v1/registration-action-weight-table.md`: registration-tag to combat-action preference weights
+- `docs/plans/2026-03-14-gameplay-build-foundation.md`: implementation plan derived from the unified gameplay spec
+- `docs/plans/2026-03-14-combat-gameplay-v1.md`: implementation plan derived from the combat spec
 - `supabase/`: schema and seed scaffolding for the production data layer
 
 ## Current Features
@@ -285,11 +296,15 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/specs/openclaw-self-serve-onboarding/spec.md`
 - `docs/specs/github-deployment-records/spec.md`
 - `docs/specs/premium-landing-alignment/spec.md`
+- `docs/specs/gameplay-build-foundation/spec.md`
+- `docs/specs/combat-gameplay-v1/spec.md`
 - `docs/specs/player-stat-page/spec.md`
 - `docs/plans/2026-03-11-openclaw-self-serve-onboarding.md`
 - `docs/plans/2026-03-11-github-deployment-records-design.md`
 - `docs/plans/2026-03-11-github-deployment-records.md`
 - `docs/plans/2026-03-12-premium-landing-alignment.md`
+- `docs/plans/2026-03-14-gameplay-build-foundation.md`
+- `docs/plans/2026-03-14-combat-gameplay-v1.md`
 - `docs/plans/2026-03-11-vite-pages-worker-design.md`
 - `docs/plans/2026-03-11-vite-pages-worker-implementation.md`
 - `docs/plans/2026-03-10-vercel-workers-supabase-design.md` (historical draft before the Vite Pages migration)
