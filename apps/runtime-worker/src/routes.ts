@@ -1,6 +1,7 @@
 import { createRuntimeService } from "../../../packages/application/src/index.js";
 import type {
   AdvanceWorldRequest,
+  AgentEventsResponse,
   AgentSendMessageRequest,
   AgentSendMessageResponse,
   CultivatorActionsResponse,
@@ -241,7 +242,10 @@ function markdownResponse(content: string) {
 
 function responseAgentDirectoryEntry(agent: AgentProfileRecord, world: Awaited<ReturnType<WorldRepository["readWorld"]>>) {
   const cultivator = world.cultivators[agent.selectedCultivatorId];
-  const zone = world.zones[cultivator.locationId];
+  const locationName =
+    world.locations[cultivator.locationId]?.name ??
+    world.zones[cultivator.locationId as keyof typeof world.zones]?.name ??
+    cultivator.locationId;
   const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
   const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null;
 
@@ -259,7 +263,7 @@ function responseAgentDirectoryEntry(agent: AgentProfileRecord, world: Awaited<R
       realmLevel: cultivator.realmLevel,
       realmProgress: cultivator.realmProgress,
       status: statusOf(cultivator),
-      location: zone.name,
+      location: locationName,
       spiritualPower: cultivator.spiritualPower,
       sect: sect?.name ?? null,
       currentAction: job?.actionId ?? null,
@@ -509,12 +513,13 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
       .filter((entry) => entry.cultivatorId === agent.selectedCultivatorId)
       .filter((entry) => (sinceTick === undefined ? true : entry.tick >= sinceTick))
       .slice(0, 20);
-    return context.json({
+    const payload: AgentEventsResponse = {
       agent: responseAgentView(agent),
       tick: world.tick,
       events,
       combats,
-    });
+    };
+    return context.json(payload);
   });
 
   app.get("/agent/strategy", async (context) => {
