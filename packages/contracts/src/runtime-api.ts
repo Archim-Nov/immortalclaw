@@ -16,6 +16,7 @@ import type {
   ActionExecutionResult,
   ActionId,
   AvailableAction,
+  CombatLogEntry,
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
@@ -24,6 +25,7 @@ import type {
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
+  WorldEvent,
 } from "../../domain/src/runtime.js";
 import type { AgentRegistrationInput } from "../../persistence/src/world-repository.js";
 
@@ -109,8 +111,8 @@ export interface AgentSendMessageResponse {
 export interface AgentEventsResponse {
   agent: AgentView;
   tick: number;
-  events: unknown[];
-  combats: unknown[];
+  events: WorldEvent[];
+  combats: CombatLogEntry[];
 }
 
 export interface AgentRegistrationRecordRequest {
