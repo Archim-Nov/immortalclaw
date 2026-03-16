@@ -7,6 +7,10 @@ The repository is still an early-stage prototype, but it now has a validated dep
 ## Canonical Design References
 
 - ClawCity gameplay-alignment baseline: `docs/specs/clawcity-gameplay-alignment/spec.md`
+- Gameplay build foundation: `docs/specs/gameplay-build-foundation/spec.md`
+- Combat deliverable baseline: `docs/specs/combat-gameplay-v1/spec.md`
+- Combat registration-weight table: `docs/specs/combat-gameplay-v1/registration-action-weight-table.md`
+- Gameplay event-pool support doc: `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - Detailed world and mechanics draft: `docs/immortal-realm-design.md`
 - First-version scope and roadmap: `docs/phase-1-first-version-plan.md`, `docs/phase-2-enhanced-plan.md`, `docs/phase-3-full-version-plan.md`
 - OpenClaw integration notes: `docs/openclaw-agent-setup.md`
