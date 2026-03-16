@@ -15,9 +15,11 @@ import {
   NODE_TYPES,
   SECT_TITLE_SLOTS,
   SECT_TITLE_UPDATE_INTERVAL,
+  SETTLEMENT_DISPLAY_NAMES,
   STATE_IDS,
   STATE_META,
   type LocationId,
+  type NamedSettlementNodeType,
   type NodeType,
   type StateId,
 } from "./constants.js";
@@ -210,11 +212,14 @@ function buildAllLocations(): Record<string, Location> {
   for (const stateId of STATE_IDS) {
     for (const nodeType of NODE_TYPES) {
       const id: LocationId = toLocationId(stateId, nodeType);
+      const settlementName = SETTLEMENT_DISPLAY_NAMES[stateId][
+        nodeType as NamedSettlementNodeType
+      ];
       locations[id] = {
         id,
         stateId,
         nodeType,
-        name: `${STATE_META[stateId].name}${NODE_META[nodeType].suffix}`,
+        name: settlementName ?? `${STATE_META[stateId].name}${NODE_META[nodeType].suffix}`,
         kind: NODE_META[nodeType].kind,
         risk: STATE_META[stateId].risk,
         description: buildLocationDescription(stateId, nodeType),

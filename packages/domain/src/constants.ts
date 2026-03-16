@@ -34,6 +34,12 @@ export type NodeType = (typeof NODE_TYPES)[number];
 // ---- LocationId ----
 export type LocationId = `${StateId}:${NodeType}`;
 
+export type NamedSettlementNodeType =
+  | "main-city"
+  | "sub-town-east"
+  | "sub-town-west"
+  | "sub-town-south";
+
 // ---- State Metadata ----
 export const STATE_META: Record<StateId, { name: string; risk: RiskLevel }> = {
   qingzhou: { name: "青州", risk: "safe" },
@@ -60,6 +66,66 @@ export const NODE_META: Record<
   "dungeon-c": { suffix: "丙级秘境", kind: "adventure", riskModifier: 1 },
   "dungeon-b": { suffix: "乙级秘境", kind: "adventure", riskModifier: 2 },
   "dungeon-a": { suffix: "甲级秘境", kind: "adventure", riskModifier: 3 },
+};
+
+export const SETTLEMENT_DISPLAY_NAMES: Record<
+  StateId,
+  Record<NamedSettlementNodeType, string>
+> = {
+  qingzhou: {
+    "main-city": "青岚城",
+    "sub-town-east": "百草镇",
+    "sub-town-west": "石桥镇",
+    "sub-town-south": "安禾镇",
+  },
+  yangzhou: {
+    "main-city": "广津城",
+    "sub-town-east": "临波镇",
+    "sub-town-west": "平码镇",
+    "sub-town-south": "渡柳镇",
+  },
+  zhongzhou: {
+    "main-city": "天衡城",
+    "sub-town-east": "承令镇",
+    "sub-town-west": "会商镇",
+    "sub-town-south": "靖平镇",
+  },
+  shuzhou: {
+    "main-city": "栖云城",
+    "sub-town-east": "药溪镇",
+    "sub-town-west": "栈云镇",
+    "sub-town-south": "青木镇",
+  },
+  youzhou: {
+    "main-city": "朔宁城",
+    "sub-town-east": "猎霜镇",
+    "sub-town-west": "寒渡镇",
+    "sub-town-south": "靖边镇",
+  },
+  liangzhou: {
+    "main-city": "砺关城",
+    "sub-town-east": "砂门镇",
+    "sub-town-west": "玄矿镇",
+    "sub-town-south": "驿关镇",
+  },
+  leizhou: {
+    "main-city": "惊霆城",
+    "sub-town-east": "听霆镇",
+    "sub-town-west": "焦林镇",
+    "sub-town-south": "息雷镇",
+  },
+  cangzhou: {
+    "main-city": "沧澜城",
+    "sub-town-east": "归帆镇",
+    "sub-town-west": "碑汀镇",
+    "sub-town-south": "潮平镇",
+  },
+  wanzhou: {
+    "main-city": "长和城",
+    "sub-town-east": "长柳镇",
+    "sub-town-west": "茶桥镇",
+    "sub-town-south": "归信镇",
+  },
 };
 
 // ---- Zone-to-Location migration map ----
