@@ -9,11 +9,18 @@ import {
   getMessages,
   getCultivatorState,
   getStrategySnapshot,
+  listAvailableActions,
   performAction,
   saveCultivationRegistration,
   sendDirectMessage,
   syncCultivatorFromPersona,
 } from "./index.js";
+
+function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
+  while (world.cultivators[cultivatorId]?.activeJobId) {
+    advanceWorld(world, 1);
+  }
+}
 
 function createRegistrationRecord(): CultivationRegistrationRecord {
   return {
@@ -130,13 +137,307 @@ test("cultivation action creates a job and advances realm progress after ticks",
 test("joining the sect updates sect state immediately", () => {
   const world = createSeedWorld();
 
-  performAction(world, "yun-zhong-he", "travel-sect-gate");
-  advanceWorld(world, 1);
+   world.cultivators["yun-zhong-he"].completedBaseQuests = 1;
+
   const result = performAction(world, "yun-zhong-he", "join-sect");
 
   assert.equal(result.accepted, true);
   const state = getCultivatorState(world, "yun-zhong-he");
   assert.ok(state.sect?.name);
+});
+
+test("quest boards exist and refresh on 12-tick cadence", () => {
+  const world = createSeedWorld();
+  const mainCityBoard = world.questBoards["qingzhou:main-city"];
+  const subTownBoard = world.questBoards["qingzhou:sub-town-east"];
+
+  assert.ok(mainCityBoard);
+  assert.equal(mainCityBoard.slots, 5);
+  assert.equal(mainCityBoard.quests.length, 5);
+  assert.ok(subTownBoard);
+  assert.equal(subTownBoard.slots, 3);
+  assert.equal(subTownBoard.quests.length, 3);
+
+  const beforeIds = mainCityBoard.quests.map((quest) => quest.id);
+  advanceWorld(world, 12);
+  const afterBoard = world.questBoards["qingzhou:main-city"];
+  const afterIds = afterBoard.quests.map((quest) => quest.id);
+  assert.equal(afterBoard.lastRefreshedTick, 12);
+  assert.notDeepEqual(afterIds, beforeIds);
+});
+
+test("accepting and resolving a base quest updates rewards", () => {
+  const world = createSeedWorld();
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:sub-town-east");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const board = world.questBoards["qingzhou:sub-town-east"];
+  const candidate = board.quests[0]!;
+  const beforeStones = world.cultivators["yun-zhong-he"].spiritStones;
+  const beforeReputation = world.cultivators["yun-zhong-he"].reputation;
+
+  performAction(world, "yun-zhong-he", `accept-quest:${candidate.id}`);
+  const active = world.cultivators["yun-zhong-he"].activeQuests[0]!;
+  active.successRate = 100;
+
+  performAction(world, "yun-zhong-he", `execute-quest:${active.id}`);
+  runUntilIdle(world, "yun-zhong-he");
+
+  const after = world.cultivators["yun-zhong-he"];
+  assert.equal(after.activeQuests.length, 0);
+  assert.ok(after.spiritStones > beforeStones);
+  assert.ok(after.reputation >= beforeReputation);
+});
+
+test("sect quest success increases sect contribution", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  cultivator.completedBaseQuests = 1;
+
+  performAction(world, "yun-zhong-he", "join-sect");
+
+  const sectBoard = world.questBoards["qingzhou:main-city"];
+  const sectQuest = sectBoard.quests.find((quest) => quest.category === "sect");
+  assert.ok(sectQuest);
+
+  performAction(world, "yun-zhong-he", `accept-quest:${sectQuest!.id}`);
+  const activeQuest = cultivator.activeQuests.find((quest) => quest.category === "sect");
+  assert.ok(activeQuest);
+  activeQuest!.successRate = 100;
+
+  const beforeContribution = cultivator.totalContribution;
+  performAction(world, "yun-zhong-he", `execute-quest:${activeQuest!.id}`);
+  runUntilIdle(world, "yun-zhong-he");
+
+  assert.ok(cultivator.totalContribution > beforeContribution);
+});
+
+test("sect titles recalculate on cadence", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const sect = world.sects["qing-yun-sect"];
+
+  cultivator.sectId = sect.id;
+  cultivator.sectTitle = "外门";
+  cultivator.totalContribution = 250;
+  cultivator.contributionReachedAt = 1;
+  if (!sect.memberIds.includes(cultivator.id)) {
+    sect.memberIds.push(cultivator.id);
+  }
+  sect.lastTitleUpdateTick = 0;
+
+  let advanced = 0;
+  while (advanced < 2879) {
+    const step = Math.min(200, 2879 - advanced);
+    advanceWorld(world, step);
+    advanced += step;
+  }
+  assert.equal(cultivator.sectTitle, "外门");
+
+  advanceWorld(world, 1);
+  assert.equal(cultivator.sectTitle, "内门");
+  assert.equal(sect.lastTitleUpdateTick, 2880);
+});
+
+test("residence actions are visible at residence and hidden away", () => {
+  const world = createSeedWorld();
+
+  const atResidenceActionIds = new Set(
+    listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId),
+  );
+  assert.ok(atResidenceActionIds.has("residence-meditate"));
+  assert.ok(atResidenceActionIds.has("residence-heal"));
+  assert.ok(atResidenceActionIds.has("residence-recover-qi"));
+  assert.ok(atResidenceActionIds.has("residence-produce:recipe-healing-pill"));
+  assert.ok(atResidenceActionIds.has("residence-produce:recipe-qi-pill"));
+  assert.ok(atResidenceActionIds.has("residence-produce:recipe-ward-talisman"));
+  assert.ok(atResidenceActionIds.has("residence-socialize"));
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:sub-town-east");
+  advanceWorld(world, 1);
+
+  const awayActionIds = new Set(
+    listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId),
+  );
+  assert.equal(awayActionIds.has("residence-meditate"), false);
+  assert.equal(awayActionIds.has("residence-heal"), false);
+  assert.equal(awayActionIds.has("residence-recover-qi"), false);
+  assert.equal(awayActionIds.has("residence-produce:recipe-healing-pill"), false);
+  assert.equal(awayActionIds.has("residence-produce:recipe-qi-pill"), false);
+  assert.equal(awayActionIds.has("residence-produce:recipe-ward-talisman"), false);
+  assert.equal(awayActionIds.has("residence-socialize"), false);
+
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", "residence-heal"),
+    /Residence actions require being at your residence/,
+  );
+});
+
+test("injured cultivator cannot residence-meditate but can residence-heal and recover-qi", () => {
+  const world = createSeedWorld();
+  world.cultivators["yun-zhong-he"].injuryTicksRemaining = 4;
+
+  const actionIds = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
+  assert.equal(actionIds.has("residence-meditate"), false);
+  assert.ok(actionIds.has("residence-heal"));
+  assert.ok(actionIds.has("residence-recover-qi"));
+
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", "residence-meditate"),
+    /injured and can only do safe actions/i,
+  );
+
+  const qiBefore = world.cultivators["yun-zhong-he"].qi;
+  performAction(world, "yun-zhong-he", "residence-recover-qi");
+  advanceWorld(world, 1);
+  assert.ok(world.cultivators["yun-zhong-he"].qi > qiBefore);
+
+  const injuryBefore = world.cultivators["yun-zhong-he"].injuryTicksRemaining;
+  performAction(world, "yun-zhong-he", "residence-heal");
+  advanceWorld(world, 2);
+  assert.ok(world.cultivators["yun-zhong-he"].injuryTicksRemaining < injuryBefore);
+});
+
+test("residence production succeeds with recipe materials and rejects when materials are insufficient", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.inventory["beast-core"] = 1;
+  cultivator.inventory["spirit-ore"] = 1;
+  cultivator.spiritStones = 100;
+
+  const beforePill = cultivator.inventory["healing-pill"];
+  performAction(world, "yun-zhong-he", "residence-produce:recipe-healing-pill");
+  advanceWorld(world, 2);
+
+  assert.equal(cultivator.inventory["healing-pill"], beforePill + 1);
+  assert.equal(cultivator.inventory["beast-core"], 0);
+  assert.equal(cultivator.inventory["spirit-ore"], 0);
+  assert.equal(cultivator.spiritStones, 70);
+
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", "residence-produce:recipe-healing-pill"),
+    /No craftable residence recipe with current materials/,
+  );
+});
+
+test("residence-meditate supports no-stone fallback and standard branch", () => {
+  const fallbackWorld = createSeedWorld();
+  const fallbackCultivator = fallbackWorld.cultivators["yun-zhong-he"];
+  fallbackCultivator.spiritStones = 40;
+  const fallbackBeforeStones = fallbackCultivator.spiritStones;
+  const fallbackBeforeProgress = fallbackCultivator.realmProgress;
+
+  performAction(fallbackWorld, "yun-zhong-he", "residence-meditate");
+  advanceWorld(fallbackWorld, 4);
+
+  assert.equal(fallbackCultivator.spiritStones, fallbackBeforeStones);
+  assert.ok(fallbackCultivator.realmProgress > fallbackBeforeProgress);
+  assert.ok(fallbackCultivator.realmProgress - fallbackBeforeProgress <= 6);
+
+  const standardWorld = createSeedWorld();
+  const standardCultivator = standardWorld.cultivators["yun-zhong-he"];
+  standardCultivator.spiritStones = 200;
+  const standardBeforeStones = standardCultivator.spiritStones;
+  const standardBeforeProgress = standardCultivator.realmProgress;
+
+  performAction(standardWorld, "yun-zhong-he", "residence-meditate");
+  advanceWorld(standardWorld, 4);
+
+  assert.equal(standardCultivator.spiritStones, standardBeforeStones - 80);
+  assert.ok(standardCultivator.realmProgress - standardBeforeProgress >= 10);
+});
+
+test("residence-meditate applies residence insight/deviation outcomes", () => {
+  let sawInsight = false;
+  let sawDeviation = false;
+
+  for (let seed = 1; seed <= 120 && (!sawInsight || !sawDeviation); seed += 1) {
+    const world = createSeedWorld();
+    const cultivator = world.cultivators["yun-zhong-he"];
+    cultivator.spiritStones = 200;
+    world.nextJobSequence = seed;
+    performAction(world, "yun-zhong-he", "residence-meditate");
+    advanceWorld(world, 4);
+    if (cultivator.statusEffects.some((effect) => effect.id === "insight")) sawInsight = true;
+    if (cultivator.statusEffects.some((effect) => effect.id === "deviation")) sawDeviation = true;
+  }
+
+  assert.equal(sawInsight, true);
+  assert.equal(sawDeviation, true);
+});
+
+test("residence-heal supports no-pill and healing-pill branches", () => {
+  const noPillWorld = createSeedWorld();
+  const noPillCultivator = noPillWorld.cultivators["yun-zhong-he"];
+  noPillCultivator.injuryTicksRemaining = 10;
+  noPillCultivator.qi = 20;
+
+  performAction(noPillWorld, "yun-zhong-he", "residence-heal:no-pill");
+  advanceWorld(noPillWorld, 2);
+  const noPillInjuryAfter = noPillCultivator.injuryTicksRemaining;
+  const noPillQiAfter = noPillCultivator.qi;
+
+  const usePillWorld = createSeedWorld();
+  const usePillCultivator = usePillWorld.cultivators["yun-zhong-he"];
+  usePillCultivator.injuryTicksRemaining = 10;
+  usePillCultivator.qi = 20;
+  usePillCultivator.inventory["healing-pill"] = 1;
+
+  performAction(usePillWorld, "yun-zhong-he", "residence-heal:use-pill");
+  advanceWorld(usePillWorld, 2);
+
+  assert.equal(usePillCultivator.inventory["healing-pill"], 0);
+  assert.ok(usePillCultivator.injuryTicksRemaining < noPillInjuryAfter);
+  assert.ok(usePillCultivator.qi > noPillQiAfter);
+});
+
+test("residence-recover-qi supports base and qi-pill branches", () => {
+  const baseWorld = createSeedWorld();
+  const baseCultivator = baseWorld.cultivators["yun-zhong-he"];
+  baseCultivator.qi = 10;
+
+  performAction(baseWorld, "yun-zhong-he", "residence-recover-qi:no-pill");
+  advanceWorld(baseWorld, 1);
+  const baseQiAfter = baseCultivator.qi;
+
+  const usePillWorld = createSeedWorld();
+  const usePillCultivator = usePillWorld.cultivators["yun-zhong-he"];
+  usePillCultivator.qi = 10;
+  usePillCultivator.inventory["qi-pill"] = 1;
+
+  performAction(usePillWorld, "yun-zhong-he", "residence-recover-qi:use-pill");
+  advanceWorld(usePillWorld, 1);
+
+  assert.equal(usePillCultivator.inventory["qi-pill"], 0);
+  assert.ok(usePillCultivator.qi > baseQiAfter);
+  assert.ok(usePillCultivator.statusEffects.some((effect) => effect.id === "spirit-saturated"));
+});
+
+test("residence-produce rejects unknown recipe id", () => {
+  const world = createSeedWorld();
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", "residence-produce:recipe-unknown"),
+    /Unknown residence recipe/,
+  );
+});
+
+test("residence heal and recover-qi apply expected behavior", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.qi = 40;
+  cultivator.injuryTicksRemaining = 6;
+
+  performAction(world, "yun-zhong-he", "residence-recover-qi");
+  advanceWorld(world, 1);
+  assert.equal(cultivator.qi, 75);
+
+  performAction(world, "yun-zhong-he", "residence-heal");
+  advanceWorld(world, 2);
+  assert.equal(cultivator.injuryTicksRemaining, 2);
+  assert.ok(cultivator.qi > 75);
 });
 
 test("agent persona sync auto-provisions and reuses a single character", () => {
@@ -370,4 +671,32 @@ test("direct messages are visible to both sender and recipient mailboxes", () =>
   assert.equal(message.toCultivatorId, recipient.selectedCultivatorId);
   assert.ok(senderMessages.some((entry) => entry.id === message.id));
   assert.ok(recipientMessages.some((entry) => entry.id === message.id));
+});
+
+test("cultivator state includes derived economy view", () => {
+  const world = createSeedWorld();
+  const state = getCultivatorState(world, "yun-zhong-he");
+
+  assert.ok(state.derivedState);
+  assert.equal(typeof state.derivedState.readiness, "string");
+  assert.equal(typeof state.derivedState.recoveryState, "string");
+  assert.equal(typeof state.derivedState.activityContext, "string");
+  assert.equal(typeof state.derivedState.daoPotential.score, "number");
+});
+
+test("safety-net keeps at least one low-risk action when injured away from residence", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  cultivator.injuryTicksRemaining = 5;
+
+  const actionIds = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
+
+  assert.ok(
+    actionIds.has("heal")
+      || actionIds.has("residence-recover-qi")
+      || Array.from(actionIds).some((actionId) => actionId.startsWith("travel-to:")),
+  );
 });

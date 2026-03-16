@@ -3,6 +3,7 @@ export type {
   ActionId,
   AgentPersonaSyncResult,
   AvailableAction,
+  CombatLogEntry,
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
@@ -14,6 +15,7 @@ export type {
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
+  WorldEvent,
   WorldState,
 } from "./model.js";
 export {
@@ -41,4 +43,5 @@ export {
 } from "./engine.js";
 export { createSeedWorld } from "./seed.js";
 export { stubMainAttributes, stubDetailedAttributes, extractFiveElementScores } from "./attributes.js";
+export * from "./economy.js";
 export type { MainAttributeId, DetailedAttributeId } from "./attributes.js";

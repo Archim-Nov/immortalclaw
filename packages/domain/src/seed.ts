@@ -3,11 +3,27 @@ import type {
   FactionId,
   ItemDefinition,
   ItemId,
+  Location,
   Sect,
+  StateDefinition,
   StatusEffect,
   WorldState,
   Zone,
 } from "./model.js";
+import {
+  NODE_META,
+  NODE_TYPES,
+  SECT_TITLE_SLOTS,
+  SECT_TITLE_UPDATE_INTERVAL,
+  STATE_IDS,
+  STATE_META,
+  type LocationId,
+  type NodeType,
+  type StateId,
+} from "./constants.js";
+import { createEventPools } from "./events.js";
+import { seedQuestBoards } from "./quest.js";
+import { buildFullTopology, toLocationId } from "./topology.js";
 
 const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   "healing-pill": {
@@ -75,12 +91,18 @@ const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
 };
 
-const zones: Record<Zone["id"], Zone> = {
+const zones: Record<string, Zone> = {
   "mortal-town": {
     id: "mortal-town",
     name: "凡人城镇",
     kind: "safe",
     description: "适合接凡间委托、补给和积累初期声望。",
+  },
+  "qingzhou:main-city": {
+    id: "mortal-town",
+    name: "青州主城",
+    kind: "safe",
+    description: "青州主城灵脉汇聚，兼具补给、委托与初期修行功能。",
   },
   market: {
     id: "market",
@@ -122,8 +144,101 @@ const sects: Record<string, Sect> = {
     treasury: 86000,
     memberIds: [],
     spiritVeins: ["青岚支脉"],
+    headquarters: "qingzhou:main-city",
+    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
+    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
+    lastTitleUpdateTick: 0,
+  },
+  "dan-xia-sect": {
+    id: "dan-xia-sect",
+    name: "丹霞宗",
+    type: "丹修" as Sect["type"],
+    treasury: 72000,
+    memberIds: [],
+    spiritVeins: ["丹霞灵脉"],
+    headquarters: "yangzhou:main-city",
+    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
+    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
+    lastTitleUpdateTick: 0,
+  },
+  "tian-ji-sect": {
+    id: "tian-ji-sect",
+    name: "天机阁",
+    type: "阵修" as Sect["type"],
+    treasury: 64000,
+    memberIds: [],
+    spiritVeins: ["天机灵脉"],
+    headquarters: "zhongzhou:main-city",
+    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
+    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
+    lastTitleUpdateTick: 0,
   },
 };
+
+type ExtendedFactionReputation = Record<FactionId, number> &
+  Record<"dan-xia-sect" | "tian-ji-sect", number>;
+
+function buildLocationDescription(stateId: StateId, nodeType: NodeType): string {
+  const stateName = STATE_META[stateId].name;
+  const risk = STATE_META[stateId].risk;
+
+  switch (nodeType) {
+    case "main-city":
+      return `${stateName}主城灵脉汇聚，商旅与修士往来频繁，整体风险为${risk}。`;
+    case "sub-town-east":
+      return `${stateName}东镇临近官道，适合补给与接取日常委托，整体风险为${risk}。`;
+    case "sub-town-west":
+      return `${stateName}西镇坊市活跃，常有散修交易与消息流通，整体风险为${risk}。`;
+    case "sub-town-south":
+      return `${stateName}南镇靠近农灵田与驿路，适合修整与结伴出行，整体风险为${risk}。`;
+    case "wilderness":
+      return `${stateName}荒野灵气驳杂，资源与妖踪并存，探索时需留意${risk}级风险。`;
+    case "dungeon-c":
+      return `${stateName}丙级秘境适合初阶历练，可得机缘但仍有${risk}级隐患。`;
+    case "dungeon-b":
+      return `${stateName}乙级秘境阵势复杂，常伴守关异兽，风险随州势提升至${risk}。`;
+    case "dungeon-a":
+      return `${stateName}甲级秘境禁制森严，机缘与杀机并重，建议结队应对${risk}级威胁。`;
+    default:
+      return `${stateName}地界灵机流转，修行与历练并行，整体风险为${risk}。`;
+  }
+}
+
+function buildAllLocations(): Record<string, Location> {
+  const locations: Record<string, Location> = {};
+
+  for (const stateId of STATE_IDS) {
+    for (const nodeType of NODE_TYPES) {
+      const id: LocationId = toLocationId(stateId, nodeType);
+      locations[id] = {
+        id,
+        stateId,
+        nodeType,
+        name: `${STATE_META[stateId].name}${NODE_META[nodeType].suffix}`,
+        kind: NODE_META[nodeType].kind,
+        risk: STATE_META[stateId].risk,
+        description: buildLocationDescription(stateId, nodeType),
+      };
+    }
+  }
+
+  return locations;
+}
+
+function buildAllStates(): Record<string, StateDefinition> {
+  const states: Record<string, StateDefinition> = {};
+
+  for (const stateId of STATE_IDS) {
+    states[stateId] = {
+      id: stateId,
+      name: STATE_META[stateId].name,
+      risk: STATE_META[stateId].risk,
+      locationIds: NODE_TYPES.map((nodeType) => toLocationId(stateId, nodeType)),
+    };
+  }
+
+  return states;
+}
 
 export function createEmptyInventory(): Record<ItemId, number> {
   return {
@@ -141,12 +256,14 @@ export function createEmptyInventory(): Record<ItemId, number> {
 
 export function createFactionReputation(
   overrides: Partial<Record<FactionId, number>> = {},
-): Record<FactionId, number> {
+): ExtendedFactionReputation {
   return {
     townsfolk: 0,
     "market-guild": 0,
     "qing-yun-sect": 0,
     "rogue-cultivators": 0,
+    "dan-xia-sect": 0,
+    "tian-ji-sect": 0,
     ...overrides,
   };
 }
@@ -168,7 +285,13 @@ const cultivators: Record<string, Cultivator> = {
     realm: "炼气" as Cultivator["realm"],
     realmLevel: 3,
     realmProgress: 42,
-    locationId: "mortal-town",
+    locationId: "qingzhou:main-city",
+    residence: {
+      id: "residence-yun-zhong-he",
+      locationId: "qingzhou:main-city",
+      level: 1,
+      name: "云隐小筑",
+    },
     spiritStones: 900,
     qi: 92,
     maxQi: 100,
@@ -185,6 +308,11 @@ const cultivators: Record<string, Cultivator> = {
     lifespan: 180,
     age: 23,
     sectId: null,
+    sectTitle: null,
+    totalContribution: 0,
+    contributionReachedAt: 0,
+    activeQuests: [],
+    completedBaseQuests: 0,
     techniques: ["紫霄吐纳诀", "清风步"],
     inventory: {
       ...createEmptyInventory(),
@@ -204,7 +332,8 @@ const cultivators: Record<string, Cultivator> = {
 export { ITEM_DEFINITIONS };
 
 export function createSeedWorld(): WorldState {
-  return {
+  const locations = buildAllLocations();
+  const world: WorldState = {
     version: 3,
     tick: 0,
     updatedAt: new Date().toISOString(),
@@ -212,6 +341,11 @@ export function createSeedWorld(): WorldState {
     agentBindings: {},
     sects: structuredClone(sects),
     zones: structuredClone(zones),
+    locations,
+    states: buildAllStates(),
+    topology: buildFullTopology(),
+    eventPools: createEventPools(locations),
+    questBoards: {},
     itemDefinitions: structuredClone(ITEM_DEFINITIONS),
     jobs: {},
     daoLogs: [
@@ -243,4 +377,6 @@ export function createSeedWorld(): WorldState {
     nextEventSequence: 1,
     nextCombatSequence: 1,
   };
+  seedQuestBoards(world);
+  return world;
 }
