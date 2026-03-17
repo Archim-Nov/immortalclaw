@@ -1,33 +1,38 @@
 import {
+  advanceAuthenticatedAgentWorld,
+  buildAuthenticatedAgentActions,
+  buildAuthenticatedAgentEvents,
   buildAuthenticatedAgentState,
+  buildPublicAgentDirectory,
+  buildPublicAgentState,
   createRuntimeService,
+  listAuthenticatedAgentMessages,
+  performAuthenticatedAgentAction,
+  readAuthenticatedAgentDaoLogs,
+  readAuthenticatedAgentRegistration,
+  readAuthenticatedAgentSectInfo,
+  readAuthenticatedAgentStrategy,
+  readAuthenticatedAgentTribulation,
   registerAgentWorkflow,
+  resetAuthenticatedAgentCredential,
+  saveAuthenticatedAgentRegistration,
+  sendAuthenticatedAgentMessage,
+  syncAgentPersonaWorkflow,
 } from "../../../packages/application/src/index.js";
 import type {
   AdvanceWorldRequest,
-  AgentEventsResponse,
   AgentSendMessageRequest,
-  AgentSendMessageResponse,
   CultivatorActionsResponse,
   PerformActionRequest,
   RuntimeHealthResponse,
 } from "../../../packages/contracts/src/index.js";
+import { deriveRegistrationRecordFromAnswers, getRegistrationQuestionnaire } from "../../../packages/domain/src/registration-questionnaire.js";
 import {
-  deriveRegistrationRecordFromAnswers,
-  extractFiveElementScores,
   getAgentBindingInfo,
-  getRegistrationQuestionnaire,
-  getCultivatorState,
   getDaoLogs,
   getMessages,
-  getRecentWorldEvents,
   getSectInfo,
-  getStrategySnapshot,
-  getTribulationPreview,
   resolveCultivatorIdForAgent,
-  statusOf,
-  stubDetailedAttributes,
-  stubMainAttributes,
 } from "../../../packages/domain/src/runtime.js";
 import type {
   ActionId,
@@ -219,53 +224,6 @@ function readRegistrationInput(body: Record<string, unknown>): {
   };
 }
 
-function responseAgentView(agent: AgentProfileRecord) {
-  return {
-    agentId: agent.agentId,
-    name: agent.name,
-    selectedCultivatorId: agent.selectedCultivatorId,
-    createdAt: agent.createdAt,
-    updatedAt: agent.updatedAt,
-    lastSeenAt: agent.lastSeenAt,
-  };
-}
-
-async function resolveMessageRecipientCultivatorId(
-  repository: WorldRepository,
-  body: Record<string, unknown>,
-): Promise<string> {
-  const directCultivatorId = readOptionalBodyString(body.toCultivatorId);
-
-  if (directCultivatorId) {
-    return directCultivatorId;
-  }
-
-  const targetAgentId = readOptionalBodyString(body.toAgentId);
-
-  if (!targetAgentId) {
-    throw createStatusError(400, "Body must include toAgentId or toCultivatorId.");
-  }
-
-  const targetAgent = (await repository.listAgentProfiles()).find((agent) => agent.agentId === targetAgentId);
-
-  if (!targetAgent) {
-    throw createStatusError(404, `Agent not found: ${targetAgentId}`);
-  }
-
-  const world = await repository.readWorld();
-  const selectedCultivatorId = readOptionalBodyString(targetAgent.selectedCultivatorId);
-
-  if (!selectedCultivatorId) {
-    throw createStatusError(409, `Agent has no selected cultivator: ${targetAgentId}`);
-  }
-
-  if (!world.cultivators[selectedCultivatorId]) {
-    throw createStatusError(409, `Agent target is stale or missing from the world: ${targetAgentId}`);
-  }
-
-  return selectedCultivatorId;
-}
-
 function readLegacyCultivatorIdFromQuery(
   world: Awaited<ReturnType<WorldRepository["readWorld"]>>,
   request: URL,
@@ -301,37 +259,6 @@ function markdownResponse(content: string) {
       "content-type": "text/markdown; charset=utf-8",
     },
   });
-}
-
-function responseAgentDirectoryEntry(agent: AgentProfileRecord, world: Awaited<ReturnType<WorldRepository["readWorld"]>>) {
-  const cultivator = world.cultivators[agent.selectedCultivatorId];
-  const locationName =
-    world.locations[cultivator.locationId]?.name ??
-    world.zones[cultivator.locationId as keyof typeof world.zones]?.name ??
-    cultivator.locationId;
-  const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
-  const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null;
-
-  return {
-    agentId: agent.agentId,
-    name: agent.name,
-    selectedCultivatorId: agent.selectedCultivatorId,
-    createdAt: agent.createdAt,
-    updatedAt: agent.updatedAt,
-    lastSeenAt: agent.lastSeenAt,
-    cultivator: {
-      id: cultivator.id,
-      name: cultivator.name,
-      realm: cultivator.realm,
-      realmLevel: cultivator.realmLevel,
-      realmProgress: cultivator.realmProgress,
-      status: statusOf(cultivator),
-      location: locationName,
-      spiritualPower: cultivator.spiritualPower,
-      sect: sect?.name ?? null,
-      currentAction: job?.actionId ?? null,
-    },
-  };
 }
 
 export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: RouteRegistrationOptions = {}) {
@@ -375,7 +302,11 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
       ? await readAuthenticatedAgent(context.req.raw, repository)
       : null;
     const agentId = authenticatedAgent?.agentId ?? readRequiredBodyString(body.agentId, "Body must include agentId.");
-    const payload = await repository.syncPersona(agentId, readLegacyPersonaInput(body));
+    const payload = await syncAgentPersonaWorkflow({
+      repository,
+      agentId,
+      input: readLegacyPersonaInput(body),
+    });
     return context.json(payload);
   });
 
@@ -463,34 +394,18 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
 
   app.get("/world/agents", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
-    const [world, agentProfiles] = await Promise.all([repository.readWorld(), repository.listAgentProfiles()]);
-    return context.json({
-      agents: agentProfiles
-        .filter((agent) => Boolean(world.cultivators[agent.selectedCultivatorId]))
-        .map((agent) => responseAgentDirectoryEntry(agent, world)),
-    });
+    return context.json(await buildPublicAgentDirectory({ repository }));
   });
 
   app.get("/world/agent/:agentId", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agentId = context.req.param("agentId");
-    const agent = await repository.getAgentProfile(agentId);
+    const payload = await buildPublicAgentState({ repository, agentId });
 
-    if (!agent || !agent.selectedCultivatorId) {
+    if (!payload) {
       return context.json({ error: "Agent not found or has no cultivator." }, 404);
     }
-
-    const service = createRuntimeService({ repository });
-    const cultivatorState = await service.getCultivatorState(agent.selectedCultivatorId);
-    const cultivator = (await repository.readWorld()).cultivators[agent.selectedCultivatorId];
-
-    return context.json({
-      agent: responseAgentView(agent),
-      ...cultivatorState,
-      fiveElementScores: extractFiveElementScores(cultivator?.registrationRecord ?? null),
-      mainAttributes: stubMainAttributes(),
-      detailedAttributes: stubDetailedAttributes(),
-    });
+    return context.json(payload);
   });
 
   app.post("/world/tick", async (context) => {
@@ -510,138 +425,103 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
   app.get("/agent/actions", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const service = createRuntimeService({ repository });
-    return context.json({
-      agent: responseAgentView(agent),
-      cultivatorId: agent.selectedCultivatorId,
-      actions: await service.listActions(agent.selectedCultivatorId),
-    });
+    return context.json(await buildAuthenticatedAgentActions({ repository, agent }));
   });
 
   app.get("/agent/messages", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const world = await repository.readWorld();
-    return context.json(getMessages(world, agent.selectedCultivatorId));
+    return context.json(await listAuthenticatedAgentMessages({ repository, agent }));
   });
 
   app.post("/agent/messages", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as AgentSendMessageRequest & Record<string, unknown>;
-    const targetCultivatorId = await resolveMessageRecipientCultivatorId(repository, body);
-    const subject = readOptionalBodyString(body.subject) ?? "Private Telepathy";
     const content = readRequiredBodyString(body.content, "Body must include content.");
-    const message = await repository.sendDirectMessage(
-      agent.selectedCultivatorId,
-      targetCultivatorId,
-      agent.name,
-      subject,
-      content,
+    return context.json(
+      await sendAuthenticatedAgentMessage({
+        repository,
+        agent,
+        request: {
+          toAgentId: readOptionalBodyString(body.toAgentId),
+          toCultivatorId: readOptionalBodyString(body.toCultivatorId),
+          subject: readOptionalBodyString(body.subject),
+          content,
+        },
+      }),
     );
-    const payload: AgentSendMessageResponse = {
-      ok: true,
-      message,
-    };
-    return context.json(payload);
   });
 
   app.get("/agent/events", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const world = await repository.readWorld();
-    const sinceTick = readOptionalSinceTick(context.req.query("sinceTick"));
-    const events = getRecentWorldEvents(world, agent.selectedCultivatorId, 50).filter((event) =>
-      sinceTick === undefined ? true : event.tick >= sinceTick,
+    return context.json(
+      await buildAuthenticatedAgentEvents({
+        repository,
+        agent,
+        sinceTick: readOptionalSinceTick(context.req.query("sinceTick")),
+      }),
     );
-    const combats = world.combatLogs
-      .filter((entry) => entry.cultivatorId === agent.selectedCultivatorId)
-      .filter((entry) => (sinceTick === undefined ? true : entry.tick >= sinceTick))
-      .slice(0, 20);
-    const payload: AgentEventsResponse = {
-      agent: responseAgentView(agent),
-      tick: world.tick,
-      events,
-      combats,
-    };
-    return context.json(payload);
   });
 
   app.get("/agent/strategy", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const world = await repository.readWorld();
-    return context.json(getStrategySnapshot(world, agent.selectedCultivatorId));
+    return context.json(await readAuthenticatedAgentStrategy({ repository, agent }));
   });
 
   app.get("/agent/tribulation", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const world = await repository.readWorld();
-    return context.json(getTribulationPreview(world, agent.selectedCultivatorId));
+    return context.json(await readAuthenticatedAgentTribulation({ repository, agent }));
   });
 
   app.get("/agent/sect", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const world = await repository.readWorld();
-    return context.json(getSectInfo(world, agent.selectedCultivatorId));
+    return context.json(await readAuthenticatedAgentSectInfo({ repository, agent }));
   });
 
   app.get("/agent/dao-heart", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const world = await repository.readWorld();
-    return context.json(getDaoLogs(world, agent.selectedCultivatorId));
+    return context.json(await readAuthenticatedAgentDaoLogs({ repository, agent }));
   });
 
   app.get("/agent/registration", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    return context.json(await repository.getCultivationRegistration(agent.selectedCultivatorId));
+    return context.json(await readAuthenticatedAgentRegistration({ repository, agent }));
   });
 
   app.post("/agent/credential/reset", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const currentCredential = readBearerToken(context.req.header("authorization") ?? undefined);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const payload = await repository.resetAgentCredential(agent.agentId, currentCredential);
-    return context.json({
-      ok: true,
-      agentId: payload.agentId,
-      credential: payload.credential,
-      message: "Agent credential reset successfully. Save the new credential now.",
-    });
+    return context.json(await resetAuthenticatedAgentCredential({ repository, agent, currentCredential }));
   });
 
   app.post("/agent/registration", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as Record<string, unknown>;
-    return context.json(
-      await repository.saveCultivationRegistration(
-        agent.selectedCultivatorId,
-        readRegistrationRecord(body),
-        agent.agentId,
-      ),
-    );
+    return context.json(await saveAuthenticatedAgentRegistration({ repository, agent, record: readRegistrationRecord(body) }));
   });
 
   app.post("/agent/act", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const service = createRuntimeService({ repository });
     const body = (await context.req.json()) as Partial<PerformActionRequest> & Record<string, unknown>;
     const actionId = readRequiredBodyString(body.actionId, "Body must include actionId.");
-    return context.json(await service.performAction(agent.selectedCultivatorId, actionId as ActionId));
+    return context.json(await performAuthenticatedAgentAction({ repository, agent, actionId: actionId as ActionId }));
   });
 
   app.post("/agent/tick", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     await readAuthenticatedAgent(context.req.raw, repository);
-    const service = createRuntimeService({ repository });
     const body = (await context.req.json()) as Partial<AdvanceWorldRequest>;
     const steps = typeof body.steps === "number" ? body.steps : 1;
-    return context.json(await service.advanceWorld(steps, "manual"));
+    return context.json(await advanceAuthenticatedAgentWorld({ repository, steps }));
   });
 }

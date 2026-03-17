@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  AgentRegistrationInput,
-  AgentRegistrationResult,
-} from "../../persistence/src/world-repository.js";
+import { createSeedWorld } from "../../domain/src/runtime.js";
 import type {
   CultivationRegistrationRecord,
   CultivatorStateView,
 } from "../../domain/src/runtime.js";
+import type {
+  AgentProfileWriteInput,
+} from "../../persistence/src/world-repository.js";
 import { registerAgentWorkflow } from "./agent-registration.js";
 
 function createRegistrationRecord(): CultivationRegistrationRecord {
@@ -168,31 +168,51 @@ function createState(): CultivatorStateView {
 }
 
 test("registerAgentWorkflow assembles the richer registration response in application", async () => {
-  const calls: { input?: AgentRegistrationInput; cultivatorId?: string } = {};
+  const calls: {
+    cultivatorId?: string;
+    savedProfile?: AgentProfileWriteInput;
+    issuedAgentId?: string;
+  } = {};
   const registrationRecord = createRegistrationRecord();
   const state = createState();
+  const world = createSeedWorld();
 
   const payload = await registerAgentWorkflow({
     repository: {
-      async registerAgent(input): Promise<AgentRegistrationResult> {
-        calls.input = input;
+      async transactWorld(mutator) {
+        return mutator(world);
+      },
+      async saveAgentProfile(input) {
+        calls.savedProfile = input;
         return {
-          agentId: "agent-1",
-          name: "Su Mingyue",
-          selectedCultivatorId: "cultivator-9",
-          createdCultivator: true,
-          credential: "immortal_sk_test",
+          agentId: input.agentId,
+          name: input.name,
+          selectedCultivatorId: input.selectedCultivatorId,
           createdAt: "2026-03-17T00:00:00.000Z",
           updatedAt: "2026-03-17T00:00:00.000Z",
           lastSeenAt: "2026-03-17T00:00:00.000Z",
         };
       },
+      async issueAgentCredential(agentId) {
+        calls.issuedAgentId = agentId;
+        return {
+          agentId,
+          credential: "immortal_sk_test",
+        };
+      },
       async getCultivatorState(cultivatorId) {
         calls.cultivatorId = cultivatorId;
-        return state;
+        return {
+          ...state,
+          cultivator: {
+            ...state.cultivator,
+            id: cultivatorId,
+            name: calls.savedProfile?.name ?? state.cultivator.name,
+          },
+        } satisfies CultivatorStateView;
       },
-      async getCultivationRegistration() {
-        return registrationRecord;
+      async getCultivationRegistration(cultivatorId) {
+        return world.cultivators[cultivatorId]?.registrationRecord ?? null;
       },
     },
     input: {
@@ -203,8 +223,9 @@ test("registerAgentWorkflow assembles the richer registration response in applic
     baseUrl: "https://runtime.test",
   });
 
-  assert.equal(calls.input?.name, "Su Mingyue");
-  assert.equal(calls.cultivatorId, "cultivator-9");
+  assert.equal(calls.savedProfile?.name, "Su Mingyue");
+  assert.equal(calls.cultivatorId, calls.savedProfile?.selectedCultivatorId);
+  assert.equal(calls.savedProfile?.agentId, calls.issuedAgentId);
   assert.equal(payload.ok, true);
   assert.equal(payload.baseUrl, "https://runtime.test");
   assert.equal(payload.registration?.core_temperament, "Calm strategist");

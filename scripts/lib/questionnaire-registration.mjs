@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  deriveRegistrationRecordFromAnswers,
-} from "../../packages/domain/src/runtime.js";
+import { deriveRegistrationRecordFromAnswers } from "../../packages/domain/src/registration-questionnaire.js";
 import {
   QUESTIONNAIRE_VERSION,
   REGISTRATION_ANSWER_OPTIONS,
