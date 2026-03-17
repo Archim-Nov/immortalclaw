@@ -10,6 +10,8 @@ import type {
 } from "../../../packages/contracts/src/index.js";
 import {
   buildRegistrationProfile,
+  deriveDetailedAttributes,
+  deriveMainAttributes,
   deriveRegistrationRecordFromAnswers,
   extractFiveElementScores,
   getAgentBindingInfo,
@@ -23,8 +25,6 @@ import {
   getTribulationPreview,
   resolveCultivatorIdForAgent,
   statusOf,
-  stubDetailedAttributes,
-  stubMainAttributes,
 } from "../../../packages/domain/src/runtime.js";
 import type {
   ActionId,
@@ -503,13 +503,14 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const service = createRuntimeService({ repository });
     const cultivatorState = await service.getCultivatorState(agent.selectedCultivatorId);
     const cultivator = (await repository.readWorld()).cultivators[agent.selectedCultivatorId];
+    const mainAttributes = deriveMainAttributes(cultivator?.registrationRecord ?? null);
 
     return context.json({
       agent: responseAgentView(agent),
       ...cultivatorState,
       fiveElementScores: extractFiveElementScores(cultivator?.registrationRecord ?? null),
-      mainAttributes: stubMainAttributes(),
-      detailedAttributes: stubDetailedAttributes(),
+      mainAttributes,
+      detailedAttributes: deriveDetailedAttributes(mainAttributes),
     });
   });
 
@@ -526,9 +527,14 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const service = createRuntimeService({ repository });
     const payload = await service.getCultivatorState(agent.selectedCultivatorId);
+    const cultivator = (await repository.readWorld()).cultivators[agent.selectedCultivatorId];
+    const mainAttributes = deriveMainAttributes(cultivator?.registrationRecord ?? null);
     return context.json({
       agent: responseAgentView(agent),
       ...payload,
+      fiveElementScores: extractFiveElementScores(cultivator?.registrationRecord ?? null),
+      mainAttributes,
+      detailedAttributes: deriveDetailedAttributes(mainAttributes),
     });
   });
 
