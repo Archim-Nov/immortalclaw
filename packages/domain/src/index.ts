@@ -42,5 +42,13 @@ export { SqliteWorldStore, createSqliteWorldStore, createWorldStore } from "./st
 export * from "./constants.js";
 export * from "./topology.js";
 export * from "./events.js";
+export {
+  deriveDetailedAttributes,
+  deriveMainAttributes,
+  extractFiveElementScores,
+  stubDetailedAttributes,
+  stubMainAttributes,
+} from "./attributes.js";
+export type { DetailedAttributeId, MainAttributeId } from "./attributes.js";
 export * from "./quest.js";
 export * from "./economy.js";

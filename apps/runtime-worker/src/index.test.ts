@@ -13,6 +13,39 @@ function createRepository() {
   return createInMemoryWorldRepository();
 }
 
+function assertBalancedMainAttributes(mainAttributes: Record<string, number>) {
+  assert.equal(Object.keys(mainAttributes).length, 8);
+  assert.equal(Object.values(mainAttributes).reduce((sum, value) => sum + value, 0), 400);
+  assert.ok(Object.values(mainAttributes).every((value) => value >= 30 && value <= 70));
+}
+
+function assertDetailedAttributesFollowFormula(
+  mainAttributes: Record<string, number>,
+  detailedAttributes: Record<string, number>,
+) {
+  assert.equal(Object.keys(detailedAttributes).length, 15);
+  assert.equal(
+    detailedAttributes.qixue_shangxian,
+    200 + 8 * mainAttributes.tipu + 2 * mainAttributes.gengu + 2 * mainAttributes.daoxin,
+  );
+  assert.equal(
+    detailedAttributes.lingli_shangxian,
+    120 + 8 * mainAttributes.lingyuan + 2 * mainAttributes.gengu + 2 * mainAttributes.shenshi,
+  );
+  assert.equal(
+    detailedAttributes.lingli_huifu,
+    Math.round((2 + 0.10 * mainAttributes.gengu + 0.08 * mainAttributes.lingyuan + 0.05 * mainAttributes.daoxin) * 100) / 100,
+  );
+  assert.equal(
+    detailedAttributes.kongzhi_qiangdu,
+    Math.round((0.55 * mainAttributes.shenshi + 0.25 * mainAttributes.wuxing + 0.20 * mainAttributes.lingyuan) * 100) / 100,
+  );
+  assert.equal(
+    detailedAttributes.huxin,
+    Math.round((0.06 * mainAttributes.daoxin + 0.04 * mainAttributes.tipu + 0.02 * mainAttributes.gengu) * 100) / 100,
+  );
+}
+
 function createRegistrationRecord(): CultivationRegistrationRecord {
   return {
     record_type: "registration_record",
@@ -329,6 +362,12 @@ test("agent registration can save a canonical registration record in the same ca
   assert.equal(stateResponse.status, 200);
   assert.equal(statePayload.registration?.core_temperament, "Calm strategist");
   assert.ok(statePayload.registrationEffects);
+  assertBalancedMainAttributes(statePayload.mainAttributes);
+  assert.ok(statePayload.mainAttributes.daoxin > 50);
+  assert.ok(statePayload.mainAttributes.shenshi > 50);
+  assert.ok(statePayload.mainAttributes.bingpo < 50);
+  assertDetailedAttributesFollowFormula(statePayload.mainAttributes, statePayload.detailedAttributes);
+  assert.deepEqual(statePayload.fiveElementScores, { metal: 5, wood: 6, water: 11, fire: 3, earth: 8 });
 });
 
 test("agent registration can derive and save a canonical registration record from questionnaire answers", async () => {
@@ -942,15 +981,10 @@ test("GET /world/agent/:agentId returns full cultivator state for registered age
   assert.ok(payload.cultivation);
   assert.ok(payload.factionReputation);
 
-  // Stubbed main attributes (8 keys, all 50)
-  assert.equal(Object.keys(payload.mainAttributes).length, 8);
-  assert.equal(payload.mainAttributes.gengu, 50);
-  assert.equal(payload.mainAttributes.bingpo, 50);
-
-  // Stubbed detailed attributes (15 keys)
-  assert.equal(Object.keys(payload.detailedAttributes).length, 15);
-  assert.equal(payload.detailedAttributes.qixue_shangxian, 600);
-  assert.equal(payload.detailedAttributes.huxin, 6);
+  assertBalancedMainAttributes(payload.mainAttributes);
+  assert.ok(payload.mainAttributes.daoxin > 50);
+  assert.ok(payload.mainAttributes.bingpo < 50);
+  assertDetailedAttributesFollowFormula(payload.mainAttributes, payload.detailedAttributes);
 
   // Five-element scores from registration
   assert.deepEqual(payload.fiveElementScores, { metal: 5, wood: 6, water: 11, fire: 3, earth: 8 });
@@ -969,6 +1003,17 @@ test("GET /world/agent/:agentId returns default five-element scores when agent h
 
   // Five-element scores should default to 50 each
   assert.deepEqual(payload.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
+  assert.deepEqual(payload.mainAttributes, {
+    gengu: 50,
+    tipu: 50,
+    lingyuan: 50,
+    shenshi: 50,
+    wuxing: 50,
+    daoxin: 50,
+    shenfa: 50,
+    bingpo: 50,
+  });
+  assertDetailedAttributesFollowFormula(payload.mainAttributes, payload.detailedAttributes);
 
   // Registration field should be null
   assert.equal(payload.registration, null);
