@@ -1,4 +1,4 @@
-import { stubMainAttributes } from "./attributes.js";
+import { deriveMainAttributes } from "./attributes.js";
 import type {
   ActivityContext,
   Cultivator,
@@ -83,7 +83,7 @@ export function computeDaoPotential(cultivator: Cultivator): DaoPotential {
         ? 50 + cultivator.realmLevel * 8
         : 100 + cultivator.realmLevel * 12;
 
-  const mainAttributes = stubMainAttributes();
+  const mainAttributes = deriveMainAttributes(cultivator.registrationRecord);
   const attributeAverage = Math.floor(
     Object.values(mainAttributes).reduce((sum, value) => sum + value, 0) / Object.values(mainAttributes).length,
   );

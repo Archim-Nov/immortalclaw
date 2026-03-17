@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createSeedWorld } from "../../domain/src/runtime.js";
 import type {
   AgentProfileRecord,
 } from "../../persistence/src/world-repository.js";
@@ -91,6 +92,16 @@ function createState(): CultivatorStateView {
 
 test("buildAuthenticatedAgentState assembles agent view plus cultivator state in application", async () => {
   const calls: { cultivatorId?: string } = {};
+  const world = createSeedWorld();
+  const seedCultivatorId = Object.keys(world.cultivators)[0];
+  if (!seedCultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+  world.cultivators["cultivator-9"] = {
+    ...world.cultivators[seedCultivatorId]!,
+    id: "cultivator-9",
+    registrationRecord: null,
+  };
   const agent: AgentProfileRecord = {
     agentId: "agent-1",
     name: "Su Mingyue",
@@ -106,6 +117,9 @@ test("buildAuthenticatedAgentState assembles agent view plus cultivator state in
         calls.cultivatorId = cultivatorId;
         return createState();
       },
+      async readWorld() {
+        return world;
+      },
     },
     agent,
   });
@@ -115,4 +129,7 @@ test("buildAuthenticatedAgentState assembles agent view plus cultivator state in
   assert.equal(payload.agent.name, "Su Mingyue");
   assert.equal(payload.cultivator.id, "cultivator-9");
   assert.equal(payload.tick, 12);
+  assert.equal(payload.mainAttributes.gengu, 50);
+  assert.equal(payload.detailedAttributes.qixue_shangxian, 800);
+  assert.deepEqual(payload.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
 });

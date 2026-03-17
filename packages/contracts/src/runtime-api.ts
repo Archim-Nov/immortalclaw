@@ -1,4 +1,5 @@
 export type {
+  DetailedAttributeId,
   ActionExecutionResult,
   ActionId,
   AvailableAction,
@@ -6,6 +7,7 @@ export type {
   CultivationRegistrationView,
   CultivatorStateView,
   Message,
+  MainAttributeId,
   RegistrationAnswer,
   RegistrationProfileView,
   RegistrationQuestionId,
@@ -24,6 +26,7 @@ import type {
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
+  FiveElementId,
   Message,
   RegistrationAnswer,
   RegistrationProfileView,
@@ -35,6 +38,7 @@ import type {
   TribulationPreview,
   WorldEvent,
 } from "../../domain/src/runtime.js";
+import type { DetailedAttributeId, MainAttributeId } from "../../domain/src/attributes.js";
 import type { AgentRegistrationInput } from "../../persistence/src/world-repository.js";
 
 export interface RuntimeHealthResponse {
@@ -98,7 +102,13 @@ export interface AgentView {
   lastSeenAt: string | null;
 }
 
-export interface AgentStateResponse extends CultivatorStateView {
+export interface DerivedAttributeResponse {
+  fiveElementScores: Record<FiveElementId, number>;
+  mainAttributes: Record<MainAttributeId, number>;
+  detailedAttributes: Record<DetailedAttributeId, number>;
+}
+
+export interface AgentStateResponse extends CultivatorStateView, DerivedAttributeResponse {
   agent: AgentView;
 }
 

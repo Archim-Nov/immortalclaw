@@ -138,5 +138,6 @@ test("buildPublicAgentState assembles the stat-page payload for a registered age
   assert.equal(payload?.agent.agentId, "agent-1");
   assert.equal(payload?.cultivator.id, cultivatorId);
   assert.equal(payload?.mainAttributes.gengu, 50);
-  assert.equal(payload?.detailedAttributes.qixue_shangxian, 600);
+  assert.equal(payload?.detailedAttributes.qixue_shangxian, 800);
+  assert.deepEqual(payload?.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
 });

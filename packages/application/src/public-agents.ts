@@ -1,7 +1,7 @@
 import {
+  deriveDetailedAttributes,
+  deriveMainAttributes,
   extractFiveElementScores,
-  stubDetailedAttributes,
-  stubMainAttributes,
 } from "../../domain/src/attributes.js";
 import type { CultivatorStateView, WorldState } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
@@ -79,11 +79,13 @@ export async function buildPublicAgentState(options: {
     return null;
   }
 
+  const mainAttributes = deriveMainAttributes(cultivator.registrationRecord ?? null);
+
   return {
     agent: toAgentView(agent),
     ...cultivatorState,
     fiveElementScores: extractFiveElementScores(cultivator.registrationRecord ?? null),
-    mainAttributes: stubMainAttributes(),
-    detailedAttributes: stubDetailedAttributes(),
+    mainAttributes,
+    detailedAttributes: deriveDetailedAttributes(mainAttributes),
   };
 }

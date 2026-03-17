@@ -193,6 +193,14 @@ export function temperamentPrimaryElement(id: RegistrationTemperamentId): FiveEl
   return TEMPERAMENTS[id].main;
 }
 
+export function temperamentSecondaryElement(id: RegistrationTemperamentId): FiveElementId {
+  return TEMPERAMENTS[id].secondary;
+}
+
+export function behaviorAspectElements(id: RegistrationBehaviorAspectId): FiveElementId[] {
+  return [...BEHAVIOR_ASPECTS[id].elements];
+}
+
 export function resolveBehaviorAspectId(label: string): RegistrationBehaviorAspectId | null {
   const key = normalizedKey(label);
   if (LEGACY_BEHAVIOR_ALIASES[key]) {
