@@ -11,14 +11,22 @@ The current target architecture is:
 - Supabase Postgres for durable world state
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
 
-The older `apps/world-api` and `apps/world-worker` remain in the repo as local SQLite harnesses for debugging and migration backstops. They are not the primary production path.
+## Official Runtime Path
+
+The official production runtime path is:
+
+`apps/web -> apps/runtime-worker -> packages/application -> packages/persistence -> packages/domain`
+
+This is the only path we should extend for product architecture work.
+
+The older `apps/world-api` and `apps/world-worker` remain in the repo as legacy harnesses only for debugging and migration backstops. They are not part of the product architecture.
 
 ## Packages and Apps
 
 - `apps/web`: Vite web surface for Cloudflare Pages
 - `apps/runtime-worker`: Cloudflare Worker runtime surface
-- `apps/world-api`: legacy local Node HTTP harness
-- `apps/world-worker`: legacy local auto-tick harness
+- `apps/world-api`: legacy local Node HTTP harness only, outside the product architecture
+- `apps/world-worker`: legacy local auto-tick harness only, outside the product architecture
 - `packages/domain`: simulation rules and world model
 - `packages/application`: transport-free use cases
 - `packages/contracts`: shared runtime request and response types
@@ -248,7 +256,7 @@ Check Supabase for rows in:
 
 ### Legacy SQLite Harnesses
 
-These remain available for local-only debugging:
+These remain available as legacy harnesses only for local debugging and migration backstops. They are not part of the official production runtime path:
 
 ```text
 npm run dev:legacy-api

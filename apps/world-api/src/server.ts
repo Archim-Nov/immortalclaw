@@ -19,7 +19,7 @@ import {
 } from "../../../packages/domain/src/index.js";
 
 const LEGACY_HARNESS_NOTICE =
-  "[world-api] Legacy local SQLite harness. Use apps/runtime-worker for the primary runtime API and deployed traffic.";
+  "[world-api] Legacy harness only. Use apps/runtime-worker for product runtime work; apps/world-api is not part of the product architecture.";
 
 const store = createSqliteWorldStore({
   filePath: process.env.WORLD_DB_PATH,
@@ -257,5 +257,5 @@ const server = http.createServer(async (request, response) => {
 console.warn(LEGACY_HARNESS_NOTICE);
 server.listen(port, "127.0.0.1", () => {
   console.log(`Immortal Claw legacy world API listening on http://127.0.0.1:${port}`);
-  console.log("[world-api] Local-only SQLite harness for debugging and migration backstops.");
+  console.log("[world-api] Local-only SQLite harness for debugging and migration backstops. Not part of the product architecture.");
 });

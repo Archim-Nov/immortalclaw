@@ -1,4 +1,8 @@
-import { createRuntimeService } from "../../../packages/application/src/index.js";
+import {
+  buildAuthenticatedAgentState,
+  createRuntimeService,
+  registerAgentWorkflow,
+} from "../../../packages/application/src/index.js";
 import type {
   AdvanceWorldRequest,
   AgentEventsResponse,
@@ -9,7 +13,6 @@ import type {
   RuntimeHealthResponse,
 } from "../../../packages/contracts/src/index.js";
 import {
-  buildRegistrationProfile,
   deriveRegistrationRecordFromAnswers,
   extractFiveElementScores,
   getAgentBindingInfo,
@@ -347,38 +350,15 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const repository = resolveRepository(context.env, options.repository);
     const body = (await context.req.json()) as Record<string, unknown>;
     const { input: registrationInput, questionnaireSource } = readRegistrationInput(body);
-    const payload = await repository.registerAgent(registrationInput);
-    const service = createRuntimeService({ repository });
-    const [state, savedRecord] = await Promise.all([
-      service.getCultivatorState(payload.selectedCultivatorId),
-      repository.getCultivationRegistration(payload.selectedCultivatorId),
-    ]);
-    const registrationProfile = savedRecord ? buildRegistrationProfile(savedRecord) : null;
-    const messageDetails = registrationProfile
-      ? [
-          `Core temperament: ${registrationProfile.coreTemperament.label}.`,
-          `Secondary temperament: ${registrationProfile.secondaryTemperament.label}.`,
-          `Behavior aspect: ${registrationProfile.behaviorAspect.label}.`,
-          `Spirit root: ${registrationProfile.spiritRoot.label}.`,
-          `Cultivation motive: ${registrationProfile.cultivationMotive.label}.`,
-        ].join(" ")
-      : "";
-    const messagePrefix =
-      questionnaireSource === "answers"
-        ? "Agent registered, questionnaire answers were processed, and cultivation record saved successfully."
-        : "Agent registered and cultivation record saved successfully.";
-
-    return context.json({
-      ok: true,
-      agentId: payload.agentId,
-      credential: payload.credential,
+    const payload = await registerAgentWorkflow({
+      repository,
+      input: registrationInput,
+      questionnaireSource,
       baseUrl: new URL(context.req.url).origin,
-      selectedCultivatorId: payload.selectedCultivatorId,
-      createdCultivator: payload.createdCultivator,
-      registration: state.registration,
-      registrationEffects: state.registrationEffects,
-      registrationProfile,
-      message: `${messagePrefix} ${messageDetails} Save this credential now.`.trim(),
+    });
+    return context.json({
+      ...payload,
+      message: `${payload.message} Save this credential now.`.trim(),
     });
   });
 
@@ -524,12 +504,7 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
   app.get("/agent/state", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
-    const service = createRuntimeService({ repository });
-    const payload = await service.getCultivatorState(agent.selectedCultivatorId);
-    return context.json({
-      agent: responseAgentView(agent),
-      ...payload,
-    });
+    return context.json(await buildAuthenticatedAgentState({ repository, agent }));
   });
 
   app.get("/agent/actions", async (context) => {
