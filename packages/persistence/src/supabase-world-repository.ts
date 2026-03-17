@@ -24,6 +24,7 @@ import type {
   AgentCredentialResetResult,
   AgentPersonaInput,
   AgentProfileRecord,
+  AgentProfileWriteInput,
   AgentRegistrationInput,
   AgentRegistrationResult,
   TickLockRecord,
@@ -111,6 +112,13 @@ export class SupabaseWorldRepository implements WorldRepository {
   async readWorld(): Promise<WorldState> {
     const snapshot = await this.readSnapshot();
     return snapshot.world;
+  }
+
+  async transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult> {
+    const snapshot = await this.readSnapshot();
+    const result = mutator(snapshot.world);
+    await this.persistWorld(snapshot.world, snapshot.revision);
+    return structuredClone(result);
   }
 
   async listAgentProfiles(): Promise<AgentProfileRecord[]> {
@@ -259,37 +267,29 @@ export class SupabaseWorldRepository implements WorldRepository {
     }
   }
 
-  async registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult> {
+  async saveAgentProfile(input: AgentProfileWriteInput): Promise<AgentProfileRecord> {
+    const normalizedAgentId = normalizeAgentId(input.agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+
     const normalizedName = input.name.trim();
     if (!normalizedName) {
-      throw new Error("Agent registration requires a name.");
+      throw new Error("Agent profile requires a name.");
     }
 
-    const agentId = crypto.randomUUID();
+    const normalizedCultivatorId = input.selectedCultivatorId.trim();
+    if (!normalizedCultivatorId) {
+      throw new Error("selectedCultivatorId is required.");
+    }
+
     const timestamp = this.now();
-    const existingProfile = await this.readAgentProfile(agentId);
-    const snapshot = await this.readSnapshot();
-    const sync = syncCultivatorFromPersona(snapshot.world, {
-      agentId,
-      name: normalizedName,
-      genderPresentation: input.genderPresentation,
-      pronouns: input.pronouns,
-      age: input.age,
-      origin: input.origin,
-      temperament: input.temperament,
-      startingPath: input.startingPath,
-    });
-
-    if (input.record) {
-      saveCultivationRegistration(snapshot.world, sync.selectedCultivatorId, input.record, agentId);
-    }
-
-    await this.persistWorld(snapshot.world, snapshot.revision);
+    const existingProfile = await this.readAgentProfile(normalizedAgentId);
 
     const profile = {
-      agentId,
+      agentId: normalizedAgentId,
       name: normalizedName,
-      selectedCultivatorId: sync.selectedCultivatorId,
+      selectedCultivatorId: normalizedCultivatorId,
       genderPresentation: input.genderPresentation,
       pronouns: input.pronouns?.trim(),
       origin: input.origin?.trim(),
@@ -297,14 +297,29 @@ export class SupabaseWorldRepository implements WorldRepository {
       startingPath: input.startingPath,
       createdAt: existingProfile?.createdAt ?? timestamp,
       updatedAt: timestamp,
-      lastSeenAt: timestamp,
+      lastSeenAt: input.lastSeenAt ?? existingProfile?.lastSeenAt ?? timestamp,
     } satisfies AgentProfileRecord;
 
     await this.upsertRows("agent_profiles", [this.toAgentProfileRow(profile)], "agent_id");
 
-    await this.fetchImpl(
+    return structuredClone(profile);
+  }
+
+  async issueAgentCredential(agentId: string): Promise<AgentCredentialResetResult> {
+    const normalizedAgentId = normalizeAgentId(agentId);
+    if (!normalizedAgentId) {
+      throw new Error("agentId is required.");
+    }
+
+    const existingProfile = await this.readAgentProfile(normalizedAgentId);
+    if (!existingProfile) {
+      throw new Error(`Agent not found: ${normalizedAgentId}`);
+    }
+
+    const timestamp = this.now();
+    const revokeResponse = await this.fetchImpl(
       this.tableUrl("agent_credentials", {
-        agent_id: `eq.${encodeURIComponent(agentId)}`,
+        agent_id: `eq.${encodeURIComponent(normalizedAgentId)}`,
       }),
       {
         method: "PATCH",
@@ -317,13 +332,17 @@ export class SupabaseWorldRepository implements WorldRepository {
         }),
       },
     );
+    if (!revokeResponse.ok) {
+      const error = await this.readError(revokeResponse);
+      throw new Error(`Failed to revoke existing agent credentials: ${error.message}`);
+    }
 
     const credential = issueCredential();
     await this.upsertRows(
       "agent_credentials",
       [
         {
-          agent_id: agentId,
+          agent_id: normalizedAgentId,
           credential_hash: await hashCredential(credential),
           created_at: timestamp,
           last_seen_at: timestamp,
@@ -334,8 +353,53 @@ export class SupabaseWorldRepository implements WorldRepository {
     );
 
     return {
-      ...profile,
+      agentId: normalizedAgentId,
       credential,
+    };
+  }
+
+  async registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult> {
+    const normalizedName = input.name.trim();
+    if (!normalizedName) {
+      throw new Error("Agent registration requires a name.");
+    }
+
+    const agentId = crypto.randomUUID();
+    const sync = await this.transactWorld((world) => {
+      const result = syncCultivatorFromPersona(world, {
+        agentId,
+        name: normalizedName,
+        genderPresentation: input.genderPresentation,
+        pronouns: input.pronouns,
+        age: input.age,
+        origin: input.origin,
+        temperament: input.temperament,
+        startingPath: input.startingPath,
+      });
+
+      if (input.record) {
+        saveCultivationRegistration(world, result.selectedCultivatorId, input.record, agentId);
+      }
+
+      return result;
+    });
+
+    const profile = await this.saveAgentProfile({
+      agentId,
+      name: normalizedName,
+      selectedCultivatorId: sync.selectedCultivatorId,
+      genderPresentation: input.genderPresentation,
+      pronouns: input.pronouns,
+      age: input.age,
+      origin: input.origin,
+      temperament: input.temperament,
+      startingPath: input.startingPath,
+    });
+    const credential = await this.issueAgentCredential(agentId);
+
+    return {
+      ...profile,
+      credential: credential.credential,
       createdCultivator: sync.created,
     };
   }
@@ -486,22 +550,21 @@ export class SupabaseWorldRepository implements WorldRepository {
       throw new Error(`Agent not found: ${normalizedAgentId}`);
     }
 
-    const snapshot = await this.readSnapshot();
-    const sync = syncCultivatorFromPersona(snapshot.world, {
+    const sync = await this.transactWorld((world) =>
+      syncCultivatorFromPersona(world, {
+        agentId: normalizedAgentId,
+        name: input.name,
+        genderPresentation: input.genderPresentation,
+        pronouns: input.pronouns,
+        age: input.age,
+        origin: input.origin,
+        temperament: input.temperament,
+        startingPath: input.startingPath,
+      }),
+    );
+
+    return this.saveAgentProfile({
       agentId: normalizedAgentId,
-      name: input.name,
-      genderPresentation: input.genderPresentation,
-      pronouns: input.pronouns,
-      age: input.age,
-      origin: input.origin,
-      temperament: input.temperament,
-      startingPath: input.startingPath,
-    });
-
-    await this.persistWorld(snapshot.world, snapshot.revision);
-
-    const updatedProfile: AgentProfileRecord = {
-      ...existingProfile,
       name: input.name.trim(),
       selectedCultivatorId: sync.selectedCultivatorId,
       genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
@@ -509,11 +572,8 @@ export class SupabaseWorldRepository implements WorldRepository {
       origin: input.origin?.trim() ?? existingProfile.origin,
       temperament: input.temperament?.trim() ?? existingProfile.temperament,
       startingPath: input.startingPath ?? existingProfile.startingPath,
-      updatedAt: this.now(),
-    };
-
-    await this.upsertRows("agent_profiles", [this.toAgentProfileRow(updatedProfile)], "agent_id");
-    return structuredClone(updatedProfile);
+      lastSeenAt: existingProfile.lastSeenAt,
+    });
   }
 
   async touchAgent(agentId: string): Promise<void> {
@@ -550,18 +610,34 @@ export class SupabaseWorldRepository implements WorldRepository {
       throw new Error("agentId is required.");
     }
 
-    const snapshot = await this.readSnapshot();
-    const result = syncCultivatorFromPersona(snapshot.world, {
-      agentId: normalizedAgentId,
-      name: input.name,
-      genderPresentation: input.genderPresentation,
-      pronouns: input.pronouns,
-      age: input.age,
-      origin: input.origin,
-      temperament: input.temperament,
-      startingPath: input.startingPath,
-    });
-    await this.persistWorld(snapshot.world, snapshot.revision);
+    const result = await this.transactWorld((world) =>
+      syncCultivatorFromPersona(world, {
+        agentId: normalizedAgentId,
+        name: input.name,
+        genderPresentation: input.genderPresentation,
+        pronouns: input.pronouns,
+        age: input.age,
+        origin: input.origin,
+        temperament: input.temperament,
+        startingPath: input.startingPath,
+      }),
+    );
+
+    const existingProfile = await this.readAgentProfile(normalizedAgentId);
+    if (existingProfile) {
+      await this.saveAgentProfile({
+        agentId: normalizedAgentId,
+        name: input.name.trim(),
+        selectedCultivatorId: result.selectedCultivatorId,
+        genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
+        pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
+        origin: input.origin?.trim() ?? existingProfile.origin,
+        temperament: input.temperament?.trim() ?? existingProfile.temperament,
+        startingPath: input.startingPath ?? existingProfile.startingPath,
+        lastSeenAt: existingProfile.lastSeenAt,
+      });
+    }
+
     return structuredClone(result);
   }
 

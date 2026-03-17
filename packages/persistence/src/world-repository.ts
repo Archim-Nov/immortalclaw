@@ -39,6 +39,12 @@ export interface AgentRegistrationInput extends AgentPersonaInput {
   record?: CultivationRegistrationRecord;
 }
 
+export interface AgentProfileWriteInput extends AgentPersonaInput {
+  agentId: string;
+  selectedCultivatorId: string;
+  lastSeenAt?: string | null;
+}
+
 export interface AgentProfileRecord {
   agentId: string;
   name: string;
@@ -66,6 +72,7 @@ export interface AgentCredentialResetResult {
 
 export interface WorldRepository {
   readWorld(): Promise<WorldState>;
+  transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
   listAgentProfiles(): Promise<AgentProfileRecord[]>;
   getAgentProfile(agentId: string): Promise<AgentProfileRecord | null>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
@@ -75,18 +82,25 @@ export interface WorldRepository {
   getLatestTickRun(): Promise<TickRunRecord | null>;
   acquireTickLock(ownerId: string): Promise<TickLockRecord | null>;
   releaseTickLock(lockId: string): Promise<void>;
+  saveAgentProfile(input: AgentProfileWriteInput): Promise<AgentProfileRecord>;
+  issueAgentCredential(agentId: string): Promise<AgentCredentialResetResult>;
+  /** @deprecated Prefer application-owned registration workflows plus transactWorld/saveAgentProfile/issueAgentCredential. */
   registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult>;
   resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult>;
   authenticateAgent(credential: string): Promise<AgentProfileRecord | null>;
+  /** @deprecated Prefer application-owned persona sync workflows plus transactWorld/saveAgentProfile. */
   syncAgentPersona(agentId: string, input: AgentPersonaInput): Promise<AgentProfileRecord>;
   touchAgent(agentId: string): Promise<void>;
+  /** @deprecated Prefer application-owned persona sync workflows plus transactWorld/saveAgentProfile. */
   syncPersona(agentId: string, input: AgentPersonaInput): Promise<AgentPersonaSyncResult>;
   getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null>;
+  /** @deprecated Prefer transactWorld plus domain saveCultivationRegistration from application workflows. */
   saveCultivationRegistration(
     cultivatorId: string,
     record: CultivationRegistrationRecord,
     savedByAgentId?: string | null,
   ): Promise<CultivationRegistrationRecord>;
+  /** @deprecated Prefer transactWorld plus domain sendDirectMessage from application workflows. */
   sendDirectMessage(
     fromCultivatorId: string,
     toCultivatorId: string,

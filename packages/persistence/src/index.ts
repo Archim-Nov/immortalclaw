@@ -5,6 +5,7 @@ export type { SupabaseWorldRepositoryOptions } from "./supabase-world-repository
 export type {
   AgentPersonaInput,
   AgentProfileRecord,
+  AgentProfileWriteInput,
   AgentRegistrationInput,
   AgentRegistrationResult,
   TickLockRecord,

@@ -490,6 +490,53 @@ test("sendDirectMessage persists a private message into the stored world snapsho
   assert.ok(world.messages.some((entry) => entry.id === message.id));
 });
 
+test("saveAgentProfile and issueAgentCredential persist agent metadata without using registerAgent", async () => {
+  const { api, repository } = createRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const profile = await repository.saveAgentProfile({
+    agentId: "agent-profile-test",
+    name: "Su Mingyue",
+    selectedCultivatorId: cultivatorId,
+    origin: "Frost Harbor",
+  });
+  const issued = await repository.issueAgentCredential(profile.agentId);
+  const authenticated = await repository.authenticateAgent(issued.credential);
+
+  assert.equal(profile.agentId, "agent-profile-test");
+  assert.equal(profile.selectedCultivatorId, cultivatorId);
+  assert.equal(authenticated?.agentId, "agent-profile-test");
+  assert.equal(authenticated?.selectedCultivatorId, cultivatorId);
+  assert.equal(api.tables.agent_profiles.size, 1);
+  assert.equal(api.tables.agent_credentials.size, 1);
+});
+
+test("transactWorld persists world mutations while returning a cloned result", async () => {
+  const { repository } = createRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const mutatedCultivator = await repository.transactWorld((draftWorld) => {
+    draftWorld.cultivators[cultivatorId].spiritStones += 42;
+    return draftWorld.cultivators[cultivatorId];
+  });
+
+  mutatedCultivator.spiritStones = -1;
+
+  const refreshedWorld = await repository.readWorld();
+  assert.equal(refreshedWorld.cultivators[cultivatorId].spiritStones, world.cultivators[cultivatorId].spiritStones + 42);
+  assert.notEqual(refreshedWorld.cultivators[cultivatorId].spiritStones, mutatedCultivator.spiritStones);
+});
+
 test("Supabase REST requests use the Supabase secret key header without bearer auth", async () => {
   const { api, repository } = createRepository();
 
