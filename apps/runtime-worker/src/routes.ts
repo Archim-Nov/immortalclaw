@@ -9,8 +9,11 @@ import type {
   RuntimeHealthResponse,
 } from "../../../packages/contracts/src/index.js";
 import {
+  buildRegistrationProfile,
+  deriveRegistrationRecordFromAnswers,
   extractFiveElementScores,
   getAgentBindingInfo,
+  getRegistrationQuestionnaire,
   getCultivatorState,
   getDaoLogs,
   getMessages,
@@ -26,7 +29,13 @@ import {
 import type {
   ActionId,
   CultivationRegistrationRecord,
+  RegistrationAnswer,
+  RegistrationQuestionId,
 } from "../../../packages/domain/src/runtime.js";
+import {
+  REGISTRATION_ANSWERS_SET,
+  REGISTRATION_QUESTION_IDS,
+} from "../../../packages/domain/src/registration-questionnaire.js";
 import type {
   AgentPersonaInput,
   AgentProfileRecord,
@@ -131,6 +140,30 @@ function readOptionalRegistrationRecord(body: Record<string, unknown>): Cultivat
   return readRegistrationRecord(body);
 }
 
+function readOptionalRegistrationAnswers(
+  body: Record<string, unknown>,
+): Record<RegistrationQuestionId, RegistrationAnswer> | undefined {
+  if (body.answers === undefined) {
+    return undefined;
+  }
+  if (!body.answers || typeof body.answers !== "object" || Array.isArray(body.answers)) {
+    throw createStatusError(400, "Body must include questionnaire answers as an object.");
+  }
+
+  const rawAnswers = body.answers as Record<string, unknown>;
+  const answers = {} as Record<RegistrationQuestionId, RegistrationAnswer>;
+
+  for (const questionId of REGISTRATION_QUESTION_IDS) {
+    const answer = rawAnswers[questionId];
+    if (typeof answer !== "string" || !REGISTRATION_ANSWERS_SET.has(answer as RegistrationAnswer)) {
+      throw createStatusError(400, `Questionnaire is missing a valid answer for ${questionId}.`);
+    }
+    answers[questionId] = answer as RegistrationAnswer;
+  }
+
+  return answers;
+}
+
 function readLegacyPersonaInput(body: Record<string, unknown>): AgentPersonaInput {
   return {
     name: readRequiredBodyString(body.name, "Body must include persona name."),
@@ -143,8 +176,34 @@ function readLegacyPersonaInput(body: Record<string, unknown>): AgentPersonaInpu
   };
 }
 
-function readRegistrationInput(body: Record<string, unknown>): AgentRegistrationInput {
+function readRegistrationInput(body: Record<string, unknown>): {
+  input: AgentRegistrationInput;
+  questionnaireSource: "answers" | "record";
+} {
+  const record = readOptionalRegistrationRecord(body);
+  const answers = readOptionalRegistrationAnswers(body);
+
+  if (record && answers) {
+    throw createStatusError(400, "Body must include either questionnaire answers or a registration record, not both.");
+  }
+
+  if (!record && !answers) {
+    throw createStatusError(400, "Body must include questionnaire answers or a registration record.");
+  }
+
+  let resolvedRecord: CultivationRegistrationRecord;
+  try {
+    resolvedRecord = record ?? deriveRegistrationRecordFromAnswers(answers!);
+  } catch (error) {
+    throw createStatusError(
+      400,
+      error instanceof Error ? `Questionnaire could not be processed: ${error.message}` : "Questionnaire could not be processed.",
+    );
+  }
+
   return {
+    questionnaireSource: record ? "record" : "answers",
+    input: {
     name: readRequiredBodyString(body.name, "Body must include name."),
     genderPresentation: typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
     pronouns: readOptionalBodyString(body.pronouns),
@@ -152,7 +211,8 @@ function readRegistrationInput(body: Record<string, unknown>): AgentRegistration
     origin: readOptionalBodyString(body.origin),
     temperament: readOptionalBodyString(body.temperament),
     startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
-    record: readOptionalRegistrationRecord(body),
+      record: resolvedRecord,
+    },
   };
 }
 
@@ -281,21 +341,32 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
   app.get("/register.md", (context) => markdownResponse(renderRegisterMarkdown(new URL(context.req.url).origin)));
   app.get("/heartbeat.md", (context) => markdownResponse(renderHeartbeatMarkdown(new URL(context.req.url).origin)));
   app.get("/agent/guide", (context) => markdownResponse(renderSkillMarkdown(new URL(context.req.url).origin)));
+  app.get("/agent/register/questions", (context) => context.json(getRegistrationQuestionnaire()));
 
   app.post("/agent/register", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const body = (await context.req.json()) as Record<string, unknown>;
-    const registrationInput = readRegistrationInput(body);
+    const { input: registrationInput, questionnaireSource } = readRegistrationInput(body);
     const payload = await repository.registerAgent(registrationInput);
-    let registration = null;
-    let registrationEffects = null;
-
-    if (registrationInput.record) {
-      const service = createRuntimeService({ repository });
-      const state = await service.getCultivatorState(payload.selectedCultivatorId);
-      registration = state.registration;
-      registrationEffects = state.registrationEffects;
-    }
+    const service = createRuntimeService({ repository });
+    const [state, savedRecord] = await Promise.all([
+      service.getCultivatorState(payload.selectedCultivatorId),
+      repository.getCultivationRegistration(payload.selectedCultivatorId),
+    ]);
+    const registrationProfile = savedRecord ? buildRegistrationProfile(savedRecord) : null;
+    const messageDetails = registrationProfile
+      ? [
+          `Core temperament: ${registrationProfile.coreTemperament.label}.`,
+          `Secondary temperament: ${registrationProfile.secondaryTemperament.label}.`,
+          `Behavior aspect: ${registrationProfile.behaviorAspect.label}.`,
+          `Spirit root: ${registrationProfile.spiritRoot.label}.`,
+          `Cultivation motive: ${registrationProfile.cultivationMotive.label}.`,
+        ].join(" ")
+      : "";
+    const messagePrefix =
+      questionnaireSource === "answers"
+        ? "Agent registered, questionnaire answers were processed, and cultivation record saved successfully."
+        : "Agent registered and cultivation record saved successfully.";
 
     return context.json({
       ok: true,
@@ -304,11 +375,10 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
       baseUrl: new URL(context.req.url).origin,
       selectedCultivatorId: payload.selectedCultivatorId,
       createdCultivator: payload.createdCultivator,
-      registration,
-      registrationEffects,
-      message: registrationInput.record
-        ? "Agent registered and cultivation record saved successfully. Save this credential now."
-        : "Agent registered successfully. Save this credential now.",
+      registration: state.registration,
+      registrationEffects: state.registrationEffects,
+      registrationProfile,
+      message: `${messagePrefix} ${messageDetails} Save this credential now.`.trim(),
     });
   });
 

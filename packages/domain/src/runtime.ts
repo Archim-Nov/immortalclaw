@@ -9,6 +9,8 @@ export type {
   CultivatorStateView,
   FiveElementId,
   Message,
+  RegistrationProfileView,
+  RegistrationQuestionnaireView,
   RegistrationGameplayEffectsView,
   RegistrationAnswer,
   RegistrationQuestionId,
@@ -45,3 +47,8 @@ export { createSeedWorld } from "./seed.js";
 export { stubMainAttributes, stubDetailedAttributes, extractFiveElementScores } from "./attributes.js";
 export * from "./economy.js";
 export type { MainAttributeId, DetailedAttributeId } from "./attributes.js";
+export {
+  deriveRegistrationRecordFromAnswers,
+  getRegistrationQuestionnaire,
+  buildRegistrationProfile,
+} from "./registration-questionnaire.js";

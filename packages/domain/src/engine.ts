@@ -458,10 +458,9 @@ function defaultResidenceAt(locationId: string, cultivatorId: string) {
   };
 }
 
-function starterProfile(startingPath: Cultivator["startingPath"]) {
-  if (startingPath === "sword") return { techniques: ["Taiyi Sword", "Wind Step"], spiritStones: 320, inventory: { ...createEmptyInventory(), "healing-pill": 1, "qi-pill": 1, "sword-manual": 1 }, reputation: 16, factionReputation: createFactionReputation({ townsfolk: 6, "qing-yun-sect": 12, "market-guild": 2, "rogue-cultivators": -4 }) };
-  if (startingPath === "alchemy") return { techniques: ["Warm Flame", "Herb Sense"], spiritStones: 280, inventory: { ...createEmptyInventory(), "healing-pill": 2, "qi-pill": 1, "alchemy-manual": 1 }, reputation: 14, factionReputation: createFactionReputation({ townsfolk: 4, "qing-yun-sect": 2, "market-guild": 12, "rogue-cultivators": 0 }) };
-  if (startingPath === "array") return { techniques: ["Array Basics", "Still Mind"], spiritStones: 260, inventory: { ...createEmptyInventory(), "healing-pill": 1, "qi-pill": 2, "ward-talisman": 1, "array-manual": 1 }, reputation: 15, factionReputation: createFactionReputation({ townsfolk: 3, "qing-yun-sect": 4, "market-guild": 10, "rogue-cultivators": 3 }) };
+// `startingPath` is deprecated compatibility metadata. New characters always
+// receive the same unified starter package so older callers no longer steer opening gameplay.
+function starterProfile() {
   return { techniques: ["Loose Breathing", "Light Body"], spiritStones: 360, inventory: { ...createEmptyInventory(), "healing-pill": 1, "qi-pill": 1 }, reputation: 12, factionReputation: createFactionReputation({ townsfolk: 8, "qing-yun-sect": 0, "market-guild": 4, "rogue-cultivators": 6 }) };
 }
 function toSummary(cultivator: Cultivator, selectedCultivatorId: string | null): CharacterSummary {
@@ -560,7 +559,7 @@ function registrationViewOf(cultivator: Cultivator): CultivationRegistrationView
 
 export function createCultivator(world: WorldState, input: CreateCultivatorInput): CharacterSummary {
   const name = input.name.trim(); if (!name || name.length > 24) throw new Error("Character name must be 1-24 chars.");
-  const agentId = normalizeAgentId(input.agentId); const starter = starterProfile(input.startingPath ?? "wanderer");
+  const agentId = normalizeAgentId(input.agentId); const starter = starterProfile();
   const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
   const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", startingPath: input.startingPath ?? "wanderer", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: DEFAULT_CITY_LOCATION_ID, residence: defaultResidenceAt(DEFAULT_CITY_LOCATION_ID, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, karma: 0, reputation: starter.reputation, factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, sectTitle: null, totalContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, nextTribulationTick: 100, registrationRecord: null };
   world.cultivators[cultivator.id] = cultivator;

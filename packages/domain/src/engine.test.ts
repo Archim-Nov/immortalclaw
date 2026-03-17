@@ -22,6 +22,16 @@ function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: s
   }
 }
 
+function starterSnapshot(cultivator: ReturnType<typeof createSeedWorld>["cultivators"][string]) {
+  return {
+    techniques: cultivator.techniques,
+    spiritStones: cultivator.spiritStones,
+    inventory: cultivator.inventory,
+    reputation: cultivator.reputation,
+    factionReputation: cultivator.factionReputation,
+  };
+}
+
 function createRegistrationRecord(): CultivationRegistrationRecord {
   return {
     record_type: "registration_record" as const,
@@ -470,6 +480,28 @@ test("agent persona sync auto-provisions and reuses a single character", () => {
   assert.equal(state.cultivator.name, "Liu Ruyan");
   assert.equal(state.cultivator.pronouns, "she/her");
   assert.equal(state.cultivator.temperament, "calm");
+});
+
+test("startingPath stays as metadata but no longer changes new character starter package", () => {
+  const world = createSeedWorld();
+
+  const sword = syncCultivatorFromPersona(world, {
+    agentId: "openclaw-sword-path",
+    name: "Sword Path",
+    startingPath: "sword",
+  });
+  const alchemy = syncCultivatorFromPersona(world, {
+    agentId: "openclaw-alchemy-path",
+    name: "Alchemy Path",
+    startingPath: "alchemy",
+  });
+
+  const swordCultivator = world.cultivators[sword.selectedCultivatorId];
+  const alchemyCultivator = world.cultivators[alchemy.selectedCultivatorId];
+
+  assert.equal(swordCultivator.startingPath, "sword");
+  assert.equal(alchemyCultivator.startingPath, "alchemy");
+  assert.deepEqual(starterSnapshot(swordCultivator), starterSnapshot(alchemyCultivator));
 });
 
 test("studying a manual adds technique and strategy recommends safe progression", () => {

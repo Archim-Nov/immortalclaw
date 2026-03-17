@@ -28,6 +28,7 @@ export interface TickLockRecord {
   acquiredAt: string;
 }
 
+// Includes deprecated `startingPath` only for backward compatibility with older callers.
 export interface AgentPersonaInput
   extends Pick<
     CreateCultivatorInput,
@@ -46,6 +47,7 @@ export interface AgentProfileRecord {
   pronouns?: string;
   origin?: string;
   temperament?: string;
+  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
   startingPath?: StartingPath;
   createdAt: string;
   updatedAt: string;

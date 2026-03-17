@@ -1,5 +1,6 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
+/** @deprecated Compatibility-only metadata. New-character starter packages ignore this field and it will be removed gradually. */
 export type StartingPath = "sword" | "alchemy" | "array" | "wanderer";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
 export type RegistrationQuestionId =
@@ -24,6 +25,7 @@ export type RegistrationQuestionId =
 export type RegistrationAnswer = "A" | "B" | "C" | "D";
 export type RegistrationConfidenceLevel = "high" | "medium" | "low";
 export type RegistrationLocale = "zh-CN" | "en";
+export type RegistrationQuestionCategory = "core-temperament" | "behavior-aspect" | "cultivation-motive";
 export type RegistrationTemperamentId =
   | "shou_jie"
   | "duan_feng"
@@ -406,6 +408,7 @@ export interface Cultivator {
   pronouns: string;
   origin: string;
   temperament: string;
+  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
   startingPath: StartingPath;
   createdByAgentId: string | null;
   realm: RealmStage;
@@ -486,6 +489,24 @@ export interface CultivationRegistrationView {
   overall_confidence: RegistrationConfidenceLevel;
 }
 
+export interface RegistrationQuestionOptionView {
+  id: RegistrationAnswer;
+  label: string;
+}
+
+export interface RegistrationQuestionView {
+  id: RegistrationQuestionId;
+  category: RegistrationQuestionCategory;
+  prompt: string;
+  options: RegistrationQuestionOptionView[];
+}
+
+export interface RegistrationQuestionnaireView {
+  version: string;
+  locale: RegistrationLocale;
+  questions: RegistrationQuestionView[];
+}
+
 export interface RegistrationDominantElementView {
   id: FiveElementId;
   label: string;
@@ -496,6 +517,41 @@ export interface RegistrationGameplayModifierView {
   source: "core-temperament" | "behavior-aspect" | "cultivation-motive" | "spirit-root";
   title: string;
   summary: string;
+}
+
+export interface RegistrationProfileView {
+  summary: string;
+  coreTemperament: {
+    id: RegistrationTemperamentId;
+    label: string;
+    confidence: RegistrationConfidenceLevel;
+  };
+  secondaryTemperament: {
+    id: RegistrationTemperamentId;
+    label: string;
+  };
+  behaviorAspect: {
+    id: RegistrationBehaviorAspectId;
+    label: string;
+    confidence: RegistrationConfidenceLevel;
+  };
+  cultivationMotive: {
+    id: RegistrationCultivationMotiveId;
+    label: string;
+    confidence: RegistrationConfidenceLevel;
+  };
+  spiritRoot: {
+    kindId: RegistrationSpiritRootKindId;
+    label: string;
+  };
+  fiveElementScores: Record<FiveElementId, number>;
+  dominantElements: RegistrationDominantElementView[];
+  confidence: {
+    core: RegistrationConfidenceLevel;
+    behavior: RegistrationConfidenceLevel;
+    motive: RegistrationConfidenceLevel;
+    overall: RegistrationConfidenceLevel;
+  };
 }
 
 export interface RegistrationGameplayEffectsView {
@@ -584,6 +640,7 @@ export interface CharacterSummary {
   pronouns: string;
   origin: string;
   temperament: string;
+  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
   startingPath: StartingPath;
   realm: RealmStage;
   realmLevel: number;
@@ -600,6 +657,7 @@ export interface CreateCultivatorInput {
   age?: number;
   origin?: string;
   temperament?: string;
+  /** @deprecated Compatibility-only metadata. Accepted for backward compatibility and ignored for starter-package selection. */
   startingPath?: StartingPath;
 }
 
@@ -692,6 +750,7 @@ export interface CultivatorStateView {
     pronouns: string;
     origin: string;
     temperament: string;
+    /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
     startingPath: StartingPath;
   };
   cultivation: {
