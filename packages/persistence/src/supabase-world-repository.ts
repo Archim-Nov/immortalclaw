@@ -39,6 +39,8 @@ interface StoredWorldSnapshotRow {
   payload: WorldState;
 }
 
+type JsonSafeNumber = number | "Infinity";
+
 export interface SupabaseWorldRepositoryOptions {
   url: string;
   secretKey: string;
@@ -658,7 +660,7 @@ export class SupabaseWorldRepository implements WorldRepository {
     const existing = rows[0];
     if (existing) {
       return {
-        world: structuredClone(existing.payload),
+        world: deserializeStoredWorld(existing.payload),
         revision: existing.version,
       };
     }
@@ -689,7 +691,7 @@ export class SupabaseWorldRepository implements WorldRepository {
         version: 1,
         tick: persistedWorld.tick,
         updated_at: persistedWorld.updatedAt,
-        payload: persistedWorld,
+        payload: serializeWorldForStorage(persistedWorld),
       }),
     });
 
@@ -729,7 +731,7 @@ export class SupabaseWorldRepository implements WorldRepository {
           version: expectedRevision + 1,
           tick: persistedWorld.tick,
           updated_at: persistedWorld.updatedAt,
-          payload: persistedWorld,
+          payload: serializeWorldForStorage(persistedWorld),
         }),
       },
     );
@@ -876,6 +878,52 @@ export class SupabaseWorldRepository implements WorldRepository {
       return fallback;
     }
   }
+}
+
+function serializeFiniteNumber(value: number): JsonSafeNumber {
+  return Number.isFinite(value) ? value : "Infinity";
+}
+
+function deserializeFiniteNumber(value: unknown): number {
+  if (value === null || value === "Infinity") {
+    return Number.POSITIVE_INFINITY;
+  }
+  return typeof value === "number" ? value : Number(value);
+}
+
+function serializeWorldForStorage(world: WorldState): WorldState {
+  const copy = structuredClone(world);
+  copy.topology.distanceMatrix = Object.fromEntries(
+    Array.from(world.topology.distanceMatrix.entries()).map(([key, value]) => [key, serializeFiniteNumber(value)]),
+  ) as unknown as WorldState["topology"]["distanceMatrix"];
+
+  for (const sect of Object.values(copy.sects)) {
+    sect.titleSlots = sect.titleSlots.map((slot) => ({
+      ...slot,
+      threshold: deserializeFiniteNumber(serializeFiniteNumber(slot.threshold)),
+      maxSlots: deserializeFiniteNumber(serializeFiniteNumber(slot.maxSlots)),
+    }));
+  }
+
+  return copy;
+}
+
+function deserializeStoredWorld(world: WorldState): WorldState {
+  const copy = structuredClone(world);
+  const distanceMatrixEntries = Object.entries(
+    (copy.topology.distanceMatrix as unknown as Record<string, unknown>) ?? {},
+  ).map(([key, value]) => [key, deserializeFiniteNumber(value)] as const);
+  copy.topology.distanceMatrix = new Map(distanceMatrixEntries);
+
+  for (const sect of Object.values(copy.sects)) {
+    sect.titleSlots = sect.titleSlots.map((slot) => ({
+      ...slot,
+      threshold: deserializeFiniteNumber(slot.threshold),
+      maxSlots: deserializeFiniteNumber(slot.maxSlots),
+    }));
+  }
+
+  return copy;
 }
 
 export function createSupabaseWorldRepository(options: SupabaseWorldRepositoryOptions) {

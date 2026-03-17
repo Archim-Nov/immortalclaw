@@ -1,5 +1,6 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
+/** @deprecated Compatibility-only metadata. New-character starter packages ignore this field and it will be removed gradually. */
 export type StartingPath = "sword" | "alchemy" | "array" | "wanderer";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
 export type RegistrationQuestionId =
@@ -24,6 +25,7 @@ export type RegistrationQuestionId =
 export type RegistrationAnswer = "A" | "B" | "C" | "D";
 export type RegistrationConfidenceLevel = "high" | "medium" | "low";
 export type RegistrationLocale = "zh-CN" | "en";
+export type RegistrationQuestionCategory = "core-temperament" | "behavior-aspect" | "cultivation-motive";
 export type RegistrationTemperamentId =
   | "shou_jie"
   | "duan_feng"
@@ -72,6 +74,211 @@ export type ZoneId =
   | "mystic-ruins"
   | "healing-sanctuary";
 
+// ---- New location system types (P1 migration) ----
+// Core types are defined in constants.ts - re-exported here for convenience
+export type { StateId, NodeType, LocationId, RiskLevel } from "./constants.js";
+
+export interface Location {
+  id: string; // LocationId format: "{stateId}:{nodeType}"
+  stateId: string;
+  nodeType: string;
+  name: string;
+  kind: "safe" | "resource" | "adventure";
+  risk: string;
+  description: string;
+}
+
+export interface StateDefinition {
+  id: string;
+  name: string;
+  risk: string;
+  locationIds: string[];
+}
+
+export interface TopologyEdge {
+  from: string;
+  to: string;
+  ticks: number;
+}
+
+export interface TopologyGraph {
+  edges: TopologyEdge[];
+  distanceMatrix: Map<string, number>;
+}
+
+export interface EventEffect {
+  spiritStones?: number;
+  qi?: number;
+  spiritualPower?: number;
+  realmProgress?: number;
+  injuryTicksRemaining?: number;
+  itemRewards?: ReadonlyArray<{ itemId: ItemId; count: number }>;
+  statusEffects?: ReadonlyArray<{ effectId: StatusEffectId; ticks: number }>;
+  karmaChange?: number;
+  reputationChange?: number;
+}
+
+export interface EventTemplate {
+  id: string;
+  layer: "global-common" | "state-specific" | "node-specific" | "special-overlay";
+  source: "exploration" | "travel";
+  semanticType: "fortune" | "training" | "human";
+  resultType: "resource" | "progression" | "status" | "combat" | "story";
+  name: string;
+  nameCn: string;
+  description: string;
+  baseWeight: number;
+  stateId: import("./constants.js").StateId | null;
+  nodeType: import("./constants.js").NodeType | null;
+  minRealm: RealmStage | null;
+  effects: EventEffect;
+}
+
+export interface EventPools {
+  globalCommon: readonly EventTemplate[];
+  stateSpecific: Readonly<Record<import("./constants.js").StateId, readonly EventTemplate[]>>;
+  nodeSpecific: Readonly<Record<string, readonly EventTemplate[]>>;
+  travelPool: readonly EventTemplate[];
+}
+
+export interface Residence {
+  id: string;
+  locationId: import("./constants.js").LocationId;
+  level: 1;
+  name: string;
+}
+
+export type QuestCategory = "base" | "sect" | "high-risk";
+export type QuestReadiness = "poor" | "stable" | "ready" | "advantaged";
+export type ReadinessLevel = QuestReadiness;
+export type RecoveryState = "healthy" | "wounded" | "injured" | "depleted";
+export type ActivityContext =
+  | "stationed"
+  | "traveling"
+  | "retreating"
+  | "recovering"
+  | "tasking"
+  | "exploring"
+  | "sect-duty"
+  | "encounter-resolving";
+
+export interface DaoPotential {
+  readonly score: number;
+  readonly tier: "novice" | "apprentice" | "adept" | "expert" | "master" | "grandmaster";
+  readonly breakdown: {
+    readonly realmBase: number;
+    readonly attributeAverage: number;
+    readonly detailedAttributeModifier: number;
+    readonly readinessModifier: number;
+    readonly statusModifier: number;
+  };
+}
+
+export interface DerivedStateView {
+  readonly readiness: ReadinessLevel;
+  readonly recoveryState: RecoveryState;
+  readonly activityContext: ActivityContext;
+  readonly daoPotential: DaoPotential;
+}
+
+export type OnboardingStage =
+  | "registered"
+  | "first-action"
+  | "first-travel"
+  | "first-residence"
+  | "first-quest"
+  | "joined-sect"
+  | "first-sect-quest"
+  | "long-term-visible"
+  | "completed";
+
+export interface OnboardingProgress {
+  readonly stage: OnboardingStage;
+  readonly completedStages: readonly OnboardingStage[];
+  readonly nextAction: ActionId | null;
+  readonly hint: string;
+}
+
+export interface QuestRewardRange {
+  spiritStones: { min: number; max: number };
+  reputation: number;
+  karmaChange: number;
+  contribution: number;
+}
+
+export interface QuestPenalty {
+  injuryTicks: number;
+  spiritStoneLoss: number;
+}
+
+export interface QuestTemplate {
+  id: string;
+  type: string;
+  category: QuestCategory;
+  name: string;
+  nameCn: string;
+  description: string;
+  durationTicks: number;
+  minReadiness: QuestReadiness;
+  sourceNodeTypes: readonly import("./constants.js").NodeType[];
+  reward: QuestRewardRange;
+  failurePenalty: QuestPenalty;
+  successRate: number;
+}
+
+export interface QuestReward {
+  spiritStones: number;
+  reputation: number;
+  karmaChange: number;
+  contribution: number;
+}
+
+export interface QuestInstance {
+  id: string;
+  templateId: string;
+  category: QuestCategory;
+  locationId: string;
+  name: string;
+  nameCn: string;
+  description: string;
+  durationTicks: number;
+  reward: QuestReward;
+  failurePenalty: QuestPenalty;
+  successRate: number;
+  generatedAtTick: number;
+  expiresAtTick: number;
+}
+
+export interface ActiveQuest {
+  id: string;
+  instanceId: string;
+  templateId: string;
+  category: QuestCategory;
+  name: string;
+  description: string;
+  durationTicks: number;
+  reward: QuestReward;
+  failurePenalty: QuestPenalty;
+  successRate: number;
+  acceptedAtTick: number;
+  status: "accepted" | "in-progress";
+}
+
+export interface QuestBoard {
+  locationId: string;
+  slots: number;
+  quests: QuestInstance[];
+  lastRefreshedTick: number;
+}
+
+export type SectTitle = "外门" | "内门" | "精英" | "长老" | "宗主";
+
+export interface SectTitleSlot {
+  title: SectTitle;
+  threshold: number;
+  maxSlots: number;
+}
+
 export type ItemId =
   | "healing-pill"
   | "qi-pill"
@@ -103,23 +310,44 @@ export type StatusEffectId =
   | "spirit-saturated";
 
 export type TimedActionId =
-  | "travel-town"
-  | "travel-market"
-  | "travel-sect-gate"
-  | "travel-spirit-mine"
-  | "travel-mystic-ruins"
-  | "travel-healing-sanctuary"
+  | `travel-to:${string}`
+  | `execute-quest:${string}`
   | "meditate"
   | "heal"
   | "cultivate"
+  | "residence-meditate"
+  | "residence-heal"
+  | "residence-recover-qi"
+  | "residence-produce"
+  | "residence-socialize"
   | "take-mortal-task"
   | "mine-spirit-stones"
   | "search-fortune"
   | "take-sect-errand"
   | "hunt-mine-beast"
-  | "challenge-guardian";
+  | "challenge-guardian"
+  | `residence-produce:${string}`
+  | `residence-heal:${"use-pill" | "no-pill"}`
+  | `residence-recover-qi:${"use-pill" | "no-pill"}`;
+
+export type ResidenceActionId =
+  | "residence-meditate"
+  | "residence-heal"
+  | "residence-recover-qi"
+  | "residence-produce"
+  | "residence-socialize";
+
+export interface ProductionRecipe {
+  id: string;
+  outputItemId: ItemId;
+  outputCount: number;
+  inputMaterials: ReadonlyArray<{ itemId: ItemId; count: number }>;
+  spiritStoneCost: number;
+  durationTicks: number;
+}
 
 export type ImmediateActionId =
+  | `accept-quest:${string}`
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
@@ -150,6 +378,10 @@ export interface Sect {
   treasury: number;
   memberIds: string[];
   spiritVeins: string[];
+  headquarters: string;
+  titleSlots: SectTitleSlot[];
+  titleUpdateInterval: number;
+  lastTitleUpdateTick: number;
 }
 
 export interface ItemDefinition {
@@ -176,12 +408,14 @@ export interface Cultivator {
   pronouns: string;
   origin: string;
   temperament: string;
+  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
   startingPath: StartingPath;
   createdByAgentId: string | null;
   realm: RealmStage;
   realmLevel: number;
   realmProgress: number;
-  locationId: ZoneId;
+  locationId: string;
+  residence: Residence;
   spiritStones: number;
   qi: number;
   maxQi: number;
@@ -193,6 +427,11 @@ export interface Cultivator {
   lifespan: number;
   age: number;
   sectId: string | null;
+  sectTitle: SectTitle | null;
+  totalContribution: number;
+  contributionReachedAt: number;
+  activeQuests: ActiveQuest[];
+  completedBaseQuests: number;
   techniques: string[];
   inventory: Record<ItemId, number>;
   statusEffects: StatusEffect[];
@@ -250,6 +489,24 @@ export interface CultivationRegistrationView {
   overall_confidence: RegistrationConfidenceLevel;
 }
 
+export interface RegistrationQuestionOptionView {
+  id: RegistrationAnswer;
+  label: string;
+}
+
+export interface RegistrationQuestionView {
+  id: RegistrationQuestionId;
+  category: RegistrationQuestionCategory;
+  prompt: string;
+  options: RegistrationQuestionOptionView[];
+}
+
+export interface RegistrationQuestionnaireView {
+  version: string;
+  locale: RegistrationLocale;
+  questions: RegistrationQuestionView[];
+}
+
 export interface RegistrationDominantElementView {
   id: FiveElementId;
   label: string;
@@ -260,6 +517,41 @@ export interface RegistrationGameplayModifierView {
   source: "core-temperament" | "behavior-aspect" | "cultivation-motive" | "spirit-root";
   title: string;
   summary: string;
+}
+
+export interface RegistrationProfileView {
+  summary: string;
+  coreTemperament: {
+    id: RegistrationTemperamentId;
+    label: string;
+    confidence: RegistrationConfidenceLevel;
+  };
+  secondaryTemperament: {
+    id: RegistrationTemperamentId;
+    label: string;
+  };
+  behaviorAspect: {
+    id: RegistrationBehaviorAspectId;
+    label: string;
+    confidence: RegistrationConfidenceLevel;
+  };
+  cultivationMotive: {
+    id: RegistrationCultivationMotiveId;
+    label: string;
+    confidence: RegistrationConfidenceLevel;
+  };
+  spiritRoot: {
+    kindId: RegistrationSpiritRootKindId;
+    label: string;
+  };
+  fiveElementScores: Record<FiveElementId, number>;
+  dominantElements: RegistrationDominantElementView[];
+  confidence: {
+    core: RegistrationConfidenceLevel;
+    behavior: RegistrationConfidenceLevel;
+    motive: RegistrationConfidenceLevel;
+    overall: RegistrationConfidenceLevel;
+  };
 }
 
 export interface RegistrationGameplayEffectsView {
@@ -274,6 +566,13 @@ export interface ActionJob {
   label: string;
   remainingTicks: number;
   totalTicks: number;
+  meta?: {
+    residenceRecipeId?: string;
+    residenceMeditateFallback?: boolean;
+    residenceHealUsePill?: boolean;
+    residenceRecoverQiUsePill?: boolean;
+    activeQuestId?: string;
+  };
 }
 
 export interface DaoLogEntry {
@@ -300,7 +599,7 @@ export interface WorldEvent {
   id: string;
   tick: number;
   cultivatorId: string | null;
-  zoneId: ZoneId;
+  zoneId: string;
   title: string;
   content: string;
   severity: "low" | "medium" | "high";
@@ -311,7 +610,7 @@ export interface CombatLogEntry {
   id: string;
   tick: number;
   cultivatorId: string;
-  zoneId: ZoneId;
+  zoneId: string;
   encounterId: "mine-beast" | "ruins-guardian";
   enemyName: string;
   outcome: "victory" | "defeat";
@@ -341,10 +640,11 @@ export interface CharacterSummary {
   pronouns: string;
   origin: string;
   temperament: string;
+  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
   startingPath: StartingPath;
   realm: RealmStage;
   realmLevel: number;
-  locationId: ZoneId;
+  locationId: string;
   sectId: string | null;
   isSelected: boolean;
 }
@@ -357,6 +657,7 @@ export interface CreateCultivatorInput {
   age?: number;
   origin?: string;
   temperament?: string;
+  /** @deprecated Compatibility-only metadata. Accepted for backward compatibility and ignored for starter-package selection. */
   startingPath?: StartingPath;
 }
 
@@ -449,6 +750,7 @@ export interface CultivatorStateView {
     pronouns: string;
     origin: string;
     temperament: string;
+    /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
     startingPath: StartingPath;
   };
   cultivation: {
@@ -473,6 +775,8 @@ export interface CultivatorStateView {
   recentCombats: CombatLogEntry[];
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
+  derivedState: DerivedStateView;
+  onboarding: OnboardingProgress;
   agentGuidance: {
     warnings: string[];
     priorities: string[];
@@ -498,6 +802,11 @@ export interface WorldState {
   agentBindings: Record<string, AgentBinding>;
   sects: Record<string, Sect>;
   zones: Record<ZoneId, Zone>;
+  locations: Record<string, Location>;
+  states: Record<string, StateDefinition>;
+  topology: TopologyGraph;
+  eventPools: EventPools;
+  questBoards: Record<string, QuestBoard>;
   itemDefinitions: Record<ItemId, ItemDefinition>;
   jobs: Record<string, ActionJob>;
   daoLogs: DaoLogEntry[];

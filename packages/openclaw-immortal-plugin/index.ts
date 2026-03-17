@@ -44,6 +44,7 @@ type PersonaProfile = {
   pronouns?: string;
   origin?: string;
   temperament?: string;
+  /** @deprecated Compatibility-only metadata forwarded for older runtimes. Starter packages no longer depend on it. */
   startingPath?: StartingPathValue;
 };
 
@@ -510,6 +511,7 @@ function normalizeGender(value: string | undefined): GenderValue | undefined {
 }
 
 function normalizeStartingPath(value: string | undefined, combinedText: string): StartingPathValue | undefined {
+  // Deprecated compatibility path: keep parsing older persona files until the field is removed end-to-end.
   const normalized = value?.trim().toLowerCase();
   if ((STARTING_PATH_VALUES as readonly string[]).includes(normalized ?? "")) {
     return normalized as StartingPathValue;

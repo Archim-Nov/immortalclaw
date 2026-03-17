@@ -19,9 +19,16 @@ async function main() {
   assertQuestionnaireFixture();
 
   const seed = requestedSeed();
-  const { answers, payload } = buildQuestionnaireDrivenAgentPayload(seed);
+  const { answers, record, payload, answerSummary } = buildQuestionnaireDrivenAgentPayload(seed);
   const repository = createInMemoryWorldRepository();
   const app = createApp({ repository });
+
+  const questionsResponse = await app.request("https://runtime.smoke/agent/register/questions");
+  const questionsResult = await readJson(questionsResponse);
+
+  if (!questionsResponse.ok) {
+    throw new Error(`Questionnaire fetch smoke failed: ${questionsResponse.status} ${JSON.stringify(questionsResult)}`);
+  }
 
   const registerResponse = await app.request("https://runtime.smoke/agent/register", {
     method: "POST",
@@ -51,9 +58,16 @@ async function main() {
     smokeRunAt: new Date().toISOString(),
     seed,
     fixtureVerified: true,
+    questionnaireDefinition: {
+      version: questionsResult.version,
+      locale: questionsResult.locale,
+      questionCount: questionsResult.questions?.length ?? 0,
+      firstQuestion: questionsResult.questions?.[0] ?? null,
+    },
     questionnaire: {
-      version: payload.record.questionnaire_version,
+      version: record.questionnaire_version,
       answers,
+      dominantElements: answerSummary,
     },
     syntheticAgent: {
       name: payload.name,
@@ -64,7 +78,7 @@ async function main() {
       pronouns: payload.pronouns,
       age: payload.age,
     },
-    registrationRecord: payload.record,
+    registrationRecord: record,
     registerResult: {
       ok: registerResult.ok,
       agentId: registerResult.agentId,
@@ -72,6 +86,7 @@ async function main() {
       createdCultivator: registerResult.createdCultivator,
       registration: registerResult.registration,
       registrationEffects: registerResult.registrationEffects,
+      registrationProfile: registerResult.registrationProfile,
       message: registerResult.message,
     },
     immediateState: {

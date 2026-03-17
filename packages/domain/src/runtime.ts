@@ -3,17 +3,21 @@ export type {
   ActionId,
   AgentPersonaSyncResult,
   AvailableAction,
+  CombatLogEntry,
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
   FiveElementId,
   Message,
+  RegistrationProfileView,
+  RegistrationQuestionnaireView,
   RegistrationGameplayEffectsView,
   RegistrationAnswer,
   RegistrationQuestionId,
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
+  WorldEvent,
   WorldState,
 } from "./model.js";
 export {
@@ -41,4 +45,10 @@ export {
 } from "./engine.js";
 export { createSeedWorld } from "./seed.js";
 export { stubMainAttributes, stubDetailedAttributes, extractFiveElementScores } from "./attributes.js";
+export * from "./economy.js";
 export type { MainAttributeId, DetailedAttributeId } from "./attributes.js";
+export {
+  deriveRegistrationRecordFromAnswers,
+  getRegistrationQuestionnaire,
+  buildRegistrationProfile,
+} from "./registration-questionnaire.js";

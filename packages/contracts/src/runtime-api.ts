@@ -6,6 +6,10 @@ export type {
   CultivationRegistrationView,
   CultivatorStateView,
   Message,
+  RegistrationAnswer,
+  RegistrationProfileView,
+  RegistrationQuestionId,
+  RegistrationQuestionnaireView,
   RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
@@ -16,14 +20,20 @@ import type {
   ActionExecutionResult,
   ActionId,
   AvailableAction,
+  CombatLogEntry,
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
   Message,
+  RegistrationAnswer,
+  RegistrationProfileView,
+  RegistrationQuestionId,
+  RegistrationQuestionnaireView,
   RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
   TribulationPreview,
+  WorldEvent,
 } from "../../domain/src/runtime.js";
 import type { AgentRegistrationInput } from "../../persistence/src/world-repository.js";
 
@@ -59,7 +69,12 @@ export interface AdvanceWorldRequest {
 
 export type AdvanceWorldResponse = TickSummary;
 
-export interface AgentRegistrationRequest extends AgentRegistrationInput {}
+export interface AgentRegistrationRequest extends Omit<AgentRegistrationInput, "record"> {
+  answers?: Record<RegistrationQuestionId, RegistrationAnswer>;
+  record?: CultivationRegistrationRecord;
+}
+
+export type AgentRegistrationQuestionnaireResponse = RegistrationQuestionnaireView;
 
 export interface AgentRegistrationResponse {
   ok: true;
@@ -70,6 +85,7 @@ export interface AgentRegistrationResponse {
   createdCultivator: boolean;
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
+  registrationProfile: RegistrationProfileView | null;
   message: string;
 }
 
@@ -109,8 +125,8 @@ export interface AgentSendMessageResponse {
 export interface AgentEventsResponse {
   agent: AgentView;
   tick: number;
-  events: unknown[];
-  combats: unknown[];
+  events: WorldEvent[];
+  combats: CombatLogEntry[];
 }
 
 export interface AgentRegistrationRecordRequest {

@@ -19,9 +19,16 @@ async function main() {
   assertQuestionnaireFixture();
 
   const seed = requestedSeed();
-  const { answers, payload } = buildQuestionnaireDrivenAgentPayload(seed);
+  const { answers, record, payload, answerSummary } = buildQuestionnaireDrivenAgentPayload(seed);
   const repository = createInMemoryWorldRepository();
   const app = createApp({ repository });
+
+  const questionsResponse = await app.request("https://runtime.smoke/agent/register/questions");
+  const questionsResult = await readJson(questionsResponse);
+
+  if (!questionsResponse.ok) {
+    throw new Error(`Questionnaire smoke failed: ${questionsResponse.status} ${JSON.stringify(questionsResult)}`);
+  }
 
   const registerResponse = await app.request("https://runtime.smoke/agent/register", {
     method: "POST",
@@ -67,8 +74,11 @@ async function main() {
       origin: payload.origin,
       temperament: payload.temperament,
       startingPath: payload.startingPath,
+      questionnaireVersion: questionsResult.version,
+      questionCount: questionsResult.questions?.length ?? 0,
       answerPreview: answers,
-      recordSummary: payload.record.summary,
+      recordSummary: record.summary,
+      dominantElements: answerSummary,
     },
     registerResult: {
       ok: registerResult.ok,
@@ -77,6 +87,7 @@ async function main() {
       createdCultivator: registerResult.createdCultivator,
       registration: registerResult.registration,
       registrationEffects: registerResult.registrationEffects,
+      registrationProfile: registerResult.registrationProfile,
       message: registerResult.message,
     },
     stateResult: {

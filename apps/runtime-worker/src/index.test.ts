@@ -115,6 +115,55 @@ function createRegistrationRecordV2(): CultivationRegistrationRecord {
   };
 }
 
+function createQuestionnaireAnswers() {
+  return {
+    Q1: "C",
+    Q2: "C",
+    Q3: "C",
+    Q4: "C",
+    Q5: "C",
+    Q6: "C",
+    Q7: "C",
+    Q8: "A",
+    Q9: "C",
+    Q10: "C",
+    Q11: "C",
+    Q12: "C",
+    Q13: "B",
+    Q14: "B",
+    Q15: "B",
+    Q16: "B",
+    Q17: "C",
+    Q18: "B",
+  } as const;
+}
+
+function createQuestionnaireRegistrationBody(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    answers: createQuestionnaireAnswers(),
+    ...overrides,
+  };
+}
+
+function starterStateSnapshot(statePayload: {
+  cultivator: { spiritStones: number; reputation: number };
+  cultivation: { techniques: string[] };
+  inventory: Record<string, number>;
+  factionReputation: Array<{ factionId: string; value: number }>;
+}) {
+  return {
+    spiritStones: statePayload.cultivator.spiritStones,
+    reputation: statePayload.cultivator.reputation,
+    techniques: statePayload.cultivation.techniques,
+    inventory: statePayload.inventory,
+    factionReputation: Object.fromEntries(
+      statePayload.factionReputation.map((entry) => [entry.factionId, entry.value]),
+    ),
+  };
+}
+
 test("health route returns ok", async () => {
   const app = createApp({ repository: createRepository() });
 
@@ -144,6 +193,21 @@ test("public onboarding docs are exposed as markdown", async () => {
 
   assert.equal(heartbeatResponse.status, 200);
   assert.match(await heartbeatResponse.text(), /Immortal Claw Heartbeat Guide/i);
+});
+
+test("public registration questionnaire endpoint returns the canonical 18 questions", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  const response = await app.request("https://runtime.test/agent/register/questions");
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.version, "immortal-claw-oc-v2");
+  assert.equal(payload.questions.length, 18);
+  assert.equal(payload.questions[0]?.id, "Q1");
+  assert.equal(payload.questions[17]?.id, "Q18");
+  assert.equal(payload.questions[0]?.options.length, 4);
+  assert.equal(payload.questions[0]?.options[0]?.id, "A");
 });
 
 test("worker fetch allows the local vite origin", async () => {
@@ -194,22 +258,29 @@ test("state route returns cultivator state", async () => {
 });
 
 test("agent registration response uses the credential contract", async () => {
-  const app = createApp({
-    repository: {
-      async registerAgent() {
-        return {
-          agentId: "6c3ee3f8-d64f-425d-9617-f633660fb22c",
-          name: "Su Mingyue",
-          selectedCultivatorId: "cultivator-9",
-          createdAt: "2026-03-12T00:00:00.000Z",
-          updatedAt: "2026-03-12T00:00:00.000Z",
-          lastSeenAt: "2026-03-12T00:00:00.000Z",
-          credential: "immortal_sk_contract",
-          createdCultivator: true,
-        };
-      },
-    } as never,
+  const app = createApp({ repository: createRepository() });
+
+  const response = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Su Mingyue" })),
   });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.match(payload.agentId, UUID_SHAPE);
+  assert.equal(typeof payload.credential, "string");
+  assert.equal(Object.hasOwn(payload, "credential"), true);
+  assert.equal(Object.hasOwn(payload, "apiKey"), false);
+  assert.ok(payload.registration);
+  assert.ok(payload.registrationEffects);
+  assert.ok(payload.registrationProfile);
+});
+
+test("agent registration requires questionnaire completion", async () => {
+  const app = createApp({ repository: createRepository() });
 
   const response = await app.request("https://runtime.test/agent/register", {
     method: "POST",
@@ -222,13 +293,8 @@ test("agent registration response uses the credential contract", async () => {
   });
   const payload = await response.json();
 
-  assert.equal(response.status, 200);
-  assert.match(payload.agentId, UUID_SHAPE);
-  assert.equal(typeof payload.credential, "string");
-  assert.equal(Object.hasOwn(payload, "credential"), true);
-  assert.equal(Object.hasOwn(payload, "apiKey"), false);
-  assert.equal(payload.registration, null);
-  assert.equal(payload.registrationEffects, null);
+  assert.equal(response.status, 400);
+  assert.match(String(payload.error), /questionnaire/i);
 });
 
 test("agent registration can save a canonical registration record in the same call", async () => {
@@ -263,6 +329,35 @@ test("agent registration can save a canonical registration record in the same ca
   assert.equal(stateResponse.status, 200);
   assert.equal(statePayload.registration?.core_temperament, "Calm strategist");
   assert.ok(statePayload.registrationEffects);
+});
+
+test("agent registration can derive and save a canonical registration record from questionnaire answers", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Questionnaire Agent" })),
+  });
+  const registerPayload = await registerResponse.json();
+
+  assert.equal(registerResponse.status, 200);
+  assert.equal(registerPayload.registration?.core_temperament_id, "qian_yuan");
+  assert.equal(registerPayload.registration?.spirit_root_result, "\u6c34\u571f\u53cc\u7075\u6839");
+  assert.ok(registerPayload.registrationEffects);
+  assert.equal(registerPayload.registrationProfile?.summary?.length > 0, true);
+  assert.equal(registerPayload.registrationProfile?.coreTemperament?.id, "qian_yuan");
+  assert.equal(registerPayload.registrationProfile?.behaviorAspect?.id, "water-earth");
+  assert.deepEqual(registerPayload.registrationProfile?.fiveElementScores, {
+    metal: 5,
+    wood: 6,
+    water: 11,
+    fire: 3,
+    earth: 9,
+  });
 });
 
 test("agent registration accepts v2 taxonomy ids and surfaces localized labels", async () => {
@@ -313,10 +408,12 @@ test("agent registration ignores caller-supplied identity and authenticated stat
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      agentId: "openclaw-main",
-      name: "Su Mingyue",
-    }),
+    body: JSON.stringify(
+      createQuestionnaireRegistrationBody({
+        agentId: "openclaw-main",
+        name: "Su Mingyue",
+      }),
+    ),
   });
   const registerPayload = await registerResponse.json();
 
@@ -347,10 +444,12 @@ test("public world agent directory returns registered agents with current cultiv
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      agentId: "openclaw-main",
-      name: "Su Mingyue",
-    }),
+    body: JSON.stringify(
+      createQuestionnaireRegistrationBody({
+        agentId: "openclaw-main",
+        name: "Su Mingyue",
+      }),
+    ),
   });
 
   const response = await app.request("https://runtime.test/world/agents");
@@ -374,9 +473,7 @@ test("credential reset revokes the previous credential and keeps the bound culti
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      name: "Su Mingyue",
-    }),
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Su Mingyue" })),
   });
   const registerPayload = await registerResponse.json();
 
@@ -423,11 +520,13 @@ test("registered agents can fetch actions and execute a real first move", async 
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      agentId: "openclaw-player",
-      name: "Player One",
-      startingPath: "sword",
-    }),
+    body: JSON.stringify(
+      createQuestionnaireRegistrationBody({
+        agentId: "openclaw-player",
+        name: "Player One",
+        startingPath: "sword",
+      }),
+    ),
   });
   const registerPayload = await registerResponse.json();
   const authHeaders = {
@@ -493,6 +592,64 @@ test("registered agents can fetch actions and execute a real first move", async 
   assert.ok(completedStatePayload.tick >= 4);
 });
 
+test("registration still accepts startingPath but new characters use the same starter package", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const swordRegisterResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(
+      createQuestionnaireRegistrationBody({
+        agentId: "openclaw-sword-starter",
+        name: "Sword Starter",
+        startingPath: "sword",
+      }),
+    ),
+  });
+  const swordRegisterPayload = await swordRegisterResponse.json();
+
+  const alchemyRegisterResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(
+      createQuestionnaireRegistrationBody({
+        agentId: "openclaw-alchemy-starter",
+        name: "Alchemy Starter",
+        startingPath: "alchemy",
+      }),
+    ),
+  });
+  const alchemyRegisterPayload = await alchemyRegisterResponse.json();
+
+  assert.equal(swordRegisterResponse.status, 200);
+  assert.equal(alchemyRegisterResponse.status, 200);
+
+  const swordStateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${swordRegisterPayload.credential}`,
+    },
+  });
+  const swordStatePayload = await swordStateResponse.json();
+
+  const alchemyStateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${alchemyRegisterPayload.credential}`,
+    },
+  });
+  const alchemyStatePayload = await alchemyStateResponse.json();
+
+  assert.equal(swordStateResponse.status, 200);
+  assert.equal(alchemyStateResponse.status, 200);
+  assert.equal(swordStatePayload.cultivator.startingPath, "sword");
+  assert.equal(alchemyStatePayload.cultivator.startingPath, "alchemy");
+  assert.deepEqual(starterStateSnapshot(swordStatePayload), starterStateSnapshot(alchemyStatePayload));
+});
+
 test("registered agents can send a private message to another agent", async () => {
   const repository = createRepository();
   const app = createApp({ repository });
@@ -502,9 +659,7 @@ test("registered agents can send a private message to another agent", async () =
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      name: "Su Mingyue",
-    }),
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Su Mingyue" })),
   });
   const senderPayload = await senderResponse.json();
 
@@ -513,9 +668,7 @@ test("registered agents can send a private message to another agent", async () =
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      name: "Li Aotian",
-    }),
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Li Aotian" })),
   });
   const recipientPayload = await recipientResponse.json();
 
@@ -566,9 +719,7 @@ test("agent message route rejects missing recipient identifiers", async () => {
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      name: "Su Mingyue",
-    }),
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Su Mingyue" })),
   });
   const registerPayload = await registerResponse.json();
 
@@ -806,16 +957,11 @@ test("GET /world/agent/:agentId returns full cultivator state for registered age
 });
 
 test("GET /world/agent/:agentId returns default five-element scores when agent has no registration", async () => {
-  const app = createApp({ repository: createRepository() });
+  const repository = createRepository();
+  const app = createApp({ repository });
 
-  // Register an agent WITHOUT a registration record
-  const registerResponse = await app.request("https://runtime.test/agent/register", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "No Registration Agent" }),
-  });
-  assert.equal(registerResponse.status, 200);
-  const registered = await registerResponse.json();
+  // Simulate a legacy agent that exists before questionnaire enforcement.
+  const registered = await repository.registerAgent({ name: "No Registration Agent" });
 
   const response = await app.request(`https://runtime.test/world/agent/${registered.agentId}`);
   assert.equal(response.status, 200);
@@ -857,3 +1003,4 @@ test("scheduled tick advances the world through the worker entrypoint", async ()
   const after = await repository.readWorld();
   assert.ok(after.tick > before.tick);
 });
+
