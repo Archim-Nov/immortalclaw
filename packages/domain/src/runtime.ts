@@ -44,17 +44,5 @@ export {
   syncCultivatorFromPersona,
 } from "./engine.js";
 export { createSeedWorld } from "./seed.js";
-export {
-  deriveDetailedAttributes,
-  deriveMainAttributes,
-  extractFiveElementScores,
-  stubDetailedAttributes,
-  stubMainAttributes,
-} from "./attributes.js";
 export * from "./economy.js";
 export type { MainAttributeId, DetailedAttributeId } from "./attributes.js";
-export {
-  deriveRegistrationRecordFromAnswers,
-  getRegistrationQuestionnaire,
-  buildRegistrationProfile,
-} from "./registration-questionnaire.js";

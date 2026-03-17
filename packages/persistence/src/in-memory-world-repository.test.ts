@@ -172,3 +172,48 @@ test("sendDirectMessage persists a private message visible to both agents", asyn
   assert.equal(message.toCultivatorId, recipient.selectedCultivatorId);
   assert.ok(senderMessages.some((entry) => entry.id === message.id));
 });
+
+test("saveAgentProfile and issueAgentCredential persist agent metadata without using registerAgent", async () => {
+  const repository = createInMemoryWorldRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const profile = await repository.saveAgentProfile({
+    agentId: "agent-profile-test",
+    name: "Su Mingyue",
+    selectedCultivatorId: cultivatorId,
+    origin: "Frost Harbor",
+  });
+  const issued = await repository.issueAgentCredential(profile.agentId);
+  const authenticated = await repository.authenticateAgent(issued.credential);
+
+  assert.equal(profile.agentId, "agent-profile-test");
+  assert.equal(profile.selectedCultivatorId, cultivatorId);
+  assert.equal(authenticated?.agentId, "agent-profile-test");
+  assert.equal(authenticated?.selectedCultivatorId, cultivatorId);
+});
+
+test("transactWorld persists world mutations while returning a cloned result", async () => {
+  const repository = createInMemoryWorldRepository();
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const mutatedCultivator = await repository.transactWorld((draftWorld) => {
+    draftWorld.cultivators[cultivatorId].spiritStones += 42;
+    return draftWorld.cultivators[cultivatorId];
+  });
+
+  mutatedCultivator.spiritStones = -1;
+
+  const refreshedWorld = await repository.readWorld();
+  assert.equal(refreshedWorld.cultivators[cultivatorId].spiritStones, world.cultivators[cultivatorId].spiritStones + 42);
+  assert.notEqual(refreshedWorld.cultivators[cultivatorId].spiritStones, mutatedCultivator.spiritStones);
+});

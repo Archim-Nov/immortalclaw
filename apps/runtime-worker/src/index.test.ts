@@ -550,6 +550,50 @@ test("credential reset revokes the previous credential and keeps the bound culti
   assert.equal(statePayload.cultivator.id, registerPayload.selectedCultivatorId);
 });
 
+test("authenticated persona sync updates the bound agent profile and cultivator identity", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Original Name" })),
+  });
+  const registerPayload = await registerResponse.json();
+
+  const syncResponse = await app.request("https://runtime.test/agent/sync-persona", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Updated Persona",
+      origin: "Cloudstep Ferry",
+      temperament: "Sharper than before.",
+    }),
+  });
+  const syncPayload = await syncResponse.json();
+
+  assert.equal(syncResponse.status, 200);
+  assert.equal(syncPayload.agentId, registerPayload.agentId);
+
+  const stateResponse = await app.request("https://runtime.test/agent/state", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const statePayload = await stateResponse.json();
+
+  assert.equal(stateResponse.status, 200);
+  assert.equal(statePayload.agent.name, "Updated Persona");
+  assert.equal(statePayload.cultivator.name, "Updated Persona");
+  assert.equal(statePayload.cultivator.origin, "Cloudstep Ferry");
+  assert.equal(statePayload.cultivator.temperament, "Sharper than before.");
+});
+
 test("registered agents can fetch actions and execute a real first move", async () => {
   const repository = createRepository();
   const app = createApp({ repository });
@@ -916,6 +960,177 @@ test("agent routes reject malformed authorization with the same generic error", 
 
   assert.equal(response.status, 401);
   assert.equal(payload.error, "Invalid or expired credential.");
+});
+
+test("authenticated agent insight routes return world views for the bound cultivator", async () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+  const sectId = Object.keys(world.sects)[0];
+
+  if (!cultivatorId || !sectId) {
+    throw new Error("Seed world should include at least one cultivator and one sect.");
+  }
+
+  world.tick = 24;
+  world.cultivators[cultivatorId] = {
+    ...world.cultivators[cultivatorId],
+    sectId,
+    sectTitle: "外门",
+    totalContribution: 18,
+  };
+  world.sects[sectId] = {
+    ...world.sects[sectId],
+    memberIds: [...world.sects[sectId].memberIds, cultivatorId],
+  };
+  world.worldEvents.unshift({
+    id: "event-keep",
+    tick: 22,
+    cultivatorId,
+    zoneId: "qingzhou",
+    title: "Keep",
+    content: "Recent event",
+    severity: "medium",
+    tags: ["quest"],
+  });
+  world.worldEvents.unshift({
+    id: "event-drop",
+    tick: 12,
+    cultivatorId,
+    zoneId: "qingzhou",
+    title: "Drop",
+    content: "Old event",
+    severity: "low",
+    tags: ["old"],
+  });
+  world.combatLogs.unshift({
+    id: "combat-keep",
+    tick: 23,
+    cultivatorId,
+    zoneId: "qingzhou:wilderness",
+    encounterId: "mine-beast",
+    enemyName: "Stone Fang",
+    outcome: "victory",
+    damageTaken: 8,
+    spiritualPowerSpent: 12,
+    loot: {},
+    summary: "Won cleanly.",
+  });
+  world.daoLogs.unshift({
+    id: "dao-1",
+    cultivatorId,
+    tick: 9,
+    title: "Stillness",
+    content: "The dao heart steadies.",
+    tags: ["reflection"],
+  });
+
+  const registrationRecord = createRegistrationRecordV2();
+  const app = createApp({
+    repository: {
+      async authenticateAgent() {
+        return {
+          agentId: "agent-self",
+          name: "Su Mingyue",
+          selectedCultivatorId: cultivatorId,
+          createdAt: "2026-03-13T00:00:00.000Z",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+          lastSeenAt: "2026-03-13T00:00:00.000Z",
+        };
+      },
+      async touchAgent() {},
+      async readWorld() {
+        return world;
+      },
+      async getCultivationRegistration(inputCultivatorId) {
+        assert.equal(inputCultivatorId, cultivatorId);
+        return registrationRecord;
+      },
+    } as never,
+  });
+
+  const headers = { authorization: "Bearer immortal_sk_test" };
+
+  const eventsResponse = await app.request("https://runtime.test/agent/events?sinceTick=20", { headers });
+  const eventsPayload = await eventsResponse.json();
+  assert.equal(eventsResponse.status, 200);
+  assert.equal(eventsPayload.tick, 24);
+  assert.deepEqual(eventsPayload.events.map((event: { id: string }) => event.id), ["event-keep"]);
+  assert.deepEqual(eventsPayload.combats.map((entry: { id: string }) => entry.id), ["combat-keep"]);
+
+  const strategyResponse = await app.request("https://runtime.test/agent/strategy", { headers });
+  const strategyPayload = await strategyResponse.json();
+  assert.equal(strategyResponse.status, 200);
+  assert.equal(strategyPayload.cultivatorId, cultivatorId);
+
+  const tribulationResponse = await app.request("https://runtime.test/agent/tribulation", { headers });
+  const tribulationPayload = await tribulationResponse.json();
+  assert.equal(tribulationResponse.status, 200);
+  assert.equal(typeof tribulationPayload.nextTribulationTick, "number");
+
+  const sectResponse = await app.request("https://runtime.test/agent/sect", { headers });
+  const sectPayload = await sectResponse.json();
+  assert.equal(sectResponse.status, 200);
+  assert.equal(sectPayload.id, sectId);
+
+  const daoHeartResponse = await app.request("https://runtime.test/agent/dao-heart", { headers });
+  const daoHeartPayload = await daoHeartResponse.json();
+  assert.equal(daoHeartResponse.status, 200);
+  assert.equal(daoHeartPayload[0]?.id, "dao-1");
+
+  const registrationResponse = await app.request("https://runtime.test/agent/registration", { headers });
+  const registrationPayload = await registrationResponse.json();
+  assert.equal(registrationResponse.status, 200);
+  assert.equal(registrationPayload.result.core_temperament_id, "qian_yuan");
+});
+
+test("authenticated registration save route binds the record to the authenticated agent", async () => {
+  const record = createRegistrationRecordV2();
+  const app = createApp({
+    repository: {
+      async authenticateAgent() {
+        return {
+          agentId: "agent-self",
+          name: "Su Mingyue",
+          selectedCultivatorId: "cultivator-self",
+          createdAt: "2026-03-13T00:00:00.000Z",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+          lastSeenAt: "2026-03-13T00:00:00.000Z",
+        };
+      },
+      async touchAgent() {},
+      async transactWorld<TResult>(mutator) {
+        const world = createSeedWorld();
+        const baseCultivatorId = Object.keys(world.cultivators)[0];
+        if (!baseCultivatorId) {
+          throw new Error("Seed world should include at least one cultivator.");
+        }
+        world.cultivators["cultivator-self"] = {
+          ...world.cultivators[baseCultivatorId],
+          id: "cultivator-self",
+          registrationRecord: null,
+        };
+        const result = mutator(world);
+        const stored = world.cultivators["cultivator-self"]?.registrationRecord;
+        assert.equal(stored?.cultivator_id, "cultivator-self");
+        assert.equal(stored?.agent_id, "agent-self");
+        assert.deepEqual(stored?.answers, record.answers);
+        return result as TResult;
+      },
+    } as never,
+  });
+
+  const response = await app.request("https://runtime.test/agent/registration", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer immortal_sk_test",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ record }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.result.core_temperament_id, "qian_yuan");
 });
 
 test("actions route returns available actions", async () => {

@@ -37,6 +37,12 @@ function unusedRepository() {
     async releaseTickLock() {
       throw new Error("not used");
     },
+    async saveAgentProfile() {
+      throw new Error("not used");
+    },
+    async issueAgentCredential() {
+      throw new Error("not used");
+    },
     async registerAgent() {
       throw new Error("not used");
     },
