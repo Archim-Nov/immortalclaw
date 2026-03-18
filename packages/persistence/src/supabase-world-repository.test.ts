@@ -345,6 +345,28 @@ test("readWorld bootstraps and persists a seed snapshot when storage is empty", 
   assert.equal(api.tables.cultivator_records.size, Object.keys(first.cultivators).length);
 });
 
+test("readWorld tolerates legacy stored snapshots without topology data", async () => {
+  const { api, repository } = createRepository();
+
+  const seeded = await repository.readWorld();
+  const snapshot = Array.from(api.tables.world_snapshots.values())[0];
+
+  if (!snapshot) {
+    throw new Error("Expected a persisted world snapshot.");
+  }
+
+  const legacyPayload = structuredClone(snapshot.payload) as Record<string, unknown>;
+  delete legacyPayload.topology;
+  snapshot.payload = legacyPayload as WorldState;
+
+  const reloaded = await repository.readWorld();
+
+  assert.equal(reloaded.tick, seeded.tick);
+  assert.ok(reloaded.topology);
+  assert.ok(reloaded.topology.distanceMatrix instanceof Map);
+  assert.ok(reloaded.topology.distanceMatrix.size > 0);
+});
+
 test("agent registration issues credentials and authenticated lookups resolve the bound cultivator", async () => {
   const { api, repository } = createRepository();
 

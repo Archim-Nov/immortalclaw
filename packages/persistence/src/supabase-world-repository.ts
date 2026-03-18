@@ -20,6 +20,7 @@ import type {
   WorldState,
 } from "../../domain/src/runtime.js";
 import type { WorldEvent } from "../../domain/src/model.js";
+import { buildFullTopology } from "../../domain/src/topology.js";
 import type {
   AgentCredentialResetResult,
   AgentPersonaInput,
@@ -976,9 +977,14 @@ function serializeWorldForStorage(world: WorldState): WorldState {
 
 function deserializeStoredWorld(world: WorldState): WorldState {
   const copy = structuredClone(world);
-  const distanceMatrixEntries = Object.entries(
-    (copy.topology.distanceMatrix as unknown as Record<string, unknown>) ?? {},
-  ).map(([key, value]) => [key, deserializeFiniteNumber(value)] as const);
+  if (!copy.topology || !copy.topology.distanceMatrix) {
+    copy.topology = buildFullTopology() as WorldState["topology"];
+  }
+  const rawDistanceMatrix = copy.topology.distanceMatrix as unknown;
+  const distanceMatrixEntries = rawDistanceMatrix instanceof Map
+    ? Array.from(rawDistanceMatrix.entries()).map(([key, value]) => [key, deserializeFiniteNumber(value)] as const)
+    : Object.entries((rawDistanceMatrix as Record<string, unknown>) ?? {})
+      .map(([key, value]) => [key, deserializeFiniteNumber(value)] as const);
   copy.topology.distanceMatrix = new Map(distanceMatrixEntries);
 
   for (const sect of Object.values(copy.sects)) {
