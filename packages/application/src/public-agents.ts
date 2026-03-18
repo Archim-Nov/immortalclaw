@@ -3,6 +3,7 @@ import {
   deriveMainAttributes,
   extractFiveElementScores,
 } from "../../domain/src/attributes.js";
+import { statusOf } from "../../domain/src/runtime.js";
 import type { CultivatorStateView, WorldState } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
 import { toAgentView } from "./agent-onboarding.js";
@@ -39,7 +40,7 @@ function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
       realm: cultivator.realm,
       realmLevel: cultivator.realmLevel,
       realmProgress: cultivator.realmProgress,
-      status: cultivator.status,
+      status: statusOf(cultivator),
       location: locationNameOf(world, cultivator.locationId),
       spiritualPower: cultivator.spiritualPower,
       sect: sect?.name ?? null,

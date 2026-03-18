@@ -42,6 +42,7 @@ test("buildPublicAgentDirectory returns only agents that still map to world cult
   assert.equal(payload.agents.length, 1);
   assert.equal(payload.agents[0]?.agentId, "agent-1");
   assert.equal(payload.agents[0]?.cultivator.id, cultivatorId);
+  assert.equal(payload.agents[0]?.cultivator.status, "idle");
 });
 
 test("buildPublicAgentState assembles the stat-page payload for a registered agent", async () => {
