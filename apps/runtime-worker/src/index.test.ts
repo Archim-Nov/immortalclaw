@@ -1093,6 +1093,28 @@ test("act route performs an action", async () => {
   assert.equal(payload.accepted, true);
 });
 
+test("legacy cultivator insight routes return tribulation and strategy views", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  const tribulationResponse = await app.request(
+    `https://runtime.test/cultivator/tribulation?cultivatorId=${cultivatorId}`,
+  );
+  assert.equal(tribulationResponse.status, 200);
+  const tribulationPayload = await tribulationResponse.json();
+  assert.equal(typeof tribulationPayload.nextTribulationTick, "number");
+
+  const strategyResponse = await app.request(
+    `https://runtime.test/cultivator/strategy?cultivatorId=${cultivatorId}`,
+  );
+  assert.equal(strategyResponse.status, 200);
+  const strategyPayload = await strategyResponse.json();
+  assert.equal(strategyPayload.cultivatorId, cultivatorId);
+});
+
 test("GET /world/agent/:agentId returns full cultivator state for registered agent", async () => {
   const app = createApp({ repository: createRepository() });
 
@@ -1187,4 +1209,3 @@ test("scheduled tick advances the world through the worker entrypoint", async ()
   const after = await repository.readWorld();
   assert.ok(after.tick > before.tick);
 });
-
