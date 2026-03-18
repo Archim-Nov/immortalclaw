@@ -90,3 +90,42 @@ test("onRequest proxies registration requests to the runtime without changing me
     globalThis.fetch = originalFetch;
   }
 });
+
+test("onRequest returns JSON 502 when no runtime base URL is configured", async () => {
+  const response = await onRequest({
+    env: {},
+    request: new Request("https://immortal-claw.pages.dev/world/agents"),
+  });
+
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+  assert.equal(response.headers.get("x-immortal-proxy"), "pages");
+  const payload = await response.json();
+  assert.match(payload.error, /Runtime proxy is not configured/);
+});
+
+test("onRequest returns JSON 502 when the runtime worker is unreachable", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () => {
+    throw new Error("fetch failed");
+  }) as typeof fetch;
+
+  try {
+    const response = await onRequest({
+      env: {
+        RUNTIME_PROXY_BASE_URL: "https://runtime.example",
+      },
+      request: new Request("https://immortal-claw.pages.dev/world/agents"),
+    });
+
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(response.headers.get("x-immortal-proxy"), "pages");
+    const payload = await response.json();
+    assert.match(payload.error, /Runtime worker is unreachable/);
+    assert.match(payload.error, /fetch failed/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
