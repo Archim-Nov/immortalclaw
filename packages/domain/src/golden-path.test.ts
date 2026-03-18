@@ -19,7 +19,6 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   const world = createSeedWorld();
   const summary = createCultivator(world, {
     name: "Golden Path Disciple",
-    startingPath: "sword",
   });
   const cultivatorId = summary.id;
 
@@ -90,7 +89,6 @@ test("onboarding nextAction gives actionable fallback choices", () => {
   const world = createSeedWorld();
   const summary = createCultivator(world, {
     name: "Guide Target",
-    startingPath: "wanderer",
   });
   const cultivatorId = summary.id;
 

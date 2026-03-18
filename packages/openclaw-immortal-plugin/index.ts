@@ -36,7 +36,6 @@ type OpenClawPluginApiLike = {
 };
 
 type GenderValue = "male" | "female" | "nonbinary" | "other" | "unspecified";
-type StartingPathValue = "sword" | "alchemy" | "array" | "wanderer";
 
 type PersonaProfile = {
   name: string;
@@ -44,8 +43,6 @@ type PersonaProfile = {
   pronouns?: string;
   origin?: string;
   temperament?: string;
-  /** @deprecated Compatibility-only metadata forwarded for older runtimes. Starter packages no longer depend on it. */
-  startingPath?: StartingPathValue;
 };
 
 type PluginConfig = {
@@ -82,7 +79,6 @@ type StoredCredentialsFile = {
 };
 
 const GENDER_VALUES = ["male", "female", "nonbinary", "other", "unspecified"] as const;
-const STARTING_PATH_VALUES = ["sword", "alchemy", "array", "wanderer"] as const;
 const IDENTITY_FILE_NAMES = ["IDENTITY.md", "Identity.md", "identity.md"] as const;
 const SOUL_FILE_NAMES = ["SOUL.md", "Soul.md", "soul.md"] as const;
 const REGISTRATION_RECORD_FILE_NAMES = [
@@ -106,18 +102,9 @@ const ZH_BACKSTORY = "\u6765\u5386";
 const ZH_TEMPERAMENT = "\u6027\u683c";
 const ZH_DISPOSITION = "\u6c14\u8d28";
 const ZH_PERSONA = "\u4eba\u683c";
-const ZH_STARTING_PATH = "\u4fee\u884c\u65b9\u5411";
-const ZH_DAO = "\u9053\u9014";
-const ZH_PATH = "\u8def\u5f84";
 const ZH_FEMALE = "\u5973";
 const ZH_MALE = "\u7537";
 const ZH_NONBINARY = "\u975e\u4e8c\u5143";
-const ZH_SWORD = "\u5251";
-const ZH_BLADE = "\u5200";
-const ZH_ALCHEMY = "\u4e39";
-const ZH_MEDICINE = "\u836f";
-const ZH_ARRAY = "\u9635";
-const ZH_FORMATION = "\u7b26\u9635";
 const ZH_SOUL = "\u7075\u9b42";
 const ZH_CORE_PERSONA = "\u6838\u5fc3\u4eba\u683c";
 const ZH_CHARACTER_NOTES = "\u89d2\u8272\u7b14\u8bb0";
@@ -510,41 +497,6 @@ function normalizeGender(value: string | undefined): GenderValue | undefined {
   return "other";
 }
 
-function normalizeStartingPath(value: string | undefined, combinedText: string): StartingPathValue | undefined {
-  // Deprecated compatibility path: keep parsing older persona files until the field is removed end-to-end.
-  const normalized = value?.trim().toLowerCase();
-  if ((STARTING_PATH_VALUES as readonly string[]).includes(normalized ?? "")) {
-    return normalized as StartingPathValue;
-  }
-  const haystack = `${value ?? ""}\n${combinedText}`.toLowerCase();
-  if (
-    haystack.includes("sword") ||
-    haystack.includes("blade") ||
-    haystack.includes(ZH_SWORD.toLowerCase()) ||
-    haystack.includes(ZH_BLADE.toLowerCase())
-  ) {
-    return "sword";
-  }
-  if (
-    haystack.includes("alchemy") ||
-    haystack.includes("pill") ||
-    haystack.includes("medicine") ||
-    haystack.includes(ZH_ALCHEMY.toLowerCase()) ||
-    haystack.includes(ZH_MEDICINE.toLowerCase())
-  ) {
-    return "alchemy";
-  }
-  if (
-    haystack.includes("array") ||
-    haystack.includes("formation") ||
-    haystack.includes(ZH_ARRAY.toLowerCase()) ||
-    haystack.includes(ZH_FORMATION.toLowerCase())
-  ) {
-    return "array";
-  }
-  return "wanderer";
-}
-
 function fallbackNameFromAgentId(agentId: string): string {
   const base = agentId.split(/[/:@#\\]/).pop() ?? agentId;
   const cleaned = base.replace(/[-_.]+/g, " ").trim();
@@ -620,23 +572,12 @@ function loadPersonaProfile(agentId: string, config: PluginConfig): PersonaProfi
   );
   const temperament = temperamentParts.length > 0 ? temperamentParts.join("; ") : undefined;
 
-  const startingPath = normalizeStartingPath(
-    cleanField(identityFrontMatter.startingpath) ??
-      cleanField(identityFrontMatter["starting path"]) ??
-      cleanField(identityFrontMatter.path) ??
-      cleanField(soulFrontMatter.startingpath) ??
-      cleanField(soulFrontMatter.path) ??
-      extractField(combinedText, ["starting path", "cultivation path", "path", ZH_STARTING_PATH, ZH_DAO, ZH_PATH]),
-    combinedText,
-  );
-
   return {
     name,
     genderPresentation,
     pronouns,
     origin,
     temperament,
-    startingPath,
   };
 }
 
@@ -1062,7 +1003,6 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
              ...(persona.pronouns ? { pronouns: persona.pronouns } : {}),
              ...(persona.origin ? { origin: persona.origin } : {}),
              ...(persona.temperament ? { temperament: persona.temperament } : {}),
-             ...(persona.startingPath ? { startingPath: persona.startingPath } : {}),
              ...(record ? { record } : {}),
            }),
          });

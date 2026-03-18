@@ -180,23 +180,6 @@ function createQuestionnaireRegistrationBody(
   };
 }
 
-function starterStateSnapshot(statePayload: {
-  cultivator: { spiritStones: number; reputation: number };
-  cultivation: { techniques: string[] };
-  inventory: Record<string, number>;
-  factionReputation: Array<{ factionId: string; value: number }>;
-}) {
-  return {
-    spiritStones: statePayload.cultivator.spiritStones,
-    reputation: statePayload.cultivator.reputation,
-    techniques: statePayload.cultivation.techniques,
-    inventory: statePayload.inventory,
-    factionReputation: Object.fromEntries(
-      statePayload.factionReputation.map((entry) => [entry.factionId, entry.value]),
-    ),
-  };
-}
-
 test("health route returns ok", async () => {
   const app = createApp({ repository: createRepository() });
 
@@ -607,7 +590,6 @@ test("registered agents can fetch actions and execute a real first move", async 
       createQuestionnaireRegistrationBody({
         agentId: "openclaw-player",
         name: "Player One",
-        startingPath: "sword",
       }),
     ),
   });
@@ -673,64 +655,6 @@ test("registered agents can fetch actions and execute a real first move", async 
   assert.equal(completedStatePayload.cultivator.status, "idle");
   assert.equal(completedStatePayload.currentJob, null);
   assert.ok(completedStatePayload.tick >= 4);
-});
-
-test("registration still accepts startingPath but new characters use the same starter package", async () => {
-  const repository = createRepository();
-  const app = createApp({ repository });
-
-  const swordRegisterResponse = await app.request("https://runtime.test/agent/register", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(
-      createQuestionnaireRegistrationBody({
-        agentId: "openclaw-sword-starter",
-        name: "Sword Starter",
-        startingPath: "sword",
-      }),
-    ),
-  });
-  const swordRegisterPayload = await swordRegisterResponse.json();
-
-  const alchemyRegisterResponse = await app.request("https://runtime.test/agent/register", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(
-      createQuestionnaireRegistrationBody({
-        agentId: "openclaw-alchemy-starter",
-        name: "Alchemy Starter",
-        startingPath: "alchemy",
-      }),
-    ),
-  });
-  const alchemyRegisterPayload = await alchemyRegisterResponse.json();
-
-  assert.equal(swordRegisterResponse.status, 200);
-  assert.equal(alchemyRegisterResponse.status, 200);
-
-  const swordStateResponse = await app.request("https://runtime.test/agent/state", {
-    headers: {
-      authorization: `Bearer ${swordRegisterPayload.credential}`,
-    },
-  });
-  const swordStatePayload = await swordStateResponse.json();
-
-  const alchemyStateResponse = await app.request("https://runtime.test/agent/state", {
-    headers: {
-      authorization: `Bearer ${alchemyRegisterPayload.credential}`,
-    },
-  });
-  const alchemyStatePayload = await alchemyStateResponse.json();
-
-  assert.equal(swordStateResponse.status, 200);
-  assert.equal(alchemyStateResponse.status, 200);
-  assert.equal(swordStatePayload.cultivator.startingPath, "sword");
-  assert.equal(alchemyStatePayload.cultivator.startingPath, "alchemy");
-  assert.deepEqual(starterStateSnapshot(swordStatePayload), starterStateSnapshot(alchemyStatePayload));
 });
 
 test("registered agents can send a private message to another agent", async () => {

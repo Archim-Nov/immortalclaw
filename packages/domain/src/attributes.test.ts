@@ -4,8 +4,6 @@ import {
   deriveDetailedAttributes,
   deriveMainAttributes,
   extractFiveElementScores,
-  stubDetailedAttributes,
-  stubMainAttributes,
 } from "./attributes.js";
 import type { CultivationRegistrationRecord } from "./model.js";
 
@@ -103,11 +101,6 @@ test("registered profiles change detailed attributes toward their style", () => 
   assert.ok(registeredDetailed.kongzhi_qiangdu > baselineDetailed.kongzhi_qiangdu);
   assert.ok(registeredDetailed.huxin > baselineDetailed.huxin);
   assert.ok(registeredDetailed.waigong_shanghai_beilv < baselineDetailed.waigong_shanghai_beilv);
-});
-
-test("compatibility stub helpers mirror the default derived attributes", () => {
-  assert.deepEqual(stubMainAttributes(), deriveMainAttributes(null));
-  assert.deepEqual(stubDetailedAttributes(), deriveDetailedAttributes(deriveMainAttributes(null)));
 });
 
 test("extractFiveElementScores returns scores from registration record", () => {

@@ -1,3 +1,5 @@
+> **Status: Completed.** The `startingPath` field was fully removed on 2026-03-18.
+
 # Deprecate Starting Path For New Registrations
 
 ## Summary

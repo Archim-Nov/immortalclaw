@@ -73,7 +73,6 @@ async function main() {
       name: payload.name,
       origin: payload.origin,
       temperament: payload.temperament,
-      startingPath: payload.startingPath,
       genderPresentation: payload.genderPresentation,
       pronouns: payload.pronouns,
       age: payload.age,

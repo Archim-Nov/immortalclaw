@@ -22,16 +22,6 @@ function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: s
   }
 }
 
-function starterSnapshot(cultivator: ReturnType<typeof createSeedWorld>["cultivators"][string]) {
-  return {
-    techniques: cultivator.techniques,
-    spiritStones: cultivator.spiritStones,
-    inventory: cultivator.inventory,
-    reputation: cultivator.reputation,
-    factionReputation: cultivator.factionReputation,
-  };
-}
-
 function createRegistrationRecord(): CultivationRegistrationRecord {
   return {
     record_type: "registration_record" as const,
@@ -457,7 +447,6 @@ test("agent persona sync auto-provisions and reuses a single character", () => {
     agentId: "openclaw-main",
     name: "Liu Ruyan",
     genderPresentation: "female",
-    startingPath: "alchemy",
   });
   const second = syncCultivatorFromPersona(world, {
     agentId: "openclaw-main",
@@ -465,7 +454,6 @@ test("agent persona sync auto-provisions and reuses a single character", () => {
     genderPresentation: "female",
     pronouns: "she/her",
     temperament: "calm",
-    startingPath: "sword",
   });
 
   assert.equal(first.created, true);
@@ -480,28 +468,6 @@ test("agent persona sync auto-provisions and reuses a single character", () => {
   assert.equal(state.cultivator.name, "Liu Ruyan");
   assert.equal(state.cultivator.pronouns, "she/her");
   assert.equal(state.cultivator.temperament, "calm");
-});
-
-test("startingPath stays as metadata but no longer changes new character starter package", () => {
-  const world = createSeedWorld();
-
-  const sword = syncCultivatorFromPersona(world, {
-    agentId: "openclaw-sword-path",
-    name: "Sword Path",
-    startingPath: "sword",
-  });
-  const alchemy = syncCultivatorFromPersona(world, {
-    agentId: "openclaw-alchemy-path",
-    name: "Alchemy Path",
-    startingPath: "alchemy",
-  });
-
-  const swordCultivator = world.cultivators[sword.selectedCultivatorId];
-  const alchemyCultivator = world.cultivators[alchemy.selectedCultivatorId];
-
-  assert.equal(swordCultivator.startingPath, "sword");
-  assert.equal(alchemyCultivator.startingPath, "alchemy");
-  assert.deepEqual(starterSnapshot(swordCultivator), starterSnapshot(alchemyCultivator));
 });
 
 test("studying a manual adds technique and strategy recommends safe progression", () => {
@@ -679,12 +645,10 @@ test("direct messages are visible to both sender and recipient mailboxes", () =>
   const sender = syncCultivatorFromPersona(world, {
     agentId: "openclaw-sender",
     name: "Su Mingyue",
-    startingPath: "sword",
   });
   const recipient = syncCultivatorFromPersona(world, {
     agentId: "openclaw-recipient",
     name: "Li Aotian",
-    startingPath: "alchemy",
   });
 
   const message = sendDirectMessage(

@@ -27,7 +27,6 @@ function mergeProfileInput(agentId: string, existing: AgentProfileRecord, input:
     pronouns: input.pronouns?.trim() ?? existing.pronouns,
     origin: input.origin?.trim() ?? existing.origin,
     temperament: input.temperament?.trim() ?? existing.temperament,
-    startingPath: input.startingPath ?? existing.startingPath,
     lastSeenAt: existing.lastSeenAt,
   } satisfies AgentProfileWriteInput;
 }
@@ -50,7 +49,6 @@ export async function syncAgentPersonaWorkflow(
       age: input.age,
       origin: input.origin,
       temperament: input.temperament,
-      startingPath: input.startingPath,
     }),
   );
 

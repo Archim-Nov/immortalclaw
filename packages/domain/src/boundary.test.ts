@@ -9,8 +9,6 @@ test("runtime surface stays focused on world-rule helpers instead of questionnai
   assert.equal("deriveRegistrationRecordFromAnswers" in domainRuntime, false);
   assert.equal("getRegistrationQuestionnaire" in domainRuntime, false);
   assert.equal("buildRegistrationProfile" in domainRuntime, false);
-  assert.equal("stubMainAttributes" in domainRuntime, false);
-  assert.equal("stubDetailedAttributes" in domainRuntime, false);
   assert.equal("extractFiveElementScores" in domainRuntime, false);
 });
 

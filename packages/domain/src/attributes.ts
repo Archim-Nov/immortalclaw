@@ -149,19 +149,6 @@ export function deriveDetailedAttributes(
   };
 }
 
-/**
- * Compatibility helper kept for older callers.
- */
-export function stubMainAttributes(): Record<MainAttributeId, number> {
-  return deriveMainAttributes(null);
-}
-
-/**
- * Compatibility helper kept for older callers.
- */
-export function stubDetailedAttributes(): Record<DetailedAttributeId, number> {
-  return deriveDetailedAttributes(deriveMainAttributes(null));
-}
 
 const DEFAULT_FIVE_ELEMENT_SCORES: Record<FiveElementId, number> = { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 };
 

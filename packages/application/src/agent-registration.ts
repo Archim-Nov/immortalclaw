@@ -45,7 +45,6 @@ export async function registerAgentWorkflow(
       age: input.age,
       origin: input.origin,
       temperament: input.temperament,
-      startingPath: input.startingPath,
     });
 
     if (input.record) {
@@ -64,7 +63,6 @@ export async function registerAgentWorkflow(
     age: input.age,
     origin: input.origin,
     temperament: input.temperament,
-    startingPath: input.startingPath,
   });
   const credential = await repository.issueAgentCredential(agentId);
   const [state, savedRecord] = await Promise.all([

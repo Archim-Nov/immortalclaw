@@ -79,7 +79,7 @@ export type OnboardingStage =
     ▼
 ┌─────────────────────────────────────────────┐
 │ POST /api/agent/register                     │
-│   input: { name, startingPath, ... }         │
+│   input: { name, ... }                        │
 │   ├─ engine.createCultivator()               │
 │   │   ├─ locationId = "qingzhou:main-city"   │
 │   │   ├─ spiritStones = 200                  │
@@ -429,7 +429,6 @@ describe("P1 Golden Path", () => {
     const world = createSeedWorld();
     const cultivator = createCultivator(world, {
       name: "测试修士",
-      startingPath: "sword",
     });
 
     // 阶段 1：注册完成

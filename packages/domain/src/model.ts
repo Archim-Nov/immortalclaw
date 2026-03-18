@@ -1,7 +1,5 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
-/** @deprecated Compatibility-only metadata. New-character starter packages ignore this field and it will be removed gradually. */
-export type StartingPath = "sword" | "alchemy" | "array" | "wanderer";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
 export type RegistrationQuestionId =
   | "Q1"
@@ -408,8 +406,6 @@ export interface Cultivator {
   pronouns: string;
   origin: string;
   temperament: string;
-  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
-  startingPath: StartingPath;
   createdByAgentId: string | null;
   realm: RealmStage;
   realmLevel: number;
@@ -640,8 +636,6 @@ export interface CharacterSummary {
   pronouns: string;
   origin: string;
   temperament: string;
-  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
-  startingPath: StartingPath;
   realm: RealmStage;
   realmLevel: number;
   locationId: string;
@@ -657,8 +651,6 @@ export interface CreateCultivatorInput {
   age?: number;
   origin?: string;
   temperament?: string;
-  /** @deprecated Compatibility-only metadata. Accepted for backward compatibility and ignored for starter-package selection. */
-  startingPath?: StartingPath;
 }
 
 export interface TribulationPreview {
@@ -750,8 +742,6 @@ export interface CultivatorStateView {
     pronouns: string;
     origin: string;
     temperament: string;
-    /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
-    startingPath: StartingPath;
   };
   cultivation: {
     mainTechnique: string;

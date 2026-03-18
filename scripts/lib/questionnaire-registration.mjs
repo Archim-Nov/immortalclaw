@@ -46,7 +46,6 @@ const TEMPERAMENTS = [
   "Warm in private, ruthless when a duty is accepted.",
   "Playful on the surface, calculating underneath.",
 ];
-const STARTING_PATHS = ["sword", "alchemy", "array", "wanderer"];
 const ELEMENT_LABELS = {
   metal: "Metal",
   wood: "Wood",
@@ -124,7 +123,6 @@ export function buildQuestionnaireDrivenAgentPayload(seed = Date.now()) {
       age: 16 + Math.floor(rng() * 9),
       origin: choose(ORIGINS, rng),
       temperament: choose(TEMPERAMENTS, rng),
-      startingPath: choose(STARTING_PATHS, rng),
       answers,
     },
     answerSummary: dominantElementsSummary(record.result.five_element_scores),

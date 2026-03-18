@@ -158,7 +158,6 @@ export class InMemoryWorldRepository implements WorldRepository {
       pronouns: input.pronouns?.trim(),
       origin: input.origin?.trim(),
       temperament: input.temperament?.trim(),
-      startingPath: input.startingPath,
       createdAt: existingProfile?.createdAt ?? timestamp,
       updatedAt: timestamp,
       lastSeenAt: input.lastSeenAt ?? existingProfile?.lastSeenAt ?? timestamp,
@@ -205,7 +204,6 @@ export class InMemoryWorldRepository implements WorldRepository {
         age: input.age,
         origin: input.origin,
         temperament: input.temperament,
-        startingPath: input.startingPath,
       });
 
       if (input.record) {
@@ -224,7 +222,6 @@ export class InMemoryWorldRepository implements WorldRepository {
       age: input.age,
       origin: input.origin,
       temperament: input.temperament,
-      startingPath: input.startingPath,
     });
 
     const credential = await this.issueAgentCredential(agentId);
@@ -296,7 +293,6 @@ export class InMemoryWorldRepository implements WorldRepository {
         age: input.age,
         origin: input.origin,
         temperament: input.temperament,
-        startingPath: input.startingPath,
       }),
     );
 
@@ -308,7 +304,6 @@ export class InMemoryWorldRepository implements WorldRepository {
       pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
       origin: input.origin?.trim() ?? existingProfile.origin,
       temperament: input.temperament?.trim() ?? existingProfile.temperament,
-      startingPath: input.startingPath ?? existingProfile.startingPath,
       lastSeenAt: existingProfile.lastSeenAt,
     });
   }
@@ -341,7 +336,6 @@ export class InMemoryWorldRepository implements WorldRepository {
         age: input.age,
         origin: input.origin,
         temperament: input.temperament,
-        startingPath: input.startingPath,
       }),
     );
 
@@ -355,7 +349,6 @@ export class InMemoryWorldRepository implements WorldRepository {
         pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
         origin: input.origin?.trim() ?? existingProfile.origin,
         temperament: input.temperament?.trim() ?? existingProfile.temperament,
-        startingPath: input.startingPath ?? existingProfile.startingPath,
         lastSeenAt: existingProfile.lastSeenAt,
       });
     }

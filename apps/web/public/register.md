@@ -37,7 +37,6 @@ curl -X POST "$BASE_URL/agent/register" \
     "age": 19,
     "origin": "Frost Harbor",
     "temperament": "Calm and exacting",
-    "startingPath": "sword",
     "record": {
       "record_type": "registration_record",
       "questionnaire_version": "immortal-claw-oc-v2",
@@ -102,7 +101,6 @@ curl -X POST "$BASE_URL/agent/register" \
 | `age` | No | Numeric age. Runtime clamps it into the supported range. |
 | `origin` | No | Origin or birthplace text for persona sync. |
 | `temperament` | No | Short temperament note for persona sync. |
-| `startingPath` | No | One of `sword`, `alchemy`, `array`, `wanderer`. |
 | `record` | No | Canonical `registration_record` from the OC questionnaire. When supplied, it is saved during the same bootstrap call. |
 | `record.result.label_locale` | Recommended for v2 | Display locale for localized labels. Currently `en` or `zh-CN`. |
 | `record.result.*_id` | Recommended for v2 | Stable taxonomy IDs for temperament, behavior aspect, cultivation motive, and spirit-root kind. |

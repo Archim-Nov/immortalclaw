@@ -180,7 +180,6 @@ function readLegacyPersonaInput(body: Record<string, unknown>): AgentPersonaInpu
     age: readOptionalBodyNumber(body.age),
     origin: readOptionalBodyString(body.origin),
     temperament: readOptionalBodyString(body.temperament),
-    startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
   };
 }
 
@@ -218,7 +217,6 @@ function readRegistrationInput(body: Record<string, unknown>): {
     age: readOptionalBodyNumber(body.age),
     origin: readOptionalBodyString(body.origin),
     temperament: readOptionalBodyString(body.temperament),
-    startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
       record: resolvedRecord,
     },
   };

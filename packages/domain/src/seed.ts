@@ -285,7 +285,6 @@ const cultivators: Record<string, Cultivator> = {
     pronouns: "他/他的",
     origin: "云州散修",
     temperament: "谨慎",
-    startingPath: "sword",
     createdByAgentId: null,
     realm: "炼气" as Cultivator["realm"],
     realmLevel: 3,

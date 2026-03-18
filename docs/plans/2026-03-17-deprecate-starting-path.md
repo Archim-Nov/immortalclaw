@@ -1,3 +1,5 @@
+> **Status: Completed.** The `startingPath` field was fully removed on 2026-03-18.
+
 # Starting Path Deprecation Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

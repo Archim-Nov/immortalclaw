@@ -233,7 +233,6 @@ const server = http.createServer(async (request, response) => {
             age: typeof body.age === "number" ? body.age : undefined,
             origin: typeof body.origin === "string" ? body.origin : undefined,
             temperament: typeof body.temperament === "string" ? body.temperament : undefined,
-            startingPath: typeof body.startingPath === "string" ? (body.startingPath as never) : undefined,
           }),
         ),
       );

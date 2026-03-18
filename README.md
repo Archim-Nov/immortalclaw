@@ -104,8 +104,6 @@ npm run verify:worker
 
 `npm run smoke:questionnaire-to-register` runs the same flow with a more verbose payload dump. Use it when you want to inspect the question bank, the raw 18 answers, the derived registration record, the returned `registrationProfile`, and the immediate post-register state in one place.
 
-Compatibility note: `startingPath` may still appear in older agent payloads and state views, but it is now deprecated compatibility metadata. New-character starter packages no longer change based on `startingPath`, and future cleanup should remove the field gradually.
-
 ### Runtime Environment
 
 Web app:
@@ -222,8 +220,6 @@ curl -X POST "https://<worker-host>/cultivator/act" -H "Content-Type: applicatio
 ```
 
 For the agent auth flow itself, run this sequence against the Worker and keep the returned `credential` for the next two calls. The preferred bootstrap is `GET /agent/register/questions` followed by `POST /agent/register` with all 18 questionnaire answers. If you already have the canonical OC `registration_record`, you may send `record` instead. New callers should prefer `immortal-claw-oc-v2` with stable `*_id` taxonomy fields and `label_locale`; v1 label-only records remain compatible.
-
-If an older caller still sends `startingPath`, the runtime accepts it for compatibility but ignores it when assigning the new-character starter package.
 
 ```text
 curl "https://<worker-host>/agent/register/questions"

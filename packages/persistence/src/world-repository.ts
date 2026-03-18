@@ -12,7 +12,6 @@ import type {
   CultivationRegistrationRecord,
   GenderPresentation,
   Message,
-  StartingPath,
 } from "../../domain/src/model.js";
 
 export interface TickRunRecord {
@@ -28,11 +27,10 @@ export interface TickLockRecord {
   acquiredAt: string;
 }
 
-// Includes deprecated `startingPath` only for backward compatibility with older callers.
 export interface AgentPersonaInput
   extends Pick<
     CreateCultivatorInput,
-    "name" | "genderPresentation" | "pronouns" | "age" | "origin" | "temperament" | "startingPath"
+    "name" | "genderPresentation" | "pronouns" | "age" | "origin" | "temperament"
   > {}
 
 export interface AgentRegistrationInput extends AgentPersonaInput {
@@ -53,8 +51,6 @@ export interface AgentProfileRecord {
   pronouns?: string;
   origin?: string;
   temperament?: string;
-  /** @deprecated Compatibility-only metadata. New-character starter packages ignore this field. */
-  startingPath?: StartingPath;
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;

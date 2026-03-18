@@ -31,7 +31,6 @@ function createState(): CultivatorStateView {
       pronouns: "she/her",
       origin: "Frost Harbor",
       temperament: "Calm and exacting",
-      startingPath: "sword",
     },
     cultivation: {
       mainTechnique: "Loose Breathing",

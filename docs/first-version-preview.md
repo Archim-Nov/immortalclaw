@@ -82,7 +82,6 @@ curl "http://127.0.0.1:8787/cultivator/dao-heart?cultivatorId=yun-zhong-he"
 - `pronouns`
 - `origin`
 - `temperament`
-- `startingPath`
 
 ## 首版接 OpenClaw 的位置
 

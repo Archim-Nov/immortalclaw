@@ -13,7 +13,7 @@ interface StatResponse {
     spiritStones: number; qi: number; maxQi: number;
     spiritualPower: number; maxSpiritualPower: number;
     karma: number; reputation: number; lifespan: number; age: number;
-    genderPresentation: string; pronouns: string; origin: string; temperament: string; startingPath: string;
+    genderPresentation: string; pronouns: string; origin: string; temperament: string;
   };
   cultivation: { mainTechnique: string; techniques: string[] };
   sect: { id: string; name: string; role: string; treasury: number; memberCount: number } | null;
@@ -139,7 +139,7 @@ export function PlayerStatPage() {
           <span className="stat-chip jade">{sect?.name || "散修 (Rogue Cultivator)"}</span>
         </div>
         <div className="stat-header-meta" style={{ marginTop: "1rem", opacity: 0.8 }}>
-          <span style={{ fontSize: "0.9rem" }}>{cultivator.temperament} • {cultivator.startingPath} • {cultivator.genderPresentation}</span>
+          <span style={{ fontSize: "0.9rem" }}>{cultivator.temperament} • {cultivator.genderPresentation}</span>
         </div>
       </header>
 

@@ -73,7 +73,6 @@ async function main() {
       name: payload.name,
       origin: payload.origin,
       temperament: payload.temperament,
-      startingPath: payload.startingPath,
       questionnaireVersion: questionsResult.version,
       questionCount: questionsResult.questions?.length ?? 0,
       answerPreview: answers,
