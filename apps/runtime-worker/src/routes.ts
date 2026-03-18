@@ -32,6 +32,8 @@ import {
   getDaoLogs,
   getMessages,
   getSectInfo,
+  getStrategySnapshot,
+  getTribulationPreview,
   resolveCultivatorIdForAgent,
 } from "../../../packages/domain/src/runtime.js";
 import type {
