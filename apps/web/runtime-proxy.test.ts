@@ -90,3 +90,41 @@ test("onRequest proxies registration requests to the runtime without changing me
     globalThis.fetch = originalFetch;
   }
 });
+
+test("onRequest returns a JSON 502 when the runtime proxy is not configured", async () => {
+  const response = await onRequest({
+    env: {},
+    request: new Request("https://immortal-claw.pages.dev/agent/register"),
+  });
+
+  assert.equal(response.status, 502);
+  assert.match(response.headers.get("content-type") ?? "", /application\/json/i);
+  assert.deepEqual(await response.json(), {
+    error: "Runtime proxy is not configured.",
+  });
+});
+
+test("onRequest returns a JSON 502 with the upstream fetch error message when the runtime is unreachable", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () => {
+    throw new Error("fetch failed: runtime worker unreachable");
+  }) as typeof fetch;
+
+  try {
+    const response = await onRequest({
+      env: {
+        RUNTIME_PROXY_BASE_URL: "https://runtime.example",
+      },
+      request: new Request("https://immortal-claw.pages.dev/agent/register"),
+    });
+
+    assert.equal(response.status, 502);
+    assert.match(response.headers.get("content-type") ?? "", /application\/json/i);
+    assert.deepEqual(await response.json(), {
+      error: "fetch failed: runtime worker unreachable",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

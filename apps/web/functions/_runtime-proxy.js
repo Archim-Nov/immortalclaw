@@ -37,25 +37,46 @@ export function buildRuntimeProxyUrl(requestUrl, runtimeBaseUrl) {
 export async function onRequest(context) {
   const runtimeBaseUrl = readRuntimeProxyBaseUrl(context.env);
   if (!runtimeBaseUrl) {
-    return new Response("Runtime proxy is not configured.", {
-      status: 500,
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
+    return new Response(
+      JSON.stringify({
+        error: "Runtime proxy is not configured.",
+      }),
+      {
+        status: 502,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+        },
       },
-    });
+    );
   }
 
-  const upstreamRequest = new Request(
-    buildRuntimeProxyUrl(context.request.url, runtimeBaseUrl),
-    context.request,
-  );
-  const upstreamResponse = await fetch(upstreamRequest);
-  const headers = new Headers(upstreamResponse.headers);
-  headers.set("x-immortal-proxy", "pages");
+  try {
+    const upstreamRequest = new Request(
+      buildRuntimeProxyUrl(context.request.url, runtimeBaseUrl),
+      context.request,
+    );
+    const upstreamResponse = await fetch(upstreamRequest);
+    const headers = new Headers(upstreamResponse.headers);
+    headers.set("x-immortal-proxy", "pages");
 
-  return new Response(upstreamResponse.body, {
-    status: upstreamResponse.status,
-    statusText: upstreamResponse.statusText,
-    headers,
-  });
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+      statusText: upstreamResponse.statusText,
+      headers,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return new Response(
+      JSON.stringify({
+        error: message,
+      }),
+      {
+        status: 502,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+        },
+      },
+    );
+  }
 }
