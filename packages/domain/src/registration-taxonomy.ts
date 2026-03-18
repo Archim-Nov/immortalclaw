@@ -107,6 +107,13 @@ function normalizedKey(input: string) {
   return input.trim().toLowerCase();
 }
 
+function hasOwnTaxonomyId<TKey extends string>(
+  table: Record<TKey, unknown>,
+  id: string,
+): id is TKey {
+  return Object.prototype.hasOwnProperty.call(table, id);
+}
+
 function hasCjk(input: string) {
   return /[\u3400-\u9fff]/.test(input);
 }
@@ -291,24 +298,49 @@ export function normalizeCultivationRegistrationRecord(
   record: CultivationRegistrationRecord,
 ): CultivationRegistrationRecord {
   const locale = registrationLocaleOf(record.result);
-  const coreTemperamentId = record.result.core_temperament_id ?? resolveTemperamentId(record.result.core_temperament);
+  const coreTemperamentId = record.result.core_temperament_id
+    ? hasOwnTaxonomyId(TEMPERAMENTS, record.result.core_temperament_id)
+      ? record.result.core_temperament_id
+      : null
+    : resolveTemperamentId(record.result.core_temperament);
   if (!coreTemperamentId) {
     throw new Error("registration record must include a recognized core temperament id or label.");
   }
   const secondaryTemperamentId =
-    record.result.secondary_temperament_id ?? resolveTemperamentId(record.result.secondary_temperament);
+    record.result.secondary_temperament_id
+      ? hasOwnTaxonomyId(TEMPERAMENTS, record.result.secondary_temperament_id)
+        ? record.result.secondary_temperament_id
+        : null
+      : resolveTemperamentId(record.result.secondary_temperament);
   if (!secondaryTemperamentId) {
     throw new Error("registration record must include a recognized secondary temperament id or label.");
   }
   const behaviorAspectId = record.result.behavior_aspect_id
-    ?? resolveBehaviorAspectId(record.result.behavior_aspect)
-    ?? deriveBehaviorAspectId(record.result.five_element_scores, temperamentPrimaryElement(coreTemperamentId));
+    ? hasOwnTaxonomyId(BEHAVIOR_ASPECTS, record.result.behavior_aspect_id)
+      ? record.result.behavior_aspect_id
+      : null
+    : resolveBehaviorAspectId(record.result.behavior_aspect)
+      ?? deriveBehaviorAspectId(record.result.five_element_scores, temperamentPrimaryElement(coreTemperamentId));
+  if (!behaviorAspectId) {
+    throw new Error("registration record must include a recognized behavior aspect id or label.");
+  }
   const cultivationMotiveId =
-    record.result.cultivation_motive_id ?? resolveCultivationMotiveId(record.result.cultivation_motive);
+    record.result.cultivation_motive_id
+      ? hasOwnTaxonomyId(MOTIVES, record.result.cultivation_motive_id)
+        ? record.result.cultivation_motive_id
+        : null
+      : resolveCultivationMotiveId(record.result.cultivation_motive);
   if (!cultivationMotiveId) {
     throw new Error("registration record must include a recognized cultivation motive id or label.");
   }
-  const spiritRootKindId = record.result.spirit_root_kind_id ?? deriveSpiritRootKindId(record.result.five_element_scores);
+  const spiritRootKindId = record.result.spirit_root_kind_id
+    ? (record.result.spirit_root_kind_id === "single-root" || record.result.spirit_root_kind_id === "dual-root")
+      ? record.result.spirit_root_kind_id
+      : null
+    : deriveSpiritRootKindId(record.result.five_element_scores);
+  if (!spiritRootKindId) {
+    throw new Error("registration record must include a recognized spirit root kind id.");
+  }
 
   return {
     ...record,

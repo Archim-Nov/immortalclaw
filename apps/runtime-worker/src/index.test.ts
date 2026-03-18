@@ -148,6 +148,17 @@ function createRegistrationRecordV2(): CultivationRegistrationRecord {
   };
 }
 
+function createInvalidRegistrationRecordV2(): CultivationRegistrationRecord {
+  const record = createRegistrationRecordV2();
+  return {
+    ...record,
+    result: {
+      ...record.result,
+      core_temperament_id: "bad-id" as CultivationRegistrationRecord["result"]["core_temperament_id"],
+    },
+  };
+}
+
 function createQuestionnaireAnswers() {
   return {
     Q1: "C",
@@ -419,6 +430,25 @@ test("agent registration accepts v2 taxonomy ids and surfaces localized labels",
   assert.equal(statePayload.registration?.label_locale, "en");
   assert.equal(statePayload.registration?.core_temperament_id, "qian_yuan");
   assert.equal(statePayload.registration?.spirit_root_kind_id, "dual-root");
+});
+
+test("agent registration rejects invalid taxonomy ids in registration records", async () => {
+  const app = createApp({ repository: createRepository() });
+
+  const response = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Broken Record",
+      record: createInvalidRegistrationRecordV2(),
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.match(String(payload.error), /core temperament/i);
 });
 
 test("agent registration ignores caller-supplied identity and authenticated state uses the bound cultivator", async () => {

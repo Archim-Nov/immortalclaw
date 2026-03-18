@@ -27,6 +27,7 @@ import type {
   RuntimeHealthResponse,
 } from "../../../packages/contracts/src/index.js";
 import { deriveRegistrationRecordFromAnswers, getRegistrationQuestionnaire } from "../../../packages/domain/src/registration-questionnaire.js";
+import { normalizeCultivationRegistrationRecord } from "../../../packages/domain/src/registration-taxonomy.js";
 import {
   getAgentBindingInfo,
   getDaoLogs,
@@ -143,11 +144,28 @@ function readRegistrationRecord(body: Record<string, unknown>): CultivationRegis
   return record as CultivationRegistrationRecord;
 }
 
+function normalizeRegistrationRecordForRequest(
+  record: CultivationRegistrationRecord,
+): CultivationRegistrationRecord {
+  try {
+    return normalizeCultivationRegistrationRecord(record);
+  } catch (error) {
+    throw createStatusError(
+      400,
+      error instanceof Error ? `Registration record could not be processed: ${error.message}` : "Registration record could not be processed.",
+    );
+  }
+}
+
+function readNormalizedRegistrationRecord(body: Record<string, unknown>): CultivationRegistrationRecord {
+  return normalizeRegistrationRecordForRequest(readRegistrationRecord(body));
+}
+
 function readOptionalRegistrationRecord(body: Record<string, unknown>): CultivationRegistrationRecord | undefined {
   if (body.record === undefined) {
     return undefined;
   }
-  return readRegistrationRecord(body);
+  return readNormalizedRegistrationRecord(body);
 }
 
 function readOptionalRegistrationAnswers(
@@ -386,7 +404,7 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     return context.json(
       await repository.saveCultivationRegistration(
         readCultivatorIdFromBody(body),
-        readRegistrationRecord(body),
+        readNormalizedRegistrationRecord(body),
         agentId,
       ),
     );
@@ -506,7 +524,7 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as Record<string, unknown>;
-    return context.json(await saveAuthenticatedAgentRegistration({ repository, agent, record: readRegistrationRecord(body) }));
+    return context.json(await saveAuthenticatedAgentRegistration({ repository, agent, record: readNormalizedRegistrationRecord(body) }));
   });
 
   app.post("/agent/act", async (context) => {
