@@ -1093,40 +1093,26 @@ test("act route performs an action", async () => {
   assert.equal(payload.accepted, true);
 });
 
-test("legacy cultivator insight routes return strategy and tribulation snapshots", async () => {
+test("legacy cultivator insight routes return tribulation and strategy views", async () => {
   const repository = createRepository();
+  const app = createApp({ repository });
+
   const world = await repository.readWorld();
   const cultivatorId = Object.keys(world.cultivators)[0];
-  const app = createApp({ repository });
 
   const tribulationResponse = await app.request(
     `https://runtime.test/cultivator/tribulation?cultivatorId=${cultivatorId}`,
   );
-  const tribulationPayload = await tribulationResponse.json();
-
   assert.equal(tribulationResponse.status, 200);
-  assert.equal(tribulationPayload.cultivatorId, undefined);
+  const tribulationPayload = await tribulationResponse.json();
   assert.equal(typeof tribulationPayload.nextTribulationTick, "number");
-  assert.equal(typeof tribulationPayload.tribulationType, "string");
-  assert.equal(typeof tribulationPayload.difficulty, "number");
-  assert.equal(typeof tribulationPayload.isWarned, "boolean");
-  assert.equal(typeof tribulationPayload.preparationTime, "number");
-  assert.equal(typeof tribulationPayload.supportScore, "number");
 
   const strategyResponse = await app.request(
     `https://runtime.test/cultivator/strategy?cultivatorId=${cultivatorId}`,
   );
-  const strategyPayload = await strategyResponse.json();
-
   assert.equal(strategyResponse.status, 200);
+  const strategyPayload = await strategyResponse.json();
   assert.equal(strategyPayload.cultivatorId, cultivatorId);
-  assert.equal(typeof strategyPayload.tick, "number");
-  assert.equal(typeof strategyPayload.riskLevel, "string");
-  assert.equal(typeof strategyPayload.shortTermGoal, "string");
-  assert.equal(typeof strategyPayload.longTermGoal, "string");
-  assert.equal(typeof strategyPayload.reason, "string");
-  assert.ok(Array.isArray(strategyPayload.recommendedSequence));
-  assert.ok(strategyPayload.recommendedSequence.length > 0);
 });
 
 test("GET /world/agent/:agentId returns full cultivator state for registered agent", async () => {

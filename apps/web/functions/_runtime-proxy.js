@@ -38,45 +38,44 @@ export async function onRequest(context) {
   const runtimeBaseUrl = readRuntimeProxyBaseUrl(context.env);
   if (!runtimeBaseUrl) {
     return new Response(
-      JSON.stringify({
-        error: "Runtime proxy is not configured.",
-      }),
+      JSON.stringify({ error: "Runtime proxy is not configured. Set RUNTIME_PROXY_BASE_URL or VITE_RUNTIME_BASE_URL in the Pages environment." }),
       {
         status: 502,
         headers: {
           "content-type": "application/json; charset=utf-8",
+          "x-immortal-proxy": "pages",
         },
       },
     );
   }
 
+  const upstreamUrl = buildRuntimeProxyUrl(context.request.url, runtimeBaseUrl);
+  const upstreamRequest = new Request(upstreamUrl, context.request);
+
+  let upstreamResponse;
   try {
-    const upstreamRequest = new Request(
-      buildRuntimeProxyUrl(context.request.url, runtimeBaseUrl),
-      context.request,
-    );
-    const upstreamResponse = await fetch(upstreamRequest);
-    const headers = new Headers(upstreamResponse.headers);
-    headers.set("x-immortal-proxy", "pages");
-
-    return new Response(upstreamResponse.body, {
-      status: upstreamResponse.status,
-      statusText: upstreamResponse.statusText,
-      headers,
-    });
+    upstreamResponse = await fetch(upstreamRequest);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
     return new Response(
       JSON.stringify({
-        error: message,
+        error: `Runtime worker is unreachable at ${runtimeBaseUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
       }),
       {
         status: 502,
         headers: {
           "content-type": "application/json; charset=utf-8",
+          "x-immortal-proxy": "pages",
         },
       },
     );
   }
+
+  const headers = new Headers(upstreamResponse.headers);
+  headers.set("x-immortal-proxy", "pages");
+
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers,
+  });
 }

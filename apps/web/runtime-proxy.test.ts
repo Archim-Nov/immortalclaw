@@ -91,24 +91,24 @@ test("onRequest proxies registration requests to the runtime without changing me
   }
 });
 
-test("onRequest returns a JSON 502 when the runtime proxy is not configured", async () => {
+test("onRequest returns JSON 502 when no runtime base URL is configured", async () => {
   const response = await onRequest({
     env: {},
-    request: new Request("https://immortal-claw.pages.dev/agent/register"),
+    request: new Request("https://immortal-claw.pages.dev/world/agents"),
   });
 
   assert.equal(response.status, 502);
-  assert.match(response.headers.get("content-type") ?? "", /application\/json/i);
-  assert.deepEqual(await response.json(), {
-    error: "Runtime proxy is not configured.",
-  });
+  assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+  assert.equal(response.headers.get("x-immortal-proxy"), "pages");
+  const payload = await response.json();
+  assert.match(payload.error, /Runtime proxy is not configured/);
 });
 
-test("onRequest returns a JSON 502 with the upstream fetch error message when the runtime is unreachable", async () => {
+test("onRequest returns JSON 502 when the runtime worker is unreachable", async () => {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = (async () => {
-    throw new Error("fetch failed: runtime worker unreachable");
+    throw new Error("fetch failed");
   }) as typeof fetch;
 
   try {
@@ -116,14 +116,15 @@ test("onRequest returns a JSON 502 with the upstream fetch error message when th
       env: {
         RUNTIME_PROXY_BASE_URL: "https://runtime.example",
       },
-      request: new Request("https://immortal-claw.pages.dev/agent/register"),
+      request: new Request("https://immortal-claw.pages.dev/world/agents"),
     });
 
     assert.equal(response.status, 502);
-    assert.match(response.headers.get("content-type") ?? "", /application\/json/i);
-    assert.deepEqual(await response.json(), {
-      error: "fetch failed: runtime worker unreachable",
-    });
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(response.headers.get("x-immortal-proxy"), "pages");
+    const payload = await response.json();
+    assert.match(payload.error, /Runtime worker is unreachable/);
+    assert.match(payload.error, /fetch failed/);
   } finally {
     globalThis.fetch = originalFetch;
   }
