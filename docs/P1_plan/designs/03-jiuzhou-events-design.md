@@ -344,10 +344,10 @@ export interface WorldState {
 
 ```typescript
 const STATE_DEFINITIONS: readonly StateDefinition[] = [
-  { id: "qingzhou",   name: "Qingzhou",   nameCn: "青州", resourceBias: "药材、基础灵石",        riskBias: "low",    eventBias: "低阶妖患",     sectHooks: ["剑修宗门入口"] },
+  { id: "qingzhou",   name: "Qingzhou",   nameCn: "青州", resourceBias: "药材、基础灵石",        riskBias: "low",    eventBias: "低阶妖患",     sectHooks: ["宗门入口候选"] },
   { id: "yangzhou",   name: "Yangzhou",   nameCn: "扬州", resourceBias: "水属性材料、跑商收益",  riskBias: "low",    eventBias: "水域赶路事件",  sectHooks: ["市井与商会接口"] },
   { id: "zhongzhou",  name: "Zhongzhou",  nameCn: "中州", resourceBias: "综合资源、宗门联络",    riskBias: "medium", eventBias: "官面任务与巡查", sectHooks: ["宗门事务中转"] },
-  { id: "shuzhou",    name: "Shuzhou",    nameCn: "蜀州", resourceBias: "药草、灵木",            riskBias: "medium", eventBias: "山路隐秘事件",  sectHooks: ["丹修倾向接口"] },
+  { id: "shuzhou",    name: "Shuzhou",    nameCn: "蜀州", resourceBias: "药草、灵木",            riskBias: "medium", eventBias: "山路隐秘事件",  sectHooks: ["资源转化接口"] },
   { id: "youzhou",    name: "Youzhou",    nameCn: "幽州", resourceBias: "寒性材料、狩猎收益",    riskBias: "medium", eventBias: "中风险野外遭遇", sectHooks: ["镇压与边巡任务"] },
   { id: "liangzhou",  name: "Liangzhou",  nameCn: "凉州", resourceBias: "矿材、妖核",            riskBias: "high",   eventBias: "长途赶路枯竭",  sectHooks: ["资源上缴任务"] },
   { id: "leizhou",    name: "Leizhou",    nameCn: "雷州", resourceBias: "雷性碎片、强事件线索",  riskBias: "high",   eventBias: "状态型事件",    sectHooks: ["高风险精英钩子"] },
@@ -554,9 +554,9 @@ export function migrateWorldState(oldWorld: WorldState): WorldState {
 | ID | 语义类型 | 结果类型 | 名称 | 效果摘要 |
 |----|---------|---------|------|---------|
 | `qz-f-01` | fortune | resource | 青岚灵草 | +青州特产药材 |
-| `qz-f-02` | fortune | progression | 剑意残碑 | +4 修为（剑修额外 +2） |
+| `qz-f-02` | fortune | progression | 古修残碑 | +4 修为 |
 | `qz-f-03` | fortune | status | 清风洗尘 | clear-mind 4t |
-| `qz-t-01` | training | progression | 松间练剑 | +3 修为 |
+| `qz-t-01` | training | progression | 松间参悟 | +3 修为 |
 | `qz-t-02` | training | combat | 低阶妖兽 | 轻战斗 |
 | `qz-t-03` | training | resource | 灵泉取水 | +回气丹材料 |
 | `qz-h-01` | human | resource | 青云弟子 | +宗门信息 |

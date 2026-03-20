@@ -344,7 +344,8 @@ export interface SectTitleSlot {
 export interface Sect {
   readonly id: string;
   readonly name: string;
-  readonly type: "剑修" | "丹修" | "阵修";
+  readonly sectAlignment: "正道" | "魔道";
+  readonly publicIdentity: string;
   readonly treasury: number;
   readonly memberIds: readonly string[];
   readonly spiritVeins: readonly string[];
