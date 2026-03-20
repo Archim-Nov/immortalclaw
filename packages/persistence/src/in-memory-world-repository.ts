@@ -18,7 +18,6 @@ import type {
 } from "../../domain/src/runtime.js";
 import type {
   AgentCredentialResetResult,
-  AgentPersonaInput,
   AgentProfileRecord,
   AgentProfileWriteInput,
   AgentRegistrationInput,
@@ -273,41 +272,6 @@ export class InMemoryWorldRepository implements WorldRepository {
     return profile ? structuredClone(profile) : null;
   }
 
-  async syncAgentPersona(agentId: string, input: AgentPersonaInput): Promise<AgentProfileRecord> {
-    const normalizedAgentId = normalizeAgentId(agentId);
-    if (!normalizedAgentId) {
-      throw new Error("agentId is required.");
-    }
-
-    const existingProfile = this.agentProfiles.get(normalizedAgentId);
-    if (!existingProfile) {
-      throw new Error(`Agent not found: ${normalizedAgentId}`);
-    }
-
-    const sync = await this.transactWorld((world) =>
-      syncCultivatorFromPersona(world, {
-        agentId: normalizedAgentId,
-        name: input.name,
-        genderPresentation: input.genderPresentation,
-        pronouns: input.pronouns,
-        age: input.age,
-        origin: input.origin,
-        temperament: input.temperament,
-      }),
-    );
-
-    return this.saveAgentProfile({
-      agentId: normalizedAgentId,
-      name: input.name.trim(),
-      selectedCultivatorId: sync.selectedCultivatorId,
-      genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
-      pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
-      origin: input.origin?.trim() ?? existingProfile.origin,
-      temperament: input.temperament?.trim() ?? existingProfile.temperament,
-      lastSeenAt: existingProfile.lastSeenAt,
-    });
-  }
-
   async touchAgent(agentId: string): Promise<void> {
     const normalizedAgentId = normalizeAgentId(agentId);
     if (!normalizedAgentId) {
@@ -319,41 +283,6 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
     profile.lastSeenAt = this.now();
     profile.updatedAt = profile.lastSeenAt;
-  }
-
-  async syncPersona(agentId: string, input: AgentPersonaInput) {
-    const normalizedAgentId = normalizeAgentId(agentId);
-    if (!normalizedAgentId) {
-      throw new Error("agentId is required.");
-    }
-
-    const sync = await this.transactWorld((world) =>
-      syncCultivatorFromPersona(world, {
-        agentId: normalizedAgentId,
-        name: input.name,
-        genderPresentation: input.genderPresentation,
-        pronouns: input.pronouns,
-        age: input.age,
-        origin: input.origin,
-        temperament: input.temperament,
-      }),
-    );
-
-    const existingProfile = this.agentProfiles.get(normalizedAgentId);
-    if (existingProfile) {
-      await this.saveAgentProfile({
-        agentId: normalizedAgentId,
-        name: input.name.trim(),
-        selectedCultivatorId: sync.selectedCultivatorId,
-        genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
-        pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
-        origin: input.origin?.trim() ?? existingProfile.origin,
-        temperament: input.temperament?.trim() ?? existingProfile.temperament,
-        lastSeenAt: existingProfile.lastSeenAt,
-      });
-    }
-
-    return structuredClone(sync);
   }
 
   async getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null> {

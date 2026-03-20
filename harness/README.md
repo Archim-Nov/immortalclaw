@@ -18,7 +18,6 @@ Current high-value scenarios:
 - hosted onboarding smoke: register an agent, authenticate with a bearer token, and read agent state through `apps/runtime-worker`
 - scheduled tick smoke: advance the world through the Worker scheduled handler and verify tick metadata
 - web shell smoke: confirm the Vite/Pages frontend build scaffold and browser entrypoint wiring
-- legacy harness smoke: confirm the SQLite Node harnesses still work for local-only debugging during migration
 
 The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-action-and-tick.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.

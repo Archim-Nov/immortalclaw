@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const readmePath = path.join(repoRoot, "README.md");
-const legacyApiPath = path.join(repoRoot, "apps", "world-api", "src", "server.ts");
-const legacyWorkerPath = path.join(repoRoot, "apps", "world-worker", "src", "worker.ts");
+const legacyApiPath = path.join(repoRoot, "apps", "world-api");
+const legacyWorkerPath = path.join(repoRoot, "apps", "world-worker");
 
 function readDocument(documentPath: string): string {
   assert.equal(existsSync(documentPath), true, `expected document at ${documentPath}`);
@@ -19,17 +19,12 @@ test("README defines one official production runtime path and fences legacy harn
 
   assert.match(readme, /official production runtime path/i);
   assert.match(readme, /apps\/web -> apps\/runtime-worker -> packages\/application -> packages\/persistence -> packages\/domain/i);
-  assert.match(readme, /legacy harness(es)? only/i);
+  assert.match(readme, /deleted legacy apps?/i);
   assert.match(readme, /not part of the product architecture/i);
+  assert.doesNotMatch(readme, /Legacy SQLite Harnesses/i);
 });
 
-test("legacy world api and worker notices say they are outside product architecture", () => {
-  const legacyApi = readDocument(legacyApiPath);
-  const legacyWorker = readDocument(legacyWorkerPath);
-
-  assert.match(legacyApi, /legacy harness only/i);
-  assert.match(legacyApi, /not part of the product architecture/i);
-
-  assert.match(legacyWorker, /legacy harness only/i);
-  assert.match(legacyWorker, /not part of the product architecture/i);
+test("legacy world api and worker directories are deleted", () => {
+  assert.equal(existsSync(legacyApiPath), false, `expected ${legacyApiPath} to be deleted`);
+  assert.equal(existsSync(legacyWorkerPath), false, `expected ${legacyWorkerPath} to be deleted`);
 });

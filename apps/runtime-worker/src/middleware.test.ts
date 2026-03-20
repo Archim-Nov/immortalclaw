@@ -52,13 +52,10 @@ function unusedRepository() {
     async resetAgentCredential() {
       throw new Error("not used");
     },
-    async syncAgentPersona() {
+    async transactWorld() {
       throw new Error("not used");
     },
     async touchAgent() {
-      throw new Error("not used");
-    },
-    async syncPersona() {
       throw new Error("not used");
     },
     async getCultivationRegistration() {

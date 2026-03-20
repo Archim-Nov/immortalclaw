@@ -6,7 +6,7 @@ Make the deployed runtime usable by OpenClaw without a local SQLite harness. An 
 
 ## Problem
 
-The project already has a playable cultivation loop and a custom OpenClaw plugin, but the hosted worker does not expose the endpoints needed for self-serve onboarding. The old local `apps/world-api` harness has persona sync and other read routes, while the worker only exposed basic state and action endpoints. This blocks a ClawCity-style flow where a user points OpenClaw at one URL and starts playing.
+The project already has a playable cultivation loop and a custom OpenClaw plugin, but the hosted worker does not expose the endpoints needed for self-serve onboarding. The project previously used a local `apps/world-api` harness for persona sync and other read routes, while the worker only exposed basic state and action endpoints. That history still blocks a ClawCity-style flow where a user points OpenClaw at one URL and starts playing.
 
 ## Goals
 
@@ -14,7 +14,7 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
 - support `POST /agent/register` with server-issued UUID agent ids and durable bearer credentials
 - support authenticated `/agent/*` routes for state, actions, messages, events, strategy, tribulation, sect, dao logs, registration, action execution, and manual tick
 - support `POST /agent/credential/reset` for in-session credential rotation
-- keep legacy `/cultivator/*`, `/agent/sync-persona`, and `/world/tick` compatibility for local harnesses and migration
+- keep legacy `/cultivator/*`, `/agent/sync-persona`, and `/world/tick` compatibility for migration and legacy routes
 - make the OpenClaw plugin auto-register, cache credentials, and reuse them on later runs while treating plugin `agentId` as a local lookup key instead of a server identity selector
 - make the Pages domain act as a single public entrypoint by serving `/skill.md`, `/register.md`, and `/heartbeat.md` directly and proxying runtime routes
 

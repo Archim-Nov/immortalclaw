@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   advanceWorld,
-  createSeedWorld,
   createCultivator,
   getCultivatorState,
   listAvailableActions,
   performAction,
-} from "./index.js";
+} from "./engine.js";
+import { createSeedWorld } from "./seed.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
   while (world.cultivators[cultivatorId]?.activeJobId) {

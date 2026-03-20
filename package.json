@@ -11,9 +11,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run build:web",
     "build:web": "npm run build --workspace @immortal-claw/web",
-    "dev:api": "tsx apps/world-api/src/server.ts",
-    "dev:legacy-api": "tsx apps/world-api/src/server.ts",
-    "dev:legacy-worker": "tsx apps/world-worker/src/worker.ts",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
     "smoke:onboarding": "node --import tsx scripts/smoke-onboarding.mjs",

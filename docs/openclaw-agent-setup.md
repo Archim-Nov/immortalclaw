@@ -168,7 +168,7 @@ If the runtime does not support `/agent/register`, the plugin falls back to:
 - `/cultivator/*`
 - `/world/tick`
 
-That keeps the old local `apps/world-api` harness usable for debugging.
+The old local `apps/world-api` harness was removed, so there is no parallel debugging harness to fall back to here.
 
 ## Recommended Tool Flow
 

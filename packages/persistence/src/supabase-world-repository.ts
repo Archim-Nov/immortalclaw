@@ -23,7 +23,6 @@ import type { WorldEvent } from "../../domain/src/model.js";
 import { buildFullTopology } from "../../domain/src/topology.js";
 import type {
   AgentCredentialResetResult,
-  AgentPersonaInput,
   AgentProfileRecord,
   AgentProfileWriteInput,
   AgentRegistrationInput,
@@ -536,41 +535,6 @@ export class SupabaseWorldRepository implements WorldRepository {
     };
   }
 
-  async syncAgentPersona(agentId: string, input: AgentPersonaInput): Promise<AgentProfileRecord> {
-    const normalizedAgentId = normalizeAgentId(agentId);
-    if (!normalizedAgentId) {
-      throw new Error("agentId is required.");
-    }
-
-    const existingProfile = await this.readAgentProfile(normalizedAgentId);
-    if (!existingProfile) {
-      throw new Error(`Agent not found: ${normalizedAgentId}`);
-    }
-
-    const sync = await this.transactWorld((world) =>
-      syncCultivatorFromPersona(world, {
-        agentId: normalizedAgentId,
-        name: input.name,
-        genderPresentation: input.genderPresentation,
-        pronouns: input.pronouns,
-        age: input.age,
-        origin: input.origin,
-        temperament: input.temperament,
-      }),
-    );
-
-    return this.saveAgentProfile({
-      agentId: normalizedAgentId,
-      name: input.name.trim(),
-      selectedCultivatorId: sync.selectedCultivatorId,
-      genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
-      pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
-      origin: input.origin?.trim() ?? existingProfile.origin,
-      temperament: input.temperament?.trim() ?? existingProfile.temperament,
-      lastSeenAt: existingProfile.lastSeenAt,
-    });
-  }
-
   async touchAgent(agentId: string): Promise<void> {
     const normalizedAgentId = normalizeAgentId(agentId);
     if (!normalizedAgentId) {
@@ -597,41 +561,6 @@ export class SupabaseWorldRepository implements WorldRepository {
       const error = await this.readError(response);
       throw new Error(`Failed to update agent activity: ${error.message}`);
     }
-  }
-
-  async syncPersona(agentId: string, input: AgentPersonaInput) {
-    const normalizedAgentId = normalizeAgentId(agentId);
-    if (!normalizedAgentId) {
-      throw new Error("agentId is required.");
-    }
-
-    const result = await this.transactWorld((world) =>
-      syncCultivatorFromPersona(world, {
-        agentId: normalizedAgentId,
-        name: input.name,
-        genderPresentation: input.genderPresentation,
-        pronouns: input.pronouns,
-        age: input.age,
-        origin: input.origin,
-        temperament: input.temperament,
-      }),
-    );
-
-    const existingProfile = await this.readAgentProfile(normalizedAgentId);
-    if (existingProfile) {
-      await this.saveAgentProfile({
-        agentId: normalizedAgentId,
-        name: input.name.trim(),
-        selectedCultivatorId: result.selectedCultivatorId,
-        genderPresentation: input.genderPresentation ?? existingProfile.genderPresentation,
-        pronouns: input.pronouns?.trim() ?? existingProfile.pronouns,
-        origin: input.origin?.trim() ?? existingProfile.origin,
-        temperament: input.temperament?.trim() ?? existingProfile.temperament,
-        lastSeenAt: existingProfile.lastSeenAt,
-      });
-    }
-
-    return structuredClone(result);
   }
 
   async getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null> {

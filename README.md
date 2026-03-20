@@ -19,14 +19,12 @@ The official production runtime path is:
 
 This is the only path we should extend for product architecture work.
 
-The older `apps/world-api` and `apps/world-worker` remain in the repo as legacy harnesses only for debugging and migration backstops. They are not part of the product architecture.
+The older `apps/world-api` and `apps/world-worker` are deleted legacy apps, not part of the product architecture.
 
 ## Packages and Apps
 
 - `apps/web`: Vite web surface for Cloudflare Pages
 - `apps/runtime-worker`: Cloudflare Worker runtime surface
-- `apps/world-api`: legacy local Node HTTP harness only, outside the product architecture
-- `apps/world-worker`: legacy local auto-tick harness only, outside the product architecture
 - `packages/domain`: simulation rules and world model
 - `packages/application`: transport-free use cases
 - `packages/contracts`: shared runtime request and response types
@@ -249,27 +247,6 @@ Check Supabase for rows in:
 - `world_actions`
 - `agent_profiles`
 - `agent_credentials`
-
-### Legacy SQLite Harnesses
-
-These remain available as legacy harnesses only for local debugging and migration backstops. They are not part of the official production runtime path:
-
-```text
-npm run dev:legacy-api
-npm run dev:legacy-worker
-```
-
-Legacy harness defaults:
-
-- API: `http://127.0.0.1:8787`
-- SQLite: `data/immortal-world.sqlite`
-
-Legacy harness env vars:
-
-- `WORLD_DB_PATH`
-- `WORLD_TICK_INTERVAL_MS`
-- `WORLD_TICK_STEPS`
-- `PORT`
 
 ## Example Runtime Calls
 

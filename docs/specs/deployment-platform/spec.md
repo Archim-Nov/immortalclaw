@@ -6,13 +6,13 @@ Reshape Immortal Claw from a local Node.js prototype into a deployable multi-pla
 
 ## Problem
 
-The original prototype was optimized for local development:
+The original prototype was optimized for local development with a plain Node HTTP server, a long-running worker, and local SQLite persistence.
 
-- `apps/world-api` is a plain Node HTTP server
-- `apps/world-worker` is a long-running process
-- `packages/domain` persists world state directly to a local SQLite file
+Those old SQLite harnesses have been removed from the repository. The production runtime path is now the only runtime path:
 
-That shape is useful for early iteration, but it does not map cleanly to the deployment target. It couples the game logic to process-local runtime assumptions and file-backed persistence, which will become more expensive to unwind as features expand.
+`apps/web -> apps/runtime-worker -> packages/application -> packages/persistence -> packages/domain`
+
+That shape maps cleanly to the deployment target and keeps the game logic portable across runtime adapters.
 
 ## Goals
 
@@ -41,7 +41,7 @@ When the change is complete:
 - world state persists in Supabase instead of a local SQLite file
 - scheduled world progression runs through bounded tick executions instead of a resident worker process
 - local development still supports seeding, inspecting, acting on, and advancing the world
-- the older SQLite server and worker remain optional local-only harnesses rather than the primary production path
+- the older SQLite server and worker have been removed, so the production runtime path is the only runtime path
 - browser routes are handled through client-side routing instead of Next.js route handlers
 - the browser reads the runtime base URL from `VITE_RUNTIME_BASE_URL`
 - the Worker CORS allowlist is configured through `FRONTEND_ORIGIN`
@@ -79,4 +79,4 @@ When the change is complete:
 
 ## Transition Decision
 
-Keep `apps/world-api` and `apps/world-worker` as explicit local SQLite harnesses for debugging and migration backstops, but treat `apps/web` on Cloudflare Pages plus `apps/runtime-worker` on Cloudflare Workers with Supabase as the default deployment path for development guidance, validation deployment, and production.
+Treat `apps/web` on Cloudflare Pages plus `apps/runtime-worker` on Cloudflare Workers with Supabase as the production runtime path. The legacy SQLite harnesses have been removed, so there is no parallel local runtime path to preserve.

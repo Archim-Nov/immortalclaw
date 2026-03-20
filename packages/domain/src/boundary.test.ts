@@ -13,8 +13,34 @@ test("runtime surface stays focused on world-rule helpers instead of questionnai
 });
 
 test("domain index no longer re-exports constants topology or quest internals", () => {
-  assert.equal("createSqliteWorldStore" in domainIndex, true);
+  assert.equal("createSqliteWorldStore" in domainIndex, false);
+  assert.equal("SqliteWorldStore" in domainIndex, false);
+  assert.equal("createWorldStore" in domainIndex, false);
   assert.equal("DEFAULT_ACTION_DURATIONS" in domainIndex, false);
   assert.equal("buildFullTopology" in domainIndex, false);
   assert.equal("acceptQuest" in domainIndex, false);
+});
+
+test("domain barrels do not expose dead engine helpers", () => {
+  for (const exportedName of [
+    "createCultivator",
+    "getCombatLogs",
+    "listCultivators",
+    "selectCultivatorForAgent",
+  ] as const) {
+    assert.equal(exportedName in domainIndex, false);
+    assert.equal(exportedName in domainRuntime, false);
+  }
+});
+
+test("domain barrels do not expose economy internals", () => {
+  for (const exportedName of [
+    "computeReadiness",
+    "computeRecoveryState",
+    "computeActivityContext",
+    "computeDaoPotential",
+  ] as const) {
+    assert.equal(exportedName in domainIndex, false);
+    assert.equal(exportedName in domainRuntime, false);
+  }
 });

@@ -18,7 +18,7 @@ After reading this file, check for `AGENTS.local.md` in the repo root. This file
 - `docs/templates/`: reusable templates for specs, plans, and harness checklists
 - `harness/README.md`: future home for scenarios, fixtures, and evals
 - `AGENTS.local.md` (gitignored): optional per-developer agent preferences
-- `apps/world-api` and `packages/domain`: current runnable prototype
+- `apps/runtime-worker` and `packages/domain`: current runnable runtime
 
 ## Default Workflow
 

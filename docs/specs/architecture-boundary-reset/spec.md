@@ -12,7 +12,7 @@ The current repository contains the right building blocks, but the boundaries ar
 2. `packages/application` is too thin to serve as the main workflow layer.
 3. `packages/persistence` currently performs some business decisions instead of staying storage-focused.
 4. `packages/domain` still carries product-facing baggage that outer layers can reach into too easily.
-5. `apps/world-api` and `apps/world-worker` remain in the tree, keeping a parallel legacy architecture mentally alive.
+5. `apps/world-api` and `apps/world-worker` are deleted, removing the parallel legacy architecture from the tree.
 
 ## Goals
 
@@ -22,7 +22,7 @@ The current repository contains the right building blocks, but the boundaries ar
   - `packages/application`
   - `packages/persistence`
   - `packages/domain`
-- classify `apps/world-api` and `apps/world-worker` as legacy harnesses only
+- delete `apps/world-api` and `apps/world-worker` so the legacy architecture is removed from the tree
 - move registration, onboarding, and agent orchestration flows out of `routes.ts` into `packages/application`
 - reduce `packages/persistence` to storage, transaction, and concurrency responsibilities
 - keep `packages/domain` focused on world rules and state transitions
@@ -42,7 +42,7 @@ This change is primarily architectural. User-visible behavior should stay stable
 Some developer-facing behavior should change:
 
 - repo docs should identify one official production path
-- legacy harness apps should be documented as legacy only
+- legacy apps should be documented as deleted and outside the product architecture
 - new workflow code should be added to `packages/application`, not directly into `routes.ts`
 
 ## Requirements
@@ -50,7 +50,7 @@ Some developer-facing behavior should change:
 ### Repository Architecture
 
 - document one official production runtime path
-- label legacy harness apps as outside the product architecture
+- record the legacy apps as deleted and outside the product architecture
 - avoid introducing new product logic into legacy apps
 
 ### Runtime Worker
@@ -89,7 +89,7 @@ Some developer-facing behavior should change:
 ## Acceptance Criteria
 
 - the repo contains a documented architecture reset design and implementation plan
-- the repo contains an architecture spec that defines official vs legacy paths
+- the repo contains an architecture spec that defines the official path and the deleted legacy apps
 - future implementation work can use the docs to move runtime workflows from `routes.ts` into `packages/application`
 - the migration strategy is phased so gameplay behavior can remain stable during the refactor
 
@@ -101,5 +101,4 @@ Implementation should proceed in phases:
 2. extract registration/onboarding/agent use cases into application
 3. reduce repository business logic
 4. narrow the domain export surface
-5. fence or retire legacy harness apps
-
+5. delete legacy harness apps
