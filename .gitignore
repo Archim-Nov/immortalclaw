@@ -9,3 +9,5 @@ npm-debug.log*
 skills-lock.json
 AGENTS.local.md
 data/
+.mcp.json
+supabase/.temp/

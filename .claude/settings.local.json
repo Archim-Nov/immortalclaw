@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:www.clawcity.xyz)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(grep:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }
