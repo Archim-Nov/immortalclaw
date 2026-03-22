@@ -861,7 +861,7 @@ git commit -m "test(runtime-worker): integration test for webhook dispatch after
 **Files:**
 - Modify: `packages/openclaw-immortal-plugin/index.ts`
 
-- [ ] **Step 1: Extend `OpenClawPluginApiLike` type**
+- [x] **Step 1: Extend `OpenClawPluginApiLike` type**
 
 Add the webhook and heartbeat surfaces to the type. Since the actual OpenClaw SDK APIs may not be available in all environments, model them as optional:
 
@@ -879,7 +879,7 @@ type OpenClawPluginApiLike = {
 };
 ```
 
-- [ ] **Step 2: Add `webhookBaseUrl` to `PluginConfig`**
+- [x] **Step 2: Add `webhookBaseUrl` to `PluginConfig`**
 
 ```typescript
 type PluginConfig = {
@@ -890,7 +890,7 @@ type PluginConfig = {
 
 Update `resolvePluginConfig` to read it.
 
-- [ ] **Step 3: Add HMAC verification helper**
+- [x] **Step 3: Add HMAC verification helper**
 
 ```typescript
 async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
@@ -908,7 +908,7 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
 }
 ```
 
-- [ ] **Step 4: Register webhook handler on bootstrap**
+- [x] **Step 4: Register webhook handler on bootstrap**
 
 Inside `register(api)`, after existing tool registrations, add. Note: step 6 below adds `webhookSecret` to `AgentSession`, so the handler uses proper typing — no `as any` casts needed.
 
@@ -932,7 +932,7 @@ if (api.registerWebhookHandler && api.requestHeartbeatNow) {
 }
 ```
 
-- [ ] **Step 5: Add `webhookSecret` to `AgentSession` type**
+- [x] **Step 5: Add `webhookSecret` to `AgentSession` type**
 
 This must come before the webhook handler (step 4) and bootstrap registration (step 6) since both reference `session.webhookSecret`.
 
@@ -945,7 +945,7 @@ type AgentSession = {
 
 Update `coerceAgentSession` to read `webhookSecret` from the input object.
 
-- [ ] **Step 6: Add webhook URL registration on bootstrap**
+- [x] **Step 6: Add webhook URL registration on bootstrap**
 
 After `ensureAgentSession()` succeeds and the session is cached, call `POST /agent/webhook` if `webhookBaseUrl` is configured:
 
@@ -970,7 +970,7 @@ if (config.webhookBaseUrl && session) {
 }
 ```
 
-- [ ] **Step 7: Add system prompt injection for wake reason**
+- [x] **Step 7: Add system prompt injection for wake reason**
 
 In the existing `before_prompt_build` hook (already wired via `api.on?.("before_prompt_build", ...)`), add the wake reason to the prepended system context when available:
 
@@ -986,7 +986,7 @@ lastWakeReason = undefined;
 
 This is the mechanism that gives the LLM contextual awareness of why it was woken. The `lastWakeReason` variable is set by the webhook handler (step 4) and by the fallback poll (step 8).
 
-- [ ] **Step 8: Add fallback poll timer**
+- [x] **Step 8: Add fallback poll timer**
 
 Inside `register(api)`, add a 60-second interval that polls state and messages:
 
@@ -1028,12 +1028,12 @@ const pollInterval = setInterval(async () => {
 if (pollInterval.unref) pollInterval.unref();
 ```
 
-- [ ] **Step 9: Run existing plugin tests**
+- [x] **Step 9: Run existing plugin tests**
 
 Run: `node --import tsx --test packages/openclaw-immortal-plugin/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add packages/openclaw-immortal-plugin/index.ts
