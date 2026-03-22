@@ -1688,20 +1688,22 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
                 : 0;
             const messageCount = Array.isArray(messages) ? messages.length : 0;
 
-            if (lastSeenTick > 0 && tick > lastSeenTick) {
+            const newMessages = messageCount > lastSeenMessageCount;
+            if (newMessages) {
+              const reason = "Fallback poll detected new messages.";
+              setWakeReason(reason);
+              emitHeartbeat(reason, session.agentId);
+            } else if (lastSeenTick > 0 && tick > lastSeenTick) {
               const completedJob = lastSeenStatus === "busy" && status === "idle";
               const injured = status === "injured" && lastSeenStatus !== "injured";
               const tribulationAdvanced = nextTribTick > lastSeenNextTribTick && lastSeenNextTribTick > 0;
-              const newMessages = messageCount > lastSeenMessageCount;
 
-              if (completedJob || injured || tribulationAdvanced || newMessages) {
+              if (completedJob || injured || tribulationAdvanced) {
                 const reason = completedJob
                   ? "Fallback poll detected a completed job."
                   : injured
                     ? "Fallback poll detected an injury."
-                    : tribulationAdvanced
-                      ? "Fallback poll detected a tribulation state change."
-                      : "Fallback poll detected new messages.";
+                    : "Fallback poll detected a tribulation state change.";
                 setWakeReason(reason);
                 emitHeartbeat(reason, session.agentId);
               }
