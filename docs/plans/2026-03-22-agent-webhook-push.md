@@ -772,7 +772,7 @@ git commit -m "feat(runtime-worker): dispatch webhooks after scheduled and manua
 **Files:**
 - Modify: `apps/runtime-worker/src/routes.ts` (POST /agent/messages handler)
 
-- [ ] **Step 1: Update the message handler to dispatch**
+- [x] **Step 1: Update the message handler to dispatch**
 
 In `apps/runtime-worker/src/routes.ts`, update the `POST /agent/messages` handler (line 455). After the message is sent, read the recipient's cultivator ID from the response and dispatch:
 
@@ -809,12 +809,12 @@ app.post("/agent/messages", async (context) => {
 
 Add `resolveMessageWebhookTarget` to the imports from application.
 
-- [ ] **Step 2: Run existing tests**
+- [x] **Step 2: Run existing tests**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/runtime-worker/src/routes.ts

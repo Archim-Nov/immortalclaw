@@ -17,6 +17,7 @@ import {
   registerAgentWorkflow,
   resetAuthenticatedAgentCredential,
   saveAuthenticatedAgentRegistration,
+  resolveMessageWebhookTarget,
   sendAuthenticatedAgentMessage,
   resolveWebhookTargets,
   syncAgentPersonaWorkflow,
@@ -460,18 +461,30 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as AgentSendMessageRequest & Record<string, unknown>;
     const content = readRequiredBodyString(body.content, "Body must include content.");
-    return context.json(
-      await sendAuthenticatedAgentMessage({
-        repository,
-        agent,
-        request: {
-          toAgentId: readOptionalBodyString(body.toAgentId),
-          toCultivatorId: readOptionalBodyString(body.toCultivatorId),
-          subject: readOptionalBodyString(body.subject),
-          content,
-        },
-      }),
-    );
+    const response = await sendAuthenticatedAgentMessage({
+      repository,
+      agent,
+      request: {
+        toAgentId: readOptionalBodyString(body.toAgentId),
+        toCultivatorId: readOptionalBodyString(body.toCultivatorId),
+        subject: readOptionalBodyString(body.subject),
+        content,
+      },
+    });
+
+    const recipientCultivatorId = response.message.toCultivatorId;
+    if (recipientCultivatorId) {
+      const [world, agentProfiles] = await Promise.all([
+        repository.readWorld(),
+        repository.listAgentProfiles(),
+      ]);
+      const target = resolveMessageWebhookTarget(world, recipientCultivatorId, agent.name, world.tick, agentProfiles);
+      if (target) {
+        context.executionCtx.waitUntil(dispatchWebhooks([target]));
+      }
+    }
+
+    return context.json(response);
   });
 
   app.get("/agent/events", async (context) => {
