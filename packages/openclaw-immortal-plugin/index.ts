@@ -82,6 +82,7 @@ type AgentSession = {
   requestedAgentId?: string;
   credential: string;
   selectedCultivatorId?: string;
+  webhookUrl?: string;
   webhookSecret?: string;
   updatedAt: string;
 };
@@ -630,6 +631,7 @@ function coerceAgentSession(input: unknown): AgentSession | null {
     requestedAgentId: trimString((input as { requestedAgentId?: unknown }).requestedAgentId),
     credential,
     selectedCultivatorId: trimString((input as { selectedCultivatorId?: unknown }).selectedCultivatorId),
+    webhookUrl: trimString((input as { webhookUrl?: unknown }).webhookUrl),
     webhookSecret: trimString((input as { webhookSecret?: unknown }).webhookSecret),
     updatedAt:
       trimString((input as { updatedAt?: unknown }).updatedAt) ??
@@ -799,6 +801,7 @@ function readRegisteredSession(
     requestedAgentId: trimString(requestedAgentId),
     credential,
     selectedCultivatorId: trimString((payload as { selectedCultivatorId?: unknown }).selectedCultivatorId),
+    webhookUrl: trimString((payload as { webhookUrl?: unknown }).webhookUrl),
     webhookSecret: trimString((payload as { webhookSecret?: unknown }).webhookSecret),
     updatedAt: nowIsoString(),
   };
@@ -1117,30 +1120,38 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       }
 
       async function bindWebhookIfConfigured(session: AgentSession): Promise<AgentSession> {
-        if (!config.webhookBaseUrl || session.webhookSecret) {
+        if (!config.webhookBaseUrl) {
+          return session;
+        }
+
+        const webhookUrl = buildWebhookUrl(config.webhookBaseUrl);
+        if (session.webhookSecret && session.webhookUrl === webhookUrl) {
           return session;
         }
 
         try {
           const payload = await requestAgentWorld(session, "/agent/webhook", {
             method: "POST",
-            body: JSON.stringify({ webhookUrl: buildWebhookUrl(config.webhookBaseUrl) }),
+            body: JSON.stringify({ webhookUrl }),
           });
           const webhookSecret = trimString((payload as { webhookSecret?: unknown }).webhookSecret);
+          const returnedWebhookUrl = trimString((payload as { webhookUrl?: unknown }).webhookUrl) ?? webhookUrl;
           if (!webhookSecret) {
+            log.warn?.("[immortal-realm] /agent/webhook response did not include a webhookSecret.");
             return session;
           }
           return cacheSession({
             ...session,
+            webhookUrl: returnedWebhookUrl,
             webhookSecret,
             updatedAt: nowIsoString(),
           }) as AgentSession;
         } catch (error) {
-          if (isRequestStatus(error, 404, 405)) {
-            log.warn?.("[immortal-realm] /agent/webhook unavailable, continuing without push wakeups.");
-            return session;
-          }
-          throw error;
+          log.warn?.(
+            `[immortal-realm] Failed to bind webhook at ${buildWebhookUrl(config.webhookBaseUrl)}; continuing without push wakeups.`,
+            error,
+          );
+          return session;
         }
       }
 

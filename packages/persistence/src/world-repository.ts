@@ -34,6 +34,7 @@ export interface AgentPersonaInput
 
 export interface AgentRegistrationInput extends AgentPersonaInput {
   record?: CultivationRegistrationRecord;
+  webhookUrl?: string;
 }
 
 export interface AgentProfileWriteInput extends AgentPersonaInput {

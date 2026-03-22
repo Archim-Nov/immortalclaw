@@ -17,19 +17,19 @@
 **Files:**
 - Create: `supabase/migrations/20260322_agent_webhook_url.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 alter table agent_profiles add column webhook_url text;
 alter table agent_profiles add column webhook_secret text;
 ```
 
-- [ ] **Step 2: Verify migration syntax**
+- [x] **Step 2: Verify migration syntax**
 
 Run: `npx supabase db lint`
 Expected: No errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add supabase/migrations/20260322_agent_webhook_url.sql
@@ -1047,18 +1047,18 @@ git commit -m "feat(openclaw-plugin): add webhook handler, HMAC verification, fa
 **Files:**
 - Modify: `packages/openclaw-immortal-plugin/index.test.ts`
 
-- [ ] **Step 1: Add test for webhook handler**
+- [x] **Step 1: Add test for webhook handler**
 
 Add a test that creates the plugin with a mock `registerWebhookHandler` and `requestHeartbeatNow`, sends a webhook with a valid HMAC signature, and verifies `requestHeartbeatNow` was called with the correct reason.
 
 Consult `packages/openclaw-immortal-plugin/index.test.ts` for the existing test setup pattern (mock API, mock fetch, plugin creation).
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `node --import tsx --test packages/openclaw-immortal-plugin/index.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add packages/openclaw-immortal-plugin/index.test.ts
@@ -1069,17 +1069,17 @@ git commit -m "test(openclaw-plugin): verify webhook receipt triggers heartbeat 
 
 ### Task 12: Full Test Suite and Cleanup
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `npm test`
 Expected: All tests pass.
 
-- [ ] **Step 2: Fix any regressions**
+- [x] **Step 2: Fix any regressions**
 
 If any test fails, investigate and fix. Common issues:
 - Missing `webhookUrl`/`webhookSecret` fields in test fixtures that construct `AgentProfileRecord` objects. Add `webhookUrl: null, webhookSecret: null` to those fixtures.
 
-- [ ] **Step 3: Final commit if needed**
+- [x] **Step 3: Final commit if needed**
 
 ```bash
 git add -A

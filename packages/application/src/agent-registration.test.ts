@@ -187,6 +187,8 @@ test("registerAgentWorkflow assembles the richer registration response in applic
           agentId: input.agentId,
           name: input.name,
           selectedCultivatorId: input.selectedCultivatorId,
+          webhookUrl: input.webhookUrl ?? null,
+          webhookSecret: null,
           createdAt: "2026-03-17T00:00:00.000Z",
           updatedAt: "2026-03-17T00:00:00.000Z",
           lastSeenAt: "2026-03-17T00:00:00.000Z",
@@ -217,12 +219,14 @@ test("registerAgentWorkflow assembles the richer registration response in applic
     input: {
       name: "Su Mingyue",
       record: registrationRecord,
+      webhookUrl: "https://example.com/hooks/immortal-realm",
     },
     questionnaireSource: "answers",
     baseUrl: "https://runtime.test",
   });
 
   assert.equal(calls.savedProfile?.name, "Su Mingyue");
+  assert.equal(calls.savedProfile?.webhookUrl, "https://example.com/hooks/immortal-realm");
   assert.equal(calls.cultivatorId, calls.savedProfile?.selectedCultivatorId);
   assert.equal(calls.savedProfile?.agentId, calls.issuedAgentId);
   assert.equal(payload.ok, true);

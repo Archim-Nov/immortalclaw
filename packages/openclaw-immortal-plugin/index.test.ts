@@ -67,12 +67,14 @@ function registerPlugin(
   hooks: Array<{ event: string; handler: (...args: unknown[]) => unknown }>;
   webhooks: CapturedWebhook[];
   heartbeatCalls: Array<{ reason: string; agentId?: string }>;
+  warnings: string[];
 } {
   const plugin = createImmortalRealmPlugin({ fetchImpl });
   const tools = new Map<string, RegisteredTool>();
   const hooks: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = [];
   const webhooks: CapturedWebhook[] = [];
   const heartbeatCalls: Array<{ reason: string; agentId?: string }> = [];
+  const warnings: string[] = [];
 
   plugin.register({
     pluginConfig,
@@ -85,13 +87,17 @@ function registerPlugin(
     requestHeartbeatNow(payload) {
       heartbeatCalls.push(payload);
     },
+    logger: {
+      warn(...args: unknown[]) {
+        warnings.push(args.map((value) => String(value)).join(" "));
+      },
+    },
     on(event, handler) {
       hooks.push({ event, handler });
     },
-    logger: {},
   });
 
-  return { tools, hooks, webhooks, heartbeatCalls };
+  return { tools, hooks, webhooks, heartbeatCalls, warnings };
 }
 
 async function signWebhookBody(body: string, secret: string): Promise<string> {
@@ -204,6 +210,230 @@ test("webhook receipt triggers heartbeat wake with the signed payload reason", a
       reason: "You received a message from Xu Ling.",
       agentId,
     });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin rebinds webhook when the configured url changes", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-rebind-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
+  const agentId = "550e8400-e29b-41d4-a716-446655440112";
+  const oldWebhookUrl = "https://old.example/hooks/immortal-realm";
+  const newWebhookUrl = "https://new.example/hooks/immortal-realm";
+
+  try {
+    writePersonaFiles(personaDir);
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId,
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_webhook_rebind",
+              selectedCultivatorId: "cultivator-9",
+              webhookUrl: oldWebhookUrl,
+              webhookSecret: "whsec_old",
+              updatedAt: "2026-03-22T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const matchingRequests: CapturedRequest[] = [];
+    const matching = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        webhookBaseUrl: "https://old.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        matchingRequests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+        });
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId,
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(JSON.stringify({ tick: 1, cultivator: { id: "cultivator-9" } }), {
+            status: 200,
+          });
+        }
+
+        if (url.endsWith("/agent/webhook")) {
+          return new Response(JSON.stringify({ webhookUrl: oldWebhookUrl, webhookSecret: "whsec_old" }), {
+            status: 200,
+          });
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await matching.tools.get("immortal_state")?.execute("tool-1", {});
+    assert.equal(matchingRequests.filter((entry) => entry.url.endsWith("/agent/webhook")).length, 0);
+
+    const rebindingRequests: CapturedRequest[] = [];
+    const rebinding = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        webhookBaseUrl: "https://new.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        rebindingRequests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+        });
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId,
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(JSON.stringify({ tick: 2, cultivator: { id: "cultivator-9" } }), {
+            status: 200,
+          });
+        }
+
+        if (url.endsWith("/agent/webhook")) {
+          return new Response(
+            JSON.stringify({ webhookUrl: newWebhookUrl, webhookSecret: "whsec_new" }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await rebinding.tools.get("immortal_state")?.execute("tool-2", {});
+
+    assert.equal(rebindingRequests.filter((entry) => entry.url.endsWith("/agent/webhook")).length, 1);
+    assert.match(
+      String(rebindingRequests.find((entry) => entry.url.endsWith("/agent/webhook"))?.body ?? ""),
+      /"webhookUrl":"https:\/\/new\.example\/hooks\/immortal-realm"/,
+    );
+
+    const storedCredentials = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
+      entries?: Array<Record<string, unknown>>;
+    };
+    assert.equal(storedCredentials.entries?.[0]?.webhookUrl, newWebhookUrl);
+    assert.equal(storedCredentials.entries?.[0]?.webhookSecret, "whsec_new");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin warns and continues when bootstrap webhook binding fails", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-fail-"));
+  const personaDir = path.join(root, "workspace");
+  const credentialsPath = path.join(root, "credentials.json");
+
+  try {
+    writePersonaFiles(personaDir);
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId: "550e8400-e29b-41d4-a716-446655440113",
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_webhook_fail",
+              selectedCultivatorId: "cultivator-9",
+              updatedAt: "2026-03-22T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const requests: CapturedRequest[] = [];
+    const { tools, warnings } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        webhookBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        personaDir,
+        credentialsPath,
+      },
+      async (input, init) => {
+        const url = String(input);
+        requests.push({
+          url,
+          method: String(init?.method ?? "GET"),
+          body: typeof init?.body === "string" ? init.body : undefined,
+        });
+
+        if (url.endsWith("/agent/webhook")) {
+          return new Response(JSON.stringify({ error: "bind failed" }), { status: 500 });
+        }
+
+        if (url.endsWith("/agent/sync-persona")) {
+          return new Response(
+            JSON.stringify({
+              agentId: "550e8400-e29b-41d4-a716-446655440113",
+              selectedCultivatorId: "cultivator-9",
+              created: false,
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.endsWith("/agent/state")) {
+          return new Response(JSON.stringify({ tick: 1, cultivator: { id: "cultivator-9" } }), {
+            status: 200,
+          });
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await tools.get("immortal_state")?.execute("tool-fail", {});
+
+    assert.ok(requests.some((entry) => entry.url.endsWith("/agent/webhook")));
+    assert.ok(warnings.some((message) => message.includes("Failed to bind webhook")));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

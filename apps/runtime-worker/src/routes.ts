@@ -235,15 +235,29 @@ function readRegistrationInput(body: Record<string, unknown>): {
   return {
     questionnaireSource: record ? "record" : "answers",
     input: {
-    name: readRequiredBodyString(body.name, "Body must include name."),
-    genderPresentation: typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
-    pronouns: readOptionalBodyString(body.pronouns),
-    age: readOptionalBodyNumber(body.age),
-    origin: readOptionalBodyString(body.origin),
-    temperament: readOptionalBodyString(body.temperament),
+      name: readRequiredBodyString(body.name, "Body must include name."),
+      genderPresentation: typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
+      pronouns: readOptionalBodyString(body.pronouns),
+      age: readOptionalBodyNumber(body.age),
+      origin: readOptionalBodyString(body.origin),
+      temperament: readOptionalBodyString(body.temperament),
+      webhookUrl: readOptionalBodyString(body.webhookUrl),
       record: resolvedRecord,
     },
   };
+}
+
+function isLocalDevelopmentOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  try {
+    const hostname = new URL(origin).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return origin.includes("localhost") || origin.includes("127.0.0.1");
+  }
 }
 
 function readLegacyCultivatorIdFromQuery(
@@ -541,7 +555,7 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as Record<string, unknown>;
     const webhookUrl = readRequiredBodyString(body.webhookUrl, "Body must include webhookUrl.");
-    const allowInsecure = !context.env?.FRONTEND_ORIGIN || context.env.FRONTEND_ORIGIN.includes("localhost");
+    const allowInsecure = isLocalDevelopmentOrigin(context.env?.FRONTEND_ORIGIN);
     return context.json(
       await updateAgentWebhookUrl({
         repository,

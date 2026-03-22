@@ -223,6 +223,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       age: input.age,
       origin: input.origin,
       temperament: input.temperament,
+      webhookUrl: input.webhookUrl,
     });
 
     const credential = await this.issueAgentCredential(agentId);
