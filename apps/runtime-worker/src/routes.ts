@@ -5,6 +5,7 @@ import {
   buildAuthenticatedAgentState,
   buildPublicAgentDirectory,
   buildPublicAgentState,
+  dispatchWebhooks,
   createRuntimeService,
   listAuthenticatedAgentMessages,
   performAuthenticatedAgentAction,
@@ -17,6 +18,7 @@ import {
   resetAuthenticatedAgentCredential,
   saveAuthenticatedAgentRegistration,
   sendAuthenticatedAgentMessage,
+  resolveWebhookTargets,
   syncAgentPersonaWorkflow,
   updateAgentWebhookUrl,
 } from "../../../packages/application/src/index.js";
@@ -557,6 +559,15 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as Partial<AdvanceWorldRequest>;
     const steps = typeof body.steps === "number" ? body.steps : 1;
-    return context.json(await advanceAuthenticatedAgentWorld({ repository, steps }));
+    const tickSummary = await advanceAuthenticatedAgentWorld({ repository, steps });
+    const [world, agentProfiles] = await Promise.all([
+      repository.readWorld(),
+      repository.listAgentProfiles(),
+    ]);
+    const targets = resolveWebhookTargets(world, tickSummary, agentProfiles);
+    if (targets.length > 0) {
+      context.executionCtx.waitUntil(dispatchWebhooks(targets));
+    }
+    return context.json(tickSummary);
   });
 }

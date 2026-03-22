@@ -679,7 +679,7 @@ git commit -m "feat(runtime-worker): add POST /agent/webhook endpoint"
 - Modify: `apps/runtime-worker/src/scheduler.ts`
 - Modify: `apps/runtime-worker/src/routes.ts` (POST /agent/tick handler)
 
-- [ ] **Step 1: Update `runScheduledTick` to dispatch webhooks**
+- [x] **Step 1: Update `runScheduledTick` to dispatch webhooks**
 
 In `apps/runtime-worker/src/scheduler.ts`, update the function to capture the tick summary, read world and profiles, and dispatch:
 
@@ -728,7 +728,7 @@ export async function runScheduledTick(
 }
 ```
 
-- [ ] **Step 2: Update `POST /agent/tick` to dispatch webhooks**
+- [x] **Step 2: Update `POST /agent/tick` to dispatch webhooks**
 
 In `apps/runtime-worker/src/routes.ts`, update the `/agent/tick` handler (line 538):
 
@@ -753,12 +753,12 @@ app.post("/agent/tick", async (context) => {
 
 Add `resolveWebhookTargets` and `dispatchWebhooks` to the imports from application.
 
-- [ ] **Step 3: Run existing tests**
+- [x] **Step 3: Run existing tests**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/runtime-worker/src/scheduler.ts apps/runtime-worker/src/routes.ts
