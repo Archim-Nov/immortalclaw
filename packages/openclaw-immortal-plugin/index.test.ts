@@ -17,6 +17,11 @@ type CapturedRequest = {
   authorization?: string | null;
 };
 
+type CapturedWebhook = {
+  path: string;
+  handler: (req: { body: string; headers: Record<string, string> }) => Promise<{ status: number; body?: string }>;
+};
+
 function createRegistrationRecord() {
   return {
     record_type: "registration_record",
@@ -60,15 +65,25 @@ function registerPlugin(
 ): {
   tools: Map<string, RegisteredTool>;
   hooks: Array<{ event: string; handler: (...args: unknown[]) => unknown }>;
+  webhooks: CapturedWebhook[];
+  heartbeatCalls: Array<{ reason: string; agentId?: string }>;
 } {
   const plugin = createImmortalRealmPlugin({ fetchImpl });
   const tools = new Map<string, RegisteredTool>();
   const hooks: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = [];
+  const webhooks: CapturedWebhook[] = [];
+  const heartbeatCalls: Array<{ reason: string; agentId?: string }> = [];
 
   plugin.register({
     pluginConfig,
     registerTool(tool) {
       tools.set(tool.name, tool);
+    },
+    registerWebhookTargetWithPluginRoute(path, handler) {
+      webhooks.push({ path, handler });
+    },
+    requestHeartbeatNow(payload) {
+      heartbeatCalls.push(payload);
     },
     on(event, handler) {
       hooks.push({ event, handler });
@@ -76,7 +91,20 @@ function registerPlugin(
     logger: {},
   });
 
-  return { tools, hooks };
+  return { tools, hooks, webhooks, heartbeatCalls };
+}
+
+async function signWebhookBody(body: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
+  return `sha256=${[...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 test("plugin registers expected tools and prompt hook", async () => {
@@ -112,6 +140,73 @@ test("plugin registers expected tools and prompt hook", async () => {
     String((result as { prependSystemContext?: string }).prependSystemContext),
     /Credential cache:/,
   );
+});
+
+test("webhook receipt triggers heartbeat wake with the signed payload reason", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-"));
+  const credentialsPath = path.join(root, "credentials.json");
+  const webhookSecret = "whsec_test_webhook_secret";
+  const agentId = "550e8400-e29b-41d4-a716-446655440111";
+  const body = JSON.stringify({
+    event: "message",
+    tick: 42,
+    reason: "You received a message from Xu Ling.",
+  });
+
+  try {
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId,
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_webhook",
+              selectedCultivatorId: "cultivator-9",
+              webhookSecret,
+              updatedAt: "2026-03-22T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const { webhooks, heartbeatCalls } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        credentialsPath,
+        personaDir: path.join(root, "workspace"),
+      },
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    assert.equal(webhooks.length, 1);
+    assert.equal(webhooks[0]?.path, "/hooks/immortal-realm");
+
+    const signature = await signWebhookBody(body, webhookSecret);
+    const response = await webhooks[0]!.handler({
+      body,
+      headers: {
+        "x-immortal-signature": signature,
+      },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(heartbeatCalls.length, 1);
+    assert.deepEqual(heartbeatCalls[0], {
+      reason: "You received a message from Xu Ling.",
+      agentId,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("legacy defaultCultivatorId still works for state act and tick tools", async () => {
