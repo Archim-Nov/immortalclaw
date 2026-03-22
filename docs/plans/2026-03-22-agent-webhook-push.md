@@ -47,7 +47,7 @@ git commit -m "feat(persistence): add webhook_url and webhook_secret columns to 
 - Modify: `packages/persistence/src/supabase-world-repository.ts:123-130` (listAgentProfiles SELECT fields)
 - Modify: `packages/persistence/src/in-memory-world-repository.ts:133-167` (saveAgentProfile)
 
-- [ ] **Step 1: Add fields to `AgentProfileRecord` and `AgentProfileWriteInput`**
+- [x] **Step 1: Add fields to `AgentProfileRecord` and `AgentProfileWriteInput`**
 
 In `packages/persistence/src/world-repository.ts`, add to `AgentProfileRecord`:
 
@@ -63,7 +63,7 @@ webhookUrl?: string;
 webhookSecret?: string;
 ```
 
-- [ ] **Step 2: Add fields to `AgentProfileRow`**
+- [x] **Step 2: Add fields to `AgentProfileRow`**
 
 In `packages/persistence/src/supabase-world-repository.ts`, add to the `AgentProfileRow` interface (line 62):
 
@@ -72,7 +72,7 @@ webhook_url?: string | null;
 webhook_secret?: string | null;
 ```
 
-- [ ] **Step 3: Update `toAgentProfileRow` and `fromAgentProfileRow`**
+- [x] **Step 3: Update `toAgentProfileRow` and `fromAgentProfileRow`**
 
 In `toAgentProfileRow` (line 619), add:
 
@@ -88,11 +88,11 @@ webhookUrl: row.webhook_url ?? null,
 webhookSecret: row.webhook_secret ?? null,
 ```
 
-- [ ] **Step 4: Update SELECT field lists**
+- [x] **Step 4: Update SELECT field lists**
 
 Find `listAgentProfiles` (line 123) and `getAgentProfile` (line 132) — add `webhook_url,webhook_secret` to the `select` field string. Also update `readAgentProfile` (line 607) if it has its own select string.
 
-- [ ] **Step 5: Update in-memory repository**
+- [x] **Step 5: Update in-memory repository**
 
 In `packages/persistence/src/in-memory-world-repository.ts`, ensure `saveAgentProfile` (line 133) passes through `webhookUrl` and `webhookSecret` fields when constructing the stored record. Set defaults:
 
@@ -101,12 +101,12 @@ webhookUrl: input.webhookUrl ?? existing?.webhookUrl ?? null,
 webhookSecret: input.webhookSecret ?? existing?.webhookSecret ?? null,
 ```
 
-- [ ] **Step 6: Run existing tests to verify no regressions**
+- [x] **Step 6: Run existing tests to verify no regressions**
 
 Run: `node --import tsx --test "packages/persistence/**/*.test.ts" "packages/application/**/*.test.ts" "apps/runtime-worker/**/*.test.ts"`
 Expected: All existing tests pass. The new nullable fields have defaults, so no existing code should break.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/persistence/src/world-repository.ts packages/persistence/src/supabase-world-repository.ts packages/persistence/src/in-memory-world-repository.ts

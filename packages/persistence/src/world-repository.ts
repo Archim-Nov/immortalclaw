@@ -40,6 +40,8 @@ export interface AgentProfileWriteInput extends AgentPersonaInput {
   agentId: string;
   selectedCultivatorId: string;
   lastSeenAt?: string | null;
+  webhookUrl?: string;
+  webhookSecret?: string;
 }
 
 export interface AgentProfileRecord {
@@ -50,6 +52,8 @@ export interface AgentProfileRecord {
   pronouns?: string;
   origin?: string;
   temperament?: string;
+  webhookUrl: string | null;
+  webhookSecret: string | null;
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;
