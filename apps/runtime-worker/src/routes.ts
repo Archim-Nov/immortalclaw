@@ -18,6 +18,7 @@ import {
   saveAuthenticatedAgentRegistration,
   sendAuthenticatedAgentMessage,
   syncAgentPersonaWorkflow,
+  updateAgentWebhookUrl,
 } from "../../../packages/application/src/index.js";
 import type {
   AdvanceWorldRequest,
@@ -518,6 +519,22 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const currentCredential = readBearerToken(context.req.header("authorization") ?? undefined);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     return context.json(await resetAuthenticatedAgentCredential({ repository, agent, currentCredential }));
+  });
+
+  app.post("/agent/webhook", async (context) => {
+    const repository = resolveRepository(context.env, options.repository);
+    const agent = await readAuthenticatedAgent(context.req.raw, repository);
+    const body = (await context.req.json()) as Record<string, unknown>;
+    const webhookUrl = readRequiredBodyString(body.webhookUrl, "Body must include webhookUrl.");
+    const allowInsecure = !context.env.FRONTEND_ORIGIN || context.env.FRONTEND_ORIGIN.includes("localhost");
+    return context.json(
+      await updateAgentWebhookUrl({
+        repository,
+        agent,
+        webhookUrl,
+        allowInsecure,
+      }),
+    );
   });
 
   app.post("/agent/registration", async (context) => {

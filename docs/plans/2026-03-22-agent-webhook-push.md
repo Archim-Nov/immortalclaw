@@ -640,7 +640,7 @@ git commit -m "feat(application): add updateAgentWebhookUrl use case with secret
 **Files:**
 - Modify: `apps/runtime-worker/src/routes.ts`
 
-- [ ] **Step 1: Add the endpoint**
+- [x] **Step 1: Add the endpoint**
 
 In `apps/runtime-worker/src/routes.ts`, after the existing `POST /agent/credential/reset` handler, add:
 
@@ -659,12 +659,12 @@ app.post("/agent/webhook", async (context) => {
 
 Add `updateAgentWebhookUrl` to the imports from application.
 
-- [ ] **Step 2: Run existing tests**
+- [x] **Step 2: Run existing tests**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/runtime-worker/src/routes.ts
