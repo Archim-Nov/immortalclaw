@@ -882,6 +882,7 @@ function clampLimit(input: unknown): number | undefined {
   return Math.max(1, Math.min(50, Math.floor(input)));
 }
 
+// Keep this local shape aligned with the canonical contract in packages/contracts/src/runtime-api.ts.
 type WebhookWakePayload = {
   event: "tick" | "message" | "tribulation";
   tick: number;

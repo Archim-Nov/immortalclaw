@@ -197,6 +197,38 @@ test("dispatchWebhooks posts signed payloads and ignores delivery failures", asy
   );
 });
 
+test("dispatchWebhooks logs delivery failures at debug level", async () => {
+  const messages: string[] = [];
+  const fetchImpl: typeof fetch = async () => {
+    throw new Error("socket hang up");
+  };
+
+  await dispatchWebhooks(
+    [
+      {
+        agentId: "agent-2",
+        webhookUrl: "https://fail.example.com/hooks/immortal-realm",
+        webhookSecret: "whsec_two",
+        payload: {
+          event: "message",
+          tick: 12,
+          reason: "You received a message from Xu Ling.",
+        },
+      },
+    ],
+    fetchImpl,
+    {
+      debug(message) {
+        messages.push(message);
+      },
+    },
+  );
+
+  assert.equal(messages.length, 1);
+  assert.match(messages[0] ?? "", /agent-2/);
+  assert.match(messages[0] ?? "", /socket hang up/);
+});
+
 test("resolveMessageWebhookTarget returns null when recipient has no webhook", () => {
   const world = createSeedWorld();
   const sync = syncCultivatorFromPersona(world, { agentId: "agent-1", name: "Su Mingyue" });

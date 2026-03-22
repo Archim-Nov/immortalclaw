@@ -9,6 +9,10 @@ export interface WebhookTarget {
   payload: WebhookWakePayload;
 }
 
+export interface WebhookDispatchLogger {
+  debug?: (message: string) => void;
+}
+
 type WebhookEnabledAgentProfile = AgentProfileRecord & {
   webhookUrl: string;
   webhookSecret: string;
@@ -136,20 +140,29 @@ export async function signPayload(body: string, secret: string): Promise<string>
 export async function dispatchWebhooks(
   targets: WebhookTarget[],
   fetchImpl: typeof fetch = fetch,
+  logger?: WebhookDispatchLogger,
 ): Promise<void> {
   await Promise.allSettled(
     targets.map(async (target) => {
-      const body = JSON.stringify(target.payload);
-      const signature = await signPayload(body, target.webhookSecret);
+      try {
+        const body = JSON.stringify(target.payload);
+        const signature = await signPayload(body, target.webhookSecret);
 
-      await fetchImpl(target.webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Immortal-Signature": signature,
-        },
-        body,
-      });
+        await fetchImpl(target.webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Immortal-Signature": signature,
+          },
+          body,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger?.debug?.(
+          `[webhook-dispatch] delivery failed for ${target.agentId} -> ${target.webhookUrl}: ${message}`,
+        );
+        throw error;
+      }
     }),
   );
 }

@@ -215,6 +215,65 @@ test("webhook receipt triggers heartbeat wake with the signed payload reason", a
   }
 });
 
+test("webhook receipt rejects an invalid signature", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-bad-sig-"));
+  const credentialsPath = path.join(root, "credentials.json");
+  const webhookSecret = "whsec_test_webhook_secret";
+  const agentId = "550e8400-e29b-41d4-a716-446655440113";
+  const body = JSON.stringify({
+    event: "message",
+    tick: 42,
+    reason: "You received a message from Xu Ling.",
+  });
+
+  try {
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId,
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_webhook",
+              selectedCultivatorId: "cultivator-9",
+              webhookSecret,
+              updatedAt: "2026-03-22T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const { webhooks, heartbeatCalls } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        credentialsPath,
+        personaDir: path.join(root, "workspace"),
+      },
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    const response = await webhooks[0]!.handler({
+      body,
+      headers: {
+        "x-immortal-signature": "sha256=deadbeef",
+      },
+    });
+
+    assert.equal(response.status, 403);
+    assert.equal(heartbeatCalls.length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("plugin rebinds webhook when the configured url changes", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-rebind-"));
   const personaDir = path.join(root, "workspace");
