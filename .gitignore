@@ -11,3 +11,6 @@ AGENTS.local.md
 data/
 .mcp.json
 supabase/.temp/
+openspec/
+.opencode/
+.claude/
