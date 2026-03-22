@@ -169,7 +169,7 @@ git commit -m "feat(contracts): add WebhookWakePayload and AgentWebhookBindRespo
 - Create: `packages/application/src/webhook-dispatch.test.ts`
 - Create: `packages/application/src/webhook-dispatch.ts`
 
-- [ ] **Step 1: Write failing tests for `resolveWebhookTargets`**
+- [x] **Step 1: Write failing tests for `resolveWebhookTargets`**
 
 Create `packages/application/src/webhook-dispatch.test.ts`:
 
@@ -319,12 +319,12 @@ test("resolveMessageWebhookTarget returns null when recipient has no webhook", (
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test packages/application/src/webhook-dispatch.test.ts`
 Expected: FAIL — module `./webhook-dispatch.js` not found.
 
-- [ ] **Step 3: Implement `resolveWebhookTargets` and `resolveMessageWebhookTarget`**
+- [x] **Step 3: Implement `resolveWebhookTargets` and `resolveMessageWebhookTarget`**
 
 Create `packages/application/src/webhook-dispatch.ts`:
 
@@ -454,12 +454,12 @@ export async function dispatchWebhooks(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test packages/application/src/webhook-dispatch.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 5: Export from application index**
+- [x] **Step 5: Export from application index**
 
 Add to `packages/application/src/index.ts`:
 
@@ -473,7 +473,7 @@ export {
 } from "./webhook-dispatch.js";
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/application/src/webhook-dispatch.ts packages/application/src/webhook-dispatch.test.ts packages/application/src/index.ts

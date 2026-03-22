@@ -38,3 +38,10 @@ export type {
   PublicAgentDirectoryRepository,
   PublicAgentStateRepository,
 } from "./public-agents.js";
+export {
+  dispatchWebhooks,
+  resolveMessageWebhookTarget,
+  resolveWebhookTargets,
+  signPayload,
+} from "./webhook-dispatch.js";
+export type { WebhookTarget } from "./webhook-dispatch.js";
