@@ -15,6 +15,7 @@ import type {
   AgentProfileWriteInput,
   AgentRegistrationInput,
 } from "../../persistence/src/world-repository.js";
+import { issueWebhookSecret } from "../../persistence/src/webhook-secret.js";
 
 export interface AgentRegistrationWorkflowRepository {
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
@@ -29,10 +30,6 @@ export interface RegisterAgentWorkflowOptions {
   input: AgentRegistrationInput;
   questionnaireSource: "answers" | "record";
   baseUrl: string;
-}
-
-function issueWebhookSecret(webhookUrl: string | undefined): string | undefined {
-  return webhookUrl ? `whsec_${crypto.randomUUID()}` : undefined;
 }
 
 export async function registerAgentWorkflow(

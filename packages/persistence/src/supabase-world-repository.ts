@@ -31,6 +31,7 @@ import type {
   TickRunRecord,
   WorldRepository,
 } from "./world-repository.js";
+import { issueWebhookSecret } from "./webhook-secret.js";
 
 const DEFAULT_WORLD_KEY = "primary";
 const DEFAULT_TICK_LOCK_NAME = "world-tick";
@@ -89,10 +90,6 @@ function normalizeAgentId(value: string | undefined): string | undefined {
 
 function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-function issueWebhookSecret(webhookUrl: string | undefined): string | undefined {
-  return webhookUrl ? `whsec_${crypto.randomUUID()}` : undefined;
 }
 
 async function hashCredential(credential: string): Promise<string> {

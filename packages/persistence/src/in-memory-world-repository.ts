@@ -26,6 +26,7 @@ import type {
   TickRunRecord,
   WorldRepository,
 } from "./world-repository.js";
+import { issueWebhookSecret } from "./webhook-secret.js";
 
 export interface InMemoryWorldRepositoryOptions {
   world?: WorldState;
@@ -39,10 +40,6 @@ function normalizeAgentId(value: string | undefined): string | undefined {
 
 function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-function issueWebhookSecret(webhookUrl: string | undefined): string | undefined {
-  return webhookUrl ? `whsec_${crypto.randomUUID()}` : undefined;
 }
 
 function clearAgentCredentials(agentCredentials: Map<string, string>, agentId: string) {

@@ -177,18 +177,19 @@ test("dispatchWebhooks posts signed payloads and ignores delivery failures", asy
   );
 
   assert.equal(calls.length, 2);
-  assert.equal(calls[0]?.url, "https://example.com/hooks/immortal-realm");
-  assert.equal(calls[0]?.init?.method, "POST");
+  const successfulCall = calls.find((call) => call.url === "https://example.com/hooks/immortal-realm");
+  assert.ok(successfulCall);
+  assert.equal(successfulCall.init?.method, "POST");
   assert.equal(
-    (calls[0]?.init?.headers as Record<string, string>)["Content-Type"],
+    (successfulCall.init?.headers as Record<string, string>)["Content-Type"],
     "application/json",
   );
   assert.match(
-    (calls[0]?.init?.headers as Record<string, string>)["X-Immortal-Signature"],
+    (successfulCall.init?.headers as Record<string, string>)["X-Immortal-Signature"],
     /^sha256=[0-9a-f]{64}$/,
   );
   assert.equal(
-    calls[0]?.init?.body,
+    successfulCall.init?.body,
     JSON.stringify({
       event: "tick",
       tick: 11,

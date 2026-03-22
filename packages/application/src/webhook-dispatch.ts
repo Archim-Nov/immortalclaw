@@ -142,6 +142,7 @@ export async function dispatchWebhooks(
   fetchImpl: typeof fetch = fetch,
   logger?: WebhookDispatchLogger,
 ): Promise<void> {
+  // Webhook delivery is best-effort: log per-target failures and let sibling deliveries continue.
   await Promise.allSettled(
     targets.map(async (target) => {
       try {
@@ -161,7 +162,6 @@ export async function dispatchWebhooks(
         logger?.debug?.(
           `[webhook-dispatch] delivery failed for ${target.agentId} -> ${target.webhookUrl}: ${message}`,
         );
-        throw error;
       }
     }),
   );
