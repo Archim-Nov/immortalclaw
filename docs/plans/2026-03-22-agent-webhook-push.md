@@ -828,7 +828,7 @@ git commit -m "feat(runtime-worker): dispatch webhook to recipient after message
 **Files:**
 - Modify: `apps/runtime-worker/src/index.test.ts`
 
-- [ ] **Step 1: Write integration test**
+- [x] **Step 1: Write integration test**
 
 Add a test that registers an agent with a webhook URL, performs an action, advances a tick, and verifies an outbound webhook fetch was made. The test should use the in-memory repository and a mock `fetch` injected via the dispatch module.
 
@@ -842,12 +842,12 @@ The test needs to:
 
 **Note on `executionCtx.waitUntil`:** The Hono test client does not provide a real `executionCtx`. The test should verify webhook dispatch by either: (a) providing a mock `executionCtx` with a `waitUntil` that captures promises and awaits them, or (b) injecting a mock `fetch` that records outbound calls and asserting against it after the tick response. Consult existing tests in `apps/runtime-worker/src/index.test.ts` for the exact app creation pattern — you may need to pass a custom `waitUntil` in the test factory.
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All tests pass including the new one.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/runtime-worker/src/index.test.ts

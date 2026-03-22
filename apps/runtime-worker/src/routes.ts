@@ -541,7 +541,7 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as Record<string, unknown>;
     const webhookUrl = readRequiredBodyString(body.webhookUrl, "Body must include webhookUrl.");
-    const allowInsecure = !context.env.FRONTEND_ORIGIN || context.env.FRONTEND_ORIGIN.includes("localhost");
+    const allowInsecure = !context.env?.FRONTEND_ORIGIN || context.env.FRONTEND_ORIGIN.includes("localhost");
     return context.json(
       await updateAgentWebhookUrl({
         repository,
