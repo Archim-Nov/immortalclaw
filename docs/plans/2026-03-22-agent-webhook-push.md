@@ -120,7 +120,7 @@ git commit -m "feat(persistence): add webhookUrl and webhookSecret to agent prof
 **Files:**
 - Modify: `packages/contracts/src/runtime-api.ts`
 
-- [ ] **Step 1: Add optional `webhookUrl` to `AgentRegistrationRequest`**
+- [x] **Step 1: Add optional `webhookUrl` to `AgentRegistrationRequest`**
 
 In `packages/contracts/src/runtime-api.ts`, update the existing `AgentRegistrationRequest` (line 76):
 
@@ -132,7 +132,7 @@ export interface AgentRegistrationRequest extends Omit<AgentRegistrationInput, "
 }
 ```
 
-- [ ] **Step 2: Add new types**
+- [x] **Step 2: Add new types**
 
 At the end of `packages/contracts/src/runtime-api.ts`, add:
 
@@ -150,11 +150,11 @@ export interface AgentWebhookBindResponse {
 }
 ```
 
-- [ ] **Step 3: Export from index**
+- [x] **Step 3: Export from index**
 
 Ensure the types are exported from `packages/contracts/src/index.ts` (if it re-exports from `runtime-api.ts`, this may already work).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add packages/contracts/src/runtime-api.ts
