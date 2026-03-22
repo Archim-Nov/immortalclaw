@@ -58,3 +58,48 @@ test("updateAgentWebhookUrl rejects non-HTTPS URLs in production", async () => {
     /HTTPS/,
   );
 });
+
+test("updateAgentWebhookUrl rejects empty webhook URLs", async () => {
+  const repository = {
+    saveAgentProfile: async (_input: AgentProfileWriteInput) => createProfile(),
+  };
+
+  await assert.rejects(
+    updateAgentWebhookUrl({
+      repository,
+      agent: createProfile(),
+      webhookUrl: "   ",
+    }),
+    /provided/,
+  );
+});
+
+test("updateAgentWebhookUrl rejects malformed URLs", async () => {
+  const repository = {
+    saveAgentProfile: async (_input: AgentProfileWriteInput) => createProfile(),
+  };
+
+  await assert.rejects(
+    updateAgentWebhookUrl({
+      repository,
+      agent: createProfile(),
+      webhookUrl: "not-a-url",
+    }),
+    /valid URL/,
+  );
+});
+
+test("updateAgentWebhookUrl rejects webhook URLs longer than 2048 characters", async () => {
+  const repository = {
+    saveAgentProfile: async (_input: AgentProfileWriteInput) => createProfile(),
+  };
+
+  await assert.rejects(
+    updateAgentWebhookUrl({
+      repository,
+      agent: createProfile(),
+      webhookUrl: `https://example.com/${"a".repeat(2050)}`,
+    }),
+    /2048/,
+  );
+});

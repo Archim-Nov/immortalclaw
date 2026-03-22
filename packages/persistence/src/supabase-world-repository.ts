@@ -612,7 +612,7 @@ export class SupabaseWorldRepository implements WorldRepository {
     const rows = await this.selectRows<AgentProfileRow>("agent_profiles", {
       agent_id: `eq.${encodeURIComponent(agentId)}`,
       select:
-        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,created_at,updated_at,last_seen_at",
+        "agent_id,name,selected_cultivator_id,gender_presentation,pronouns,origin,temperament,webhook_url,webhook_secret,created_at,updated_at,last_seen_at",
       limit: "1",
     });
 

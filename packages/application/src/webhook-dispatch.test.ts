@@ -4,6 +4,7 @@ import { createSeedWorld, syncCultivatorFromPersona } from "../../domain/src/run
 import type { TickSummary } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
 import {
+  dispatchWebhooks,
   resolveMessageWebhookTarget,
   resolveWebhookTargets,
   signPayload,
@@ -135,6 +136,65 @@ test("signPayload produces different signatures for different secrets", async ()
   const sig1 = await signPayload(body, "secret-a");
   const sig2 = await signPayload(body, "secret-b");
   assert.notEqual(sig1, sig2);
+});
+
+test("dispatchWebhooks posts signed payloads and ignores delivery failures", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+
+    if (String(input).includes("fail")) {
+      throw new Error("network down");
+    }
+
+    return new Response(null, { status: 202 });
+  };
+
+  await dispatchWebhooks(
+    [
+      {
+        agentId: "agent-1",
+        webhookUrl: "https://example.com/hooks/immortal-realm",
+        webhookSecret: "whsec_one",
+        payload: {
+          event: "tick",
+          tick: 11,
+          reason: "Your meditation completed.",
+        },
+      },
+      {
+        agentId: "agent-2",
+        webhookUrl: "https://fail.example.com/hooks/immortal-realm",
+        webhookSecret: "whsec_two",
+        payload: {
+          event: "message",
+          tick: 12,
+          reason: "You received a message from Xu Ling.",
+        },
+      },
+    ],
+    fetchImpl,
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.url, "https://example.com/hooks/immortal-realm");
+  assert.equal(calls[0]?.init?.method, "POST");
+  assert.equal(
+    (calls[0]?.init?.headers as Record<string, string>)["Content-Type"],
+    "application/json",
+  );
+  assert.match(
+    (calls[0]?.init?.headers as Record<string, string>)["X-Immortal-Signature"],
+    /^sha256=[0-9a-f]{64}$/,
+  );
+  assert.equal(
+    calls[0]?.init?.body,
+    JSON.stringify({
+      event: "tick",
+      tick: 11,
+      reason: "Your meditation completed.",
+    }),
+  );
 });
 
 test("resolveMessageWebhookTarget returns null when recipient has no webhook", () => {
