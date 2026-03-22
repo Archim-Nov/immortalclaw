@@ -91,6 +91,10 @@ function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
+function issueWebhookSecret(webhookUrl: string | undefined): string | undefined {
+  return webhookUrl ? `whsec_${crypto.randomUUID()}` : undefined;
+}
+
 async function hashCredential(credential: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential.trim()));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -395,6 +399,7 @@ export class SupabaseWorldRepository implements WorldRepository {
       origin: input.origin,
       temperament: input.temperament,
       webhookUrl: input.webhookUrl,
+      webhookSecret: issueWebhookSecret(input.webhookUrl),
     });
     const credential = await this.issueAgentCredential(agentId);
 

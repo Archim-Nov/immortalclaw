@@ -9,6 +9,11 @@ export interface WebhookTarget {
   payload: WebhookWakePayload;
 }
 
+type WebhookEnabledAgentProfile = AgentProfileRecord & {
+  webhookUrl: string;
+  webhookSecret: string;
+};
+
 function buildCultivatorToAgentMap(world: WorldState): Map<string, string> {
   const map = new Map<string, string>();
 
@@ -40,12 +45,12 @@ function buildWakePayload(event: WebhookWakePayload["event"], tick: number, reas
 function resolveTargetProfile(
   agentLookup: Map<string, AgentProfileRecord>,
   agentId: string,
-): AgentProfileRecord | null {
+): WebhookEnabledAgentProfile | null {
   const profile = agentLookup.get(agentId);
   if (!profile?.webhookUrl || !profile.webhookSecret) {
     return null;
   }
-  return profile;
+  return profile as WebhookEnabledAgentProfile;
 }
 
 export function resolveWebhookTargets(

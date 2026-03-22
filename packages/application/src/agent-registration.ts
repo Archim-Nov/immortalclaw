@@ -31,6 +31,10 @@ export interface RegisterAgentWorkflowOptions {
   baseUrl: string;
 }
 
+function issueWebhookSecret(webhookUrl: string | undefined): string | undefined {
+  return webhookUrl ? `whsec_${crypto.randomUUID()}` : undefined;
+}
+
 export async function registerAgentWorkflow(
   options: RegisterAgentWorkflowOptions,
 ): Promise<AgentRegistrationResponse> {
@@ -64,6 +68,7 @@ export async function registerAgentWorkflow(
     origin: input.origin,
     temperament: input.temperament,
     webhookUrl: input.webhookUrl,
+    webhookSecret: issueWebhookSecret(input.webhookUrl),
   });
   const credential = await repository.issueAgentCredential(agentId);
   const [state, savedRecord] = await Promise.all([

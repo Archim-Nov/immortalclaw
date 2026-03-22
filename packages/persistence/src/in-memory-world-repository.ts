@@ -41,6 +41,10 @@ function issueCredential(): string {
   return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
+function issueWebhookSecret(webhookUrl: string | undefined): string | undefined {
+  return webhookUrl ? `whsec_${crypto.randomUUID()}` : undefined;
+}
+
 function clearAgentCredentials(agentCredentials: Map<string, string>, agentId: string) {
   for (const [credential, storedAgentId] of agentCredentials.entries()) {
     if (storedAgentId === agentId) {
@@ -224,6 +228,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       origin: input.origin,
       temperament: input.temperament,
       webhookUrl: input.webhookUrl,
+      webhookSecret: issueWebhookSecret(input.webhookUrl),
     });
 
     const credential = await this.issueAgentCredential(agentId);
