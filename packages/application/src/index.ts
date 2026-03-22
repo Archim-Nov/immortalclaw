@@ -33,6 +33,8 @@ export type {
 } from "./agent-registration.js";
 export { buildAuthenticatedAgentState, toAgentView } from "./agent-onboarding.js";
 export type { AgentOnboardingRepository } from "./agent-onboarding.js";
+export { updateAgentWebhookUrl } from "./agent-webhook.js";
+export type { AgentWebhookRepository } from "./agent-webhook.js";
 export { buildPublicAgentDirectory, buildPublicAgentState } from "./public-agents.js";
 export type {
   PublicAgentDirectoryRepository,

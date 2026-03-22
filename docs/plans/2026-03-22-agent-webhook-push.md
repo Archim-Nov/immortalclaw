@@ -488,7 +488,7 @@ git commit -m "feat(application): add webhook dispatch module with event routing
 - Create: `packages/application/src/agent-webhook.ts`
 - Create: `packages/application/src/agent-webhook.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Create `packages/application/src/agent-webhook.test.ts`:
 
@@ -555,12 +555,12 @@ test("updateAgentWebhookUrl rejects non-HTTPS URLs in production", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test packages/application/src/agent-webhook.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `updateAgentWebhookUrl`**
+- [x] **Step 3: Implement `updateAgentWebhookUrl`**
 
 Create `packages/application/src/agent-webhook.ts`:
 
@@ -613,12 +613,12 @@ export async function updateAgentWebhookUrl(options: {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test packages/application/src/agent-webhook.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 5: Export from application index**
+- [x] **Step 5: Export from application index**
 
 Add to `packages/application/src/index.ts`:
 
@@ -626,7 +626,7 @@ Add to `packages/application/src/index.ts`:
 export { updateAgentWebhookUrl } from "./agent-webhook.js";
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/application/src/agent-webhook.ts packages/application/src/agent-webhook.test.ts packages/application/src/index.ts
