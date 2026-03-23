@@ -1148,7 +1148,7 @@ test("agent registration and authenticated state retrieval", async () => {
 });
 ```
 
-Implement `createMinimalAnswers()` by referencing the questionnaire schema from `packages/domain/src/questionnaire.ts` — provide one valid answer per question.
+Implement `createMinimalAnswers()` by referencing the questionnaire schema from `packages/domain/src/registration-questionnaire.ts` — provide one valid answer per question.
 
 - [ ] **Step 4: Port CORS tests from runtime-worker**
 
@@ -1171,6 +1171,7 @@ Create `apps/runtime-worker/test/do-lifecycle.test.ts` (uses `wrangler` unstable
 // Run via: npx wrangler dev --test (or vitest with pool-workers)
 
 import { env, runDurableObjectAlarm } from "cloudflare:test";
+import { test, expect } from "vitest";
 
 test("DO initializes schema and sets alarm on first fetch", async () => {
   const id = env.WORLD.idFromName("test-lifecycle");
@@ -1226,8 +1227,8 @@ Expected: Both PASS
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/world-do/src/index.test.ts apps/world-do/src/test-helpers.ts
-git commit -m "test: add integration tests for WorldDurableObject routes"
+git add apps/world-do/src/routes.test.ts apps/world-do/src/test-helpers.ts apps/world-do/src/middleware.test.ts apps/world-do/src/env.test.ts apps/runtime-worker/test/do-lifecycle.test.ts apps/runtime-worker/vitest.config.ts
+git commit -m "test: add route-level and DO lifecycle tests for WorldDurableObject"
 ```
 
 ---
