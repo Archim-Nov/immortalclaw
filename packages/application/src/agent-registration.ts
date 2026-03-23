@@ -15,17 +15,19 @@ import type {
   AgentProfileWriteInput,
   AgentRegistrationInput,
 } from "../../persistence/src/world-repository.js";
+import type { AuthClient } from "../../persistence/src/auth-client.js";
 
-export interface AgentRegistrationWorkflowRepository {
+export interface AgentRegistrationWorldRepository {
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
-  saveAgentProfile(input: AgentProfileWriteInput): Promise<AgentProfileRecord>;
-  issueAgentCredential(agentId: string): Promise<AgentCredentialResetResult>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null>;
 }
 
+export interface AgentRegistrationAuthClient extends Pick<AuthClient, "saveAgentProfile" | "issueAgentCredential"> {}
+
 export interface RegisterAgentWorkflowOptions {
-  repository: AgentRegistrationWorkflowRepository;
+  world: AgentRegistrationWorldRepository;
+  auth: AgentRegistrationAuthClient;
   input: AgentRegistrationInput;
   questionnaireSource: "answers" | "record";
   baseUrl: string;
@@ -34,10 +36,10 @@ export interface RegisterAgentWorkflowOptions {
 export async function registerAgentWorkflow(
   options: RegisterAgentWorkflowOptions,
 ): Promise<AgentRegistrationResponse> {
-  const { repository, input, questionnaireSource, baseUrl } = options;
+  const { world, auth, input, questionnaireSource, baseUrl } = options;
   const agentId = crypto.randomUUID();
-  const sync = await repository.transactWorld((world) => {
-    const result = syncCultivatorFromPersona(world, {
+  const sync = await world.transactWorld((draftWorld) => {
+    const result = syncCultivatorFromPersona(draftWorld, {
       agentId,
       name: input.name.trim(),
       genderPresentation: input.genderPresentation,
@@ -48,13 +50,13 @@ export async function registerAgentWorkflow(
     });
 
     if (input.record) {
-      saveCultivationRegistration(world, result.selectedCultivatorId, input.record, agentId);
+      saveCultivationRegistration(draftWorld, result.selectedCultivatorId, input.record, agentId);
     }
 
     return result;
   });
 
-  const payload = await repository.saveAgentProfile({
+  const payload = await auth.saveAgentProfile({
     agentId,
     name: input.name.trim(),
     selectedCultivatorId: sync.selectedCultivatorId,
@@ -64,10 +66,10 @@ export async function registerAgentWorkflow(
     origin: input.origin,
     temperament: input.temperament,
   });
-  const credential = await repository.issueAgentCredential(agentId);
+  const credential = await auth.issueAgentCredential(agentId);
   const [state, savedRecord] = await Promise.all([
-    repository.getCultivatorState(payload.selectedCultivatorId),
-    repository.getCultivationRegistration(payload.selectedCultivatorId),
+    world.getCultivatorState(payload.selectedCultivatorId),
+    world.getCultivationRegistration(payload.selectedCultivatorId),
   ]);
   const registrationProfile = savedRecord ? buildRegistrationProfile(savedRecord) : null;
   const messageDetails = registrationProfile

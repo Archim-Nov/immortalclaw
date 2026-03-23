@@ -9,10 +9,12 @@ test("syncAgentPersonaWorkflow updates an existing agent profile after syncing t
   const savedProfiles: AgentProfileWriteInput[] = [];
 
   const result = await syncAgentPersonaWorkflow({
-    repository: {
+    world: {
       async transactWorld(mutator) {
         return mutator(world);
       },
+    },
+    auth: {
       async getAgentProfile() {
         return {
           agentId: "agent-1",
@@ -29,6 +31,7 @@ test("syncAgentPersonaWorkflow updates an existing agent profile after syncing t
         savedProfiles.push(input);
         return {
           ...input,
+          lastSeenAt: input.lastSeenAt ?? null,
           createdAt: "2026-03-17T00:00:00.000Z",
           updatedAt: "2026-03-17T00:00:01.000Z",
         };
@@ -53,10 +56,12 @@ test("syncAgentPersonaWorkflow keeps legacy no-profile behavior when the agent p
   let saved = false;
 
   const result = await syncAgentPersonaWorkflow({
-    repository: {
+    world: {
       async transactWorld(mutator) {
         return mutator(world);
       },
+    },
+    auth: {
       async getAgentProfile() {
         return null;
       },

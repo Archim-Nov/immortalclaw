@@ -28,7 +28,7 @@ test("buildAuthenticatedAgentActions assembles agent view plus available actions
   ];
 
   const payload = await buildAuthenticatedAgentActions({
-    repository: {
+    world: {
       async listAvailableActions(cultivatorId) {
         calls.cultivatorId = cultivatorId;
         return actions;

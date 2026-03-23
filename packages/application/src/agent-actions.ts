@@ -8,13 +8,13 @@ export interface AgentActionsRepository {
 }
 
 export async function buildAuthenticatedAgentActions(options: {
-  repository: AgentActionsRepository;
+  world: AgentActionsRepository;
   agent: AgentProfileRecord;
 }): Promise<AgentActionsResponse> {
-  const { repository, agent } = options;
+  const { world, agent } = options;
   return {
     agent: toAgentView(agent),
     cultivatorId: agent.selectedCultivatorId,
-    actions: await repository.listAvailableActions(agent.selectedCultivatorId),
+    actions: await world.listAvailableActions(agent.selectedCultivatorId),
   };
 }

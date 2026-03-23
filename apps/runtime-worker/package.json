@@ -4,13 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test:do": "vitest run --config ./vitest.config.ts"
   },
   "dependencies": {
-    "hono": "^4.12.8"
+    "@immortal-claw/world-do": "*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20260310.1",
+    "@cloudflare/vitest-pool-workers": "^0.13.3",
+    "@cloudflare/workers-types": "4.20260317.1",
+    "vitest": "^4.1.0",
     "wrangler": "^4.75.0"
   }
 }

@@ -15,29 +15,29 @@ export interface AgentOperationsRepository {
 }
 
 export async function saveAuthenticatedAgentRegistration(options: {
-  repository: Pick<AgentOperationsRepository, "transactWorld">;
+  world: Pick<AgentOperationsRepository, "transactWorld">;
   agent: AgentProfileRecord;
   record: CultivationRegistrationRecord;
 }): Promise<CultivationRegistrationRecord> {
-  const { repository, agent, record } = options;
-  return repository.transactWorld((world) =>
-    saveCultivationRegistration(world, agent.selectedCultivatorId, record, agent.agentId),
+  const { world, agent, record } = options;
+  return world.transactWorld((draftWorld) =>
+    saveCultivationRegistration(draftWorld, agent.selectedCultivatorId, record, agent.agentId),
   );
 }
 
 export async function performAuthenticatedAgentAction(options: {
-  repository: Pick<AgentOperationsRepository, "performAction">;
+  world: Pick<AgentOperationsRepository, "performAction">;
   agent: AgentProfileRecord;
   actionId: ActionId;
 }): Promise<ActionExecutionResult> {
-  const { repository, agent, actionId } = options;
-  return repository.performAction(agent.selectedCultivatorId, actionId);
+  const { world, agent, actionId } = options;
+  return world.performAction(agent.selectedCultivatorId, actionId);
 }
 
 export async function advanceAuthenticatedAgentWorld(options: {
-  repository: Pick<AgentOperationsRepository, "advanceWorld">;
+  world: Pick<AgentOperationsRepository, "advanceWorld">;
   steps: number;
 }): Promise<TickSummary> {
-  const { repository, steps } = options;
-  return repository.advanceWorld(steps, "manual");
+  const { world, steps } = options;
+  return world.advanceWorld(steps, "manual");
 }

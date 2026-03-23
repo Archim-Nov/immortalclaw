@@ -644,7 +644,7 @@ export function deriveRegistrationRecordFromAnswers(
         ? "high"
         : "medium";
 
-  const result = {
+  const result: Omit<CultivationRegistrationRecord["result"], "label_locale"> = {
     core_temperament: coreTemperament,
     secondary_temperament: secondaryTemperament,
     behavior_aspect: behaviorAspect,

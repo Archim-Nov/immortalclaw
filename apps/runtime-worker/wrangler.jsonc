@@ -3,9 +3,14 @@
   "name": "immortal-claw-runtime-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",
-  "triggers": {
-    "crons": ["* * * * *"]
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORLD", "class_name": "WorldDurableObject" }
+    ]
   },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["WorldDurableObject"] }
+  ],
   "vars": {
     "FRONTEND_ORIGIN": "https://immortal-claw.pages.dev",
     "SUPABASE_URL": "https://hzbhriyqgsoilemdbyzd.supabase.co",

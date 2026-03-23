@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeedWorld } from "../../domain/src/runtime.js";
+import { createSeedWorld, getCultivatorState } from "../../domain/src/runtime.js";
 import { buildPublicAgentDirectory, buildPublicAgentState } from "./public-agents.js";
 
 test("buildPublicAgentDirectory returns only agents that still map to world cultivators", async () => {
@@ -12,10 +12,12 @@ test("buildPublicAgentDirectory returns only agents that still map to world cult
   }
 
   const payload = await buildPublicAgentDirectory({
-    repository: {
+    world: {
       async readWorld() {
         return world;
       },
+    },
+    auth: {
       async listAgentProfiles() {
         return [
           {
@@ -54,10 +56,15 @@ test("buildPublicAgentState assembles the stat-page payload for a registered age
   }
 
   const payload = await buildPublicAgentState({
-    repository: {
+    world: {
       async readWorld() {
         return world;
       },
+      async getCultivatorState(inputCultivatorId) {
+        return getCultivatorState(world, inputCultivatorId);
+      },
+    },
+    auth: {
       async getAgentProfile() {
         return {
           agentId: "agent-1",
@@ -66,69 +73,6 @@ test("buildPublicAgentState assembles the stat-page payload for a registered age
           createdAt: "2026-03-17T00:00:00.000Z",
           updatedAt: "2026-03-17T00:00:00.000Z",
           lastSeenAt: "2026-03-17T00:00:00.000Z",
-        };
-      },
-      async getCultivatorState(inputCultivatorId) {
-        return {
-          tick: 0,
-          cultivator: {
-            id: inputCultivatorId,
-            name: world.cultivators[inputCultivatorId]!.name,
-            realm: world.cultivators[inputCultivatorId]!.realm,
-            realmLevel: world.cultivators[inputCultivatorId]!.realmLevel,
-            realmProgress: world.cultivators[inputCultivatorId]!.realmProgress,
-            status: world.cultivators[inputCultivatorId]!.status,
-            location: world.locations[world.cultivators[inputCultivatorId]!.locationId]!.name,
-            spiritStones: world.cultivators[inputCultivatorId]!.spiritStones,
-            qi: world.cultivators[inputCultivatorId]!.qi,
-            maxQi: world.cultivators[inputCultivatorId]!.maxQi,
-            spiritualPower: world.cultivators[inputCultivatorId]!.spiritualPower,
-            maxSpiritualPower: world.cultivators[inputCultivatorId]!.maxSpiritualPower,
-            karma: world.cultivators[inputCultivatorId]!.karma,
-            reputation: world.cultivators[inputCultivatorId]!.reputation,
-            lifespan: world.cultivators[inputCultivatorId]!.lifespan,
-          },
-          cultivation: { mainTechnique: "Loose Breathing", techniques: ["Loose Breathing"] },
-          sect: null,
-          tribulation: {
-            nextTribulationTick: 100,
-            tribulationType: "None",
-            difficulty: 0,
-            isWarned: false,
-            preparationTime: 100,
-            supportScore: 0,
-          },
-          inventory: world.cultivators[inputCultivatorId]!.inventory,
-          inventoryDetails: [],
-          currentJob: null,
-          nearbyOpportunities: [],
-          statusEffects: [],
-          factionReputation: [],
-          recentEvents: [],
-          recentCombats: [],
-          registration: null,
-          registrationEffects: null,
-          derivedState: {
-            readiness: "ready",
-            recoveryState: "healthy",
-            activityContext: "settled",
-            daoPotential: {
-              score: 50,
-              tier: "steady",
-              nextMilestone: 65,
-            },
-          },
-          onboarding: {
-            stage: "registered",
-            completedSteps: ["register"],
-            nextAction: "take-mortal-task",
-            summary: "Ready to start.",
-          },
-          agentGuidance: {
-            warnings: [],
-            priorities: [],
-            suggestedActions: [],
-          },
         };
       },
     },

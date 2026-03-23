@@ -16,64 +16,64 @@ export interface AgentInsightsRepository {
 }
 
 export async function buildAuthenticatedAgentEvents(options: {
-  repository: Pick<AgentInsightsRepository, "readWorld">;
+  world: Pick<AgentInsightsRepository, "readWorld">;
   agent: AgentProfileRecord;
   sinceTick?: number;
 }): Promise<AgentEventsResponse> {
-  const { repository, agent, sinceTick } = options;
-  const world = await repository.readWorld();
-  const events = getRecentWorldEvents(world, agent.selectedCultivatorId, 50).filter((event) =>
+  const { world, agent, sinceTick } = options;
+  const snapshot = await world.readWorld();
+  const events = getRecentWorldEvents(snapshot, agent.selectedCultivatorId, 50).filter((event) =>
     sinceTick === undefined ? true : event.tick >= sinceTick,
   );
-  const combats = world.combatLogs
+  const combats = snapshot.combatLogs
     .filter((entry) => entry.cultivatorId === agent.selectedCultivatorId)
     .filter((entry) => (sinceTick === undefined ? true : entry.tick >= sinceTick))
     .slice(0, 20);
 
   return {
     agent: toAgentView(agent),
-    tick: world.tick,
+    tick: snapshot.tick,
     events,
     combats,
   };
 }
 
 export async function readAuthenticatedAgentStrategy(options: {
-  repository: Pick<AgentInsightsRepository, "readWorld">;
+  world: Pick<AgentInsightsRepository, "readWorld">;
   agent: AgentProfileRecord;
 }): Promise<AgentStrategyResponse> {
-  const { repository, agent } = options;
-  return getStrategySnapshot(await repository.readWorld(), agent.selectedCultivatorId);
+  const { world, agent } = options;
+  return getStrategySnapshot(await world.readWorld(), agent.selectedCultivatorId);
 }
 
 export async function readAuthenticatedAgentTribulation(options: {
-  repository: Pick<AgentInsightsRepository, "readWorld">;
+  world: Pick<AgentInsightsRepository, "readWorld">;
   agent: AgentProfileRecord;
 }): Promise<AgentTribulationResponse> {
-  const { repository, agent } = options;
-  return getTribulationPreview(await repository.readWorld(), agent.selectedCultivatorId);
+  const { world, agent } = options;
+  return getTribulationPreview(await world.readWorld(), agent.selectedCultivatorId);
 }
 
 export async function readAuthenticatedAgentSectInfo(options: {
-  repository: Pick<AgentInsightsRepository, "readWorld">;
+  world: Pick<AgentInsightsRepository, "readWorld">;
   agent: AgentProfileRecord;
 }): Promise<ReturnType<typeof getSectInfo>> {
-  const { repository, agent } = options;
-  return getSectInfo(await repository.readWorld(), agent.selectedCultivatorId);
+  const { world, agent } = options;
+  return getSectInfo(await world.readWorld(), agent.selectedCultivatorId);
 }
 
 export async function readAuthenticatedAgentDaoLogs(options: {
-  repository: Pick<AgentInsightsRepository, "readWorld">;
+  world: Pick<AgentInsightsRepository, "readWorld">;
   agent: AgentProfileRecord;
 }): Promise<ReturnType<typeof getDaoLogs>> {
-  const { repository, agent } = options;
-  return getDaoLogs(await repository.readWorld(), agent.selectedCultivatorId);
+  const { world, agent } = options;
+  return getDaoLogs(await world.readWorld(), agent.selectedCultivatorId);
 }
 
 export async function readAuthenticatedAgentRegistration(options: {
-  repository: Pick<AgentInsightsRepository, "getCultivationRegistration">;
+  world: Pick<AgentInsightsRepository, "getCultivationRegistration">;
   agent: AgentProfileRecord;
 }): Promise<CultivationRegistrationRecord | null> {
-  const { repository, agent } = options;
-  return repository.getCultivationRegistration(agent.selectedCultivatorId);
+  const { world, agent } = options;
+  return world.getCultivationRegistration(agent.selectedCultivatorId);
 }

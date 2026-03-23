@@ -6,18 +6,21 @@ import {
 import { statusOf } from "../../domain/src/runtime.js";
 import type { CultivatorStateView, WorldState } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
+import type { AuthClient } from "../../persistence/src/auth-client.js";
 import { toAgentView } from "./agent-onboarding.js";
 
-export interface PublicAgentDirectoryRepository {
+export interface PublicAgentDirectoryWorldRepository {
   readWorld(): Promise<WorldState>;
-  listAgentProfiles(): Promise<AgentProfileRecord[]>;
 }
 
-export interface PublicAgentStateRepository {
+export interface PublicAgentDirectoryAuthClient extends Pick<AuthClient, "listAgentProfiles"> {}
+
+export interface PublicAgentStateWorldRepository {
   readWorld(): Promise<WorldState>;
-  getAgentProfile(agentId: string): Promise<AgentProfileRecord | null>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
 }
+
+export interface PublicAgentStateAuthClient extends Pick<AuthClient, "getAgentProfile"> {}
 
 function locationNameOf(world: WorldState, locationId: string): string {
   return (
@@ -49,32 +52,36 @@ function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
   };
 }
 
-export async function buildPublicAgentDirectory(options: { repository: PublicAgentDirectoryRepository }) {
-  const { repository } = options;
-  const [world, agentProfiles] = await Promise.all([repository.readWorld(), repository.listAgentProfiles()]);
+export async function buildPublicAgentDirectory(options: {
+  world: PublicAgentDirectoryWorldRepository;
+  auth: PublicAgentDirectoryAuthClient;
+}) {
+  const { world, auth } = options;
+  const [snapshot, agentProfiles] = await Promise.all([world.readWorld(), auth.listAgentProfiles()]);
   return {
     agents: agentProfiles
-      .filter((agent) => Boolean(world.cultivators[agent.selectedCultivatorId]))
-      .map((agent) => buildDirectoryEntry(agent, world)),
+      .filter((agent) => Boolean(snapshot.cultivators[agent.selectedCultivatorId]))
+      .map((agent) => buildDirectoryEntry(agent, snapshot)),
   };
 }
 
 export async function buildPublicAgentState(options: {
-  repository: PublicAgentStateRepository;
+  world: PublicAgentStateWorldRepository;
+  auth: PublicAgentStateAuthClient;
   agentId: string;
 }) {
-  const { repository, agentId } = options;
-  const agent = await repository.getAgentProfile(agentId);
+  const { world, auth, agentId } = options;
+  const agent = await auth.getAgentProfile(agentId);
 
   if (!agent || !agent.selectedCultivatorId) {
     return null;
   }
 
-  const [cultivatorState, world] = await Promise.all([
-    repository.getCultivatorState(agent.selectedCultivatorId),
-    repository.readWorld(),
+  const [cultivatorState, snapshot] = await Promise.all([
+    world.getCultivatorState(agent.selectedCultivatorId),
+    world.readWorld(),
   ]);
-  const cultivator = world.cultivators[agent.selectedCultivatorId];
+  const cultivator = snapshot.cultivators[agent.selectedCultivatorId];
 
   if (!cultivator) {
     return null;

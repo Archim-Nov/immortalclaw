@@ -12,12 +12,12 @@ export interface AgentCredentialRepository {
 }
 
 export async function resetAuthenticatedAgentCredential(options: {
-  repository: AgentCredentialRepository;
+  auth: AgentCredentialRepository;
   agent: AgentProfileRecord;
   currentCredential: string;
 }): Promise<AgentCredentialResetResponse> {
-  const { repository, agent, currentCredential } = options;
-  const payload = await repository.resetAgentCredential(agent.agentId, currentCredential);
+  const { auth, agent, currentCredential } = options;
+  const payload = await auth.resetAgentCredential(agent.agentId, currentCredential);
   return {
     ok: true,
     agentId: payload.agentId,

@@ -70,7 +70,7 @@ function createState(): CultivatorStateView {
     cultivator: {
       id: "cultivator-9",
       name: "Su Mingyue",
-      realm: "鐐兼皵",
+      realm: "炼气",
       realmLevel: 1,
       realmProgress: 0,
       status: "idle",
@@ -145,18 +145,24 @@ function createState(): CultivatorStateView {
     derivedState: {
       readiness: "ready",
       recoveryState: "healthy",
-      activityContext: "settled",
+      activityContext: "stationed",
       daoPotential: {
         score: 50,
-        tier: "steady",
-        nextMilestone: 65,
+        tier: "adept",
+        breakdown: {
+          realmBase: 20,
+          attributeAverage: 20,
+          detailedAttributeModifier: 8,
+          readinessModifier: 1,
+          statusModifier: 1,
+        },
       },
     },
     onboarding: {
       stage: "registered",
-      completedSteps: ["register"],
+      completedStages: [],
       nextAction: "take-mortal-task",
-      summary: "Ready to start.",
+      hint: "Ready to start.",
     },
     agentGuidance: {
       warnings: [],
@@ -177,10 +183,26 @@ test("registerAgentWorkflow assembles the richer registration response in applic
   const world = createSeedWorld();
 
   const payload = await registerAgentWorkflow({
-    repository: {
+    world: {
       async transactWorld(mutator) {
         return mutator(world);
       },
+      async getCultivatorState(cultivatorId) {
+        calls.cultivatorId = cultivatorId;
+        return {
+          ...state,
+          cultivator: {
+            ...state.cultivator,
+            id: cultivatorId,
+            name: calls.savedProfile?.name ?? state.cultivator.name,
+          },
+        } satisfies CultivatorStateView;
+      },
+      async getCultivationRegistration(cultivatorId) {
+        return world.cultivators[cultivatorId]?.registrationRecord ?? null;
+      },
+    },
+    auth: {
       async saveAgentProfile(input) {
         calls.savedProfile = input;
         return {
@@ -198,20 +220,6 @@ test("registerAgentWorkflow assembles the richer registration response in applic
           agentId,
           credential: "immortal_sk_test",
         };
-      },
-      async getCultivatorState(cultivatorId) {
-        calls.cultivatorId = cultivatorId;
-        return {
-          ...state,
-          cultivator: {
-            ...state.cultivator,
-            id: cultivatorId,
-            name: calls.savedProfile?.name ?? state.cultivator.name,
-          },
-        } satisfies CultivatorStateView;
-      },
-      async getCultivationRegistration(cultivatorId) {
-        return world.cultivators[cultivatorId]?.registrationRecord ?? null;
       },
     },
     input: {

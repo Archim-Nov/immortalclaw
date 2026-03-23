@@ -1,29 +1,24 @@
-import type { WorldRepository } from "../../../packages/persistence/src/index.js";
-import {
-  createInMemoryWorldRepository,
-  createSupabaseWorldRepository,
-} from "../../../packages/persistence/src/index.js";
+import type { AuthClient } from "../../../packages/persistence/src/auth-client.js";
+import type { WorldRepository } from "../../../packages/persistence/src/world-repository.js";
 
 export const LOCAL_VITE_DEV_PORT = 5173;
 export const LOCAL_VITE_PREVIEW_PORT = 4173;
 export const LOCAL_VITE_DEV_ORIGIN = `http://localhost:${LOCAL_VITE_DEV_PORT}`;
 export const LOCAL_VITE_PREVIEW_ORIGIN = `http://localhost:${LOCAL_VITE_PREVIEW_PORT}`;
 
-export interface RuntimeWorkerBindings {
+export interface WorldDOEnv {
   FRONTEND_ORIGIN?: string;
-  SUPABASE_URL?: string;
-  SUPABASE_SECRET_KEY?: string;
+  SUPABASE_URL: string;
+  SUPABASE_SECRET_KEY: string;
   WORLD_TICK_STEPS?: string;
-  REPOSITORY?: WorldRepository;
 }
 
-export interface RuntimeWorkerVariables {
-  repository?: WorldRepository;
-}
-
-export interface RuntimeWorkerEnv {
-  Bindings: RuntimeWorkerBindings;
-  Variables: RuntimeWorkerVariables;
+export interface WorldDOHonoEnv {
+  Bindings: WorldDOEnv;
+  Variables: {
+    world: WorldRepository;
+    auth: AuthClient;
+  };
 }
 
 function invalidFrontendOriginError() {
@@ -78,13 +73,10 @@ function isPagesPreviewOrigin(originUrl: URL, frontendUrl: URL): boolean {
     return false;
   }
 
-  return (
-    originUrl.hostname.endsWith(`.${frontendUrl.hostname}`) &&
-    isDnsLabel(originLabels[0])
-  );
+  return originUrl.hostname.endsWith(`.${frontendUrl.hostname}`) && isDnsLabel(originLabels[0]);
 }
 
-export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
+export function readFrontendOrigin(bindings?: Pick<WorldDOEnv, "FRONTEND_ORIGIN">): string {
   const trimmed = bindings?.FRONTEND_ORIGIN?.trim();
   if (!trimmed) {
     throw new Error("FRONTEND_ORIGIN must be configured.");
@@ -98,7 +90,7 @@ export function readFrontendOrigin(bindings?: RuntimeWorkerBindings): string {
   return url.origin;
 }
 
-export function resolveCorsOrigins(bindings?: RuntimeWorkerBindings): string[] {
+export function resolveCorsOrigins(bindings?: Pick<WorldDOEnv, "FRONTEND_ORIGIN">): string[] {
   return [
     ...new Set([
       readFrontendOrigin(bindings),
@@ -108,7 +100,7 @@ export function resolveCorsOrigins(bindings?: RuntimeWorkerBindings): string[] {
   ];
 }
 
-export function isAllowedCorsOrigin(origin: string, bindings?: RuntimeWorkerBindings): boolean {
+export function isAllowedCorsOrigin(origin: string, bindings?: Pick<WorldDOEnv, "FRONTEND_ORIGIN">): boolean {
   const originUrl = readAbsoluteOriginUrl(origin);
   if (!originUrl) {
     return false;
@@ -127,32 +119,10 @@ export function isAllowedCorsOrigin(origin: string, bindings?: RuntimeWorkerBind
   return isPagesPreviewOrigin(originUrl, new URL(frontendOrigin));
 }
 
-export function readTickSteps(bindings: RuntimeWorkerBindings): number {
+export function readTickSteps(bindings: Pick<WorldDOEnv, "WORLD_TICK_STEPS">): number {
   const parsed = Number(bindings.WORLD_TICK_STEPS ?? 1);
   if (!Number.isFinite(parsed)) {
     return 1;
   }
   return Math.max(1, Math.min(20, Math.floor(parsed)));
-}
-
-export function resolveRepository(
-  bindings: RuntimeWorkerBindings,
-  repository?: WorldRepository,
-): WorldRepository {
-  if (repository) {
-    return repository;
-  }
-
-  if (bindings.REPOSITORY) {
-    return bindings.REPOSITORY;
-  }
-
-  if (bindings.SUPABASE_URL && bindings.SUPABASE_SECRET_KEY) {
-    return createSupabaseWorldRepository({
-      url: bindings.SUPABASE_URL,
-      secretKey: bindings.SUPABASE_SECRET_KEY,
-    });
-  }
-
-  return createInMemoryWorldRepository();
 }

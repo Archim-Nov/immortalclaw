@@ -156,7 +156,7 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
   );
 
   const payload = await buildAuthenticatedAgentEvents({
-    repository: {
+    world: {
       async readWorld(): Promise<WorldState> {
         return world;
       },
@@ -210,7 +210,7 @@ test("authenticated insight readers derive strategy, tribulation, sect, dao logs
   const expectedDaoLogs = getDaoLogs(world, cultivatorId);
   const registrationRecord = createRegistrationRecord();
 
-  const repository = {
+  const worldRepository = {
     async readWorld(): Promise<WorldState> {
       return world;
     },
@@ -220,9 +220,9 @@ test("authenticated insight readers derive strategy, tribulation, sect, dao logs
     },
   };
 
-  assert.deepEqual(await readAuthenticatedAgentStrategy({ repository, agent }), expectedStrategy);
-  assert.deepEqual(await readAuthenticatedAgentTribulation({ repository, agent }), expectedTribulation);
-  assert.deepEqual(await readAuthenticatedAgentSectInfo({ repository, agent }), expectedSect);
-  assert.deepEqual(await readAuthenticatedAgentDaoLogs({ repository, agent }), expectedDaoLogs);
-  assert.deepEqual(await readAuthenticatedAgentRegistration({ repository, agent }), registrationRecord);
+  assert.deepEqual(await readAuthenticatedAgentStrategy({ world: worldRepository, agent }), expectedStrategy);
+  assert.deepEqual(await readAuthenticatedAgentTribulation({ world: worldRepository, agent }), expectedTribulation);
+  assert.deepEqual(await readAuthenticatedAgentSectInfo({ world: worldRepository, agent }), expectedSect);
+  assert.deepEqual(await readAuthenticatedAgentDaoLogs({ world: worldRepository, agent }), expectedDaoLogs);
+  assert.deepEqual(await readAuthenticatedAgentRegistration({ world: worldRepository, agent }), registrationRecord);
 });

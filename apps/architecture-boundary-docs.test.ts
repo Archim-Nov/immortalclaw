@@ -8,6 +8,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const readmePath = path.join(repoRoot, "README.md");
 const legacyApiPath = path.join(repoRoot, "apps", "world-api");
 const legacyWorkerPath = path.join(repoRoot, "apps", "world-worker");
+const worldDoSourcePath = path.join(repoRoot, "apps", "world-do", "src");
 
 function readDocument(documentPath: string): string {
   assert.equal(existsSync(documentPath), true, `expected document at ${documentPath}`);
@@ -18,7 +19,10 @@ test("README defines one official production runtime path and fences legacy harn
   const readme = readDocument(readmePath);
 
   assert.match(readme, /official production runtime path/i);
-  assert.match(readme, /apps\/web -> apps\/runtime-worker -> packages\/application -> packages\/persistence -> packages\/domain/i);
+  assert.match(
+    readme,
+    /apps\/web -> apps\/runtime-worker -> apps\/world-do -> packages\/application -> packages\/persistence -> packages\/domain/i,
+  );
   assert.match(readme, /deleted legacy apps?/i);
   assert.match(readme, /not part of the product architecture/i);
   assert.doesNotMatch(readme, /Legacy SQLite Harnesses/i);
