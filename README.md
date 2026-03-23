@@ -271,6 +271,7 @@ This repo keeps lightweight delivery guidance in versioned docs:
 - `docs/product/vision.md`
 - `docs/process/spec-driven-development.md`
 - `docs/process/harness-engineering.md`
+- `docs/process/deployment-guide.md`
 - `docs/templates/`
 - `harness/README.md`
 
