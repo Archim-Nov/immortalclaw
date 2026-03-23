@@ -434,9 +434,12 @@ function createFakeSqlStorage(): SqlStorage {
   const db = new Database(":memory:");
   const sql: SqlStorage = {
     exec(query, ...bindings) {
-      if (bindings.length === 0) {
+      const trimmed = query.trimStart().toUpperCase();
+      const isQuery = trimmed.startsWith("SELECT");
+
+      if (isQuery) {
         const stmt = db.prepare(query);
-        const rows = stmt.all();
+        const rows = bindings.length > 0 ? stmt.all(...bindings) : stmt.all();
         return {
           toArray: () => rows,
           one: () => rows[0],
@@ -444,11 +447,13 @@ function createFakeSqlStorage(): SqlStorage {
           rowsWritten: 0,
         };
       }
+
+      // DDL (CREATE TABLE/INDEX) and DML (INSERT/UPDATE/DELETE)
       const stmt = db.prepare(query);
-      const info = stmt.run(...bindings);
+      const info = bindings.length > 0 ? stmt.run(...bindings) : stmt.run();
       return {
         toArray: () => [],
-        one: () => undefined,
+        one: () => undefined as any,
         rowsRead: 0,
         rowsWritten: info.changes,
       };
@@ -610,6 +615,7 @@ export type { AuthClient } from "./auth-client.js";
 // SQLite implementation
 export { SqliteWorldRepository } from "./sqlite-world-repository.js";
 export type { SqlStorage, SqlStorageCursor } from "./sqlite-world-repository.js";
+export { createSchema } from "./sqlite-schema.js";
 
 // Supabase auth
 export { SupabaseAuthClient, createSupabaseAuthClient } from "./supabase-auth-client.js";
@@ -1164,7 +1170,7 @@ Create `apps/runtime-worker/test/do-lifecycle.test.ts` (uses `wrangler` unstable
 // This test requires the Cloudflare Workers runtime.
 // Run via: npx wrangler dev --test (or vitest with pool-workers)
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { env, runDurableObjectAlarm } from "cloudflare:test";
 
 test("DO initializes schema and sets alarm on first fetch", async () => {
   const id = env.WORLD.idFromName("test-lifecycle");
@@ -1185,9 +1191,10 @@ test("DO alarm advances world tick", async () => {
   const res1 = await stub.fetch(new Request("http://localhost/world/status"));
   const tick1 = (await res1.json()).tick;
 
-  // Trigger alarm manually (test runtime supports this)
-  // The alarm should call advanceWorld() and increment the tick
-  await stub.alarm();
+  // Trigger alarm via Cloudflare's test helper (not stub.alarm())
+  // See: https://developers.cloudflare.com/workers/testing/vitest-integration/testing-durable-objects/
+  const alarmResult = await runDurableObjectAlarm(stub);
+  expect(alarmResult).toBe(true); // true = alarm handler ran
 
   const res2 = await stub.fetch(new Request("http://localhost/world/status"));
   const tick2 = (await res2.json()).tick;
