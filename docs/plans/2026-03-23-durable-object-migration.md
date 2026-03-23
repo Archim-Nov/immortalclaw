@@ -21,7 +21,7 @@
 | `apps/world-do/package.json` | Workspace package metadata, dependencies (hono) |
 | `apps/world-do/tsconfig.json` | TypeScript config extending root, cloudflare types |
 | `apps/world-do/src/index.ts` | `WorldDurableObject` class: constructor, fetch, alarm |
-| `apps/world-do/src/schema.ts` | SQLite table creation + index DDL |
+| `apps/world-do/src/test-helpers.ts` | Test helper for building Hono app with in-memory repos |
 | `apps/world-do/src/routes.ts` | Internal Hono router (moved from runtime-worker) |
 | `apps/world-do/src/middleware.ts` | CORS + error handling middleware (moved from runtime-worker) |
 | `apps/world-do/src/env.ts` | DO env types and helper functions |
@@ -31,6 +31,7 @@
 | `packages/persistence/src/supabase-auth-client.ts` | `SupabaseAuthClient` for credential/profile ops |
 | `packages/persistence/src/supabase-auth-client.test.ts` | Tests for auth client |
 | `packages/persistence/src/auth-client.ts` | `AuthClient` interface definition |
+| `packages/persistence/src/sqlite-schema.ts` | SQLite table creation + index DDL (used by both tests and DO) |
 | `supabase/migrations/20260323_drop_world_tables.sql` | Drop world tables, truncate auth tables |
 
 ### Modified Files
@@ -419,16 +420,42 @@ test("readWorld returns seeded world when database is empty", async () => {
 });
 ```
 
-**SQLite test strategy:** Use `better-sqlite3` as a devDependency to create a real in-memory SQLite database for testing. This gives us actual SQL execution without Cloudflare's runtime. Add `better-sqlite3` and `@types/better-sqlite3` to `packages/persistence/package.json` devDependencies. The `createFakeSqlStorage()` helper wraps `better-sqlite3` to match the `SqlStorage` interface:
+**SQLite test strategy:** Use `better-sqlite3` as a devDependency to create a real in-memory SQLite database for testing. This gives us actual SQL execution without Cloudflare's runtime. Add `better-sqlite3` and `@types/better-sqlite3` to `packages/persistence/package.json` devDependencies.
+
+**Schema ownership:** The schema DDL (`createSchema()`) lives in `packages/persistence/src/sqlite-schema.ts` — NOT in `apps/world-do/src/schema.ts` as originally planned. This allows Task 4's tests to import and run schema creation without depending on a package that doesn't exist yet. Task 6 (`apps/world-do/src/schema.ts`) is removed — the DO constructor imports `createSchema` directly from `@immortal-claw/persistence`.
+
+The `createFakeSqlStorage()` helper wraps `better-sqlite3` to match the `SqlStorage` interface and runs schema creation:
 
 ```ts
 import Database from "better-sqlite3";
+import { createSchema } from "./sqlite-schema.js";
 
 function createFakeSqlStorage(): SqlStorage {
   const db = new Database(":memory:");
-  // Run schema creation
-  createSchema({ exec: (q, ...b) => { /* adapter */ } });
-  return { exec(query, ...bindings) { /* adapter from better-sqlite3 to SqlStorage */ } };
+  const sql: SqlStorage = {
+    exec(query, ...bindings) {
+      if (bindings.length === 0) {
+        const stmt = db.prepare(query);
+        const rows = stmt.all();
+        return {
+          toArray: () => rows,
+          one: () => rows[0],
+          rowsRead: rows.length,
+          rowsWritten: 0,
+        };
+      }
+      const stmt = db.prepare(query);
+      const info = stmt.run(...bindings);
+      return {
+        toArray: () => [],
+        one: () => undefined,
+        rowsRead: 0,
+        rowsWritten: info.changes,
+      };
+    },
+  };
+  createSchema(sql);
+  return sql;
 }
 ```
 
@@ -599,16 +626,28 @@ rm packages/persistence/src/supabase-world-repository.ts
 rm packages/persistence/src/supabase-world-repository.test.ts
 ```
 
-- [ ] **Step 3: Update InMemoryWorldRepository to match new interface**
+- [ ] **Step 3: Update InMemoryWorldRepository to match new interfaces**
 
-The `InMemoryWorldRepository` needs to drop the removed methods (`acquireTickLock`, `releaseTickLock`, `registerAgent`, `saveCultivationRegistration`, `sendDirectMessage`) from its class and implement `AuthClient` separately or as a combined test helper.
+The `InMemoryWorldRepository` needs to:
+1. Drop removed methods from its class: `acquireTickLock`, `releaseTickLock`, `registerAgent`, `saveCultivationRegistration`, `sendDirectMessage`
+2. Implement both `WorldRepository` and `AuthClient` (the auth methods already exist on the class)
+3. Add the new `getWorldMetadata()` method
 
-Simplest approach: make `InMemoryWorldRepository` implement both `WorldRepository` and `AuthClient`. The auth methods already exist on the class. Tests that need both can pass the same object to `world` and `auth`.
+Simplest approach: `class InMemoryWorldRepository implements WorldRepository, AuthClient`. Tests that need both can pass the same object to `world` and `auth`.
 
-- [ ] **Step 4: Run all persistence tests**
+- [ ] **Step 4: Update in-memory repository tests**
+
+`packages/persistence/src/in-memory-world-repository.test.ts` contains tests for the removed methods:
+- `registerAgent` test (~line 108)
+- `saveCultivationRegistration` test (~line 148)
+- `sendDirectMessage` test (~line 176)
+
+**Delete these tests.** Also delete any tests for `acquireTickLock`/`releaseTickLock`. Add a test for `getWorldMetadata()`. Verify remaining tests still exercise the kept methods (`readWorld`, `transactWorld`, `authenticateAgent`, etc.).
+
+- [ ] **Step 5: Run all persistence tests**
 
 Run: `node --import tsx --test packages/persistence/src/*.test.ts`
-Expected: PASS (supabase tests gone, in-memory + sqlite tests pass)
+Expected: PASS (supabase tests gone, removed-method tests gone, in-memory + sqlite tests pass)
 
 - [ ] **Step 5: Commit**
 
@@ -621,12 +660,11 @@ git commit -m "refactor: update persistence exports, remove SupabaseWorldReposit
 
 ## Task 6: Create world-do Package Scaffold
 
-Set up the `apps/world-do/` workspace package.
+Set up the `apps/world-do/` workspace package. Note: schema DDL lives in `packages/persistence/src/sqlite-schema.ts` (created in Task 4), not here.
 
 **Files:**
 - Create: `apps/world-do/package.json`
 - Create: `apps/world-do/tsconfig.json`
-- Create: `apps/world-do/src/schema.ts`
 
 - [ ] **Step 1: Create package.json**
 
@@ -655,77 +693,16 @@ Set up the `apps/world-do/` workspace package.
 }
 ```
 
-- [ ] **Step 3: Implement schema.ts**
-
-```ts
-import type { SqlStorage } from "@immortal-claw/persistence";
-
-export function createSchema(sql: SqlStorage): void {
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS world_state (
-      world_key TEXT PRIMARY KEY,
-      version INTEGER NOT NULL,
-      tick INTEGER NOT NULL,
-      updated_at TEXT NOT NULL,
-      payload TEXT NOT NULL
-    )
-  `);
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS cultivator_records (
-      cultivator_id TEXT PRIMARY KEY,
-      tick INTEGER NOT NULL,
-      updated_at TEXT NOT NULL,
-      snapshot TEXT NOT NULL
-    )
-  `);
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS world_actions (
-      id TEXT PRIMARY KEY,
-      tick INTEGER NOT NULL,
-      cultivator_id TEXT NOT NULL,
-      action_id TEXT NOT NULL,
-      accepted INTEGER NOT NULL,
-      summary TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      payload TEXT NOT NULL
-    )
-  `);
-  sql.exec("CREATE INDEX IF NOT EXISTS idx_world_actions_tick ON world_actions(tick DESC)");
-  sql.exec("CREATE INDEX IF NOT EXISTS idx_world_actions_cultivator ON world_actions(cultivator_id, created_at DESC)");
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS world_events (
-      id TEXT PRIMARY KEY,
-      tick INTEGER NOT NULL,
-      event_type TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      payload TEXT NOT NULL
-    )
-  `);
-  sql.exec("CREATE INDEX IF NOT EXISTS idx_world_events_tick ON world_events(tick DESC)");
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS tick_runs (
-      id TEXT PRIMARY KEY,
-      tick INTEGER NOT NULL,
-      advanced_ticks INTEGER NOT NULL,
-      trigger TEXT NOT NULL,
-      recorded_at TEXT NOT NULL,
-      payload TEXT NOT NULL
-    )
-  `);
-  sql.exec("CREATE INDEX IF NOT EXISTS idx_tick_runs_recorded_at ON tick_runs(recorded_at DESC)");
-}
-```
-
-- [ ] **Step 4: Run npm install to link workspace**
+- [ ] **Step 3: Run npm install to link workspace**
 
 Run: `npm install`
 Expected: `@immortal-claw/world-do` linked in node_modules
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add apps/world-do/
-git commit -m "feat: scaffold world-do workspace package with SQLite schema"
+git commit -m "feat: scaffold world-do workspace package"
 ```
 
 ---
@@ -769,8 +746,7 @@ Create `apps/world-do/src/index.ts`:
 ```ts
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
-import { createSchema } from "./schema.js";
-import { SqliteWorldRepository, createSupabaseAuthClient } from "@immortal-claw/persistence";
+import { createSchema, SqliteWorldRepository, createSupabaseAuthClient } from "@immortal-claw/persistence";
 import { registerRoutes } from "./routes.js";
 import { registerMiddleware } from "./middleware.js";
 import { readTickSteps } from "./env.js";
@@ -1069,37 +1045,32 @@ git commit -m "refactor: gut runtime-worker to thin DO pass-through"
 
 ---
 
-## Task 10: Write Integration Tests for WorldDurableObject
+## Task 10: Write Tests for WorldDurableObject
 
-Test the DO's fetch and alarm handlers end-to-end.
+Two levels of testing: (A) route-level tests using the Hono app directly with in-memory repos, and (B) DO lifecycle tests using `wrangler dev --remote=false` to verify the actual Durable Object class (constructor, alarm, `blockConcurrencyWhile`).
 
 **Files:**
-- Create: `apps/world-do/src/index.test.ts`
+- Create: `apps/world-do/src/routes.test.ts`
+- Create: `apps/world-do/src/test-helpers.ts`
+- Create: `apps/world-do/src/middleware.test.ts`
+- Create: `apps/world-do/src/env.test.ts`
 
-- [ ] **Step 1: Write integration test for health endpoint**
+### Part A: Route-Level Tests
 
-```ts
-import test from "node:test";
-import assert from "node:assert/strict";
-// Use the Hono app directly for testing (no need to instantiate DO)
-import { createTestApp } from "./test-helpers.js";
-
-test("GET /health returns ok", async () => {
-  const app = createTestApp();
-  const res = await app.request("/health");
-  assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.equal(body.ok, true);
-});
-```
-
-Create a `test-helpers.ts` that builds the Hono app with in-memory repositories:
+- [ ] **Step 1: Create test-helpers.ts**
 
 ```ts
 import { Hono } from "hono";
 import { createInMemoryWorldRepository } from "@immortal-claw/persistence";
 import { registerRoutes } from "./routes.js";
-import type { WorldDOHonoEnv } from "./env.js";
+import { registerMiddleware } from "./middleware.js";
+import type { WorldDOHonoEnv, WorldDOEnv } from "./env.js";
+
+const TEST_ENV: WorldDOEnv = {
+  FRONTEND_ORIGIN: "https://immortal-claw.pages.dev",
+  SUPABASE_URL: "http://localhost:54321",
+  SUPABASE_SECRET_KEY: "test-secret",
+};
 
 export function createTestApp() {
   const app = new Hono<WorldDOHonoEnv>();
@@ -1109,14 +1080,29 @@ export function createTestApp() {
     c.set("auth", repo); // InMemoryWorldRepository implements both
     await next();
   });
+  registerMiddleware(app, TEST_ENV);
   registerRoutes(app);
   return app;
 }
 ```
 
-- [ ] **Step 2: Write integration test for world/status**
+- [ ] **Step 2: Write route-level tests**
+
+Create `apps/world-do/src/routes.test.ts`:
 
 ```ts
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createTestApp } from "./test-helpers.js";
+
+test("GET /health returns ok", async () => {
+  const app = createTestApp();
+  const res = await app.request("/health");
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+});
+
 test("GET /world/status returns tick info", async () => {
   const app = createTestApp();
   const res = await app.request("/world/status");
@@ -1124,21 +1110,29 @@ test("GET /world/status returns tick info", async () => {
   const body = await res.json();
   assert.equal(body.ok, true);
   assert.equal(typeof body.tick, "number");
+  assert.equal(typeof body.lastTickAt, "string");
 });
 ```
 
-- [ ] **Step 3: Write integration test for authenticated agent flow**
+- [ ] **Step 3: Write registration + authenticated flow test**
+
+The registration route requires either `answers` (array of questionnaire answers) or `record` (a pre-built `CultivationRegistrationRecord`). Use a minimal valid registration body:
 
 ```ts
-test("authenticated agent can get state", async () => {
+test("agent registration and authenticated state retrieval", async () => {
   const app = createTestApp();
-  // Register an agent first
+  // Register with minimal valid answers
   const regRes = await app.request("/agent/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Test Agent" }),
+    body: JSON.stringify({
+      name: "Su Mingyue",
+      answers: createMinimalAnswers(), // helper that provides valid questionnaire answers
+    }),
   });
+  assert.equal(regRes.status, 200);
   const { credential } = await regRes.json();
+  assert.ok(credential);
 
   // Use credential to get agent state
   const stateRes = await app.request("/agent/state", {
@@ -1148,22 +1142,81 @@ test("authenticated agent can get state", async () => {
 });
 ```
 
+Implement `createMinimalAnswers()` by referencing the questionnaire schema from `packages/domain/src/questionnaire.ts` — provide one valid answer per question.
+
 - [ ] **Step 4: Port CORS tests from runtime-worker**
 
 Create `apps/world-do/src/middleware.test.ts`. Port the 8 CORS tests from `apps/runtime-worker/src/middleware.test.ts` — these cover preview origins, disallowed origins, error responses with CORS headers, etc. Security-relevant behavior that must be preserved.
-
-Update the test setup to use the `createTestApp()` helper with middleware registered.
 
 - [ ] **Step 5: Port env utility tests**
 
 Create `apps/world-do/src/env.test.ts`. Port tests from `apps/runtime-worker/src/env.test.ts` — covers `readFrontendOrigin`, `isAllowedCorsOrigin`, `readTickSteps` validation.
 
-- [ ] **Step 6: Run tests**
+### Part B: DO Lifecycle Tests
 
-Run: `node --import tsx --test apps/world-do/src/*.test.ts`
-Expected: PASS
+These tests verify the actual `WorldDurableObject` class — constructor setup, `blockConcurrencyWhile()` schema creation, alarm scheduling, and the alarm tick path. They cannot run with plain `node:test` because they require the Cloudflare Workers runtime.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Write DO lifecycle smoke test**
+
+Create `apps/runtime-worker/test/do-lifecycle.test.ts` (uses `wrangler` unstable dev API or vitest with `@cloudflare/vitest-pool-workers`):
+
+```ts
+// This test requires the Cloudflare Workers runtime.
+// Run via: npx wrangler dev --test (or vitest with pool-workers)
+
+import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+
+test("DO initializes schema and sets alarm on first fetch", async () => {
+  const id = env.WORLD.idFromName("test-lifecycle");
+  const stub = env.WORLD.get(id);
+
+  // First fetch should trigger constructor → blockConcurrencyWhile → schema + alarm
+  const res = await stub.fetch(new Request("http://localhost/world/status"));
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+  expect(typeof body.tick).toBe("number");
+});
+
+test("DO alarm advances world tick", async () => {
+  const id = env.WORLD.idFromName("test-alarm");
+  const stub = env.WORLD.get(id);
+
+  // Initialize
+  const res1 = await stub.fetch(new Request("http://localhost/world/status"));
+  const tick1 = (await res1.json()).tick;
+
+  // Trigger alarm manually (test runtime supports this)
+  // The alarm should call advanceWorld() and increment the tick
+  await stub.alarm();
+
+  const res2 = await stub.fetch(new Request("http://localhost/world/status"));
+  const tick2 = (await res2.json()).tick;
+  expect(tick2).toBeGreaterThan(tick1);
+});
+```
+
+**Test runner choice:** Use `@cloudflare/vitest-pool-workers` (Cloudflare's official test integration) which runs tests inside the Workers runtime with real DO instances. Add to `apps/runtime-worker/package.json` devDependencies:
+```json
+"@cloudflare/vitest-pool-workers": "^0.8.0",
+"vitest": "^3.0.0"
+```
+
+Add a `vitest.config.ts` in `apps/runtime-worker/`:
+```ts
+import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
+export default defineWorkersConfig({
+  test: { poolOptions: { workers: { wrangler: { configPath: "./wrangler.jsonc" } } } },
+});
+```
+
+- [ ] **Step 7: Run both test suites**
+
+Route-level tests: `node --import tsx --test apps/world-do/src/*.test.ts`
+DO lifecycle tests: `cd apps/runtime-worker && npx vitest run test/do-lifecycle.test.ts`
+
+Expected: Both PASS
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/world-do/src/index.test.ts apps/world-do/src/test-helpers.ts
