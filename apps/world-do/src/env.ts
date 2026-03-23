@@ -1,5 +1,4 @@
-import type { AuthClient } from "../../../packages/persistence/src/auth-client.js";
-import type { WorldRepository } from "../../../packages/persistence/src/world-repository.js";
+import type { AuthClient, WorldRepository } from "@immortal-claw/persistence";
 
 export const LOCAL_VITE_DEV_PORT = 5173;
 export const LOCAL_VITE_PREVIEW_PORT = 4173;

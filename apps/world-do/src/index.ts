@@ -7,7 +7,7 @@ import {
   createSupabaseAuthClient,
   type SqlStorage,
   type SqlStorageCursor,
-} from "../../../packages/persistence/src/index.js";
+} from "@immortal-claw/persistence";
 import { registerMiddleware } from "./middleware.js";
 import { registerRoutes } from "./routes.js";
 import { createWorldDoRuntime } from "./runtime.js";

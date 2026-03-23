@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeedWorld } from "../../../packages/domain/src/runtime.js";
+import { createSeedWorld } from "@immortal-claw/domain";
 import { createTestApp, createQuestionnaireRegistrationBody } from "./test-helpers.js";
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

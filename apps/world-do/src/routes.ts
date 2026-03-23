@@ -19,43 +19,42 @@ import {
   saveAuthenticatedAgentRegistration,
   sendAuthenticatedAgentMessage,
   syncAgentPersonaWorkflow,
-} from "../../../packages/application/src/index.js";
+} from "@immortal-claw/application";
 import type {
   AdvanceWorldRequest,
   AgentSendMessageRequest,
   CultivatorActionsResponse,
   PerformActionRequest,
   RuntimeHealthResponse,
-} from "../../../packages/contracts/src/index.js";
-import { deriveRegistrationRecordFromAnswers, getRegistrationQuestionnaire } from "../../../packages/domain/src/registration-questionnaire.js";
-import { normalizeCultivationRegistrationRecord } from "../../../packages/domain/src/registration-taxonomy.js";
+} from "@immortal-claw/contracts";
 import {
+  deriveRegistrationRecordFromAnswers,
   getAgentBindingInfo,
+  getRegistrationQuestionnaire,
   getDaoLogs,
   getMessages,
+  normalizeCultivationRegistrationRecord,
+  REGISTRATION_ANSWERS_SET,
+  REGISTRATION_QUESTION_IDS,
   getSectInfo,
   getStrategySnapshot,
   getTribulationPreview,
   resolveCultivatorIdForAgent,
   saveCultivationRegistration,
-} from "../../../packages/domain/src/runtime.js";
+} from "@immortal-claw/domain";
 import type {
   ActionId,
   CultivationRegistrationRecord,
   RegistrationAnswer,
   RegistrationQuestionId,
-} from "../../../packages/domain/src/runtime.js";
-import {
-  REGISTRATION_ANSWERS_SET,
-  REGISTRATION_QUESTION_IDS,
-} from "../../../packages/domain/src/registration-questionnaire.js";
+} from "@immortal-claw/domain";
 import type {
   AuthClient,
   AgentPersonaInput,
   AgentProfileRecord,
   AgentRegistrationInput,
   WorldRepository,
-} from "../../../packages/persistence/src/index.js";
+} from "@immortal-claw/persistence";
 import { renderHeartbeatMarkdown, renderRegisterMarkdown, renderSkillMarkdown } from "./agent-guides.js";
 import type { WorldDOHonoEnv } from "./env.js";
 

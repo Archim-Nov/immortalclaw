@@ -4,6 +4,10 @@
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
+    "@immortal-claw/application": "*",
+    "@immortal-claw/contracts": "*",
+    "@immortal-claw/domain": "*",
+    "@immortal-claw/persistence": "*",
     "hono": "^4.12.8"
   }
 }

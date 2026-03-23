@@ -32,3 +32,16 @@ test("legacy world api and worker directories are deleted", () => {
   assert.equal(existsSync(legacyApiPath), false, `expected ${legacyApiPath} to be deleted`);
   assert.equal(existsSync(legacyWorkerPath), false, `expected ${legacyWorkerPath} to be deleted`);
 });
+
+test("world-do consumes shared code through workspace package imports", () => {
+  const sourceFiles = ["env.ts", "index.ts", "routes.ts", "routes.test.ts", "test-helpers.ts"];
+
+  for (const fileName of sourceFiles) {
+    const contents = readDocument(path.join(worldDoSourcePath, fileName));
+    assert.doesNotMatch(
+      contents,
+      /\.\.\/\.\.\/\.\.\/packages\//,
+      `expected ${fileName} to use workspace package imports instead of deep relative imports`,
+    );
+  }
+});

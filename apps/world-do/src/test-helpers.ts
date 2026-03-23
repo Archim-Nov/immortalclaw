@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
+import { createInMemoryWorldRepository } from "@immortal-claw/persistence";
 import { registerMiddleware } from "./middleware.js";
 import { registerRoutes } from "./routes.js";
 import type { WorldDOEnv, WorldDOHonoEnv } from "./env.js";
