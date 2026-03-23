@@ -1217,17 +1217,22 @@ export default defineWorkersConfig({
 });
 ```
 
-- [ ] **Step 7: Run both test suites**
+- [ ] **Step 7: Install new dependencies**
+
+Run: `npm install`
+Expected: `vitest` and `@cloudflare/vitest-pool-workers` installed and linked
+
+- [ ] **Step 8: Run both test suites**
 
 Route-level tests: `node --import tsx --test apps/world-do/src/*.test.ts`
 DO lifecycle tests: `cd apps/runtime-worker && npx vitest run test/do-lifecycle.test.ts`
 
 Expected: Both PASS
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/world-do/src/routes.test.ts apps/world-do/src/test-helpers.ts apps/world-do/src/middleware.test.ts apps/world-do/src/env.test.ts apps/runtime-worker/test/do-lifecycle.test.ts apps/runtime-worker/vitest.config.ts
+git add apps/world-do/src/routes.test.ts apps/world-do/src/test-helpers.ts apps/world-do/src/middleware.test.ts apps/world-do/src/env.test.ts apps/runtime-worker/test/do-lifecycle.test.ts apps/runtime-worker/vitest.config.ts apps/runtime-worker/package.json
 git commit -m "test: add route-level and DO lifecycle tests for WorldDurableObject"
 ```
 
