@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CultivationRegistrationRecord } from "../../../packages/domain/src/runtime.js";
 import { createSeedWorld } from "../../../packages/domain/src/runtime.js";
+import { signPayload } from "../../../packages/application/src/index.js";
 import worker from "./index.js";
 import { createApp } from "./app.js";
 import { createInMemoryWorldRepository } from "../../../packages/persistence/src/index.js";
@@ -1238,4 +1239,111 @@ test("scheduled tick advances the world through the worker entrypoint", async ()
 
   const after = await repository.readWorld();
   assert.ok(after.tick > before.tick);
+});
+
+test("agents with webhooks receive tick wake notifications after a completed job", async () => {
+  const repository = createRepository();
+  const app = createApp({ repository });
+  const webhookUrl = "https://webhook.test/hooks/immortal-realm";
+  const waitUntilPromises: Promise<unknown>[] = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input, init) => {
+    fetchCalls.push({ input, init });
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+
+  try {
+    const registerResponse = await app.request("https://runtime.test/agent/register", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(
+        createQuestionnaireRegistrationBody({
+          name: "Webhook Agent",
+        }),
+      ),
+    });
+    const registerPayload = await registerResponse.json();
+    const authHeaders = {
+      authorization: `Bearer ${registerPayload.credential}`,
+    };
+
+    const webhookResponse = await app.request("https://runtime.test/agent/webhook", {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ webhookUrl }),
+    });
+    const webhookPayload = await webhookResponse.json();
+
+    const actionsResponse = await app.request("https://runtime.test/agent/actions", {
+      headers: authHeaders,
+    });
+    const actionsPayload = await actionsResponse.json();
+    const cultivateAction = actionsPayload.actions.find((action: { actionId: string }) => action.actionId === "cultivate");
+
+    const actResponse = await app.request("https://runtime.test/agent/act", {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        actionId: cultivateAction.actionId,
+      }),
+    });
+    const actPayload = await actResponse.json();
+
+    const tickResponse = await app.request(
+      "https://runtime.test/agent/tick",
+      {
+        method: "POST",
+        headers: {
+          ...authHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          steps: 4,
+        }),
+      },
+      undefined,
+      {
+        waitUntil(promise) {
+          waitUntilPromises.push(promise);
+        },
+      } as never,
+    );
+    const tickPayload = await tickResponse.json();
+
+    await Promise.all(waitUntilPromises);
+
+    assert.equal(registerResponse.status, 200);
+    assert.equal(webhookResponse.status, 200);
+    assert.equal(actResponse.status, 200);
+    assert.equal(tickResponse.status, 200);
+    assert.equal(actPayload.accepted, true);
+    assert.ok(Array.isArray(tickPayload.completedJobs));
+    assert.ok(tickPayload.completedJobs.some((job: { actionId: string }) => job.actionId === "cultivate"));
+    assert.equal(fetchCalls.length, 1);
+
+    const outbound = fetchCalls[0];
+    assert.ok(outbound);
+    assert.equal(String(outbound.input), webhookUrl);
+    assert.equal(outbound.init?.method, "POST");
+
+    const outboundBody = String(outbound.init?.body ?? "");
+    const outboundPayload = JSON.parse(outboundBody) as { event: string; tick: number; reason: string };
+    const expectedSignature = await signPayload(outboundBody, webhookPayload.webhookSecret);
+    const outboundHeaders = new Headers(outbound.init?.headers);
+
+    assert.equal(outboundPayload.event, "tick");
+    assert.equal(outboundHeaders.get("X-Immortal-Signature"), expectedSignature);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

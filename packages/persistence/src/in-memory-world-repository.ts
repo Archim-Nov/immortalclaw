@@ -26,6 +26,7 @@ import type {
   TickRunRecord,
   WorldRepository,
 } from "./world-repository.js";
+import { issueWebhookSecret } from "./webhook-secret.js";
 
 export interface InMemoryWorldRepositoryOptions {
   world?: WorldState;
@@ -157,6 +158,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       pronouns: input.pronouns?.trim(),
       origin: input.origin?.trim(),
       temperament: input.temperament?.trim(),
+      webhookUrl: input.webhookUrl ?? existingProfile?.webhookUrl ?? null,
+      webhookSecret: input.webhookSecret ?? existingProfile?.webhookSecret ?? null,
       createdAt: existingProfile?.createdAt ?? timestamp,
       updatedAt: timestamp,
       lastSeenAt: input.lastSeenAt ?? existingProfile?.lastSeenAt ?? timestamp,
@@ -221,6 +224,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       age: input.age,
       origin: input.origin,
       temperament: input.temperament,
+      webhookUrl: input.webhookUrl,
+      webhookSecret: issueWebhookSecret(input.webhookUrl),
     });
 
     const credential = await this.issueAgentCredential(agentId);

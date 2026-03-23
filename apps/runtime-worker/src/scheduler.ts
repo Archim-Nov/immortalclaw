@@ -1,4 +1,8 @@
-import { createRuntimeService } from "../../../packages/application/src/index.js";
+import {
+  createRuntimeService,
+  dispatchWebhooks,
+  resolveWebhookTargets,
+} from "../../../packages/application/src/index.js";
 import type { WorldRepository } from "../../../packages/persistence/src/index.js";
 import type { RuntimeWorkerBindings } from "./env.js";
 import { readTickSteps, resolveRepository } from "./env.js";
@@ -14,7 +18,7 @@ export interface ScheduledEventLike {
 export async function runScheduledTick(
   event: ScheduledEventLike,
   bindings: RuntimeWorkerBindings,
-  _controller: ScheduledController,
+  controller: ScheduledController,
   repository?: WorldRepository,
 ): Promise<void> {
   const resolvedRepository = resolveRepository(bindings, repository);
@@ -27,7 +31,15 @@ export async function runScheduledTick(
 
   try {
     const service = createRuntimeService({ repository: resolvedRepository });
-    await service.advanceWorld(readTickSteps(bindings), "scheduled");
+    const tickSummary = await service.advanceWorld(readTickSteps(bindings), "scheduled");
+    const [world, agentProfiles] = await Promise.all([
+      resolvedRepository.readWorld(),
+      resolvedRepository.listAgentProfiles(),
+    ]);
+    const targets = resolveWebhookTargets(world, tickSummary, agentProfiles);
+    if (targets.length > 0) {
+      controller.waitUntil(dispatchWebhooks(targets));
+    }
   } finally {
     await resolvedRepository.releaseTickLock(lock.lockId);
   }

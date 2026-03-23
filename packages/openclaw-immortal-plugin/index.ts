@@ -33,6 +33,17 @@ type OpenClawPluginApiLike = {
     event: string,
     handler: (...args: unknown[]) => Promise<PromptHookResult> | PromptHookResult,
   ) => void;
+  registerWebhookHandler?: (
+    path: string,
+    handler: (req: { body: string; headers: Record<string, string> }) => Promise<{ status: number; body?: string }>,
+  ) => void;
+  registerWebhookTargetWithPluginRoute?: OpenClawPluginApiLike["registerWebhookHandler"];
+  requestHeartbeatNow?: (opts: { reason: string; agentId?: string }) => void;
+  runtime?: {
+    system?: {
+      requestHeartbeatNow?: (opts: { reason: string; agentId?: string }) => void;
+    };
+  };
 };
 
 type GenderValue = "male" | "female" | "nonbinary" | "other" | "unspecified";
@@ -47,6 +58,7 @@ type PersonaProfile = {
 
 type PluginConfig = {
   worldBaseUrl: string;
+  webhookBaseUrl?: string;
   defaultCultivatorId?: string;
   agentId?: string;
   personaDir: string;
@@ -70,6 +82,8 @@ type AgentSession = {
   requestedAgentId?: string;
   credential: string;
   selectedCultivatorId?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
   updatedAt: string;
 };
 
@@ -212,6 +226,11 @@ function normalizeBaseUrl(input: unknown): string {
   return input.replace(/\/+$/, "");
 }
 
+function normalizeOptionalBaseUrl(input: unknown): string | undefined {
+  const value = trimString(input);
+  return value ? value.replace(/\/+$/, "") : undefined;
+}
+
 function trimString(input: unknown): string | undefined {
   if (typeof input !== "string") {
     return undefined;
@@ -246,6 +265,7 @@ function resolvePluginConfig(pluginConfig: Record<string, unknown> | undefined):
 
   return {
     worldBaseUrl: normalizeBaseUrl(pluginConfig?.worldBaseUrl),
+    webhookBaseUrl: normalizeOptionalBaseUrl(pluginConfig?.webhookBaseUrl),
     defaultCultivatorId: trimString(pluginConfig?.defaultCultivatorId),
     agentId: trimString(pluginConfig?.agentId),
     personaDir,
@@ -611,6 +631,8 @@ function coerceAgentSession(input: unknown): AgentSession | null {
     requestedAgentId: trimString((input as { requestedAgentId?: unknown }).requestedAgentId),
     credential,
     selectedCultivatorId: trimString((input as { selectedCultivatorId?: unknown }).selectedCultivatorId),
+    webhookUrl: trimString((input as { webhookUrl?: unknown }).webhookUrl),
+    webhookSecret: trimString((input as { webhookSecret?: unknown }).webhookSecret),
     updatedAt:
       trimString((input as { updatedAt?: unknown }).updatedAt) ??
       trimString((input as { createdAt?: unknown }).createdAt) ??
@@ -779,6 +801,8 @@ function readRegisteredSession(
     requestedAgentId: trimString(requestedAgentId),
     credential,
     selectedCultivatorId: trimString((payload as { selectedCultivatorId?: unknown }).selectedCultivatorId),
+    webhookUrl: trimString((payload as { webhookUrl?: unknown }).webhookUrl),
+    webhookSecret: trimString((payload as { webhookSecret?: unknown }).webhookSecret),
     updatedAt: nowIsoString(),
   };
 }
@@ -858,6 +882,99 @@ function clampLimit(input: unknown): number | undefined {
   return Math.max(1, Math.min(50, Math.floor(input)));
 }
 
+// Keep this local shape aligned with the canonical contract in packages/contracts/src/runtime-api.ts.
+type WebhookWakePayload = {
+  event: "tick" | "message" | "tribulation";
+  tick: number;
+  reason: string;
+};
+
+type WebhookRequestLike = {
+  body: string;
+  headers: Record<string, string>;
+};
+
+type WebhookResponseLike = {
+  status: number;
+  body?: string;
+};
+
+type HeartbeatRequester = (opts: { reason: string; agentId?: string }) => void;
+
+function parseWebhookWakePayload(body: string): WebhookWakePayload {
+  const parsed = JSON.parse(body);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Invalid webhook payload.");
+  }
+
+  const event = (parsed as { event?: unknown }).event;
+  const tick = (parsed as { tick?: unknown }).tick;
+  const reason = trimString((parsed as { reason?: unknown }).reason);
+  if (event !== "tick" && event !== "message" && event !== "tribulation") {
+    throw new Error("Invalid webhook payload.");
+  }
+  if (typeof tick !== "number" || !Number.isFinite(tick)) {
+    throw new Error("Invalid webhook payload.");
+  }
+  if (!reason) {
+    throw new Error("Invalid webhook payload.");
+  }
+
+  return {
+    event,
+    tick,
+    reason,
+  };
+}
+
+async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
+  const normalizedSignature = signature.trim();
+  if (!normalizedSignature.startsWith("sha256=")) {
+    return false;
+  }
+
+  const expectedHex = normalizedSignature.slice("sha256=".length).trim();
+  if (!/^[0-9a-f]{64}$/i.test(expectedHex)) {
+    return false;
+  }
+
+  const chunks = expectedHex.match(/.{2}/g);
+  if (!chunks) {
+    return false;
+  }
+
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    return crypto.subtle.verify(
+      "HMAC",
+      key,
+      Uint8Array.from(chunks.map((chunk) => Number.parseInt(chunk, 16))),
+      encoder.encode(body),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getHeartbeatRequester(api: OpenClawPluginApiLike): HeartbeatRequester | undefined {
+  return api.requestHeartbeatNow ?? api.runtime?.system?.requestHeartbeatNow;
+}
+
+function buildWakeContext(reason: string): string {
+  return `You were woken by the world server: ${reason} Call immortal_state to see your current situation, then decide your next action.`;
+}
+
+function buildWebhookUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/hooks/immortal-realm`;
+}
+
 type ResolvedTarget =
   | {
       mode: "agent";
@@ -902,6 +1019,10 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           type: "string",
           description: "Optional local cache key used to resume the same agent session across runs.",
         },
+        webhookBaseUrl: {
+          type: "string",
+          description: "Externally reachable base URL for the OpenClaw webhook target.",
+        },
         personaDir: {
           type: "string",
           description: "Workspace directory containing IDENTITY.md and SOUL.md.",
@@ -938,6 +1059,14 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       const syncedAgents = new Set<string>();
       let cachedSession: AgentSession | null = null;
       let registrationRouteAvailable: boolean | undefined;
+      let pendingWakeReason: string | undefined;
+      let lastSeenTick = 0;
+      let lastSeenStatus = "";
+      let lastSeenNextTribTick = 0;
+      let lastSeenMessageCount = 0;
+      const heartbeat = getHeartbeatRequester(api);
+      const registerWebhook =
+        api.registerWebhookTargetWithPluginRoute ?? api.registerWebhookHandler;
 
       function markInspection(
         cultivatorId: string,
@@ -980,6 +1109,53 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         return cachedSession;
       }
 
+      function setWakeReason(reason: string): void {
+        pendingWakeReason = reason;
+      }
+
+      function emitHeartbeat(reason: string, agentId?: string): void {
+        if (!heartbeat) {
+          return;
+        }
+        heartbeat({ reason, agentId });
+      }
+
+      async function bindWebhookIfConfigured(session: AgentSession): Promise<AgentSession> {
+        if (!config.webhookBaseUrl) {
+          return session;
+        }
+
+        const webhookUrl = buildWebhookUrl(config.webhookBaseUrl);
+        if (session.webhookSecret && session.webhookUrl === webhookUrl) {
+          return session;
+        }
+
+        try {
+          const payload = await requestAgentWorld(session, "/agent/webhook", {
+            method: "POST",
+            body: JSON.stringify({ webhookUrl }),
+          });
+          const webhookSecret = trimString((payload as { webhookSecret?: unknown }).webhookSecret);
+          const returnedWebhookUrl = trimString((payload as { webhookUrl?: unknown }).webhookUrl) ?? webhookUrl;
+          if (!webhookSecret) {
+            log.warn?.("[immortal-realm] /agent/webhook response did not include a webhookSecret.");
+            return session;
+          }
+          return cacheSession({
+            ...session,
+            webhookUrl: returnedWebhookUrl,
+            webhookSecret,
+            updatedAt: nowIsoString(),
+          }) as AgentSession;
+        } catch (error) {
+          log.warn?.(
+            `[immortal-realm] Failed to bind webhook at ${buildWebhookUrl(config.webhookBaseUrl)}; continuing without push wakeups.`,
+            error,
+          );
+          return session;
+        }
+      }
+
       function loadSession(agentId?: string): AgentSession | null {
         if (
           cachedSession &&
@@ -995,17 +1171,17 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       async function registerAgentSession(agentId?: string): Promise<AgentSession> {
         const persona = loadPersonaProfile(agentId ?? config.agentId ?? "openclaw-agent", config);
         const record = loadLocalRegistrationRecord(config, log);
-         const payload = await requestWorld(fetchImpl, config, "/agent/register", {
-           method: "POST",
-           body: JSON.stringify({
-             name: persona.name,
-             ...(persona.genderPresentation ? { genderPresentation: persona.genderPresentation } : {}),
-             ...(persona.pronouns ? { pronouns: persona.pronouns } : {}),
-             ...(persona.origin ? { origin: persona.origin } : {}),
-             ...(persona.temperament ? { temperament: persona.temperament } : {}),
-             ...(record ? { record } : {}),
-           }),
-         });
+        const payload = await requestWorld(fetchImpl, config, "/agent/register", {
+          method: "POST",
+          body: JSON.stringify({
+            name: persona.name,
+            ...(persona.genderPresentation ? { genderPresentation: persona.genderPresentation } : {}),
+            ...(persona.pronouns ? { pronouns: persona.pronouns } : {}),
+            ...(persona.origin ? { origin: persona.origin } : {}),
+            ...(persona.temperament ? { temperament: persona.temperament } : {}),
+            ...(record ? { record } : {}),
+          }),
+        });
         registrationRouteAvailable = true;
         return cacheSession(readRegisteredSession(config, payload, agentId)) as AgentSession;
       }
@@ -1018,7 +1194,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         if (!forceRefresh) {
           const stored = loadSession(agentId);
           if (stored) {
-            return stored;
+            return await bindWebhookIfConfigured(stored);
           }
         }
 
@@ -1031,7 +1207,8 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         }
 
         try {
-          return await registerAgentSession(agentId);
+          const session = await registerAgentSession(agentId);
+          return await bindWebhookIfConfigured(session);
         } catch (error) {
           if (isRequestStatus(error, 404, 405)) {
             registrationRouteAvailable = false;
@@ -1104,7 +1281,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             updatedAt: nowIsoString(),
           }) as AgentSession;
           syncedAgents.add(updated.agentId);
-          return updated;
+          return await bindWebhookIfConfigured(updated);
         } catch (error) {
           if (isRequestStatus(error, 404, 405)) {
             syncedAgents.add(session.agentId);
@@ -1187,7 +1364,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       }
 
       log.info?.(
-        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} agentId=${config.agentId ?? "auto"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"} personaDir=${config.personaDir} credentialsPath=${config.credentialsPath} registrationRecordPath=${config.registrationRecordPath ?? "auto"}`,
+        `[immortal-realm] worldBaseUrl=${config.worldBaseUrl} webhookBaseUrl=${config.webhookBaseUrl ?? "none"} agentId=${config.agentId ?? "auto"} defaultCultivatorId=${config.defaultCultivatorId ?? "none"} personaDir=${config.personaDir} credentialsPath=${config.credentialsPath} registrationRecordPath=${config.registrationRecordPath ?? "auto"}`,
       );
       registerReadTool({
         name: "immortal_state",
@@ -1402,6 +1579,33 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         },
       });
 
+      registerWebhook?.("/hooks/immortal-realm", async (req: WebhookRequestLike): Promise<WebhookResponseLike> => {
+        const session = loadSession();
+        if (!session?.webhookSecret) {
+          return { status: 401 };
+        }
+
+        const signature = req.headers["x-immortal-signature"] ?? req.headers["X-Immortal-Signature"] ?? "";
+        const valid = await verifyWebhookSignature(req.body, signature, session.webhookSecret);
+        if (!valid) {
+          return { status: 403 };
+        }
+
+        let payload: WebhookWakePayload;
+        try {
+          payload = parseWebhookWakePayload(req.body);
+        } catch {
+          return { status: 400 };
+        }
+
+        setWakeReason(payload.reason);
+        emitHeartbeat(payload.reason, session.agentId);
+        return {
+          status: 200,
+          body: JSON.stringify({ ok: true }),
+        };
+      });
+
       api.registerTool({
         name: "immortal_act",
         label: "Immortal Act",
@@ -1472,9 +1676,72 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
         },
       });
 
-      api.on?.("before_prompt_build", async () => ({
-        prependSystemContext: buildPromptGuidance(config),
-      }));
+      const pollInterval = setInterval(() => {
+        void (async () => {
+          try {
+            const session = loadSession();
+            if (!session || !heartbeat) {
+              return;
+            }
+
+            const [state, messages] = await Promise.all([
+              requestAgentWorld(session, "/agent/state"),
+              requestAgentWorld(session, "/agent/messages"),
+            ]);
+            const tick = typeof (state as { tick?: unknown }).tick === "number" ? (state as { tick: number }).tick : 0;
+            const status =
+              typeof (state as { cultivator?: { status?: unknown } }).cultivator?.status === "string"
+                ? ((state as { cultivator: { status: string } }).cultivator.status ?? "")
+                : "";
+            const nextTribTick =
+              typeof (state as { tribulation?: { nextTribulationTick?: unknown } }).tribulation?.nextTribulationTick ===
+              "number"
+                ? ((state as { tribulation: { nextTribulationTick: number } }).tribulation.nextTribulationTick ?? 0)
+                : 0;
+            const messageCount = Array.isArray(messages) ? messages.length : 0;
+
+            const newMessages = messageCount > lastSeenMessageCount;
+            if (newMessages) {
+              const reason = "Fallback poll detected new messages.";
+              setWakeReason(reason);
+              emitHeartbeat(reason, session.agentId);
+            } else if (lastSeenTick > 0 && tick > lastSeenTick) {
+              const completedJob = lastSeenStatus === "busy" && status === "idle";
+              const injured = status === "injured" && lastSeenStatus !== "injured";
+              const tribulationAdvanced = nextTribTick > lastSeenNextTribTick && lastSeenNextTribTick > 0;
+
+              if (completedJob || injured || tribulationAdvanced) {
+                const reason = completedJob
+                  ? "Fallback poll detected a completed job."
+                  : injured
+                    ? "Fallback poll detected an injury."
+                    : "Fallback poll detected a tribulation state change.";
+                setWakeReason(reason);
+                emitHeartbeat(reason, session.agentId);
+              }
+            }
+
+            lastSeenTick = tick;
+            lastSeenStatus = status;
+            lastSeenNextTribTick = nextTribTick;
+            lastSeenMessageCount = messageCount;
+          } catch {
+            // Silent fallback polling.
+          }
+        })();
+      }, 60_000);
+      pollInterval.unref?.();
+
+      api.on?.("before_prompt_build", async () => {
+        const wakeReason = pendingWakeReason;
+        pendingWakeReason = undefined;
+        const prependSystemContext = wakeReason
+          ? `${buildWakeContext(wakeReason)}\n${buildPromptGuidance(config)}`
+          : buildPromptGuidance(config);
+        return {
+          prependSystemContext,
+        };
+      });
     },
   };
 }

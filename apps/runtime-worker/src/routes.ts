@@ -5,6 +5,7 @@ import {
   buildAuthenticatedAgentState,
   buildPublicAgentDirectory,
   buildPublicAgentState,
+  dispatchWebhooks,
   createRuntimeService,
   listAuthenticatedAgentMessages,
   performAuthenticatedAgentAction,
@@ -16,8 +17,11 @@ import {
   registerAgentWorkflow,
   resetAuthenticatedAgentCredential,
   saveAuthenticatedAgentRegistration,
+  resolveMessageWebhookTarget,
   sendAuthenticatedAgentMessage,
+  resolveWebhookTargets,
   syncAgentPersonaWorkflow,
+  updateAgentWebhookUrl,
 } from "../../../packages/application/src/index.js";
 import type {
   AdvanceWorldRequest,
@@ -231,15 +235,29 @@ function readRegistrationInput(body: Record<string, unknown>): {
   return {
     questionnaireSource: record ? "record" : "answers",
     input: {
-    name: readRequiredBodyString(body.name, "Body must include name."),
-    genderPresentation: typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
-    pronouns: readOptionalBodyString(body.pronouns),
-    age: readOptionalBodyNumber(body.age),
-    origin: readOptionalBodyString(body.origin),
-    temperament: readOptionalBodyString(body.temperament),
+      name: readRequiredBodyString(body.name, "Body must include name."),
+      genderPresentation: typeof body.genderPresentation === "string" ? (body.genderPresentation as never) : undefined,
+      pronouns: readOptionalBodyString(body.pronouns),
+      age: readOptionalBodyNumber(body.age),
+      origin: readOptionalBodyString(body.origin),
+      temperament: readOptionalBodyString(body.temperament),
+      webhookUrl: readOptionalBodyString(body.webhookUrl),
       record: resolvedRecord,
     },
   };
+}
+
+function isLocalDevelopmentOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  try {
+    const hostname = new URL(origin).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return origin.includes("localhost") || origin.includes("127.0.0.1");
+  }
 }
 
 function readLegacyCultivatorIdFromQuery(
@@ -457,18 +475,30 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as AgentSendMessageRequest & Record<string, unknown>;
     const content = readRequiredBodyString(body.content, "Body must include content.");
-    return context.json(
-      await sendAuthenticatedAgentMessage({
-        repository,
-        agent,
-        request: {
-          toAgentId: readOptionalBodyString(body.toAgentId),
-          toCultivatorId: readOptionalBodyString(body.toCultivatorId),
-          subject: readOptionalBodyString(body.subject),
-          content,
-        },
-      }),
-    );
+    const response = await sendAuthenticatedAgentMessage({
+      repository,
+      agent,
+      request: {
+        toAgentId: readOptionalBodyString(body.toAgentId),
+        toCultivatorId: readOptionalBodyString(body.toCultivatorId),
+        subject: readOptionalBodyString(body.subject),
+        content,
+      },
+    });
+
+    const recipientCultivatorId = response.message.toCultivatorId;
+    if (recipientCultivatorId) {
+      const [world, agentProfiles] = await Promise.all([
+        repository.readWorld(),
+        repository.listAgentProfiles(),
+      ]);
+      const target = resolveMessageWebhookTarget(world, recipientCultivatorId, agent.name, world.tick, agentProfiles);
+      if (target) {
+        context.executionCtx.waitUntil(dispatchWebhooks([target]));
+      }
+    }
+
+    return context.json(response);
   });
 
   app.get("/agent/events", async (context) => {
@@ -520,6 +550,22 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     return context.json(await resetAuthenticatedAgentCredential({ repository, agent, currentCredential }));
   });
 
+  app.post("/agent/webhook", async (context) => {
+    const repository = resolveRepository(context.env, options.repository);
+    const agent = await readAuthenticatedAgent(context.req.raw, repository);
+    const body = (await context.req.json()) as Record<string, unknown>;
+    const webhookUrl = readRequiredBodyString(body.webhookUrl, "Body must include webhookUrl.");
+    const allowInsecure = isLocalDevelopmentOrigin(context.env?.FRONTEND_ORIGIN);
+    return context.json(
+      await updateAgentWebhookUrl({
+        repository,
+        agent,
+        webhookUrl,
+        allowInsecure,
+      }),
+    );
+  });
+
   app.post("/agent/registration", async (context) => {
     const repository = resolveRepository(context.env, options.repository);
     const agent = await readAuthenticatedAgent(context.req.raw, repository);
@@ -540,6 +586,15 @@ export function registerRuntimeRoutes(app: Hono<RuntimeWorkerEnv>, options: Rout
     await readAuthenticatedAgent(context.req.raw, repository);
     const body = (await context.req.json()) as Partial<AdvanceWorldRequest>;
     const steps = typeof body.steps === "number" ? body.steps : 1;
-    return context.json(await advanceAuthenticatedAgentWorld({ repository, steps }));
+    const tickSummary = await advanceAuthenticatedAgentWorld({ repository, steps });
+    const [world, agentProfiles] = await Promise.all([
+      repository.readWorld(),
+      repository.listAgentProfiles(),
+    ]);
+    const targets = resolveWebhookTargets(world, tickSummary, agentProfiles);
+    if (targets.length > 0) {
+      context.executionCtx.waitUntil(dispatchWebhooks(targets));
+    }
+    return context.json(tickSummary);
   });
 }
