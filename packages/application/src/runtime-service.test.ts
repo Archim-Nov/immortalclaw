@@ -25,7 +25,7 @@ test("getCultivatorState delegates through the repository", async () => {
   let calledWith = "";
 
   const service = createRuntimeService({
-    repository: {
+    world: {
       async getCultivatorState(inputCultivatorId) {
         calledWith = inputCultivatorId;
         return expected;
@@ -54,7 +54,7 @@ test("listActions delegates through the repository", async () => {
   let calledWith = "";
 
   const service = createRuntimeService({
-    repository: {
+    world: {
       async getCultivatorState() {
         throw new Error("not used");
       },
@@ -84,7 +84,7 @@ test("performAction delegates through the repository", async () => {
   let calledWithActionId = "";
 
   const service = createRuntimeService({
-    repository: {
+    world: {
       async getCultivatorState() {
         throw new Error("not used");
       },
@@ -116,7 +116,7 @@ test("advanceWorld delegates through the repository", async () => {
   let calledWithTrigger: "manual" | "scheduled" | undefined;
 
   const service = createRuntimeService({
-    repository: {
+    world: {
       async getCultivatorState() {
         throw new Error("not used");
       },

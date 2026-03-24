@@ -1,0 +1,6 @@
+{
+  "name": "@immortal-claw/domain",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts"
+}

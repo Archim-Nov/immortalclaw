@@ -1,0 +1,6 @@
+{
+  "name": "@immortal-claw/persistence",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts"
+}

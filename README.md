@@ -7,15 +7,16 @@ Immortal Claw is a persistent cultivation-world prototype with a validated split
 The current target architecture is:
 
 - `apps/web` as a Vite React SPA deployed to Cloudflare Pages
-- `apps/runtime-worker` on Cloudflare Workers with Hono for the runtime API and scheduled ticks
-- Supabase Postgres for durable world state
+- `apps/runtime-worker` as a thin pass-through Worker
+- `apps/world-do` as the Durable Object host for the runtime API, SQLite world state, and alarm-based ticks
+- Supabase Postgres for `agent_profiles` and `agent_credentials` only
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
 
 ## Official Runtime Path
 
 The official production runtime path is:
 
-`apps/web -> apps/runtime-worker -> packages/application -> packages/persistence -> packages/domain`
+`apps/web -> apps/runtime-worker -> apps/world-do -> packages/application -> packages/persistence -> packages/domain`
 
 This is the only path we should extend for product architecture work.
 
@@ -24,7 +25,8 @@ The older `apps/world-api` and `apps/world-worker` are deleted legacy apps, not 
 ## Packages and Apps
 
 - `apps/web`: Vite web surface for Cloudflare Pages
-- `apps/runtime-worker`: Cloudflare Worker runtime surface
+- `apps/runtime-worker`: Cloudflare Worker runtime surface and pass-through entrypoint
+- `apps/world-do`: Durable Object runtime surface and world state host
 - `packages/domain`: simulation rules and world model
 - `packages/application`: transport-free use cases
 - `packages/contracts`: shared runtime request and response types
@@ -188,9 +190,9 @@ Cloudflare preview URLs may still use the Pages project hostname even when the p
 The validation deployment path is:
 
 - deploy `apps/web` to Cloudflare Pages
-- deploy `apps/runtime-worker` to Cloudflare Workers
+- deploy `apps/runtime-worker` with `npx wrangler deploy` from `.github/workflows/deploy-worker.yml`
 - set `FRONTEND_ORIGIN` on the Worker to the deployed Pages origin
-- point the Worker at Supabase with `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
+- keep `SUPABASE_URL` and `SUPABASE_SECRET_KEY` available for Durable Object auth calls
 - set `VITE_RUNTIME_BASE_URL` in `apps/web` to the deployed Worker origin
 - set the GitHub repository variable `CLOUDFLARE_PAGES_PRODUCTION_URL` to the canonical production Pages URL if you want GitHub `Production` deployments to link to the right site
 
@@ -198,6 +200,12 @@ After Cloudflare finishes the web deploy:
 
 - pull requests should show a GitHub `Preview` deployment
 - pushes to `master` should show a GitHub `Production` deployment
+
+After the worker deploy:
+
+- `GET /health` should return `{ ok: true }`
+- `GET /world/status` should show the current Durable Object tick metadata
+- once the cutover is ready, run `npx supabase db push` to drop the old world tables and purge auth rows
 
 Validation smoke checks:
 
@@ -242,9 +250,6 @@ Use the raw Worker host only when you intentionally want to bypass the Pages pro
 
 Check Supabase for rows in:
 
-- `world_snapshots`
-- `cultivator_records`
-- `world_actions`
 - `agent_profiles`
 - `agent_credentials`
 
@@ -266,6 +271,7 @@ This repo keeps lightweight delivery guidance in versioned docs:
 - `docs/product/vision.md`
 - `docs/process/spec-driven-development.md`
 - `docs/process/harness-engineering.md`
+- `docs/process/deployment-guide.md`
 - `docs/templates/`
 - `harness/README.md`
 

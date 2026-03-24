@@ -15,9 +15,15 @@ export {
 } from "./agent-insights.js";
 export type { AgentInsightsRepository } from "./agent-insights.js";
 export { listAuthenticatedAgentMessages, sendAuthenticatedAgentMessage } from "./agent-messaging.js";
-export type { AgentMessagingRepository } from "./agent-messaging.js";
+export type {
+  AgentMessagingAuthClient,
+  AgentMessagingWorldRepository,
+} from "./agent-messaging.js";
 export { syncAgentPersonaWorkflow } from "./agent-persona.js";
-export type { AgentPersonaWorkflowRepository } from "./agent-persona.js";
+export type {
+  AgentPersonaAuthClient,
+  AgentPersonaWorldRepository,
+} from "./agent-persona.js";
 export {
   advanceAuthenticatedAgentWorld,
   performAuthenticatedAgentAction,
@@ -28,7 +34,8 @@ export { createRuntimeService } from "./runtime-service.js";
 export type { RuntimeRepository, RuntimeService } from "./runtime-service.js";
 export { registerAgentWorkflow } from "./agent-registration.js";
 export type {
-  AgentRegistrationWorkflowRepository,
+  AgentRegistrationAuthClient,
+  AgentRegistrationWorldRepository,
   RegisterAgentWorkflowOptions,
 } from "./agent-registration.js";
 export { buildAuthenticatedAgentState, toAgentView } from "./agent-onboarding.js";
@@ -37,8 +44,10 @@ export { updateAgentWebhookUrl } from "./agent-webhook.js";
 export type { AgentWebhookRepository } from "./agent-webhook.js";
 export { buildPublicAgentDirectory, buildPublicAgentState } from "./public-agents.js";
 export type {
-  PublicAgentDirectoryRepository,
-  PublicAgentStateRepository,
+  PublicAgentDirectoryAuthClient,
+  PublicAgentDirectoryWorldRepository,
+  PublicAgentStateAuthClient,
+  PublicAgentStateWorldRepository,
 } from "./public-agents.js";
 export {
   dispatchWebhooks,

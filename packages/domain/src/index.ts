@@ -34,3 +34,10 @@ export {
   syncCultivatorFromPersona,
 } from "./engine.js";
 export { createSeedWorld } from "./seed.js";
+export {
+  deriveRegistrationRecordFromAnswers,
+  getRegistrationQuestionnaire,
+  REGISTRATION_ANSWERS_SET,
+  REGISTRATION_QUESTION_IDS,
+} from "./registration-questionnaire.js";
+export { normalizeCultivationRegistrationRecord } from "./registration-taxonomy.js";

@@ -1,11 +1,27 @@
-import type { RuntimeWorkerBindings } from "./env.js";
-import type { ScheduledController, ScheduledEventLike } from "./scheduler.js";
-import { app } from "./app.js";
-import { runScheduledTick } from "./scheduler.js";
+import type { WorldDurableObject as WorldDurableObjectType } from "@immortal-claw/world-do";
+
+export let WorldDurableObject: typeof WorldDurableObjectType =
+  class {} as unknown as typeof WorldDurableObjectType;
+
+try {
+  ({ WorldDurableObject } = await import("@immortal-claw/world-do"));
+} catch {
+  // Node-based tests can import the worker entry without Cloudflare-only modules.
+}
+
+interface RuntimeWorkerEnv {
+  WORLD: {
+    idFromName(name: string): unknown;
+    get(id: unknown): {
+      fetch(request: Request): Promise<Response>;
+    };
+  };
+}
 
 export default {
-  fetch: app.fetch,
-  async scheduled(event: ScheduledEventLike, env: RuntimeWorkerBindings, context: ScheduledController) {
-    await runScheduledTick(event, env, context);
+  async fetch(request: Request, env: RuntimeWorkerEnv): Promise<Response> {
+    const id = env.WORLD.idFromName("primary");
+    const stub = env.WORLD.get(id);
+    return stub.fetch(request);
   },
 };

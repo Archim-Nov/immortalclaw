@@ -20,7 +20,7 @@ test("resetAuthenticatedAgentCredential formats the reset response in applicatio
   const calls: { agentId?: string; currentCredential?: string } = {};
 
   const payload = await resetAuthenticatedAgentCredential({
-    repository: {
+    auth: {
       async resetAgentCredential(agentId, currentCredential) {
         calls.agentId = agentId;
         calls.currentCredential = currentCredential;

@@ -14,9 +14,9 @@ At this stage, harness engineering is intentionally lightweight. The repository 
 
 Current high-value scenarios:
 
-- runtime API smoke: fetch health, state, actions, and act through `apps/runtime-worker`
+- runtime API smoke: fetch health, state, actions, and act through `apps/runtime-worker`, which now forwards to the Durable Object
 - hosted onboarding smoke: register an agent, authenticate with a bearer token, and read agent state through `apps/runtime-worker`
-- scheduled tick smoke: advance the world through the Worker scheduled handler and verify tick metadata
+- scheduled tick smoke: advance the world through the Durable Object alarm path and verify tick metadata
 - web shell smoke: confirm the Vite/Pages frontend build scaffold and browser entrypoint wiring
 
 The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-action-and-tick.md`.

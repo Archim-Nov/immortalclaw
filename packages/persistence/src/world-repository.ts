@@ -10,7 +10,6 @@ import type {
   CreateCultivatorInput,
   CultivationRegistrationRecord,
   GenderPresentation,
-  Message,
 } from "../../domain/src/model.js";
 
 export interface TickRunRecord {
@@ -18,12 +17,6 @@ export interface TickRunRecord {
   advancedTicks: number;
   recordedAt: string;
   trigger: "manual" | "scheduled";
-}
-
-export interface TickLockRecord {
-  lockId: string;
-  ownerId: string;
-  acquiredAt: string;
 }
 
 export interface AgentPersonaInput
@@ -73,35 +66,11 @@ export interface AgentCredentialResetResult {
 export interface WorldRepository {
   readWorld(): Promise<WorldState>;
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
-  listAgentProfiles(): Promise<AgentProfileRecord[]>;
-  getAgentProfile(agentId: string): Promise<AgentProfileRecord | null>;
+  getWorldMetadata(): Promise<{ tick: number; updatedAt: string }>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listAvailableActions(cultivatorId: string): Promise<AvailableAction[]>;
   performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult>;
   advanceWorld(steps: number, trigger?: TickRunRecord["trigger"]): Promise<TickSummary>;
   getLatestTickRun(): Promise<TickRunRecord | null>;
-  acquireTickLock(ownerId: string): Promise<TickLockRecord | null>;
-  releaseTickLock(lockId: string): Promise<void>;
-  saveAgentProfile(input: AgentProfileWriteInput): Promise<AgentProfileRecord>;
-  issueAgentCredential(agentId: string): Promise<AgentCredentialResetResult>;
-  /** @deprecated Prefer application-owned registration workflows plus transactWorld/saveAgentProfile/issueAgentCredential. */
-  registerAgent(input: AgentRegistrationInput): Promise<AgentRegistrationResult>;
-  resetAgentCredential(agentId: string, currentCredential: string): Promise<AgentCredentialResetResult>;
-  authenticateAgent(credential: string): Promise<AgentProfileRecord | null>;
-  touchAgent(agentId: string): Promise<void>;
   getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null>;
-  /** @deprecated Prefer transactWorld plus domain saveCultivationRegistration from application workflows. */
-  saveCultivationRegistration(
-    cultivatorId: string,
-    record: CultivationRegistrationRecord,
-    savedByAgentId?: string | null,
-  ): Promise<CultivationRegistrationRecord>;
-  /** @deprecated Prefer transactWorld plus domain sendDirectMessage from application workflows. */
-  sendDirectMessage(
-    fromCultivatorId: string,
-    toCultivatorId: string,
-    from: string,
-    subject: string,
-    content: string,
-  ): Promise<Message>;
 }

@@ -87,7 +87,7 @@ test("saveAuthenticatedAgentRegistration binds the record to the authenticated c
   const calls: { cultivatorId?: string; savedByAgentId?: string | null } = {};
 
   const payload = await saveAuthenticatedAgentRegistration({
-    repository: {
+    world: {
       async transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult> {
         const world = createSeedWorld();
         const cultivator = Object.keys(world.cultivators)[0];
@@ -122,12 +122,11 @@ test("performAuthenticatedAgentAction executes against the bound cultivator", as
     cultivatorId: "cultivator-9",
     actionId: "cultivate",
     accepted: true,
-    status: "in_progress",
     summary: "Cultivation started.",
   };
 
   const payload = await performAuthenticatedAgentAction({
-    repository: {
+    world: {
       async performAction(cultivatorId, actionId) {
         calls.cultivatorId = cultivatorId;
         calls.actionId = actionId;
@@ -148,13 +147,13 @@ test("advanceAuthenticatedAgentWorld uses a manual trigger", async () => {
   const result: TickSummary = {
     tick: 8,
     advancedTicks: 4,
-    settledJobs: [],
+    completedJobs: [],
+    tribulations: [],
     triggeredEvents: [],
-    activeCombats: [],
   };
 
   const payload = await advanceAuthenticatedAgentWorld({
-    repository: {
+    world: {
       async advanceWorld(steps, trigger) {
         calls.steps = steps;
         calls.trigger = trigger;

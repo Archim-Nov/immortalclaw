@@ -24,15 +24,15 @@ export function toAgentView(agent: AgentProfileRecord): AgentView {
 }
 
 export async function buildAuthenticatedAgentState(options: {
-  repository: AgentOnboardingRepository;
+  world: AgentOnboardingRepository;
   agent: AgentProfileRecord;
 }): Promise<AgentStateResponse> {
-  const { repository, agent } = options;
-  const [payload, world] = await Promise.all([
-    repository.getCultivatorState(agent.selectedCultivatorId),
-    repository.readWorld(),
+  const { world, agent } = options;
+  const [payload, snapshot] = await Promise.all([
+    world.getCultivatorState(agent.selectedCultivatorId),
+    world.readWorld(),
   ]);
-  const cultivator = world.cultivators[agent.selectedCultivatorId];
+  const cultivator = snapshot.cultivators[agent.selectedCultivatorId];
   const mainAttributes = deriveMainAttributes(cultivator?.registrationRecord ?? null);
 
   return {

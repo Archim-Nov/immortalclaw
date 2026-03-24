@@ -13,7 +13,7 @@ function createState(): CultivatorStateView {
     cultivator: {
       id: "cultivator-9",
       name: "Su Mingyue",
-      realm: "鐐兼皵",
+      realm: "炼气",
       realmLevel: 1,
       realmProgress: 14,
       status: "idle",
@@ -68,18 +68,24 @@ function createState(): CultivatorStateView {
     derivedState: {
       readiness: "ready",
       recoveryState: "healthy",
-      activityContext: "settled",
+      activityContext: "stationed",
       daoPotential: {
         score: 52,
-        tier: "steady",
-        nextMilestone: 65,
+        tier: "adept",
+        breakdown: {
+          realmBase: 20,
+          attributeAverage: 20,
+          detailedAttributeModifier: 8,
+          readinessModifier: 2,
+          statusModifier: 2,
+        },
       },
     },
     onboarding: {
       stage: "registered",
-      completedSteps: ["register"],
+      completedStages: [],
       nextAction: "take-mortal-task",
-      summary: "Ready to start.",
+      hint: "Ready to start.",
     },
     agentGuidance: {
       warnings: [],
@@ -113,7 +119,7 @@ test("buildAuthenticatedAgentState assembles agent view plus cultivator state in
   };
 
   const payload = await buildAuthenticatedAgentState({
-    repository: {
+    world: {
       async getCultivatorState(cultivatorId) {
         calls.cultivatorId = cultivatorId;
         return createState();

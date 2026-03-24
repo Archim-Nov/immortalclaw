@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { cors } from "hono/cors";
-import { isAllowedCorsOrigin, type RuntimeWorkerEnv } from "./env.js";
+import { isAllowedCorsOrigin, type WorldDOEnv, type WorldDOHonoEnv } from "./env.js";
 
 function readStatus(error: unknown) {
   if (typeof error === "object" && error !== null && "status" in error) {
@@ -21,16 +21,16 @@ function readMessage(error: unknown) {
   return "Unexpected server error.";
 }
 
-export function registerRuntimeMiddleware(app: Hono<RuntimeWorkerEnv>) {
+export function registerMiddleware(app: Hono<WorldDOHonoEnv>, env: WorldDOEnv) {
   app.use(
     "*",
     cors({
-      origin(origin, context) {
+      origin(origin) {
         if (!origin) {
           return null;
         }
 
-        return isAllowedCorsOrigin(origin, context.env) ? origin : null;
+        return isAllowedCorsOrigin(origin, env) ? origin : null;
       },
     }),
   );

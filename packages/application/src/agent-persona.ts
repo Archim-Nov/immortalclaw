@@ -5,15 +5,17 @@ import type {
   AgentProfileRecord,
   AgentProfileWriteInput,
 } from "../../persistence/src/world-repository.js";
+import type { AuthClient } from "../../persistence/src/auth-client.js";
 
-export interface AgentPersonaWorkflowRepository {
+export interface AgentPersonaWorldRepository {
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
-  getAgentProfile(agentId: string): Promise<AgentProfileRecord | null>;
-  saveAgentProfile(input: AgentProfileWriteInput): Promise<AgentProfileRecord>;
 }
 
+export interface AgentPersonaAuthClient extends Pick<AuthClient, "getAgentProfile" | "saveAgentProfile"> {}
+
 export interface SyncAgentPersonaWorkflowOptions {
-  repository: AgentPersonaWorkflowRepository;
+  world: AgentPersonaWorldRepository;
+  auth: AgentPersonaAuthClient;
   agentId: string;
   input: AgentPersonaInput;
 }
@@ -34,14 +36,14 @@ function mergeProfileInput(agentId: string, existing: AgentProfileRecord, input:
 export async function syncAgentPersonaWorkflow(
   options: SyncAgentPersonaWorkflowOptions,
 ): Promise<AgentPersonaSyncResult> {
-  const { repository, input } = options;
+  const { world, auth, input } = options;
   const agentId = options.agentId.trim();
   if (!agentId) {
     throw new Error("agentId is required.");
   }
 
-  const sync = await repository.transactWorld((world) =>
-    syncCultivatorFromPersona(world, {
+  const sync = await world.transactWorld((draftWorld) =>
+    syncCultivatorFromPersona(draftWorld, {
       agentId,
       name: input.name,
       genderPresentation: input.genderPresentation,
@@ -52,9 +54,9 @@ export async function syncAgentPersonaWorkflow(
     }),
   );
 
-  const existingProfile = await repository.getAgentProfile(agentId);
+  const existingProfile = await auth.getAgentProfile(agentId);
   if (existingProfile) {
-    await repository.saveAgentProfile(
+    await auth.saveAgentProfile(
       mergeProfileInput(agentId, existingProfile, input, sync.selectedCultivatorId),
     );
   }

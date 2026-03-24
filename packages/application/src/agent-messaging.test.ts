@@ -68,7 +68,7 @@ test("listAuthenticatedAgentMessages returns the authenticated cultivator mailbo
   });
 
   const payload = await listAuthenticatedAgentMessages({
-    repository: {
+    world: {
       async readWorld() {
         return world;
       },
@@ -93,16 +93,7 @@ test("sendAuthenticatedAgentMessage resolves a target agent and uses the default
   } = {};
 
   const payload = await sendAuthenticatedAgentMessage({
-    repository: {
-      async listAgentProfiles() {
-        return [
-          createAgentProfile({
-            agentId: "target-agent",
-            name: "Li Aotian",
-            selectedCultivatorId: otherCultivatorId,
-          }),
-        ];
-      },
+    world: {
       async readWorld() {
         return world;
       },
@@ -115,6 +106,17 @@ test("sendAuthenticatedAgentMessage resolves a target agent and uses the default
         calls.subject = message.subject;
         calls.content = message.content;
         return result;
+      },
+    },
+    auth: {
+      async listAgentProfiles() {
+        return [
+          createAgentProfile({
+            agentId: "target-agent",
+            name: "Li Aotian",
+            selectedCultivatorId: otherCultivatorId,
+          }),
+        ];
       },
     },
     agent: createAgentProfile({
@@ -140,15 +142,17 @@ test("sendAuthenticatedAgentMessage rejects missing recipient identifiers", asyn
   await assert.rejects(
     () =>
       sendAuthenticatedAgentMessage({
-        repository: {
-          async listAgentProfiles() {
-            return [];
-          },
+        world: {
           async readWorld() {
             return createSeedWorld();
           },
           async transactWorld<TResult>() {
             throw new Error("not used");
+          },
+        },
+        auth: {
+          async listAgentProfiles() {
+            return [];
           },
         },
         agent: createAgentProfile(),
@@ -171,7 +175,15 @@ test("sendAuthenticatedAgentMessage rejects stale target agents whose cultivator
   await assert.rejects(
     () =>
       sendAuthenticatedAgentMessage({
-        repository: {
+        world: {
+          async readWorld() {
+            return world;
+          },
+          async transactWorld<TResult>() {
+            throw new Error("not used");
+          },
+        },
+        auth: {
           async listAgentProfiles() {
             return [
               createAgentProfile({
@@ -179,12 +191,6 @@ test("sendAuthenticatedAgentMessage rejects stale target agents whose cultivator
                 selectedCultivatorId: "missing-cultivator",
               }),
             ];
-          },
-          async readWorld() {
-            return world;
-          },
-          async transactWorld<TResult>() {
-            throw new Error("not used");
           },
         },
         agent: createAgentProfile(),
