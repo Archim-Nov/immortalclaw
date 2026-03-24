@@ -140,6 +140,8 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
       pronouns: input.pronouns?.trim(),
       origin: input.origin?.trim(),
       temperament: input.temperament?.trim(),
+      webhookUrl: input.webhookUrl ?? existingProfile?.webhookUrl ?? null,
+      webhookSecret: existingProfile?.webhookSecret ?? null,
       createdAt: existingProfile?.createdAt ?? timestamp,
       updatedAt: timestamp,
       lastSeenAt: input.lastSeenAt ?? existingProfile?.lastSeenAt ?? timestamp,

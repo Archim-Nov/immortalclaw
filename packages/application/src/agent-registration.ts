@@ -16,6 +16,7 @@ import type {
   AgentRegistrationInput,
 } from "../../persistence/src/world-repository.js";
 import type { AuthClient } from "../../persistence/src/auth-client.js";
+import { issueWebhookSecret } from "../../persistence/src/webhook-secret.js";
 
 export interface AgentRegistrationWorldRepository {
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
@@ -65,6 +66,8 @@ export async function registerAgentWorkflow(
     age: input.age,
     origin: input.origin,
     temperament: input.temperament,
+    webhookUrl: input.webhookUrl,
+    webhookSecret: issueWebhookSecret(input.webhookUrl),
   });
   const credential = await auth.issueAgentCredential(agentId);
   const [state, savedRecord] = await Promise.all([

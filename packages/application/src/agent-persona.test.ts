@@ -22,6 +22,8 @@ test("syncAgentPersonaWorkflow updates an existing agent profile after syncing t
           selectedCultivatorId: "old-cultivator",
           origin: "Old Harbor",
           temperament: "Careful",
+          webhookUrl: null,
+          webhookSecret: null,
           createdAt: "2026-03-17T00:00:00.000Z",
           updatedAt: "2026-03-17T00:00:00.000Z",
           lastSeenAt: "2026-03-17T00:00:00.000Z",
@@ -32,6 +34,8 @@ test("syncAgentPersonaWorkflow updates an existing agent profile after syncing t
         return {
           ...input,
           lastSeenAt: input.lastSeenAt ?? null,
+          webhookUrl: input.webhookUrl ?? null,
+          webhookSecret: null,
           createdAt: "2026-03-17T00:00:00.000Z",
           updatedAt: "2026-03-17T00:00:01.000Z",
         };

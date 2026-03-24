@@ -111,6 +111,8 @@ test("buildAuthenticatedAgentState assembles agent view plus cultivator state in
     agentId: "agent-1",
     name: "Su Mingyue",
     selectedCultivatorId: "cultivator-9",
+    webhookUrl: null,
+    webhookSecret: null,
     createdAt: "2026-03-17T00:00:00.000Z",
     updatedAt: "2026-03-17T01:00:00.000Z",
     lastSeenAt: "2026-03-17T01:00:00.000Z",

@@ -17,19 +17,19 @@
 **Files:**
 - Create: `supabase/migrations/20260322_agent_webhook_url.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 alter table agent_profiles add column webhook_url text;
 alter table agent_profiles add column webhook_secret text;
 ```
 
-- [ ] **Step 2: Verify migration syntax**
+- [x] **Step 2: Verify migration syntax**
 
 Run: `npx supabase db lint`
 Expected: No errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add supabase/migrations/20260322_agent_webhook_url.sql
@@ -47,7 +47,7 @@ git commit -m "feat(persistence): add webhook_url and webhook_secret columns to 
 - Modify: `packages/persistence/src/supabase-world-repository.ts:123-130` (listAgentProfiles SELECT fields)
 - Modify: `packages/persistence/src/in-memory-world-repository.ts:133-167` (saveAgentProfile)
 
-- [ ] **Step 1: Add fields to `AgentProfileRecord` and `AgentProfileWriteInput`**
+- [x] **Step 1: Add fields to `AgentProfileRecord` and `AgentProfileWriteInput`**
 
 In `packages/persistence/src/world-repository.ts`, add to `AgentProfileRecord`:
 
@@ -63,7 +63,7 @@ webhookUrl?: string;
 webhookSecret?: string;
 ```
 
-- [ ] **Step 2: Add fields to `AgentProfileRow`**
+- [x] **Step 2: Add fields to `AgentProfileRow`**
 
 In `packages/persistence/src/supabase-world-repository.ts`, add to the `AgentProfileRow` interface (line 62):
 
@@ -72,7 +72,7 @@ webhook_url?: string | null;
 webhook_secret?: string | null;
 ```
 
-- [ ] **Step 3: Update `toAgentProfileRow` and `fromAgentProfileRow`**
+- [x] **Step 3: Update `toAgentProfileRow` and `fromAgentProfileRow`**
 
 In `toAgentProfileRow` (line 619), add:
 
@@ -88,11 +88,11 @@ webhookUrl: row.webhook_url ?? null,
 webhookSecret: row.webhook_secret ?? null,
 ```
 
-- [ ] **Step 4: Update SELECT field lists**
+- [x] **Step 4: Update SELECT field lists**
 
 Find `listAgentProfiles` (line 123) and `getAgentProfile` (line 132) — add `webhook_url,webhook_secret` to the `select` field string. Also update `readAgentProfile` (line 607) if it has its own select string.
 
-- [ ] **Step 5: Update in-memory repository**
+- [x] **Step 5: Update in-memory repository**
 
 In `packages/persistence/src/in-memory-world-repository.ts`, ensure `saveAgentProfile` (line 133) passes through `webhookUrl` and `webhookSecret` fields when constructing the stored record. Set defaults:
 
@@ -101,12 +101,12 @@ webhookUrl: input.webhookUrl ?? existing?.webhookUrl ?? null,
 webhookSecret: input.webhookSecret ?? existing?.webhookSecret ?? null,
 ```
 
-- [ ] **Step 6: Run existing tests to verify no regressions**
+- [x] **Step 6: Run existing tests to verify no regressions**
 
 Run: `node --import tsx --test "packages/persistence/**/*.test.ts" "packages/application/**/*.test.ts" "apps/runtime-worker/**/*.test.ts"`
 Expected: All existing tests pass. The new nullable fields have defaults, so no existing code should break.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/persistence/src/world-repository.ts packages/persistence/src/supabase-world-repository.ts packages/persistence/src/in-memory-world-repository.ts
@@ -120,7 +120,7 @@ git commit -m "feat(persistence): add webhookUrl and webhookSecret to agent prof
 **Files:**
 - Modify: `packages/contracts/src/runtime-api.ts`
 
-- [ ] **Step 1: Add optional `webhookUrl` to `AgentRegistrationRequest`**
+- [x] **Step 1: Add optional `webhookUrl` to `AgentRegistrationRequest`**
 
 In `packages/contracts/src/runtime-api.ts`, update the existing `AgentRegistrationRequest` (line 76):
 
@@ -132,7 +132,7 @@ export interface AgentRegistrationRequest extends Omit<AgentRegistrationInput, "
 }
 ```
 
-- [ ] **Step 2: Add new types**
+- [x] **Step 2: Add new types**
 
 At the end of `packages/contracts/src/runtime-api.ts`, add:
 
@@ -150,11 +150,11 @@ export interface AgentWebhookBindResponse {
 }
 ```
 
-- [ ] **Step 3: Export from index**
+- [x] **Step 3: Export from index**
 
 Ensure the types are exported from `packages/contracts/src/index.ts` (if it re-exports from `runtime-api.ts`, this may already work).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add packages/contracts/src/runtime-api.ts
@@ -169,7 +169,7 @@ git commit -m "feat(contracts): add WebhookWakePayload and AgentWebhookBindRespo
 - Create: `packages/application/src/webhook-dispatch.test.ts`
 - Create: `packages/application/src/webhook-dispatch.ts`
 
-- [ ] **Step 1: Write failing tests for `resolveWebhookTargets`**
+- [x] **Step 1: Write failing tests for `resolveWebhookTargets`**
 
 Create `packages/application/src/webhook-dispatch.test.ts`:
 
@@ -319,12 +319,12 @@ test("resolveMessageWebhookTarget returns null when recipient has no webhook", (
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test packages/application/src/webhook-dispatch.test.ts`
 Expected: FAIL — module `./webhook-dispatch.js` not found.
 
-- [ ] **Step 3: Implement `resolveWebhookTargets` and `resolveMessageWebhookTarget`**
+- [x] **Step 3: Implement `resolveWebhookTargets` and `resolveMessageWebhookTarget`**
 
 Create `packages/application/src/webhook-dispatch.ts`:
 
@@ -454,12 +454,12 @@ export async function dispatchWebhooks(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test packages/application/src/webhook-dispatch.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 5: Export from application index**
+- [x] **Step 5: Export from application index**
 
 Add to `packages/application/src/index.ts`:
 
@@ -473,7 +473,7 @@ export {
 } from "./webhook-dispatch.js";
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/application/src/webhook-dispatch.ts packages/application/src/webhook-dispatch.test.ts packages/application/src/index.ts
@@ -488,7 +488,7 @@ git commit -m "feat(application): add webhook dispatch module with event routing
 - Create: `packages/application/src/agent-webhook.ts`
 - Create: `packages/application/src/agent-webhook.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Create `packages/application/src/agent-webhook.test.ts`:
 
@@ -555,12 +555,12 @@ test("updateAgentWebhookUrl rejects non-HTTPS URLs in production", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test packages/application/src/agent-webhook.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `updateAgentWebhookUrl`**
+- [x] **Step 3: Implement `updateAgentWebhookUrl`**
 
 Create `packages/application/src/agent-webhook.ts`:
 
@@ -613,12 +613,12 @@ export async function updateAgentWebhookUrl(options: {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test packages/application/src/agent-webhook.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 5: Export from application index**
+- [x] **Step 5: Export from application index**
 
 Add to `packages/application/src/index.ts`:
 
@@ -626,7 +626,7 @@ Add to `packages/application/src/index.ts`:
 export { updateAgentWebhookUrl } from "./agent-webhook.js";
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/application/src/agent-webhook.ts packages/application/src/agent-webhook.test.ts packages/application/src/index.ts
@@ -640,7 +640,7 @@ git commit -m "feat(application): add updateAgentWebhookUrl use case with secret
 **Files:**
 - Modify: `apps/runtime-worker/src/routes.ts`
 
-- [ ] **Step 1: Add the endpoint**
+- [x] **Step 1: Add the endpoint**
 
 In `apps/runtime-worker/src/routes.ts`, after the existing `POST /agent/credential/reset` handler, add:
 
@@ -659,12 +659,12 @@ app.post("/agent/webhook", async (context) => {
 
 Add `updateAgentWebhookUrl` to the imports from application.
 
-- [ ] **Step 2: Run existing tests**
+- [x] **Step 2: Run existing tests**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/runtime-worker/src/routes.ts
@@ -679,7 +679,7 @@ git commit -m "feat(runtime-worker): add POST /agent/webhook endpoint"
 - Modify: `apps/runtime-worker/src/scheduler.ts`
 - Modify: `apps/runtime-worker/src/routes.ts` (POST /agent/tick handler)
 
-- [ ] **Step 1: Update `runScheduledTick` to dispatch webhooks**
+- [x] **Step 1: Update `runScheduledTick` to dispatch webhooks**
 
 In `apps/runtime-worker/src/scheduler.ts`, update the function to capture the tick summary, read world and profiles, and dispatch:
 
@@ -728,7 +728,7 @@ export async function runScheduledTick(
 }
 ```
 
-- [ ] **Step 2: Update `POST /agent/tick` to dispatch webhooks**
+- [x] **Step 2: Update `POST /agent/tick` to dispatch webhooks**
 
 In `apps/runtime-worker/src/routes.ts`, update the `/agent/tick` handler (line 538):
 
@@ -753,12 +753,12 @@ app.post("/agent/tick", async (context) => {
 
 Add `resolveWebhookTargets` and `dispatchWebhooks` to the imports from application.
 
-- [ ] **Step 3: Run existing tests**
+- [x] **Step 3: Run existing tests**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/runtime-worker/src/scheduler.ts apps/runtime-worker/src/routes.ts
@@ -772,7 +772,7 @@ git commit -m "feat(runtime-worker): dispatch webhooks after scheduled and manua
 **Files:**
 - Modify: `apps/runtime-worker/src/routes.ts` (POST /agent/messages handler)
 
-- [ ] **Step 1: Update the message handler to dispatch**
+- [x] **Step 1: Update the message handler to dispatch**
 
 In `apps/runtime-worker/src/routes.ts`, update the `POST /agent/messages` handler (line 455). After the message is sent, read the recipient's cultivator ID from the response and dispatch:
 
@@ -809,12 +809,12 @@ app.post("/agent/messages", async (context) => {
 
 Add `resolveMessageWebhookTarget` to the imports from application.
 
-- [ ] **Step 2: Run existing tests**
+- [x] **Step 2: Run existing tests**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/runtime-worker/src/routes.ts
@@ -828,7 +828,7 @@ git commit -m "feat(runtime-worker): dispatch webhook to recipient after message
 **Files:**
 - Modify: `apps/runtime-worker/src/index.test.ts`
 
-- [ ] **Step 1: Write integration test**
+- [x] **Step 1: Write integration test**
 
 Add a test that registers an agent with a webhook URL, performs an action, advances a tick, and verifies an outbound webhook fetch was made. The test should use the in-memory repository and a mock `fetch` injected via the dispatch module.
 
@@ -842,12 +842,12 @@ The test needs to:
 
 **Note on `executionCtx.waitUntil`:** The Hono test client does not provide a real `executionCtx`. The test should verify webhook dispatch by either: (a) providing a mock `executionCtx` with a `waitUntil` that captures promises and awaits them, or (b) injecting a mock `fetch` that records outbound calls and asserting against it after the tick response. Consult existing tests in `apps/runtime-worker/src/index.test.ts` for the exact app creation pattern — you may need to pass a custom `waitUntil` in the test factory.
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `node --import tsx --test apps/runtime-worker/src/index.test.ts`
 Expected: All tests pass including the new one.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/runtime-worker/src/index.test.ts
@@ -861,7 +861,7 @@ git commit -m "test(runtime-worker): integration test for webhook dispatch after
 **Files:**
 - Modify: `packages/openclaw-immortal-plugin/index.ts`
 
-- [ ] **Step 1: Extend `OpenClawPluginApiLike` type**
+- [x] **Step 1: Extend `OpenClawPluginApiLike` type**
 
 Add the webhook and heartbeat surfaces to the type. Since the actual OpenClaw SDK APIs may not be available in all environments, model them as optional:
 
@@ -879,7 +879,7 @@ type OpenClawPluginApiLike = {
 };
 ```
 
-- [ ] **Step 2: Add `webhookBaseUrl` to `PluginConfig`**
+- [x] **Step 2: Add `webhookBaseUrl` to `PluginConfig`**
 
 ```typescript
 type PluginConfig = {
@@ -890,7 +890,7 @@ type PluginConfig = {
 
 Update `resolvePluginConfig` to read it.
 
-- [ ] **Step 3: Add HMAC verification helper**
+- [x] **Step 3: Add HMAC verification helper**
 
 ```typescript
 async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
@@ -908,7 +908,7 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
 }
 ```
 
-- [ ] **Step 4: Register webhook handler on bootstrap**
+- [x] **Step 4: Register webhook handler on bootstrap**
 
 Inside `register(api)`, after existing tool registrations, add. Note: step 6 below adds `webhookSecret` to `AgentSession`, so the handler uses proper typing — no `as any` casts needed.
 
@@ -932,7 +932,7 @@ if (api.registerWebhookHandler && api.requestHeartbeatNow) {
 }
 ```
 
-- [ ] **Step 5: Add `webhookSecret` to `AgentSession` type**
+- [x] **Step 5: Add `webhookSecret` to `AgentSession` type**
 
 This must come before the webhook handler (step 4) and bootstrap registration (step 6) since both reference `session.webhookSecret`.
 
@@ -945,7 +945,7 @@ type AgentSession = {
 
 Update `coerceAgentSession` to read `webhookSecret` from the input object.
 
-- [ ] **Step 6: Add webhook URL registration on bootstrap**
+- [x] **Step 6: Add webhook URL registration on bootstrap**
 
 After `ensureAgentSession()` succeeds and the session is cached, call `POST /agent/webhook` if `webhookBaseUrl` is configured:
 
@@ -970,7 +970,7 @@ if (config.webhookBaseUrl && session) {
 }
 ```
 
-- [ ] **Step 7: Add system prompt injection for wake reason**
+- [x] **Step 7: Add system prompt injection for wake reason**
 
 In the existing `before_prompt_build` hook (already wired via `api.on?.("before_prompt_build", ...)`), add the wake reason to the prepended system context when available:
 
@@ -986,7 +986,7 @@ lastWakeReason = undefined;
 
 This is the mechanism that gives the LLM contextual awareness of why it was woken. The `lastWakeReason` variable is set by the webhook handler (step 4) and by the fallback poll (step 8).
 
-- [ ] **Step 8: Add fallback poll timer**
+- [x] **Step 8: Add fallback poll timer**
 
 Inside `register(api)`, add a 60-second interval that polls state and messages:
 
@@ -1028,12 +1028,12 @@ const pollInterval = setInterval(async () => {
 if (pollInterval.unref) pollInterval.unref();
 ```
 
-- [ ] **Step 9: Run existing plugin tests**
+- [x] **Step 9: Run existing plugin tests**
 
 Run: `node --import tsx --test packages/openclaw-immortal-plugin/index.test.ts`
 Expected: All existing tests pass.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add packages/openclaw-immortal-plugin/index.ts
@@ -1047,18 +1047,18 @@ git commit -m "feat(openclaw-plugin): add webhook handler, HMAC verification, fa
 **Files:**
 - Modify: `packages/openclaw-immortal-plugin/index.test.ts`
 
-- [ ] **Step 1: Add test for webhook handler**
+- [x] **Step 1: Add test for webhook handler**
 
 Add a test that creates the plugin with a mock `registerWebhookHandler` and `requestHeartbeatNow`, sends a webhook with a valid HMAC signature, and verifies `requestHeartbeatNow` was called with the correct reason.
 
 Consult `packages/openclaw-immortal-plugin/index.test.ts` for the existing test setup pattern (mock API, mock fetch, plugin creation).
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `node --import tsx --test packages/openclaw-immortal-plugin/index.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add packages/openclaw-immortal-plugin/index.test.ts
@@ -1069,17 +1069,17 @@ git commit -m "test(openclaw-plugin): verify webhook receipt triggers heartbeat 
 
 ### Task 12: Full Test Suite and Cleanup
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `npm test`
 Expected: All tests pass.
 
-- [ ] **Step 2: Fix any regressions**
+- [x] **Step 2: Fix any regressions**
 
 If any test fails, investigate and fix. Common issues:
 - Missing `webhookUrl`/`webhookSecret` fields in test fixtures that construct `AgentProfileRecord` objects. Add `webhookUrl: null, webhookSecret: null` to those fixtures.
 
-- [ ] **Step 3: Final commit if needed**
+- [x] **Step 3: Final commit if needed**
 
 ```bash
 git add -A

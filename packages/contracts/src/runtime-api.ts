@@ -76,6 +76,7 @@ export type AdvanceWorldResponse = TickSummary;
 export interface AgentRegistrationRequest extends Omit<AgentRegistrationInput, "record"> {
   answers?: Record<RegistrationQuestionId, RegistrationAnswer>;
   record?: CultivationRegistrationRecord;
+  webhookUrl?: string;
 }
 
 export type AgentRegistrationQuestionnaireResponse = RegistrationQuestionnaireView;
@@ -141,6 +142,18 @@ export interface AgentEventsResponse {
 
 export interface AgentRegistrationRecordRequest {
   record: CultivationRegistrationRecord;
+}
+
+export interface WebhookWakePayload {
+  event: "tick" | "message" | "tribulation";
+  tick: number;
+  reason: string;
+}
+
+export interface AgentWebhookBindResponse {
+  ok: true;
+  webhookUrl: string;
+  webhookSecret: string;
 }
 
 export type AgentStrategyResponse = StrategySnapshot;

@@ -20,6 +20,8 @@ interface AgentProfileRow {
   pronouns?: string | null;
   origin?: string | null;
   temperament?: string | null;
+  webhook_url?: string | null;
+  webhook_secret?: string | null;
   created_at: string;
   updated_at: string;
   last_seen_at?: string | null;
@@ -106,6 +108,8 @@ export class SupabaseAuthClient implements AuthClient {
       pronouns: input.pronouns?.trim(),
       origin: input.origin?.trim(),
       temperament: input.temperament?.trim(),
+      webhookUrl: input.webhookUrl ?? existingProfile?.webhookUrl ?? null,
+      webhookSecret: existingProfile?.webhookSecret ?? null,
       createdAt: existingProfile?.createdAt ?? timestamp,
       updatedAt: timestamp,
       lastSeenAt: input.lastSeenAt ?? existingProfile?.lastSeenAt ?? timestamp,
@@ -337,6 +341,8 @@ export class SupabaseAuthClient implements AuthClient {
       pronouns: profile.pronouns ?? null,
       origin: profile.origin ?? null,
       temperament: profile.temperament ?? null,
+      webhook_url: profile.webhookUrl ?? null,
+      webhook_secret: profile.webhookSecret ?? null,
       created_at: profile.createdAt,
       updated_at: profile.updatedAt,
       last_seen_at: profile.lastSeenAt,
@@ -352,6 +358,8 @@ export class SupabaseAuthClient implements AuthClient {
       pronouns: row.pronouns ?? undefined,
       origin: row.origin ?? undefined,
       temperament: row.temperament ?? undefined,
+      webhookUrl: row.webhook_url ?? null,
+      webhookSecret: row.webhook_secret ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       lastSeenAt: row.last_seen_at ?? null,
