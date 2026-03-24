@@ -11,7 +11,6 @@ export {
   readAuthenticatedAgentRegistration,
   readAuthenticatedAgentSectInfo,
   readAuthenticatedAgentStrategy,
-  readAuthenticatedAgentTribulation,
 } from "./agent-insights.js";
 export type { AgentInsightsRepository } from "./agent-insights.js";
 export { listAuthenticatedAgentMessages, sendAuthenticatedAgentMessage } from "./agent-messaging.js";

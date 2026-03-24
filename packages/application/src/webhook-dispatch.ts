@@ -80,20 +80,6 @@ export function resolveWebhookTargets(
     });
   }
 
-  for (const tribulation of tickSummary.tribulations) {
-    const agentId = cultivatorToAgent.get(tribulation.cultivatorId);
-    if (!agentId) continue;
-    const profile = resolveTargetProfile(agentLookup, agentId);
-    if (!profile) continue;
-
-    targets.push({
-      agentId,
-      webhookUrl: profile.webhookUrl,
-      webhookSecret: profile.webhookSecret,
-      payload: buildWakePayload("tribulation", tickSummary.tick, tribulation.summary),
-    });
-  }
-
   return targets;
 }
 

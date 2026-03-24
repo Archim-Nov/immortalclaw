@@ -32,7 +32,6 @@ test("resolveWebhookTargets returns targets for completed jobs", () => {
     tick: 10,
     advancedTicks: 1,
     completedJobs: [{ cultivatorId: sync.selectedCultivatorId, actionId: "meditate", summary: "Meditation completed." }],
-    tribulations: [],
     triggeredEvents: [],
   };
 
@@ -44,7 +43,7 @@ test("resolveWebhookTargets returns targets for completed jobs", () => {
   assert.ok(targets[0].payload.reason.includes("Meditation completed."));
 });
 
-test("resolveWebhookTargets returns targets for tribulations", () => {
+test("resolveWebhookTargets returns no targets when no jobs completed", () => {
   const world = createSeedWorld();
   const sync = syncCultivatorFromPersona(world, { agentId: "agent-1", name: "Su Mingyue" });
   const profiles = [createProfile({ agentId: "agent-1", selectedCultivatorId: sync.selectedCultivatorId })];
@@ -52,13 +51,11 @@ test("resolveWebhookTargets returns targets for tribulations", () => {
     tick: 20,
     advancedTicks: 1,
     completedJobs: [],
-    tribulations: [{ cultivatorId: sync.selectedCultivatorId, success: true, summary: "Survived tribulation." }],
     triggeredEvents: [],
   };
 
   const targets = resolveWebhookTargets(world, summary, profiles);
-  assert.equal(targets.length, 1);
-  assert.equal(targets[0].payload.event, "tribulation");
+  assert.equal(targets.length, 0);
 });
 
 test("resolveWebhookTargets excludes agents without webhookUrl", () => {
@@ -69,7 +66,6 @@ test("resolveWebhookTargets excludes agents without webhookUrl", () => {
     tick: 10,
     advancedTicks: 1,
     completedJobs: [{ cultivatorId: sync.selectedCultivatorId, actionId: "meditate", summary: "Done." }],
-    tribulations: [],
     triggeredEvents: [],
   };
 
@@ -89,7 +85,6 @@ test("resolveWebhookTargets excludes unrelated agents", () => {
     tick: 10,
     advancedTicks: 1,
     completedJobs: [{ cultivatorId: sync2.selectedCultivatorId, actionId: "meditate", summary: "Done." }],
-    tribulations: [],
     triggeredEvents: [],
   };
 
@@ -98,20 +93,30 @@ test("resolveWebhookTargets excludes unrelated agents", () => {
   assert.equal(targets[0].agentId, "agent-2");
 });
 
-test("resolveWebhookTargets returns multiple targets for multiple events", () => {
+test("resolveWebhookTargets returns one wake per completed job", () => {
   const world = createSeedWorld();
   const sync = syncCultivatorFromPersona(world, { agentId: "agent-1", name: "Su Mingyue" });
   const profiles = [createProfile({ agentId: "agent-1", selectedCultivatorId: sync.selectedCultivatorId })];
   const summary: TickSummary = {
     tick: 30,
     advancedTicks: 1,
-    completedJobs: [{ cultivatorId: sync.selectedCultivatorId, actionId: "meditate", summary: "Meditation done." }],
-    tribulations: [{ cultivatorId: sync.selectedCultivatorId, success: false, summary: "Failed tribulation." }],
+    completedJobs: [
+      { cultivatorId: sync.selectedCultivatorId, actionId: "meditate", summary: "Meditation done." },
+      { cultivatorId: sync.selectedCultivatorId, actionId: "cultivate", summary: "Cultivation done." },
+    ],
     triggeredEvents: [],
   };
 
   const targets = resolveWebhookTargets(world, summary, profiles);
   assert.equal(targets.length, 2);
+  assert.deepEqual(
+    targets.map((target) => target.payload.reason),
+    ["Meditation done.", "Cultivation done."],
+  );
+  assert.deepEqual(
+    targets.map((target) => target.payload.event),
+    ["tick", "tick"],
+  );
 });
 
 test("resolveMessageWebhookTarget returns target for recipient agent", () => {

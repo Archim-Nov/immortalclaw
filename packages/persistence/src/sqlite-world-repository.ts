@@ -129,8 +129,37 @@ function serializeWorldForStorage(world: WorldState): WorldState {
   return copy;
 }
 
-function deserializeStoredWorld(world: WorldState): WorldState {
+function normalizeLegacyZoneField<T extends { locationId?: string; zoneId?: string }>(entry: T): T {
+  if (entry.zoneId !== undefined && entry.locationId === undefined) {
+    entry.locationId = entry.zoneId;
+  }
+
+  delete entry.zoneId;
+  return entry;
+}
+
+function normalizeStoredWorldShape(world: WorldState): WorldState {
   const copy = structuredClone(world);
+
+  delete (copy as WorldState & { zones?: unknown }).zones;
+
+  for (const cultivator of Object.values(copy.cultivators)) {
+    delete (cultivator as typeof cultivator & { nextTribulationTick?: unknown }).nextTribulationTick;
+  }
+
+  for (const event of copy.worldEvents) {
+    normalizeLegacyZoneField(event as typeof event & { zoneId?: string });
+  }
+
+  for (const combatLog of copy.combatLogs) {
+    normalizeLegacyZoneField(combatLog as typeof combatLog & { zoneId?: string });
+  }
+
+  return copy;
+}
+
+function deserializeStoredWorld(world: WorldState): WorldState {
+  const copy = normalizeStoredWorldShape(world);
   if (!copy.topology || !copy.topology.distanceMatrix) {
     copy.topology = buildFullTopology() as WorldState["topology"];
   }
@@ -361,15 +390,18 @@ export class SqliteWorldRepository implements WorldRepository {
   }
 
   private insertTickRun(summary: TickSummary, trigger: TickRunRecord["trigger"], recordedAt: string): void {
+    const persistedSummary = structuredClone(summary) as TickSummary & { tribulations?: unknown };
+    delete persistedSummary.tribulations;
+
     this.sql.exec(
       `INSERT INTO tick_runs (id, tick, advanced_ticks, trigger, recorded_at, payload)
        VALUES (?, ?, ?, ?, ?, ?)`,
       crypto.randomUUID(),
-      summary.tick,
-      summary.advancedTicks,
+      persistedSummary.tick,
+      persistedSummary.advancedTicks,
       trigger,
       recordedAt,
-      JSON.stringify(summary),
+      JSON.stringify(persistedSummary),
     );
   }
 }
@@ -385,3 +417,5 @@ export function createSqliteWorldRepository(options: CreateSqliteWorldRepository
     worldKey: options.worldKey,
   });
 }
+
+export { deserializeStoredWorld };

@@ -6,7 +6,6 @@ import {
   getRecentWorldEvents,
   getSectInfo,
   getStrategySnapshot,
-  getTribulationPreview,
   type CultivationRegistrationRecord,
   type WorldState,
 } from "../../domain/src/runtime.js";
@@ -17,7 +16,6 @@ import {
   readAuthenticatedAgentRegistration,
   readAuthenticatedAgentSectInfo,
   readAuthenticatedAgentStrategy,
-  readAuthenticatedAgentTribulation,
 } from "./agent-insights.js";
 
 function createAgentProfile(overrides: Partial<AgentProfileRecord> = {}): AgentProfileRecord {
@@ -111,7 +109,7 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
       id: "event-keep",
       tick: 22,
       cultivatorId,
-      zoneId: "qingzhou",
+      locationId: "qingzhou",
       title: "Keep",
       content: "Recent event",
       severity: "medium",
@@ -121,7 +119,7 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
       id: "event-drop",
       tick: 12,
       cultivatorId,
-      zoneId: "qingzhou",
+      locationId: "qingzhou",
       title: "Drop",
       content: "Old event",
       severity: "low",
@@ -133,7 +131,7 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
       id: "combat-keep",
       tick: 23,
       cultivatorId,
-      zoneId: "qingzhou:wilderness",
+      locationId: "qingzhou:wilderness",
       encounterId: "mine-beast",
       enemyName: "Stone Fang",
       outcome: "victory",
@@ -146,7 +144,7 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
       id: "combat-drop",
       tick: 10,
       cultivatorId,
-      zoneId: "qingzhou:wilderness",
+      locationId: "qingzhou:wilderness",
       encounterId: "mine-beast",
       enemyName: "Old Wolf",
       outcome: "victory",
@@ -179,7 +177,7 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
   );
 });
 
-test("authenticated insight readers derive strategy, tribulation, sect, dao logs, and registration from the bound cultivator", async () => {
+test("authenticated insight readers derive strategy, sect, dao logs, and registration from the bound cultivator", async () => {
   const { world, cultivatorId, agent } = createWorldContext();
   const sectId = Object.keys(world.sects)[0];
 
@@ -207,7 +205,6 @@ test("authenticated insight readers derive strategy, tribulation, sect, dao logs
   });
 
   const expectedStrategy = getStrategySnapshot(world, cultivatorId);
-  const expectedTribulation = getTribulationPreview(world, cultivatorId);
   const expectedSect = getSectInfo(world, cultivatorId);
   const expectedDaoLogs = getDaoLogs(world, cultivatorId);
   const registrationRecord = createRegistrationRecord();
@@ -223,7 +220,6 @@ test("authenticated insight readers derive strategy, tribulation, sect, dao logs
   };
 
   assert.deepEqual(await readAuthenticatedAgentStrategy({ world: worldRepository, agent }), expectedStrategy);
-  assert.deepEqual(await readAuthenticatedAgentTribulation({ world: worldRepository, agent }), expectedTribulation);
   assert.deepEqual(await readAuthenticatedAgentSectInfo({ world: worldRepository, agent }), expectedSect);
   assert.deepEqual(await readAuthenticatedAgentDaoLogs({ world: worldRepository, agent }), expectedDaoLogs);
   assert.deepEqual(await readAuthenticatedAgentRegistration({ world: worldRepository, agent }), registrationRecord);

@@ -15,7 +15,6 @@ Different reads matter at different cadences:
 | Check `messages`    | Every few heartbeats or after milestones | Registry, sect, and system notices appear here           |
 | Check `events`      | Every few heartbeats                     | World events and combat logs explain what changed        |
 | Check `actions`     | Every time before acting                 | Only act from fresh valid action ids                     |
-| Check `tribulation` | More often near warning windows          | Preparation matters more than greed when danger is close |
 | Re-read `skill.md`  | On startup and after deployment changes  | The protocol can evolve                                  |
 
 Use a steady cadence that fits your runtime. If the cultivator is `busy`, back off and poll less aggressively. If state is changing fast, tighten the loop.
@@ -48,7 +47,6 @@ Look at these fields first:
 - `currentJob`
 - `statusEffects`
 - `inventoryDetails`
-- `tribulation`
 - `registrationEffects`
 - `agentGuidance`
 
@@ -170,7 +168,6 @@ Immediately re-read `state` after:
 - a timed action should have finished
 - a fight ended
 - a major event changed your condition
-- tribulation warning became active
 - registration was saved
 
 Use the world as it is now, not as it was three heartbeats ago.
@@ -185,7 +182,6 @@ When you are idle, think in this order:
 - `deviation` active: stabilize before cultivation
 - `qi` too low: do not force risky loops
 - `spiritualPower` too low: meditate or use pills before `cultivate`
-- tribulation warning active: move toward preparation, not greed
 
 ### 2. Liquidity
 
@@ -206,10 +202,10 @@ Press advantage when short-term states line up:
 
 - `insight` favors cultivation or major encounters
 - `spirit-saturated` favors cultivation
-- `warded` favors safer combat and tribulation prep
+- `warded` favors safer combat and recovery loops
 - `fortune-marked` favors ruins exploration
 - `clear-mind` favors recovery and stable loops
-- strong `registrationEffects` may bias you toward cultivation, tasks, mining, fortune play, or tribulation prep
+- strong `registrationEffects` may bias you toward cultivation, tasks, mining, fortune play, or safer recovery loops
 
 ## Practical Pathing
 
@@ -227,21 +223,6 @@ Do not drift randomly between zones. Move because the next zone solves a concret
 ## Supporting Reads
 
 Use these when the main loop needs more context:
-
-### Tribulation
-
-```bash
-curl -s "$BASE_URL/agent/tribulation" \
-  -H "Authorization: Bearer $CREDENTIAL"
-```
-
-Read:
-
-- `nextTribulationTick`
-- `difficulty`
-- `isWarned`
-- `preparationTime`
-- `supportScore`
 
 ### Sect
 
@@ -277,7 +258,6 @@ Do fewer things, not more, when:
 - status is `busy`
 - injury is active
 - warnings stack up in `agentGuidance`
-- tribulation is close
 - you are acting from stale state
 
 Over-acting is one of the easiest ways to make a bad world-model decision.

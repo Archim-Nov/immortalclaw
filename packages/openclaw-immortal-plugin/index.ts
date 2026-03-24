@@ -832,7 +832,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     `Credential cache: ${config.credentialsPath}.`,
     registrationRecordIdentity,
     "Rules for this world integration:",
-    "- Never invent current state, inventory, sect membership, tribulation status, persona details, or action ids.",
+    "- Never invent current state, inventory, sect membership, persona details, or action ids.",
     "- OpenClaw bootstrap files such as IDENTITY.md and SOUL.md already define the agent persona. Do not ask to create or switch characters manually.",
     "- The plugin auto-registers or resumes the agent, then syncs the persona into a single identity-bound cultivator before state lookups.",
     "- If the cached credential is rejected, stop and surface the auth error. Do not implicitly re-register because that would create a new server identity.",
@@ -842,7 +842,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- Use the exact actionId returned by immortal_actions when calling immortal_act.",
     "- Timed actions are not complete until later state or tick results confirm completion.",
     "- If a local canonical registration_record file is present, the plugin will include it during first registration automatically. If the record is produced later, persist it with immortal_registration_save and read it back with immortal_registration or immortal_state.registration.",
-    "- Use immortal_messages, immortal_tribulation, immortal_sect, and immortal_dao_logs for supporting context instead of guessing.",
+    "- Use immortal_messages, immortal_sect, and immortal_dao_logs for supporting context instead of guessing.",
     "- immortal_tick is an operator or GM action. Only use it when the user explicitly wants to advance time or when you are running the simulation for testing.",
   ]
     .filter(Boolean)
@@ -884,7 +884,7 @@ function clampLimit(input: unknown): number | undefined {
 
 // Keep this local shape aligned with the canonical contract in packages/contracts/src/runtime-api.ts.
 type WebhookWakePayload = {
-  event: "tick" | "message" | "tribulation";
+  event: "tick" | "message";
   tick: number;
   reason: string;
 };
@@ -907,10 +907,10 @@ function parseWebhookWakePayload(body: string): WebhookWakePayload {
     throw new Error("Invalid webhook payload.");
   }
 
-  const event = (parsed as { event?: unknown }).event;
+  const rawEvent = trimString((parsed as { event?: unknown }).event);
   const tick = (parsed as { tick?: unknown }).tick;
   const reason = trimString((parsed as { reason?: unknown }).reason);
-  if (event !== "tick" && event !== "message" && event !== "tribulation") {
+  if (!rawEvent) {
     throw new Error("Invalid webhook payload.");
   }
   if (typeof tick !== "number" || !Number.isFinite(tick)) {
@@ -921,7 +921,7 @@ function parseWebhookWakePayload(body: string): WebhookWakePayload {
   }
 
   return {
-    event,
+    event: rawEvent === "message" ? "message" : "tick",
     tick,
     reason,
   };
@@ -1062,7 +1062,6 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       let pendingWakeReason: string | undefined;
       let lastSeenTick = 0;
       let lastSeenStatus = "";
-      let lastSeenNextTribTick = 0;
       let lastSeenMessageCount = 0;
       const heartbeat = getHeartbeatRequester(api);
       const registerWebhook =
@@ -1530,20 +1529,6 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       });
 
       registerReadTool({
-        name: "immortal_tribulation",
-        label: "Immortal Tribulation",
-        description: "Inspect the next tribulation preview for a cultivator.",
-        load: async (target) =>
-          target.mode === "agent"
-            ? requestAgentWorld(target.session, "/agent/tribulation")
-            : requestWorld(
-                fetchImpl,
-                config,
-                `/cultivator/tribulation?cultivatorId=${encodeURIComponent(target.cultivatorId)}`,
-              ),
-      });
-
-      registerReadTool({
         name: "immortal_sect",
         label: "Immortal Sect",
         description: "Read sect membership and sect resource information for a cultivator.",
@@ -1693,11 +1678,6 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
               typeof (state as { cultivator?: { status?: unknown } }).cultivator?.status === "string"
                 ? ((state as { cultivator: { status: string } }).cultivator.status ?? "")
                 : "";
-            const nextTribTick =
-              typeof (state as { tribulation?: { nextTribulationTick?: unknown } }).tribulation?.nextTribulationTick ===
-              "number"
-                ? ((state as { tribulation: { nextTribulationTick: number } }).tribulation.nextTribulationTick ?? 0)
-                : 0;
             const messageCount = Array.isArray(messages) ? messages.length : 0;
 
             const newMessages = messageCount > lastSeenMessageCount;
@@ -1708,14 +1688,11 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             } else if (lastSeenTick > 0 && tick > lastSeenTick) {
               const completedJob = lastSeenStatus === "busy" && status === "idle";
               const injured = status === "injured" && lastSeenStatus !== "injured";
-              const tribulationAdvanced = nextTribTick > lastSeenNextTribTick && lastSeenNextTribTick > 0;
 
-              if (completedJob || injured || tribulationAdvanced) {
+              if (completedJob || injured) {
                 const reason = completedJob
                   ? "Fallback poll detected a completed job."
-                  : injured
-                    ? "Fallback poll detected an injury."
-                    : "Fallback poll detected a tribulation state change.";
+                  : "Fallback poll detected an injury.";
                 setWakeReason(reason);
                 emitHeartbeat(reason, session.agentId);
               }
@@ -1723,7 +1700,6 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
 
             lastSeenTick = tick;
             lastSeenStatus = status;
-            lastSeenNextTribTick = nextTribTick;
             lastSeenMessageCount = messageCount;
           } catch {
             // Silent fallback polling.

@@ -94,14 +94,6 @@ function createState(): CultivatorStateView {
       techniques: ["Loose Breathing", "Light Body"],
     },
     sect: null,
-    tribulation: {
-      nextTribulationTick: 100,
-      tribulationType: "None",
-      difficulty: 0,
-      isWarned: false,
-      preparationTime: 100,
-      supportScore: 10,
-    },
     inventory: {
       "healing-pill": 1,
       "qi-pill": 1,

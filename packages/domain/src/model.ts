@@ -64,14 +64,6 @@ export type RegistrationCultivationMotiveId =
   | "seek-freedom";
 export type RegistrationSpiritRootKindId = "single-root" | "dual-root";
 
-export type ZoneId =
-  | "mortal-town"
-  | "market"
-  | "sect-gate"
-  | "spirit-mine"
-  | "mystic-ruins"
-  | "healing-sanctuary";
-
 // ---- New location system types (P1 migration) ----
 // Core types are defined in constants.ts - re-exported here for convenience
 export type { StateId, NodeType, LocationId, RiskLevel } from "./constants.js";
@@ -362,13 +354,6 @@ export type ImmediateActionId =
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
-export interface Zone {
-  id: ZoneId;
-  name: string;
-  kind: "safe" | "resource" | "adventure";
-  description: string;
-}
-
 export interface Sect {
   id: string;
   name: string;
@@ -433,7 +418,6 @@ export interface Cultivator {
   statusEffects: StatusEffect[];
   activeJobId: string | null;
   injuryTicksRemaining: number;
-  nextTribulationTick: number;
   registrationRecord: CultivationRegistrationRecord | null;
 }
 
@@ -595,7 +579,7 @@ export interface WorldEvent {
   id: string;
   tick: number;
   cultivatorId: string | null;
-  zoneId: string;
+  locationId: string;
   title: string;
   content: string;
   severity: "low" | "medium" | "high";
@@ -606,7 +590,7 @@ export interface CombatLogEntry {
   id: string;
   tick: number;
   cultivatorId: string;
-  zoneId: string;
+  locationId: string;
   encounterId: "mine-beast" | "ruins-guardian";
   enemyName: string;
   outcome: "victory" | "defeat";
@@ -653,15 +637,6 @@ export interface CreateCultivatorInput {
   temperament?: string;
 }
 
-export interface TribulationPreview {
-  nextTribulationTick: number;
-  tribulationType: string;
-  difficulty: number;
-  isWarned: boolean;
-  preparationTime: number;
-  supportScore: number;
-}
-
 export interface AvailableAction {
   actionId: ActionId;
   label: string;
@@ -685,11 +660,6 @@ export interface TickSummary {
   completedJobs: Array<{
     cultivatorId: string;
     actionId: TimedActionId;
-    summary: string;
-  }>;
-  tribulations: Array<{
-    cultivatorId: string;
-    success: boolean;
     summary: string;
   }>;
   triggeredEvents: WorldEvent[];
@@ -754,7 +724,6 @@ export interface CultivatorStateView {
     treasury: number;
     memberCount: number;
   } | null;
-  tribulation: TribulationPreview;
   inventory: Record<ItemId, number>;
   inventoryDetails: InventoryEntryView[];
   currentJob: ActionJob | null;
@@ -791,7 +760,6 @@ export interface WorldState {
   cultivators: Record<string, Cultivator>;
   agentBindings: Record<string, AgentBinding>;
   sects: Record<string, Sect>;
-  zones: Record<ZoneId, Zone>;
   locations: Record<string, Location>;
   states: Record<string, StateDefinition>;
   topology: TopologyGraph;

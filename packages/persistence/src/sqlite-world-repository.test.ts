@@ -9,6 +9,7 @@ import {
 import { createSchema } from "./sqlite-schema.js";
 import {
   createSqliteWorldRepository,
+  deserializeStoredWorld,
   SqliteWorldRepository,
 } from "./sqlite-world-repository.js";
 
@@ -175,4 +176,69 @@ test("world mutation methods write logs and registration records", async () => {
   assert.ok(registration);
   assert.equal(registration?.cultivator_id, cultivatorId);
   assert.equal(latestTickRun?.tick, summary.tick);
+});
+
+test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const cultivator = world.cultivators[cultivatorId];
+  const legacyEventLocationId = cultivator.locationId;
+
+  (world as typeof world & { zones?: Record<string, unknown> }).zones = {
+    legacy: { id: "legacy" },
+  };
+  world.topology.distanceMatrix = new Map([
+    ["legacy-edge", "Infinity" as never],
+    ["finite-edge", 12],
+  ]);
+  world.cultivators[cultivatorId] = {
+    ...cultivator,
+    nextTribulationTick: 42,
+  } as typeof cultivator & { nextTribulationTick: number };
+  world.worldEvents = [
+    {
+      id: "legacy-event",
+      tick: world.tick,
+      cultivatorId,
+      zoneId: legacyEventLocationId,
+      title: "Legacy Event",
+      content: "Stored with legacy zoneId",
+      severity: "low",
+      tags: ["legacy"],
+    } as never,
+  ];
+  world.combatLogs = [
+    {
+      id: "legacy-combat",
+      tick: world.tick,
+      cultivatorId,
+      zoneId: legacyEventLocationId,
+      encounterId: "mine-beast",
+      enemyName: "Mine Beast",
+      outcome: "victory",
+      damageTaken: 0,
+      spiritualPowerSpent: 0,
+      loot: {},
+      summary: "Stored with legacy zoneId",
+    } as never,
+  ];
+
+  const normalized = deserializeStoredWorld(world as never);
+  const normalizedCultivator = normalized.cultivators[cultivatorId];
+  const normalizedEvent = normalized.worldEvents[0];
+  const normalizedCombat = normalized.combatLogs[0];
+
+  assert.equal("zones" in normalized, false);
+  assert.equal("nextTribulationTick" in normalizedCultivator, false);
+  assert.equal("zoneId" in normalizedEvent, false);
+  assert.equal(normalizedEvent.locationId, legacyEventLocationId);
+  assert.equal("zoneId" in normalizedCombat, false);
+  assert.equal(normalizedCombat.locationId, legacyEventLocationId);
+  assert.equal(normalized.topology.distanceMatrix.get("legacy-edge"), Infinity);
+  assert.equal(normalized.topology.distanceMatrix.get("finite-edge"), 12);
 });

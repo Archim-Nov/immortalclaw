@@ -132,7 +132,6 @@ test("plugin registers expected tools and prompt hook", async () => {
       "immortal_actions",
       "immortal_messages",
       "immortal_send_message",
-      "immortal_tribulation",
       "immortal_sect",
       "immortal_dao_logs",
       "immortal_act",
@@ -208,6 +207,132 @@ test("webhook receipt triggers heartbeat wake with the signed payload reason", a
     assert.equal(heartbeatCalls.length, 1);
     assert.deepEqual(heartbeatCalls[0], {
       reason: "You received a message from Xu Ling.",
+      agentId,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("webhook receipt accepts legacy tribulation wake payloads", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-legacy-"));
+  const credentialsPath = path.join(root, "credentials.json");
+  const webhookSecret = "whsec_test_webhook_secret";
+  const agentId = "550e8400-e29b-41d4-a716-446655440119";
+  const body = JSON.stringify({
+    event: "tribulation",
+    tick: 43,
+    reason: "Legacy server sent a tribulation wake.",
+  });
+
+  try {
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId,
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_webhook",
+              selectedCultivatorId: "cultivator-9",
+              webhookSecret,
+              updatedAt: "2026-03-22T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const { webhooks, heartbeatCalls } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        credentialsPath,
+        personaDir: path.join(root, "workspace"),
+      },
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    const signature = await signWebhookBody(body, webhookSecret);
+    const response = await webhooks[0]!.handler({
+      body,
+      headers: {
+        "x-immortal-signature": signature,
+      },
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(heartbeatCalls[0], {
+      reason: "Legacy server sent a tribulation wake.",
+      agentId,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("webhook receipt accepts forward-compatible non-message event names", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-future-"));
+  const credentialsPath = path.join(root, "credentials.json");
+  const webhookSecret = "whsec_test_webhook_secret";
+  const agentId = "550e8400-e29b-41d4-a716-446655440120";
+  const body = JSON.stringify({
+    event: "action-complete",
+    tick: 44,
+    reason: "Future server event completed an action.",
+  });
+
+  try {
+    writeFileSync(
+      credentialsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          entries: [
+            {
+              worldBaseUrl: "https://runtime.example",
+              agentId,
+              requestedAgentId: "openclaw-main",
+              credential: "immortal_sk_webhook",
+              selectedCultivatorId: "cultivator-9",
+              webhookSecret,
+              updatedAt: "2026-03-22T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const { webhooks, heartbeatCalls } = registerPlugin(
+      {
+        worldBaseUrl: "https://runtime.example",
+        agentId: "openclaw-main",
+        credentialsPath,
+        personaDir: path.join(root, "workspace"),
+      },
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    const signature = await signWebhookBody(body, webhookSecret);
+    const response = await webhooks[0]!.handler({
+      body,
+      headers: {
+        "x-immortal-signature": signature,
+      },
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(heartbeatCalls[0], {
+      reason: "Future server event completed an action.",
       agentId,
     });
   } finally {
