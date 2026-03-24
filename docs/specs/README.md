@@ -10,6 +10,7 @@ Recent supporting gameplay specs:
 - `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - `docs/specs/combat-gameplay-v1/spec.md`
 - `docs/specs/combat-gameplay-v1/registration-action-weight-table.md`
+- `docs/specs/neutral-sects-starter-overhaul/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`
