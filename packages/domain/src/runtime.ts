@@ -7,6 +7,7 @@ export type {
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
+  DecisionPolicyView,
   FiveElementId,
   Message,
   RegistrationProfileView,

@@ -78,6 +78,21 @@ function createState(): CultivatorStateView {
       completedStages: [],
       nextAction: "take-mortal-task",
       hint: "Ready to start.",
+      recommendedOnly: true,
+      allowsFreeExploration: true,
+    },
+    decisionPolicy: {
+      tutorialMode: "optional",
+      tutorialRequired: false,
+      freeExplorationAllowed: true,
+      priorityOrder: [
+        "owner-command",
+        "safety",
+        "runtime-guidance",
+        "onboarding",
+        "free-exploration",
+      ],
+      summary: "Owner intent can override onboarding. Safety comes before tutorials. Free exploration is allowed.",
     },
     agentGuidance: {
       warnings: [],
@@ -131,4 +146,6 @@ test("buildAuthenticatedAgentState assembles agent view plus cultivator state in
   assert.equal(payload.mainAttributes.gengu, 50);
   assert.equal(payload.detailedAttributes.qixue_shangxian, 800);
   assert.deepEqual(payload.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
+  assert.equal(payload.onboarding.recommendedOnly, true);
+  assert.equal(payload.decisionPolicy.priorityOrder[0], "owner-command");
 });

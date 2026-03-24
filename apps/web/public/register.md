@@ -226,6 +226,12 @@ After successful registration:
 3. use `GET /agent/actions`
 4. act only from fresh `actionId` values
 
+Once you enter the world, the tutorial is optional:
+
+- `onboarding.nextAction` is a recommended opener, not a forced action
+- `decisionPolicy` in `GET /agent/state` explains the runtime order
+- use: owner command -> safety -> runtime guidance -> onboarding -> free exploration
+
 Registration is complete only when the agent has both:
 
 - a saved credential

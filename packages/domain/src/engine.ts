@@ -1,9 +1,9 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, FactionId, FiveElementId, ItemId, Message, RegistrationAnswer, RegistrationGameplayEffectsView,
-  RegistrationGameplayModifierView, RegistrationQuestionId, ResidenceActionId, SectTitle, StatusEffect, TimedActionId,
-  StrategySnapshot, TickSummary, WorldEvent, WorldState, OnboardingProgress, OnboardingStage,
+  CreateCultivatorInput, DecisionPolicyView, FactionId, FiveElementId, ItemId, Message, RegistrationAnswer,
+  RegistrationGameplayEffectsView, RegistrationGameplayModifierView, RegistrationQuestionId, ResidenceActionId, SectTitle,
+  StatusEffect, TimedActionId, StrategySnapshot, TickSummary, WorldEvent, WorldState, OnboardingProgress, OnboardingStage,
 } from "./model.js";
 import { DEFAULT_ACTION_DURATIONS, RESIDENCE_PRODUCTION_RECIPES } from "./constants.js";
 import { applyEventEffects, drawEvent, eventSeverityOf, type EventSourceType } from "./events.js";
@@ -66,6 +66,13 @@ const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
   "joined-sect",
   "first-sect-quest",
   "long-term-visible",
+];
+const DECISION_POLICY_PRIORITY_ORDER: readonly DecisionPolicyView["priorityOrder"][number][] = [
+  "owner-command",
+  "safety",
+  "runtime-guidance",
+  "onboarding",
+  "free-exploration",
 ];
 const MANUAL_TECHNIQUES: Record<"study-sword-manual" | "study-alchemy-manual" | "study-array-manual", { itemId: ItemId; technique: string; summary: string; effect: StatusEffect }> = {
   "study-sword-manual": { itemId: "sword-manual", technique: "青霄剑意", summary: "Learned a sword manual and sharpened combat instincts.", effect: { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "manual", remainingTicks: 5, intensity: 1 } },
@@ -756,6 +763,17 @@ function firstUncompletedStage(completed: Set<OnboardingStage>): OnboardingStage
   return null;
 }
 
+function decisionPolicy(): DecisionPolicyView {
+  return {
+    tutorialMode: "optional",
+    tutorialRequired: false,
+    freeExplorationAllowed: true,
+    priorityOrder: [...DECISION_POLICY_PRIORITY_ORDER],
+    summary:
+      "Owner commands can override onboarding. Safety warnings come before risky ambition. Runtime guidance is advisory, and free exploration is allowed from current valid actions.",
+  };
+}
+
 function onboardingHint(stage: OnboardingStage): string {
   if (stage === "registered") {
     return "Welcome. Start with a low-risk town action to begin your first loop.";
@@ -767,7 +785,7 @@ function onboardingHint(stage: OnboardingStage): string {
     return "Return to residence and complete one residence action.";
   }
   if (stage === "first-residence") {
-    return "Accept and execute one quest from the local board.";
+    return "Accept a base quest from the local board. If none are available, keep taking safe town work until one appears.";
   }
   if (stage === "first-quest") {
     return "Join a sect in a main city once base quest prerequisites are met.";
@@ -784,7 +802,7 @@ function onboardingHint(stage: OnboardingStage): string {
   return "Golden path completed. Continue long-term progression.";
 }
 
-function onboardingNextAction(stage: OnboardingStage, cultivator: Cultivator): ActionId | null {
+function onboardingNextAction(world: WorldState, stage: OnboardingStage, cultivator: Cultivator): ActionId | null {
   if (stage === "registered") {
     return "take-mortal-task";
   }
@@ -799,7 +817,13 @@ function onboardingNextAction(stage: OnboardingStage, cultivator: Cultivator): A
       : (`travel-to:${cultivator.residence.locationId}` as ActionId);
   }
   if (stage === "first-residence") {
-    return "take-mortal-task";
+    const activeBaseQuest = cultivator.activeQuests.find((quest) => quest.category === "base");
+    if (activeBaseQuest) {
+      return `execute-quest:${activeBaseQuest.id}`;
+    }
+    const board = getQuestBoard(world, cultivator.locationId);
+    const baseQuest = board?.quests.find((quest) => quest.category === "base");
+    return baseQuest ? (`accept-quest:${baseQuest.id}` as ActionId) : "take-mortal-task";
   }
   if (stage === "first-quest") {
     return cultivator.sectId ? null : "join-sect";
@@ -842,14 +866,17 @@ function computeOnboardingProgress(world: WorldState, cultivator: Cultivator): O
   return {
     stage,
     completedStages: orderedCompleted,
-    nextAction: onboardingNextAction(stage, cultivator),
+    nextAction: onboardingNextAction(world, stage, cultivator),
     hint: onboardingHint(stage),
+    recommendedOnly: true,
+    allowsFreeExploration: true,
   };
 }
 
 export function getStrategySnapshot(world: WorldState, cultivatorId: string): StrategySnapshot {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const plan = guidance(world, cultivator);
+  const policy = decisionPolicy();
   const riskLevel =
     plan.warnings.length >= 2 || cultivator.injuryTicksRemaining > 0 || hasEffect(cultivator, "deviation")
       ? "high"
@@ -877,11 +904,13 @@ export function getStrategySnapshot(world: WorldState, cultivatorId: string): St
     longTermGoal,
     recommendedSequence,
     reason,
+    decisionPolicy: policy,
   };
 }
 
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
   const cultivator = getCultivatorOrThrow(world, cultivatorId); const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
+  const policy = decisionPolicy();
   const derivedState = {
     readiness: computeReadiness(cultivator),
     recoveryState: computeRecoveryState(cultivator),
@@ -905,6 +934,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     registrationEffects: registrationEffectsViewOf(cultivator),
     derivedState,
     onboarding: computeOnboardingProgress(world, cultivator),
+    decisionPolicy: policy,
     agentGuidance: guidance(world, cultivator),
   };
 }

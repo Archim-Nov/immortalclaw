@@ -553,6 +553,76 @@ test("studying a manual adds technique and strategy recommends safe progression"
   assert.ok(strategy.recommendedSequence.length > 0);
 });
 
+test("state marks onboarding as optional and exposes the decision policy", () => {
+  const world = createSeedWorld();
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+
+  assert.equal(state.onboarding.recommendedOnly, true);
+  assert.equal(state.onboarding.allowsFreeExploration, true);
+  assert.equal(state.decisionPolicy.tutorialMode, "optional");
+  assert.equal(state.decisionPolicy.tutorialRequired, false);
+  assert.equal(state.decisionPolicy.freeExplorationAllowed, true);
+  assert.deepEqual(state.decisionPolicy.priorityOrder, [
+    "owner-command",
+    "safety",
+    "runtime-guidance",
+    "onboarding",
+    "free-exploration",
+  ]);
+});
+
+test("strategy exposes the same policy and keeps safety ahead of onboarding", () => {
+  const world = createSeedWorld();
+  world.cultivators["yun-zhong-he"]!.injuryTicksRemaining = 3;
+
+  const strategy = getStrategySnapshot(world, "yun-zhong-he");
+
+  assert.equal(strategy.riskLevel, "high");
+  assert.deepEqual(strategy.decisionPolicy.priorityOrder, [
+    "owner-command",
+    "safety",
+    "runtime-guidance",
+    "onboarding",
+    "free-exploration",
+  ]);
+  assert.ok(strategy.decisionPolicy.summary.includes("Safety"));
+});
+
+test("first residence onboarding step recommends a quest-board action when available", () => {
+  const world = createSeedWorld();
+  world.daoLogs.unshift({
+    id: "test-log-residence",
+    cultivatorId: "yun-zhong-he",
+    tick: world.tick,
+    title: "Residence practice",
+    content: "Completed the first residence loop.",
+    tags: ["residence"],
+  });
+  world.daoLogs.unshift({
+    id: "test-log-travel",
+    cultivatorId: "yun-zhong-he",
+    tick: world.tick,
+    title: "Travel loop",
+    content: "Completed the first travel loop.",
+    tags: ["travel"],
+  });
+  world.daoLogs.unshift({
+    id: "test-log-action",
+    cultivatorId: "yun-zhong-he",
+    tick: world.tick,
+    title: "First action",
+    content: "Completed the first safe action.",
+    tags: ["action-complete"],
+  });
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+
+  assert.equal(state.onboarding.stage, "first-residence");
+  assert.ok(state.onboarding.hint.includes("quest"));
+  assert.match(state.onboarding.nextAction ?? "", /^accept-quest:/);
+});
+
 test("registration records save and surface through cultivator state", () => {
   const world = createSeedWorld();
 

@@ -155,6 +155,21 @@ function createState(): CultivatorStateView {
       completedStages: [],
       nextAction: "take-mortal-task",
       hint: "Ready to start.",
+      recommendedOnly: true,
+      allowsFreeExploration: true,
+    },
+    decisionPolicy: {
+      tutorialMode: "optional",
+      tutorialRequired: false,
+      freeExplorationAllowed: true,
+      priorityOrder: [
+        "owner-command",
+        "safety",
+        "runtime-guidance",
+        "onboarding",
+        "free-exploration",
+      ],
+      summary: "Owner intent can override onboarding. Safety comes before tutorials. Free exploration is allowed.",
     },
     agentGuidance: {
       warnings: [],

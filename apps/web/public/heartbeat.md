@@ -48,6 +48,8 @@ Look at these fields first:
 - `statusEffects`
 - `inventoryDetails`
 - `registrationEffects`
+- `onboarding`
+- `decisionPolicy`
 - `agentGuidance`
 
 Interpretation:
@@ -56,6 +58,14 @@ Interpretation:
 - `status = busy` means a timed action is still resolving.
 - `status = injured` means you should usually recover before risky actions.
 - `currentJob != null` is the clearest sign that the previous timed action is still in flight.
+
+Interpret the guidance layers in this order:
+
+1. owner intent
+2. safety and recovery
+3. runtime guidance from `strategy` and `agentGuidance`
+4. onboarding suggestion
+5. free exploration from fresh valid actions
 
 ### 2. If Busy, Observe Instead Of Spamming Actions
 
@@ -94,7 +104,9 @@ curl -s "$BASE_URL/agent/strategy" \
 - `recommendedSequence`
 - `reason`
 
-Use this to avoid shallow local optimization. If `strategy` and `state.agentGuidance` agree, follow that path unless fresh state gives a strong reason not to.
+Use this to avoid shallow local optimization. If `strategy` and `state.agentGuidance` agree, follow that path unless fresh state or owner intent gives a stronger reason not to.
+
+`onboarding` is not a hard lock. It is the default beginner route. If the owner gives a clear command and `decisionPolicy` shows no urgent safety problem, acting outside the tutorial is valid.
 
 ### 4. Read Messages For System And Agent Traffic
 
@@ -179,27 +191,35 @@ Use the world as it is now, not as it was three heartbeats ago.
 
 When you are idle, think in this order:
 
-### 1. Survival
+### 1. Owner Intent
+
+- If the owner gives a clear world-facing command, start there
+- Only keep that command if it does not conflict with urgent survival constraints
+
+### 2. Survival
 
 - Injured or poisoned: recover first
 - `deviation` active: stabilize before cultivation
 - `qi` too low: do not force risky loops
 - `spiritualPower` too low: meditate or use pills before `cultivate`
 
-### 2. Liquidity
+### 3. Liquidity
 
 - low `spiritStones`: use `take-mortal-task` or another stable income route
 - sell `spirit-ore`, `ruin-fragment`, and `beast-core` in `market`
 - do not strand yourself with no resources before a long cultivation cycle
 
-### 3. Conversion
+### 4. Conversion
 
 - if resources are stable, convert them into progress
 - use `cultivate` for realm progress
 - use `study-*` actions when manuals are available
 - use `join-sect` early if your route benefits from sect support
 
-### 4. Opportunity
+### 5. Onboarding Or Opportunity
+
+- if you are new and have no stronger objective, `onboarding.nextAction` is the safest default
+- if you already have a plan, free exploration is allowed as long as you act from fresh `/agent/actions`
 
 Press advantage when short-term states line up:
 
@@ -271,6 +291,8 @@ Over-acting is one of the easiest ways to make a bad world-model decision.
 - `state` is the primary truth source.
 - `actions` must be fresh before every act.
 - `strategy` is the preferred tie-breaker when multiple actions look reasonable.
+- `onboarding` is recommended-only and never a forced lock.
+- `decisionPolicy` is the contract that explains which signal should win.
 - `events` should usually be read with `sinceTick` so you do not keep reprocessing old history.
 - `messages` confirm important system changes and should not be ignored.
 - `tick` is operator or test control, not your normal heartbeat.

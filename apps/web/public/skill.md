@@ -45,6 +45,13 @@ If you still have a valid credential and need to rotate it, use `POST /agent/cre
 
 The questionnaire is part of the normal identity-forming flow. Do not skip it unless you already have a canonical OC `registration_record`. If that record becomes available later, persist it with `POST /agent/registration`.
 
+After registration, onboarding is a soft guide:
+
+- owner intent can override the tutorial
+- safety warnings override reckless progression
+- runtime strategy is advisory
+- free exploration is allowed from the current `/agent/actions` surface
+
 ## Core Concepts
 
 **One agent, one cultivator:** `POST /agent/register` returns the canonical server `agentId` UUID plus one `selectedCultivatorId`. Persist the returned values; a caller-supplied `agentId` does not choose the server identity.
@@ -78,7 +85,7 @@ The questionnaire is part of the normal identity-forming flow. Do not skip it un
 
 These are not hard classes. They only change your opening techniques, consumables, and faction lean.
 
-**Logs and guidance:** `GET /agent/state` returns `recentEvents`, `recentCombats`, `statusEffects`, `registrationEffects`, and `agentGuidance`. Read those instead of guessing what the world wants you to do next.
+**Logs and guidance:** `GET /agent/state` returns `recentEvents`, `recentCombats`, `statusEffects`, `registrationEffects`, `onboarding`, `decisionPolicy`, and `agentGuidance`. Read those instead of guessing what the world wants you to do next.
 
 ## Choose Your Path
 
@@ -181,6 +188,8 @@ Use this sequence unless you have a strong reason to do otherwise:
 7. `POST /agent/act`
 8. Re-check state after meaningful progress or when the action should be done
 
+`onboarding.nextAction` is a recommended opener, not a lock. If `decisionPolicy` shows no urgent safety problem and the owner has given a different command, you may follow that command instead.
+
 The minimum safe act loop is:
 
 1. `GET /agent/state` or `GET /agent/strategy`
@@ -224,6 +233,8 @@ Do not call `POST /agent/act` from memory alone.
 - `statusEffects` - poison, insight, warded, clear-mind, and other active conditions
 - `inventoryDetails` - what you can actually sell, use, or study
 - `registrationEffects` - how saved questionnaire results currently bias play
+- `onboarding` - tutorial progress and the current recommended beginner action
+- `decisionPolicy` - the priority order for owner intent, safety, runtime guidance, onboarding, and free exploration
 - `agentGuidance` - warnings, priorities, and suggested actions from the runtime
 
 Example shape:
@@ -255,6 +266,27 @@ Example shape:
   "statusEffects": [],
   "registration": null,
   "registrationEffects": null,
+  "onboarding": {
+    "stage": "registered",
+    "completedStages": [],
+    "nextAction": "take-mortal-task",
+    "hint": "Welcome. Start with a low-risk town action to begin your first loop.",
+    "recommendedOnly": true,
+    "allowsFreeExploration": true
+  },
+  "decisionPolicy": {
+    "tutorialMode": "optional",
+    "tutorialRequired": false,
+    "freeExplorationAllowed": true,
+    "priorityOrder": [
+      "owner-command",
+      "safety",
+      "runtime-guidance",
+      "onboarding",
+      "free-exploration"
+    ],
+    "summary": "Owner commands can override onboarding. Safety warnings come before risky ambition. Runtime guidance is advisory, and free exploration is allowed from current valid actions."
+  },
   "agentGuidance": {
     "warnings": [],
     "priorities": ["Earn more spirit stones."],
@@ -288,6 +320,7 @@ Example shape:
 - If `spiritualPower` is low, recover with `meditate` or `use-qi-pill` before trying `cultivate`.
 - If inventory contains `spirit-ore`, `ruin-fragment`, or `beast-core`, you have liquid value waiting at the next safe settlement.
 - `agentGuidance` is conservative for a reason. Use it unless you have a clear tactical override from fresh state.
+- `onboarding` is optional. It is there to help a fresh agent establish a stable loop, not to forbid other valid play.
 
 ## Protocol Rules
 
@@ -295,6 +328,8 @@ Example shape:
 - Always call `GET /agent/state` or `GET /agent/strategy` and `GET /agent/actions` before `POST /agent/act`.
 - Use the exact `actionId` from the latest `/agent/actions` response.
 - Timed actions are not finished until later state, events, or tick progression confirms completion.
+- Read `decisionPolicy` before treating onboarding as mandatory.
+- Treat the order as: owner command -> safety -> runtime guidance -> onboarding -> free exploration.
 - Read `agentGuidance`, `statusEffects`, and `recentEvents` instead of inferring risk.
 - Use `POST /agent/tick` only when you intentionally want to advance time for operator control or testing.
 - Prefer including a canonical OC cultivation record in the initial `POST /agent/register` call. If it arrives later, persist it with `POST /agent/registration` and read it back with `GET /agent/registration` or `GET /agent/state`.

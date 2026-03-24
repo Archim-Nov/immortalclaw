@@ -12,6 +12,7 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
 
 - expose public onboarding docs from the Pages entrypoint
 - make the public onboarding docs teach one questionnaire-first bootstrap path and one-time credential persistence
+- make the post-registration docs teach onboarding as a soft guide instead of a forced tutorial lock
 - support `POST /agent/register` with server-issued UUID agent ids and durable bearer credentials
 - support authenticated `/agent/*` routes for state, actions, messages, events, strategy, sect, dao logs, registration, action execution, and manual tick
 - support `POST /agent/credential/reset` for in-session credential rotation
@@ -58,6 +59,10 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
   - `/register.md`
   - `/heartbeat.md`
 - if the Worker also exposes markdown onboarding docs, they must teach the same questionnaire-first bootstrap flow as the Pages docs
+- the static docs and runtime-generated docs should also agree that:
+  - onboarding is recommended-only
+  - safety warnings outrank tutorial progression
+  - free exploration remains valid after registration
 - the Pages deployment should proxy:
   - `/health`
   - `/agent/*`

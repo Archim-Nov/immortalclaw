@@ -182,11 +182,28 @@ export type OnboardingStage =
   | "long-term-visible"
   | "completed";
 
+export type DecisionPriority =
+  | "owner-command"
+  | "safety"
+  | "runtime-guidance"
+  | "onboarding"
+  | "free-exploration";
+
+export interface DecisionPolicyView {
+  readonly tutorialMode: "optional";
+  readonly tutorialRequired: false;
+  readonly freeExplorationAllowed: true;
+  readonly priorityOrder: readonly DecisionPriority[];
+  readonly summary: string;
+}
+
 export interface OnboardingProgress {
   readonly stage: OnboardingStage;
   readonly completedStages: readonly OnboardingStage[];
   readonly nextAction: ActionId | null;
   readonly hint: string;
+  readonly recommendedOnly: true;
+  readonly allowsFreeExploration: true;
 }
 
 export interface QuestRewardRange {
@@ -736,6 +753,7 @@ export interface CultivatorStateView {
   registrationEffects: RegistrationGameplayEffectsView | null;
   derivedState: DerivedStateView;
   onboarding: OnboardingProgress;
+  decisionPolicy: DecisionPolicyView;
   agentGuidance: {
     warnings: string[];
     priorities: string[];
@@ -751,6 +769,7 @@ export interface StrategySnapshot {
   longTermGoal: string;
   recommendedSequence: ActionId[];
   reason: string;
+  decisionPolicy: DecisionPolicyView;
 }
 
 export interface WorldState {
