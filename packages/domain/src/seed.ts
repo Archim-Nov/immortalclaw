@@ -8,7 +8,6 @@ import type {
   StateDefinition,
   StatusEffect,
   WorldState,
-  Zone,
 } from "./model.js";
 import {
   NODE_META,
@@ -90,51 +89,6 @@ const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
     category: "manual",
     description: "记载基础阵纹和护体法门，研读后偏向防护。",
     baseValue: 255,
-  },
-};
-
-const zones: Record<string, Zone> = {
-  "mortal-town": {
-    id: "mortal-town",
-    name: "凡人城镇",
-    kind: "safe",
-    description: "适合接凡间委托、补给和积累初期声望。",
-  },
-  "qingzhou:main-city": {
-    id: "mortal-town",
-    name: "青州主城",
-    kind: "safe",
-    description: "青州主城灵脉汇聚，兼具补给、委托与初期修行功能。",
-  },
-  market: {
-    id: "market",
-    name: "修士坊市",
-    kind: "safe",
-    description: "可以买药、卖材料，也会刷新黑市相关消息。",
-  },
-  "sect-gate": {
-    id: "sect-gate",
-    name: "青云宗山门",
-    kind: "safe",
-    description: "加入宗门、接宗门差事、参加山门切磋的区域。",
-  },
-  "spirit-mine": {
-    id: "spirit-mine",
-    name: "灵石矿洞",
-    kind: "resource",
-    description: "稳定产出灵石和矿材，但也会遇到矿脉妖兽。",
-  },
-  "mystic-ruins": {
-    id: "mystic-ruins",
-    name: "秘境遗迹",
-    kind: "adventure",
-    description: "机缘、残碑和危险并存，适合博收益。",
-  },
-  "healing-sanctuary": {
-    id: "healing-sanctuary",
-    name: "疗伤圣地",
-    kind: "safe",
-    description: "恢复伤势、准备天劫和整理状态的稳妥区域。",
   },
 };
 
@@ -328,7 +282,6 @@ const cultivators: Record<string, Cultivator> = {
     statusEffects: createStatusEffects(),
     activeJobId: null,
     injuryTicksRemaining: 0,
-    nextTribulationTick: 100,
     registrationRecord: null,
   },
 };
@@ -344,7 +297,6 @@ export function createSeedWorld(): WorldState {
     cultivators: structuredClone(cultivators),
     agentBindings: {},
     sects: structuredClone(sects),
-    zones: structuredClone(zones),
     locations,
     states: buildAllStates(),
     topology: buildFullTopology(),

@@ -17,7 +17,6 @@ interface StatResponse {
   };
   cultivation: { mainTechnique: string; techniques: string[] };
   sect: { id: string; name: string; role: string; treasury: number; memberCount: number } | null;
-  tribulation: { nextTribulationTick: number; tribulationType: string; difficulty: number; isWarned: boolean; preparationTime: number; supportScore: number };
   inventory: Record<string, number>;
   inventoryDetails: Array<{ id: string; name: string; count: number; kind: string; description: string }>;
   currentJob: { id: string; cultivatorId: string; actionId: string; label: string; remainingTicks: number; totalTicks: number } | null;
@@ -114,7 +113,6 @@ export function PlayerStatPage() {
     factionReputation,
     cultivation,
     sect,
-    tribulation,
     statusEffects,
     inventory 
   } = data;
@@ -125,6 +123,12 @@ export function PlayerStatPage() {
   };
 
   const inventoryEntries = Object.entries(inventory || {}).filter(([_, count]) => count > 0);
+  const progressLabel =
+    cultivator.status === "busy"
+      ? "In progress"
+      : cultivator.status === "injured"
+        ? "Recovering from injury"
+        : "Ready for action";
 
   return (
     <div className="stat-page">
@@ -161,8 +165,8 @@ export function PlayerStatPage() {
             <span className="stat-info-value">{cultivator.age} / {cultivator.lifespan} years</span>
           </div>
           <div className="stat-info-row" style={{ marginTop: "0.5rem" }}>
-            <span className="stat-info-label">Next Tribulation</span>
-            <span className="stat-info-value">Tick {tribulation.nextTribulationTick} ({tribulation.tribulationType})</span>
+            <span className="stat-info-label">Progress</span>
+            <span className="stat-info-value">{progressLabel}</span>
           </div>
         </section>
 

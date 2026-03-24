@@ -1,10 +1,9 @@
-import type { AgentEventsResponse, AgentStrategyResponse, AgentTribulationResponse } from "../../contracts/src/runtime-api.js";
+import type { AgentEventsResponse, AgentStrategyResponse } from "../../contracts/src/runtime-api.js";
 import {
   getDaoLogs,
   getRecentWorldEvents,
   getSectInfo,
   getStrategySnapshot,
-  getTribulationPreview,
 } from "../../domain/src/runtime.js";
 import type { CultivationRegistrationRecord, WorldState } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
@@ -44,14 +43,6 @@ export async function readAuthenticatedAgentStrategy(options: {
 }): Promise<AgentStrategyResponse> {
   const { world, agent } = options;
   return getStrategySnapshot(await world.readWorld(), agent.selectedCultivatorId);
-}
-
-export async function readAuthenticatedAgentTribulation(options: {
-  world: Pick<AgentInsightsRepository, "readWorld">;
-  agent: AgentProfileRecord;
-}): Promise<AgentTribulationResponse> {
-  const { world, agent } = options;
-  return getTribulationPreview(await world.readWorld(), agent.selectedCultivatorId);
 }
 
 export async function readAuthenticatedAgentSectInfo(options: {

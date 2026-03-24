@@ -71,7 +71,7 @@ const STATUS_META: Record<StatusEffectId, { name: string; description: string }>
   "clear-mind": { name: "Clear Mind", description: "Better recovery and cultivation." },
   "qi-surge": { name: "Qi Surge", description: "Better combat and cultivation." },
   "fortune-marked": { name: "Fortune Marked", description: "Better ruins outcomes." },
-  warded: { name: "Warded", description: "Lower combat and tribulation risk." },
+  warded: { name: "Warded", description: "Lower combat risk." },
   deviation: { name: "Qi Deviation", description: "Cultivation becomes unstable and risky." },
   insight: { name: "Insight", description: "Short-term bonus to cultivation and combat." },
   "spirit-saturated": { name: "Spirit Saturated", description: "Short-term cultivation boost." },

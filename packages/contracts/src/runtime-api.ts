@@ -15,7 +15,6 @@ export type {
   RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
-  TribulationPreview,
 } from "../../domain/src/runtime.js";
 
 import type {
@@ -35,7 +34,6 @@ import type {
   RegistrationGameplayEffectsView,
   StrategySnapshot,
   TickSummary,
-  TribulationPreview,
   WorldEvent,
 } from "../../domain/src/runtime.js";
 import type { DetailedAttributeId, MainAttributeId } from "../../domain/src/attributes.js";
@@ -145,7 +143,7 @@ export interface AgentRegistrationRecordRequest {
 }
 
 export interface WebhookWakePayload {
-  event: "tick" | "message" | "tribulation";
+  event: "tick" | "message";
   tick: number;
   reason: string;
 }
@@ -157,4 +155,3 @@ export interface AgentWebhookBindResponse {
 }
 
 export type AgentStrategyResponse = StrategySnapshot;
-export type AgentTribulationResponse = TribulationPreview;

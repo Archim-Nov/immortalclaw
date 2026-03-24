@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CultivationRegistrationRecord } from "./index.js";
 import {
   advanceWorld,
   createSeedWorld,
@@ -15,6 +14,7 @@ import {
   sendDirectMessage,
   syncCultivatorFromPersona,
 } from "./index.js";
+import type { CultivationRegistrationRecord } from "./index.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
   while (world.cultivators[cultivatorId]?.activeJobId) {
@@ -115,6 +115,69 @@ function createSupportTaskRegistrationRecord(): CultivationRegistrationRecord {
     summary: "\u91cd\u6839\u57fa\u4e0e\u627f\u538b\uff0c\u9002\u5408\u7a33\u5b9a\u5de5\u4f5c\u4e0e\u5929\u52ab\u51c6\u5907\u3002",
   };
 }
+
+function createLongevityMeditationRegistrationRecord(): CultivationRegistrationRecord {
+  const record = createRegistrationRecord();
+  return {
+    ...record,
+    result: {
+      ...record.result,
+      core_temperament_id: "qian_yuan",
+      core_temperament: "潜渊型",
+      secondary_temperament_id: "guan_lan",
+      secondary_temperament: "观澜型",
+      behavior_aspect_id: "metal-water",
+      behavior_aspect: "金水 / 观势",
+      cultivation_motive_id: "seek-longevity",
+      cultivation_motive: "求长生",
+      five_element_scores: {
+        metal: 11,
+        wood: 2,
+        water: 10,
+        fire: 1,
+        earth: 3,
+      },
+      spirit_root_kind_id: "dual-root",
+      spirit_root_result: "金水双灵根",
+    },
+    summary: "偏向长线守成，但不应凭空获得新的调息收益。",
+  };
+}
+
+function createRuleBoundHealingRegistrationRecord(): CultivationRegistrationRecord {
+  const record = createRegistrationRecord();
+  return {
+    ...record,
+    result: {
+      ...record.result,
+      core_temperament_id: "shou_jie",
+      core_temperament: "守戒型",
+      secondary_temperament_id: "guan_lan",
+      secondary_temperament: "观澜型",
+      behavior_aspect_id: "metal-water",
+      behavior_aspect: "金水 / 守序",
+      cultivation_motive_id: "seek-truth",
+      cultivation_motive: "求真知",
+      five_element_scores: {
+        metal: 11,
+        wood: 1,
+        water: 10,
+        fire: 2,
+        earth: 3,
+      },
+      spirit_root_kind_id: "dual-root",
+      spirit_root_result: "金水双灵根",
+    },
+    summary: "守戒偏防守，不应凭空获得新的疗伤加成。",
+  };
+}
+
+test("runtime barrel loads without tribulation exports", async () => {
+  const runtime = await import("./runtime.js");
+
+  assert.equal(typeof runtime.createSeedWorld, "function");
+  assert.equal("getTribulationPreview" in runtime, false);
+});
 
 test("cultivation action creates a job and advances realm progress after ticks", () => {
   const world = createSeedWorld();
@@ -610,7 +673,59 @@ test("registration effects surface and improve cultivation output", () => {
   assert.ok(registeredState.cultivator.realmProgress > baselineState.cultivator.realmProgress);
 });
 
-test("registration bonuses improve task rewards and tribulation support", () => {
+test("seek-longevity registration does not add meditate recovery after tribulation cleanup", () => {
+  const baselineWorld = createSeedWorld();
+  const registeredWorld = createSeedWorld();
+
+  saveCultivationRegistration(
+    registeredWorld,
+    "yun-zhong-he",
+    createLongevityMeditationRegistrationRecord(),
+    "openclaw-main",
+  );
+
+  baselineWorld.cultivators["yun-zhong-he"].spiritualPower = 10;
+  registeredWorld.cultivators["yun-zhong-he"].spiritualPower = 10;
+
+  performAction(baselineWorld, "yun-zhong-he", "meditate");
+  performAction(registeredWorld, "yun-zhong-he", "meditate");
+  runUntilIdle(baselineWorld, "yun-zhong-he");
+  runUntilIdle(registeredWorld, "yun-zhong-he");
+
+  assert.equal(
+    registeredWorld.cultivators["yun-zhong-he"].spiritualPower,
+    baselineWorld.cultivators["yun-zhong-he"].spiritualPower,
+  );
+});
+
+test("shou_jie registration does not add heal recovery after tribulation cleanup", () => {
+  const baselineWorld = createSeedWorld();
+  const registeredWorld = createSeedWorld();
+
+  saveCultivationRegistration(
+    registeredWorld,
+    "yun-zhong-he",
+    createRuleBoundHealingRegistrationRecord(),
+    "openclaw-main",
+  );
+
+  baselineWorld.cultivators["yun-zhong-he"].qi = 10;
+  registeredWorld.cultivators["yun-zhong-he"].qi = 10;
+  baselineWorld.cultivators["yun-zhong-he"].injuryTicksRemaining = 6;
+  registeredWorld.cultivators["yun-zhong-he"].injuryTicksRemaining = 6;
+
+  performAction(baselineWorld, "yun-zhong-he", "heal");
+  performAction(registeredWorld, "yun-zhong-he", "heal");
+  runUntilIdle(baselineWorld, "yun-zhong-he");
+  runUntilIdle(registeredWorld, "yun-zhong-he");
+
+  assert.equal(
+    registeredWorld.cultivators["yun-zhong-he"].qi,
+    baselineWorld.cultivators["yun-zhong-he"].qi,
+  );
+});
+
+test("registration bonuses improve task rewards without exposing tribulation state", () => {
   const baselineWorld = createSeedWorld();
   const registeredWorld = createSeedWorld();
 
@@ -621,23 +736,50 @@ test("registration bonuses improve task rewards and tribulation support", () => 
     "openclaw-main",
   );
 
-  const baselineSupport = getCultivatorState(baselineWorld, "yun-zhong-he").tribulation.supportScore;
-  const registeredSupport = getCultivatorState(registeredWorld, "yun-zhong-he").tribulation.supportScore;
-  assert.ok(registeredSupport > baselineSupport);
+  const baselineState = getCultivatorState(baselineWorld, "yun-zhong-he");
+  const registeredState = getCultivatorState(registeredWorld, "yun-zhong-he");
+  assert.equal("tribulation" in baselineState, false);
+  assert.equal("tribulation" in registeredState, false);
 
-  const baselineBefore = getCultivatorState(baselineWorld, "yun-zhong-he").cultivator.spiritStones;
-  const registeredBefore = getCultivatorState(registeredWorld, "yun-zhong-he").cultivator.spiritStones;
+  const baselineBefore = baselineState.cultivator.spiritStones;
+  const registeredBefore = registeredState.cultivator.spiritStones;
 
   performAction(baselineWorld, "yun-zhong-he", "take-mortal-task");
   performAction(registeredWorld, "yun-zhong-he", "take-mortal-task");
 
-  advanceWorld(baselineWorld, 2);
-  advanceWorld(registeredWorld, 2);
+  const baselineSummary = advanceWorld(baselineWorld, 2);
+  const registeredSummary = advanceWorld(registeredWorld, 2);
+  assert.equal("tribulations" in baselineSummary, false);
+  assert.equal("tribulations" in registeredSummary, false);
 
   const baselineAfter = getCultivatorState(baselineWorld, "yun-zhong-he").cultivator.spiritStones;
   const registeredAfter = getCultivatorState(registeredWorld, "yun-zhong-he").cultivator.spiritStones;
 
   assert.ok((registeredAfter - registeredBefore) > (baselineAfter - baselineBefore));
+});
+
+test("seed world and runtime logs omit legacy zone compatibility fields", () => {
+  const world = createSeedWorld();
+
+  assert.equal("zones" in world, false);
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:sub-town-east");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const worldEvent = world.worldEvents[0];
+  assert.ok(worldEvent);
+  assert.equal("locationId" in worldEvent, true);
+  assert.equal("zoneId" in worldEvent, false);
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const combatLog = world.combatLogs[0];
+  assert.ok(combatLog);
+  assert.equal("locationId" in combatLog, true);
+  assert.equal("zoneId" in combatLog, false);
 });
 
 test("direct messages are visible to both sender and recipient mailboxes", () => {

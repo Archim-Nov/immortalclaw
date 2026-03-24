@@ -12,7 +12,6 @@ export type {
   RegistrationQuestionId,
   StrategySnapshot,
   TickSummary,
-  TribulationPreview,
   WorldState,
 } from "./model.js";
 export {
@@ -25,7 +24,6 @@ export {
   getRecentWorldEvents,
   getSectInfo,
   getStrategySnapshot,
-  getTribulationPreview,
   listAvailableActions,
   performAction,
   resolveCultivatorIdForAgent,

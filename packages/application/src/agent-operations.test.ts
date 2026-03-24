@@ -148,7 +148,6 @@ test("advanceAuthenticatedAgentWorld uses a manual trigger", async () => {
     tick: 8,
     advancedTicks: 4,
     completedJobs: [],
-    tribulations: [],
     triggeredEvents: [],
   };
 

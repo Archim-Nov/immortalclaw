@@ -13,7 +13,6 @@ import {
   readAuthenticatedAgentRegistration,
   readAuthenticatedAgentSectInfo,
   readAuthenticatedAgentStrategy,
-  readAuthenticatedAgentTribulation,
   registerAgentWorkflow,
   resetAuthenticatedAgentCredential,
   saveAuthenticatedAgentRegistration,
@@ -38,7 +37,6 @@ import {
   REGISTRATION_QUESTION_IDS,
   getSectInfo,
   getStrategySnapshot,
-  getTribulationPreview,
   resolveCultivatorIdForAgent,
   saveCultivationRegistration,
 } from "@immortal-claw/domain";
@@ -337,12 +335,6 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     return context.json(getMessages(snapshot, readLegacyCultivatorIdFromQuery(snapshot, new URL(context.req.url))));
   });
 
-  app.get("/cultivator/tribulation", async (context) => {
-    const world = context.get("world");
-    const snapshot = await world.readWorld();
-    return context.json(getTribulationPreview(snapshot, readLegacyCultivatorIdFromQuery(snapshot, new URL(context.req.url))));
-  });
-
   app.get("/cultivator/strategy", async (context) => {
     const world = context.get("world");
     const snapshot = await world.readWorld();
@@ -481,13 +473,6 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const auth = context.get("auth");
     const agent = await readAuthenticatedAgent(context.req.raw, auth);
     return context.json(await readAuthenticatedAgentStrategy({ world, agent }));
-  });
-
-  app.get("/agent/tribulation", async (context) => {
-    const world = context.get("world");
-    const auth = context.get("auth");
-    const agent = await readAuthenticatedAgent(context.req.raw, auth);
-    return context.json(await readAuthenticatedAgentTribulation({ world, agent }));
   });
 
   app.get("/agent/sect", async (context) => {

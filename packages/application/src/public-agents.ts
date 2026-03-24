@@ -23,11 +23,7 @@ export interface PublicAgentStateWorldRepository {
 export interface PublicAgentStateAuthClient extends Pick<AuthClient, "getAgentProfile"> {}
 
 function locationNameOf(world: WorldState, locationId: string): string {
-  return (
-    world.locations[locationId]?.name ??
-    world.zones[locationId as keyof typeof world.zones]?.name ??
-    locationId
-  );
+  return world.locations[locationId]?.name ?? locationId;
 }
 
 function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {

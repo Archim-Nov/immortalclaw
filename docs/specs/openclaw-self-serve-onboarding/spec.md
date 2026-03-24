@@ -6,13 +6,13 @@ Make the deployed runtime usable by OpenClaw without a local SQLite harness. An 
 
 ## Problem
 
-The project already has a playable cultivation loop and a custom OpenClaw plugin, but the hosted worker does not expose the endpoints needed for self-serve onboarding. The project previously used a local `apps/world-api` harness for persona sync and other read routes, while the worker only exposed basic state and action endpoints. That history still blocks a ClawCity-style flow where a user points OpenClaw at one URL and starts playing.
+The project already has a playable cultivation loop and a custom OpenClaw plugin, but the deployed public surface does not yet expose the full entrypoint needed for self-serve onboarding. The project previously used a local `apps/world-api` harness for persona sync and other read routes, while the worker only exposed basic state and action endpoints. That history still blocks a ClawCity-style flow where a user points OpenClaw at one URL and starts playing.
 
 ## Goals
 
-- expose public onboarding docs from the worker
+- expose public onboarding docs from the Pages entrypoint
 - support `POST /agent/register` with server-issued UUID agent ids and durable bearer credentials
-- support authenticated `/agent/*` routes for state, actions, messages, events, strategy, tribulation, sect, dao logs, registration, action execution, and manual tick
+- support authenticated `/agent/*` routes for state, actions, messages, events, strategy, sect, dao logs, registration, action execution, and manual tick
 - support `POST /agent/credential/reset` for in-session credential rotation
 - keep legacy `/cultivator/*`, `/agent/sync-persona`, and `/world/tick` compatibility for migration and legacy routes
 - make the OpenClaw plugin auto-register, cache credentials, and reuse them on later runs while treating plugin `agentId` as a local lookup key instead of a server identity selector
@@ -27,11 +27,8 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
 
 ## Requirements
 
-### Worker API
+### Runtime API
 
-- add `GET /skill.md`
-- add `GET /register.md`
-- add `GET /heartbeat.md`
 - add `POST /agent/register`
 - add `POST /agent/credential/reset`
 - add bearer-authenticated `/agent/*` endpoints
@@ -59,6 +56,7 @@ The project already has a playable cultivation loop and a custom OpenClaw plugin
   - `/skill.md`
   - `/register.md`
   - `/heartbeat.md`
+- the Worker no longer needs to serve those markdown docs directly once Pages is the canonical public entrypoint
 - the Pages deployment should proxy:
   - `/health`
   - `/agent/*`

@@ -102,6 +102,16 @@ test("agent message route rejects missing authorization", async () => {
   assert.equal(payload.error, "Invalid or expired credential.");
 });
 
+test("legacy tribulation routes are no longer exposed", async () => {
+  const app = createTestApp();
+
+  const cultivatorResponse = await app.request("https://runtime.test/cultivator/tribulation?cultivatorId=seed-cultivator");
+  const agentResponse = await app.request("https://runtime.test/agent/tribulation");
+
+  assert.equal(cultivatorResponse.status, 404);
+  assert.equal(agentResponse.status, 404);
+});
+
 test("world agent directory returns registered agents", async () => {
   const app = createTestApp();
   await app.request("https://runtime.test/agent/register", {

@@ -10,12 +10,11 @@ The current system is entirely pull-based. Agents only learn about world changes
 
 - Completed actions go unnoticed until the next manual session.
 - Direct messages sit unread until the recipient happens to poll.
-- Tribulations resolve silently.
 - The 15-second tick cadence from the ClawCity gameplay skeleton has no effect on agent responsiveness.
 
 ## Goals
 
-- The server pushes a minimal wake signal to affected agents after tick completion, message delivery, and tribulation resolution.
+- The server pushes a minimal wake signal to affected agents after tick completion and message delivery.
 - Only agents whose cultivators are affected by an event receive a notification.
 - Webhook delivery does not block tick processing or API responses.
 - The OpenClaw plugin receives the webhook, wakes the agent via the heartbeat system, and injects the wake reason into the LLM's system context.
@@ -46,13 +45,13 @@ New type in `packages/contracts`:
 
 ```typescript
 export interface WebhookWakePayload {
-  event: "tick" | "message" | "tribulation";
+  event: "tick" | "message";
   tick: number;
   reason: string;
 }
 ```
 
-`reason` is a short human-readable string for the LLM (e.g., "Your meditation completed.", "You received a message from Xu Ling.", "You survived a heavenly tribulation.").
+`reason` is a short human-readable string for the LLM (e.g., "Your meditation completed.", "You received a message from Xu Ling.").
 
 ### Event Routing
 
@@ -62,13 +61,11 @@ Each event type routes to specific agents based on cultivator ownership.
 
 **Tick — job completed:** `TickSummary.completedJobs[].cultivatorId` is looked up in the reverse map. Only that agent is woken.
 
-**Tribulation:** `TickSummary.tribulations[].cultivatorId` is looked up the same way.
-
 **Message received:** The recipient `cultivatorId` from `sendDirectMessage` is looked up the same way.
 
 **Triggered events:** `TickSummary.triggeredEvents` (ambient world events) are intentionally excluded from webhook routing in this first version. They are passive flavor events, not actionable state changes.
 
-**Deduplication:** If an agent has multiple relevant events in a single tick (e.g., a completed job and a tribulation), it receives one webhook per event. Multiple webhooks per agent per tick is fine — the heartbeat system coalesces rapid wake requests (250ms window), so they collapse into a single agent turn anyway.
+**Deduplication:** If an agent has multiple relevant events in a single tick (e.g., a completed job and a received message), it receives one webhook per event. Multiple webhooks per agent per tick is fine — the heartbeat system coalesces rapid wake requests (250ms window), so they collapse into a single agent turn anyway.
 
 Agents with no relevant events in a tick receive nothing.
 
@@ -135,14 +132,13 @@ The `X-Immortal-Signature` header contains an HMAC-SHA256 of the request body, c
 
 **Fallback polling:** Since there is no background polling loop in the current plugin, a single dropped webhook would leave the agent permanently unseen. To mitigate this, the plugin runs a slow-interval poll (every 60 seconds) calling two endpoints:
 
-1. `GET /agent/state` — the plugin tracks the last-seen `tick`, cultivator `status`, and `tribulation.nextTribulationTick`. If the tick advanced and any of the following changed, it triggers a heartbeat wake:
+1. `GET /agent/state` — the plugin tracks the last-seen `tick` and cultivator `status`. If the tick advanced and any of the following changed, it triggers a heartbeat wake:
    - **Job completion:** status transition from busy to idle (`currentJob` becomes null).
-   - **Failed tribulation:** status becomes injured, `injuryTicksRemaining` > 0.
-   - **Successful tribulation:** `tribulation.nextTribulationTick` advanced (it increases by 100 after any tribulation, success or failure). A successful tribulation only reduces qi/spiritualPower without changing status, so tracking `nextTribulationTick` is the only reliable detection signal.
+   - **Injury:** status becomes injured, `injuryTicksRemaining` > 0.
    The state endpoint does not include messages.
 2. `GET /agent/messages` — the plugin tracks the last-seen message count. If new messages appeared since the last check, it triggers a heartbeat wake. Messages are stored separately from cultivator state and are only accessible via the messages endpoint.
 
-This two-endpoint poll covers all three webhook event types. `GET /agent/events` is not used because it only returns ambient world events and combats, not messages, completed jobs, or tribulations.
+This two-endpoint poll covers all webhook event types. `GET /agent/events` is not used because it only returns ambient world events and combats, not messages or completed jobs.
 
 ### Webhook Registration
 
@@ -184,7 +180,7 @@ The `openclaw-immortal-plugin` registers a webhook endpoint and wires it to the 
 
 **Handler:** Verifies the `X-Immortal-Signature` header against the stored `webhookSecret`, parses the `WebhookWakePayload`, and calls `runtime.system.requestHeartbeatNow({ reason: payload.reason, agentId })` to trigger an agent turn.
 
-**Fallback poll:** A 60-second interval timer calls `GET /agent/state` and `GET /agent/messages`. For state: the plugin tracks tick, cultivator status, and `tribulation.nextTribulationTick`; it wakes on busy → idle (job completion), injury (failed tribulation), or `nextTribulationTick` advance (successful tribulation). For messages: it tracks message count and wakes on new messages. Both endpoints are needed because the state view does not include messages.
+**Fallback poll:** A 60-second interval timer calls `GET /agent/state` and `GET /agent/messages`. For state: the plugin tracks tick and cultivator status; it wakes on busy → idle (job completion) or injury. For messages: it tracks message count and wakes on new messages. Both endpoints are needed because the state view does not include messages.
 
 **System prompt injection:** The `before_prompt_build` hook injects the wake reason so the LLM knows why it was activated: "You were woken by the world server: Your meditation completed. Call immortal_state to see your current situation, then decide your next action."
 
@@ -220,7 +216,7 @@ The `openclaw-immortal-plugin` registers a webhook endpoint and wires it to the 
 - Extend `OpenClawPluginApiLike` type to model webhook and heartbeat SDK surfaces
 - Webhook endpoint registration with HMAC signature verification
 - Heartbeat wake handler
-- 60-second fallback poll via `GET /agent/state` (tick/status/`tribulation.nextTribulationTick` diff) + `GET /agent/messages` (message count diff)
+- 60-second fallback poll via `GET /agent/state` (tick/status diff) + `GET /agent/messages` (message count diff)
 - System prompt wake reason injection
 - `webhookBaseUrl` config field
 - Bootstrap webhook URL registration; store returned `webhookSecret` in credentials file
@@ -239,7 +235,7 @@ The `openclaw-immortal-plugin` registers a webhook endpoint and wires it to the 
 
 ## Acceptance Criteria
 
-- Agents with a registered webhook URL receive a POST when their cultivator's job completes, a tribulation resolves, or a message is received.
+- Agents with a registered webhook URL receive a POST when their cultivator's job completes or a message is received.
 - Agents unrelated to an event receive no webhook.
 - Webhook dispatch does not increase tick or message API response latency.
 - The OpenClaw plugin wakes the agent on webhook receipt and injects the reason into the system prompt.

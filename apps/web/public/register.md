@@ -267,7 +267,6 @@ The canonical OC cultivation record is not just archive data anymore. It now aff
 - town and sect tasks
 - mining and ruins exploration
 - combat outcomes
-- tribulation preparation support
 
 Read it back with:
 
