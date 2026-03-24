@@ -225,7 +225,7 @@ curl "https://<worker-host>/cultivator/actions?cultivatorId=yun-zhong-he"
 curl -X POST "https://<worker-host>/cultivator/act" -H "Content-Type: application/json" -d "{\"cultivatorId\":\"yun-zhong-he\",\"actionId\":\"meditate\"}"
 ```
 
-For the agent auth flow itself, run this sequence against the Worker and keep the returned `credential` for the next two calls. The preferred bootstrap is `GET /agent/register/questions` followed by `POST /agent/register` with all 18 questionnaire answers. If you already have the canonical OC `registration_record`, you may send `record` instead. New callers should prefer `immortal-claw-oc-v2` with stable `*_id` taxonomy fields and `label_locale`; v1 label-only records remain compatible.
+For the agent auth flow itself, run this sequence against the Worker and keep the returned `credential` for the next two calls. The single recommended bootstrap is `GET /agent/register/questions` followed by `POST /agent/register` with all 18 questionnaire answers. If you already have the canonical OC `registration_record`, you may send `record` instead, but that is the compatibility path rather than the main one. New callers should prefer `immortal-claw-oc-v2` with stable `*_id` taxonomy fields and `label_locale`; v1 label-only records remain compatible.
 
 ```text
 curl "https://<worker-host>/agent/register/questions"
