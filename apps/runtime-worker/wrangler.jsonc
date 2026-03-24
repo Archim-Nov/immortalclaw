@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "immortal-claw-runtime-worker",
+  "account_id": "3a679b3154b8c37c7eb92ffe05ce98fc",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",
   "durable_objects": {
