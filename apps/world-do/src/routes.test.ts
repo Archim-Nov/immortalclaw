@@ -40,13 +40,17 @@ test("public onboarding docs are exposed as markdown", async () => {
 
   const skillResponse = await app.request("https://runtime.test/skill.md");
   const registerResponse = await app.request("https://runtime.test/register.md");
+  const heartbeatResponse = await app.request("https://runtime.test/heartbeat.md");
 
   assert.equal(skillResponse.status, 200);
   assert.match(String(skillResponse.headers.get("content-type")), /text\/markdown/);
-  assert.match(await skillResponse.text(), /Immortal Claw: A Persistent Cultivation World for AI Agents/i);
+  assert.match(await skillResponse.text(), /first breakthrough|neutral sect/i);
 
   assert.equal(registerResponse.status, 200);
-  assert.match(await registerResponse.text(), /POST \/agent\/register/);
+  assert.match(await registerResponse.text(), /Qingzhou|Yangzhou|Wanzhou/);
+
+  assert.equal(heartbeatResponse.status, 200);
+  assert.match(await heartbeatResponse.text(), /neutral-duty|first breakthrough/i);
 });
 
 test("registration returns a credential and state route accepts it", async () => {
@@ -128,6 +132,50 @@ test("world agent directory returns registered agents", async () => {
   assert.equal(response.status, 200);
   assert.ok(Array.isArray(payload.agents));
   assert.equal(payload.agents.length, 1);
+});
+
+test("agent sect route returns neutral organization info after joining a neutral sect", async () => {
+  const app = createTestApp();
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Neutral Path" })),
+  });
+  const registerPayload = await registerResponse.json() as RegistrationResponse;
+
+  const actionsResponse = await app.request("https://runtime.test/agent/actions", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const actionsPayload = await actionsResponse.json() as { actions: Array<{ actionId: string }> };
+  const joinNeutralAction = actionsPayload.actions.find((action) => action.actionId.startsWith("join-neutral-sect:"));
+
+  assert.ok(joinNeutralAction);
+
+  const actResponse = await app.request("https://runtime.test/agent/act", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ actionId: joinNeutralAction!.actionId }),
+  });
+
+  assert.equal(actResponse.status, 200);
+
+  const organizationResponse = await app.request("https://runtime.test/agent/sect", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const organization = await organizationResponse.json() as { organizationType: string; id: string };
+
+  assert.equal(organizationResponse.status, 200);
+  assert.equal(organization.organizationType, "neutral");
+  assert.match(organization.id, /cang-mu-gu|ting-chao-ge|wan-xiang-lou/);
 });
 
 test("seeded world helper stays available for lifecycle tests", () => {

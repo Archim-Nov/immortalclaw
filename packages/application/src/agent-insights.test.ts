@@ -179,21 +179,15 @@ test("buildAuthenticatedAgentEvents assembles filtered events and combats in app
 
 test("authenticated insight readers derive strategy, sect, dao logs, and registration from the bound cultivator", async () => {
   const { world, cultivatorId, agent } = createWorldContext();
-  const sectId = Object.keys(world.sects)[0];
-
-  if (!sectId) {
-    throw new Error("Seed world should include at least one sect.");
-  }
-
   world.cultivators[cultivatorId] = {
     ...world.cultivators[cultivatorId],
-    sectId,
+    neutralSectId: "cang-mu-gu",
     sectTitle: "外门",
-    totalContribution: 18,
+    neutralContribution: 40,
   };
-  world.sects[sectId] = {
-    ...world.sects[sectId],
-    memberIds: [...world.sects[sectId].memberIds, cultivatorId],
+  world.neutralSects["cang-mu-gu"] = {
+    ...world.neutralSects["cang-mu-gu"],
+    memberIds: [...world.neutralSects["cang-mu-gu"].memberIds, cultivatorId],
   };
   world.daoLogs.unshift({
     id: "dao-1",
@@ -223,4 +217,5 @@ test("authenticated insight readers derive strategy, sect, dao logs, and registr
   assert.deepEqual(await readAuthenticatedAgentSectInfo({ world: worldRepository, agent }), expectedSect);
   assert.deepEqual(await readAuthenticatedAgentDaoLogs({ world: worldRepository, agent }), expectedDaoLogs);
   assert.deepEqual(await readAuthenticatedAgentRegistration({ world: worldRepository, agent }), registrationRecord);
+  assert.equal(expectedSect?.organizationType, "neutral");
 });

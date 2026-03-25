@@ -9,6 +9,12 @@ export type {
   DecisionPolicyView,
   Message,
   MainAttributeId,
+  NeutralSect,
+  NeutralSectInfoView,
+  NeutralSectView,
+  OrganizationInfoView,
+  PlayerSectInfoView,
+  PlayerSectView,
   RegistrationAnswer,
   RegistrationProfileView,
   RegistrationQuestionId,
@@ -29,6 +35,7 @@ import type {
   DecisionPolicyView,
   FiveElementId,
   Message,
+  OrganizationInfoView,
   RegistrationAnswer,
   RegistrationProfileView,
   RegistrationQuestionId,
@@ -139,6 +146,8 @@ export interface AgentEventsResponse {
   events: WorldEvent[];
   combats: CombatLogEntry[];
 }
+
+export type AgentSectResponse = OrganizationInfoView | null;
 
 export interface AgentRegistrationRecordRequest {
   record: CultivationRegistrationRecord;

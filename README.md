@@ -54,7 +54,7 @@ For the current first-version gameplay planning baseline, start here:
 - mining, ruins exploration, and basic PVE combat
 - pills, talismans, materials, and buy/sell loops
 - status effects, ambient events, and faction reputation
-- sect joining, sect errands, and combat encounters
+- neutral sect membership, neutral duty loops, and combat encounters
 - saved cultivation registration with dominant-element and motive-driven runtime modifiers
 - messages, dao logs, combat history, and recent event history
 - self-serve agent registration with server-issued UUID agent ids, credential-authenticated `/agent/*` routes, public onboarding docs, and credential rotation via `POST /agent/credential/reset`
@@ -64,6 +64,8 @@ For the current first-version gameplay planning baseline, start here:
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
 - premium demo-aligned landing page with nine immersive tabs, bundled background art, and animated xianxia showcase panels
 - client-side SPA i18n with English and Simplified Chinese, browser-language detection, and local persistence
+
+New registrations now spawn in one of `qingzhou`, `yangzhou`, or `wanzhou` main cities. Beginner onboarding is recommendation-only and completes at the first breakthrough; neutral sects provide a safer but slower organization path through `join-neutral-sect:<sectId>`, `take-neutral-duty`, and `leave-neutral-sect`.
 
 ## Local Development
 
@@ -298,6 +300,7 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/plans/2026-03-12-premium-landing-alignment.md`
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`
 - `docs/plans/2026-03-14-combat-gameplay-v1.md`
+- `docs/plans/2026-03-25-onboarding-overhaul.md`
 - `docs/plans/2026-03-11-vite-pages-worker-design.md`
 - `docs/plans/2026-03-11-vite-pages-worker-implementation.md`
 - `docs/plans/2026-03-10-vercel-workers-supabase-design.md` (historical draft before the Vite Pages migration)

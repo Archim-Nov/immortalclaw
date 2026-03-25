@@ -4,16 +4,19 @@ import type {
   ItemDefinition,
   ItemId,
   Location,
+  NeutralSect,
   Sect,
   StateDefinition,
   StatusEffect,
   WorldState,
 } from "./model.js";
 import {
+  NEUTRAL_SECTS_BY_STATE,
   NODE_META,
   NODE_TYPES,
   SECT_TITLE_SLOTS,
   SECT_TITLE_UPDATE_INTERVAL,
+  STARTER_STATES,
   SETTLEMENT_DISPLAY_NAMES,
   STATE_IDS,
   STATE_META,
@@ -130,6 +133,30 @@ const sects: Record<string, Sect> = {
     lastTitleUpdateTick: 0,
   },
 };
+
+function buildNeutralSects(): Record<string, NeutralSect> {
+  const neutralSects: Record<string, NeutralSect> = {};
+
+  for (const stateId of STATE_IDS) {
+    const definition = NEUTRAL_SECTS_BY_STATE[stateId];
+    if (!definition) {
+      continue;
+    }
+    neutralSects[definition.id] = {
+      id: definition.id,
+      name: definition.name,
+      stateId,
+      headquarters: toLocationId(stateId, "main-city"),
+      description: definition.description,
+      rewardMultiplier: definition.rewardMultiplier,
+      joinable: true,
+      competitive: false,
+      memberIds: [],
+    };
+  }
+
+  return neutralSects;
+}
 
 type ExtendedFactionReputation = Record<FactionId, number> &
   Record<"dan-xia-sect" | "tian-ji-sect", number>;
@@ -266,8 +293,10 @@ const cultivators: Record<string, Cultivator> = {
     lifespan: 180,
     age: 23,
     sectId: null,
+    neutralSectId: null,
     sectTitle: null,
     totalContribution: 0,
+    neutralContribution: 0,
     contributionReachedAt: 0,
     activeQuests: [],
     completedBaseQuests: 0,
@@ -291,12 +320,13 @@ export { ITEM_DEFINITIONS };
 export function createSeedWorld(): WorldState {
   const locations = buildAllLocations();
   const world: WorldState = {
-    version: 3,
+    version: 4,
     tick: 0,
     updatedAt: new Date().toISOString(),
     cultivators: structuredClone(cultivators),
     agentBindings: {},
-    sects: structuredClone(sects),
+    sects: {},
+    neutralSects: buildNeutralSects(),
     locations,
     states: buildAllStates(),
     topology: buildFullTopology(),

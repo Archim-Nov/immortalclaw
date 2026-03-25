@@ -17,6 +17,7 @@ export const STATE_IDS = [
   "wanzhou",
 ] as const;
 export type StateId = (typeof STATE_IDS)[number];
+export const STARTER_STATES = ["qingzhou", "yangzhou", "wanzhou"] as const satisfies readonly StateId[];
 
 // ---- Node Types ----
 export const NODE_TYPES = [
@@ -128,6 +129,71 @@ export const SETTLEMENT_DISPLAY_NAMES: Record<
   },
 };
 
+export const NEUTRAL_SECTS_BY_STATE: Record<
+  StateId,
+  {
+    id: string;
+    name: string;
+    description: string;
+    rewardMultiplier: number;
+  }
+> = {
+  zhongzhou: {
+    id: "tian-heng-zong",
+    name: "天衡宗",
+    description: "中州最大的中立门派，守衡九州来往。",
+    rewardMultiplier: 0.7,
+  },
+  yangzhou: {
+    id: "ting-chao-ge",
+    name: "听潮阁",
+    description: "扬州沿海的中立门派，擅长稳健经营与水路调度。",
+    rewardMultiplier: 0.7,
+  },
+  wanzhou: {
+    id: "wan-xiang-lou",
+    name: "万象楼",
+    description: "宛州的中立门派，以商路与杂学见长。",
+    rewardMultiplier: 0.7,
+  },
+  leizhou: {
+    id: "jing-xiao-gong",
+    name: "惊霄宫",
+    description: "雷州的中立门派，以守御与雷域巡查闻名。",
+    rewardMultiplier: 0.7,
+  },
+  shuzhou: {
+    id: "po-yun-men",
+    name: "破云门",
+    description: "蜀州的中立门派，山门险峻而行事沉稳。",
+    rewardMultiplier: 0.7,
+  },
+  liangzhou: {
+    id: "zhen-huang-cheng",
+    name: "镇荒城",
+    description: "凉州的中立门派，负责镇守荒疆要道。",
+    rewardMultiplier: 0.7,
+  },
+  cangzhou: {
+    id: "han-hai-bao",
+    name: "撼海堡",
+    description: "沧州的中立门派，久镇海疆与港埠。",
+    rewardMultiplier: 0.7,
+  },
+  qingzhou: {
+    id: "cang-mu-gu",
+    name: "苍木谷",
+    description: "青州的中立门派，以草木养气与稳修闻名。",
+    rewardMultiplier: 0.7,
+  },
+  youzhou: {
+    id: "shuo-ming-dian",
+    name: "朔冥殿",
+    description: "幽州的中立门派，长于寒域巡守与藏典。",
+    rewardMultiplier: 0.7,
+  },
+};
+
 // ---- Zone-to-Location migration map ----
 export const ZONE_TO_LOCATION_MAP: Record<string, LocationId> = {
   "mortal-town": "qingzhou:main-city",
@@ -183,6 +249,7 @@ export const DEFAULT_ACTION_DURATIONS: Record<string, number> = {
   "mine-spirit-stones": 3,
   "search-fortune": 3,
   "take-sect-errand": 2,
+  "take-neutral-duty": 2,
   "hunt-mine-beast": 3,
   "challenge-guardian": 3,
   "recover-qi": 1,
