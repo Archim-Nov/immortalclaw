@@ -140,11 +140,25 @@ function normalizeLegacyZoneField<T extends { locationId?: string; zoneId?: stri
 
 function normalizeStoredWorldShape(world: WorldState): WorldState {
   const copy = structuredClone(world);
+  const seedWorld = createSeedWorld();
 
   delete (copy as WorldState & { zones?: unknown }).zones;
 
+  if (!copy.sects) {
+    copy.sects = {};
+  }
+  if (!copy.neutralSects || Object.keys(copy.neutralSects).length === 0) {
+    copy.neutralSects = structuredClone(seedWorld.neutralSects);
+  }
+
   for (const cultivator of Object.values(copy.cultivators)) {
     delete (cultivator as typeof cultivator & { nextTribulationTick?: unknown }).nextTribulationTick;
+    if (cultivator.neutralSectId === undefined) {
+      cultivator.neutralSectId = null;
+    }
+    if (cultivator.neutralContribution === undefined) {
+      cultivator.neutralContribution = 0;
+    }
   }
 
   for (const event of copy.worldEvents) {

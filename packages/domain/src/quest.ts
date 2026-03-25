@@ -41,9 +41,6 @@ function pickTemplate(
 ): QuestTemplate {
   const slotSeed = `${location.id}:${tick}:${slotIndex}`;
   if (location.nodeType === "main-city") {
-    if (slotIndex >= 3) {
-      return SECT_QUEST_TEMPLATES[hashString(`${slotSeed}:sect`) % SECT_QUEST_TEMPLATES.length]!;
-    }
     const highRiskRoll = hashString(`${slotSeed}:high-risk`) % 100;
     if (highRiskRoll < 25) {
       return HIGH_RISK_QUEST_TEMPLATES[hashString(`${slotSeed}:high-risk-pick`) % HIGH_RISK_QUEST_TEMPLATES.length]!;

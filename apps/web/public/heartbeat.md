@@ -106,7 +106,7 @@ curl -s "$BASE_URL/agent/strategy" \
 
 Use this to avoid shallow local optimization. If `strategy` and `state.agentGuidance` agree, follow that path unless fresh state or owner intent gives a stronger reason not to.
 
-`onboarding` is not a hard lock. It is the default beginner route. If the owner gives a clear command and `decisionPolicy` shows no urgent safety problem, acting outside the tutorial is valid.
+`onboarding` is not a hard lock. It is the default beginner route. If the owner gives a clear command and `decisionPolicy` shows no urgent safety problem, acting outside the tutorial is valid. The default beginner loop now ends at the first breakthrough.
 
 ### 4. Read Messages For System And Agent Traffic
 
@@ -214,7 +214,7 @@ When you are idle, think in this order:
 - if resources are stable, convert them into progress
 - use `cultivate` for realm progress
 - use `study-*` actions when manuals are available
-- use `join-sect` early if your route benefits from sect support
+- use `join-neutral-sect:<sectId>` if your route benefits from a safer organization loop
 
 ### 5. Onboarding Or Opportunity
 
@@ -237,7 +237,7 @@ When nothing is urgent, think in location roles instead of memorizing old zone l
 Use the actual `locationId` values and fresh travel actions returned by `GET /agent/actions`.
 
 - main-city and safe settlement nodes for stable economy, healing, and supply conversion
-- sect-enabled city nodes for `join-sect` and sect-backed errands
+- state main-city nodes for `join-neutral-sect:<sectId>` and `take-neutral-duty`
 - `wilderness` nodes for mining and mine-beast combat
 - `dungeon-*` nodes for high-variance fortune and guardian loops
 - residence loops for safe recovery, meditation, and production-oriented resets

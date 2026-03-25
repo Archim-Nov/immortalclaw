@@ -198,8 +198,11 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
   ]);
   world.cultivators[cultivatorId] = {
     ...cultivator,
+    neutralSectId: undefined as never,
+    neutralContribution: undefined as never,
     nextTribulationTick: 42,
   } as typeof cultivator & { nextTribulationTick: number };
+  delete (world as typeof world & { neutralSects?: unknown }).neutralSects;
   world.worldEvents = [
     {
       id: "legacy-event",
@@ -235,6 +238,9 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
 
   assert.equal("zones" in normalized, false);
   assert.equal("nextTribulationTick" in normalizedCultivator, false);
+  assert.equal(normalizedCultivator.neutralSectId, null);
+  assert.equal(normalizedCultivator.neutralContribution, 0);
+  assert.ok(Object.keys(normalized.neutralSects).length > 0);
   assert.equal("zoneId" in normalizedEvent, false);
   assert.equal(normalizedEvent.locationId, legacyEventLocationId);
   assert.equal("zoneId" in normalizedCombat, false);

@@ -37,6 +37,7 @@ function createState(): CultivatorStateView {
       techniques: ["Loose Breathing", "Light Body"],
     },
     sect: null,
+    neutralSect: null,
     inventory: {
       "healing-pill": 1,
       "qi-pill": 1,
@@ -146,6 +147,7 @@ test("buildAuthenticatedAgentState assembles agent view plus cultivator state in
   assert.equal(payload.mainAttributes.gengu, 50);
   assert.equal(payload.detailedAttributes.qixue_shangxian, 800);
   assert.deepEqual(payload.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
+  assert.equal(payload.neutralSect, null);
   assert.equal(payload.onboarding.recommendedOnly, true);
   assert.equal(payload.decisionPolicy.priorityOrder[0], "owner-command");
 });

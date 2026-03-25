@@ -175,11 +175,9 @@ export type OnboardingStage =
   | "registered"
   | "first-action"
   | "first-travel"
-  | "first-residence"
   | "first-quest"
-  | "joined-sect"
-  | "first-sect-quest"
-  | "long-term-visible"
+  | "first-residence-cultivation"
+  | "first-breakthrough"
   | "completed";
 
 export type DecisionPriority =
@@ -331,6 +329,7 @@ export type TimedActionId =
   | "mine-spirit-stones"
   | "search-fortune"
   | "take-sect-errand"
+  | "take-neutral-duty"
   | "hunt-mine-beast"
   | "challenge-guardian"
   | `residence-produce:${string}`
@@ -355,6 +354,7 @@ export interface ProductionRecipe {
 
 export type ImmediateActionId =
   | `accept-quest:${string}`
+  | `join-neutral-sect:${string}`
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
@@ -367,7 +367,8 @@ export type ImmediateActionId =
   | "study-sword-manual"
   | "study-alchemy-manual"
   | "study-array-manual"
-  | "join-sect";
+  | "join-sect"
+  | "leave-neutral-sect";
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
@@ -382,6 +383,18 @@ export interface Sect {
   titleSlots: SectTitleSlot[];
   titleUpdateInterval: number;
   lastTitleUpdateTick: number;
+}
+
+export interface NeutralSect {
+  id: string;
+  name: string;
+  stateId: import("./constants.js").StateId;
+  headquarters: import("./constants.js").LocationId;
+  description: string;
+  rewardMultiplier: number;
+  joinable: true;
+  competitive: false;
+  memberIds: string[];
 }
 
 export interface ItemDefinition {
@@ -425,8 +438,10 @@ export interface Cultivator {
   lifespan: number;
   age: number;
   sectId: string | null;
+  neutralSectId: string | null;
   sectTitle: SectTitle | null;
   totalContribution: number;
+  neutralContribution: number;
   contributionReachedAt: number;
   activeQuests: ActiveQuest[];
   completedBaseQuests: number;
@@ -641,6 +656,7 @@ export interface CharacterSummary {
   realmLevel: number;
   locationId: string;
   sectId: string | null;
+  neutralSectId: string | null;
   isSelected: boolean;
 }
 
@@ -706,6 +722,57 @@ export interface StatusEffectView {
   source: string;
 }
 
+export interface PlayerSectView {
+  id: string;
+  name: string;
+  role: string;
+  treasury: number;
+  memberCount: number;
+}
+
+export interface NeutralSectView {
+  id: string;
+  name: string;
+  stateId: import("./constants.js").StateId;
+  headquarters: import("./constants.js").LocationId;
+  role: "member";
+  memberCount: number;
+  neutralContribution: number;
+  rewardMultiplier: number;
+  competitive: false;
+}
+
+export interface PlayerSectInfoView {
+  organizationType: "player";
+  id: string;
+  name: string;
+  type: Sect["type"];
+  treasury: number;
+  memberCount: number;
+  spiritVeins: string[];
+  headquarters: string;
+  role: SectTitle;
+  totalContribution: number;
+  lastTitleUpdateTick: number;
+  competitive: true;
+}
+
+export interface NeutralSectInfoView {
+  organizationType: "neutral";
+  id: string;
+  name: string;
+  stateId: import("./constants.js").StateId;
+  headquarters: import("./constants.js").LocationId;
+  description: string;
+  role: "member";
+  memberCount: number;
+  neutralContribution: number;
+  rewardMultiplier: number;
+  competitive: false;
+}
+
+export type OrganizationInfoView = PlayerSectInfoView | NeutralSectInfoView;
+
 export interface CultivatorStateView {
   tick: number;
   cultivator: {
@@ -734,13 +801,8 @@ export interface CultivatorStateView {
     mainTechnique: string;
     techniques: string[];
   };
-  sect: {
-    id: string;
-    name: string;
-    role: string;
-    treasury: number;
-    memberCount: number;
-  } | null;
+  sect: PlayerSectView | null;
+  neutralSect: NeutralSectView | null;
   inventory: Record<ItemId, number>;
   inventoryDetails: InventoryEntryView[];
   currentJob: ActionJob | null;
@@ -779,6 +841,7 @@ export interface WorldState {
   cultivators: Record<string, Cultivator>;
   agentBindings: Record<string, AgentBinding>;
   sects: Record<string, Sect>;
+  neutralSects: Record<string, NeutralSect>;
   locations: Record<string, Location>;
   states: Record<string, StateDefinition>;
   topology: TopologyGraph;

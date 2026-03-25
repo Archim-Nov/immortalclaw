@@ -21,6 +21,9 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
     name: "Golden Path Disciple",
   });
   const cultivatorId = summary.id;
+  const starterState = world.cultivators[cultivatorId]!.locationId.split(":")[0];
+  const wildernessLocationId = `${starterState}:wilderness`;
+  const mainCityLocationId = `${starterState}:main-city`;
 
   const checkpoints: string[] = [];
   const readStage = () => getCultivatorState(world, cultivatorId).onboarding.stage;
@@ -33,17 +36,12 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   checkpoints.push(readStage());
   assert.equal(readStage(), "first-action");
 
-  performAction(world, cultivatorId, "travel-to:qingzhou:wilderness");
+  performAction(world, cultivatorId, `travel-to:${wildernessLocationId}`);
   runUntilIdle(world, cultivatorId);
-  performAction(world, cultivatorId, "travel-to:qingzhou:main-city");
+  performAction(world, cultivatorId, `travel-to:${mainCityLocationId}`);
   runUntilIdle(world, cultivatorId);
   checkpoints.push(readStage());
   assert.equal(readStage(), "first-travel");
-
-  performAction(world, cultivatorId, "residence-meditate");
-  runUntilIdle(world, cultivatorId);
-  checkpoints.push(readStage());
-  assert.equal(readStage(), "first-residence");
 
   const questBoard = world.questBoards[world.cultivators[cultivatorId]!.locationId];
   assert.ok(questBoard);
@@ -57,11 +55,13 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   checkpoints.push(readStage());
   assert.equal(readStage(), "first-quest");
 
-  performAction(world, cultivatorId, "join-sect");
+  performAction(world, cultivatorId, "residence-meditate");
+  runUntilIdle(world, cultivatorId);
   checkpoints.push(readStage());
-  assert.equal(readStage(), "joined-sect");
+  assert.equal(readStage(), "first-residence-cultivation");
 
-  performAction(world, cultivatorId, "take-sect-errand");
+  world.cultivators[cultivatorId]!.realmProgress = 95;
+  performAction(world, cultivatorId, "cultivate");
   runUntilIdle(world, cultivatorId);
   checkpoints.push(readStage());
   assert.equal(readStage(), "completed");
@@ -73,16 +73,15 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
     "registered",
     "first-action",
     "first-travel",
-    "first-residence",
     "first-quest",
-    "joined-sect",
-    "first-sect-quest",
-    "long-term-visible",
+    "first-residence-cultivation",
+    "first-breakthrough",
+    "completed",
   ]);
   assert.equal(finalState.onboarding.stage, "completed");
-  assert.equal(finalState.sect?.id !== null, true);
-  assert.ok(world.cultivators[cultivatorId]!.totalContribution > 0);
-  assert.ok(checkpoints.length >= 7);
+  assert.equal(finalState.sect, null);
+  assert.ok(world.cultivators[cultivatorId]!.realmLevel >= 2);
+  assert.ok(checkpoints.length >= 6);
 });
 
 test("onboarding nextAction gives actionable fallback choices", () => {
@@ -91,6 +90,7 @@ test("onboarding nextAction gives actionable fallback choices", () => {
     name: "Guide Target",
   });
   const cultivatorId = summary.id;
+  const starterState = world.cultivators[cultivatorId]!.locationId.split(":")[0];
 
   const initial = getCultivatorState(world, cultivatorId).onboarding;
   assert.equal(initial.stage, "registered");
@@ -101,7 +101,7 @@ test("onboarding nextAction gives actionable fallback choices", () => {
 
   const next = getCultivatorState(world, cultivatorId).onboarding;
   assert.equal(next.stage, "first-action");
-  assert.equal(next.nextAction, "travel-to:qingzhou:wilderness");
+  assert.equal(next.nextAction, `travel-to:${starterState}:wilderness`);
 
   const actions = new Set(listAvailableActions(world, cultivatorId).map((action) => action.actionId));
   assert.ok(actions.has(next.nextAction));

@@ -29,6 +29,7 @@ function locationNameOf(world: WorldState, locationId: string): string {
 function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
   const cultivator = world.cultivators[agent.selectedCultivatorId];
   const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
+  const neutralSect = cultivator.neutralSectId ? world.neutralSects[cultivator.neutralSectId] ?? null : null;
   const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null;
 
   return {
@@ -42,7 +43,7 @@ function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
       status: statusOf(cultivator),
       location: locationNameOf(world, cultivator.locationId),
       spiritualPower: cultivator.spiritualPower,
-      sect: sect?.name ?? null,
+      sect: sect?.name ?? neutralSect?.name ?? null,
       currentAction: job?.actionId ?? null,
     },
   };

@@ -7,6 +7,7 @@ import {
   getCultivationRegistration,
   getMessages,
   getCultivatorState,
+  getSectInfo,
   getStrategySnapshot,
   listAvailableActions,
   performAction,
@@ -15,11 +16,33 @@ import {
   syncCultivatorFromPersona,
 } from "./index.js";
 import type { CultivationRegistrationRecord } from "./index.js";
+import { createCultivator, starterStateFromRoll } from "./engine.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
   while (world.cultivators[cultivatorId]?.activeJobId) {
     advanceWorld(world, 1);
   }
+}
+
+function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
+  world.sects["qing-yun-sect"] = {
+    id: "qing-yun-sect",
+    name: "Qing Yun Sect",
+    type: "鍓戜慨",
+    treasury: 86000,
+    memberIds: [],
+    spiritVeins: ["Azure Ridge"],
+    headquarters: "qingzhou:main-city",
+    titleSlots: [
+      { title: "澶栭棬", threshold: 0, maxSlots: Number.POSITIVE_INFINITY },
+      { title: "鍐呴棬", threshold: 200, maxSlots: 32 },
+      { title: "绮捐嫳", threshold: 600, maxSlots: 16 },
+      { title: "闀胯€?", threshold: 1500, maxSlots: 4 },
+      { title: "瀹椾富", threshold: Number.POSITIVE_INFINITY, maxSlots: 1 },
+    ],
+    titleUpdateInterval: 2880,
+    lastTitleUpdateTick: 0,
+  };
 }
 
 function createRegistrationRecord(): CultivationRegistrationRecord {
@@ -179,6 +202,24 @@ test("runtime barrel loads without tribulation exports", async () => {
   assert.equal("getTribulationPreview" in runtime, false);
 });
 
+test("starterStateFromRoll maps only to the three starter states", () => {
+  assert.equal(starterStateFromRoll(0), "qingzhou");
+  assert.equal(starterStateFromRoll(0.34), "yangzhou");
+  assert.equal(starterStateFromRoll(0.67), "wanzhou");
+  assert.equal(starterStateFromRoll(0.999999), "wanzhou");
+});
+
+test("new cultivators spawn in one of the starter main cities", () => {
+  const world = createSeedWorld();
+  const seen = new Set<string>();
+  for (let i = 0; i < 24; i += 1) {
+    const summary = createCultivator(world, { name: `Starter ${i}` });
+    seen.add(world.cultivators[summary.id]!.locationId);
+    assert.match(world.cultivators[summary.id]!.locationId, /^(qingzhou|yangzhou|wanzhou):main-city$/);
+  }
+  assert.ok(seen.size >= 1);
+});
+
 test("cultivation action creates a job and advances realm progress after ticks", () => {
   const world = createSeedWorld();
 
@@ -199,8 +240,9 @@ test("cultivation action creates a job and advances realm progress after ticks",
 
 test("joining the sect updates sect state immediately", () => {
   const world = createSeedWorld();
+  seedLegacyPlayerSect(world);
 
-   world.cultivators["yun-zhong-he"].completedBaseQuests = 1;
+  world.cultivators["yun-zhong-he"].completedBaseQuests = 1;
 
   const result = performAction(world, "yun-zhong-he", "join-sect");
 
@@ -217,6 +259,7 @@ test("quest boards exist and refresh on 12-tick cadence", () => {
   assert.ok(mainCityBoard);
   assert.equal(mainCityBoard.slots, 5);
   assert.equal(mainCityBoard.quests.length, 5);
+  assert.equal(mainCityBoard.quests.some((quest) => quest.category === "sect"), false);
   assert.ok(subTownBoard);
   assert.equal(subTownBoard.slots, 3);
   assert.equal(subTownBoard.quests.length, 3);
@@ -253,31 +296,40 @@ test("accepting and resolving a base quest updates rewards", () => {
   assert.ok(after.reputation >= beforeReputation);
 });
 
-test("sect quest success increases sect contribution", () => {
+test("neutral sect join, duty, and leave obey availability and reward rules", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
-  cultivator.completedBaseQuests = 1;
+  const actions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
+  assert.ok(actions.has("join-neutral-sect:cang-mu-gu"));
+  assert.equal(actions.has("join-sect"), false);
+  assert.equal(actions.has("take-sect-errand"), false);
 
-  performAction(world, "yun-zhong-he", "join-sect");
+  performAction(world, "yun-zhong-he", "join-neutral-sect:cang-mu-gu");
+  assert.equal(cultivator.neutralSectId, "cang-mu-gu");
+  assert.equal(getCultivatorState(world, "yun-zhong-he").neutralSect?.id, "cang-mu-gu");
 
-  const sectBoard = world.questBoards["qingzhou:main-city"];
-  const sectQuest = sectBoard.quests.find((quest) => quest.category === "sect");
-  assert.ok(sectQuest);
-
-  performAction(world, "yun-zhong-he", `accept-quest:${sectQuest!.id}`);
-  const activeQuest = cultivator.activeQuests.find((quest) => quest.category === "sect");
-  assert.ok(activeQuest);
-  activeQuest!.successRate = 100;
-
-  const beforeContribution = cultivator.totalContribution;
-  performAction(world, "yun-zhong-he", `execute-quest:${activeQuest!.id}`);
+  const beforeStones = cultivator.spiritStones;
+  const beforeReputation = cultivator.reputation;
+  performAction(world, "yun-zhong-he", "take-neutral-duty");
   runUntilIdle(world, "yun-zhong-he");
 
-  assert.ok(cultivator.totalContribution > beforeContribution);
+  assert.equal(cultivator.spiritStones, beforeStones + 120);
+  assert.equal(cultivator.reputation, beforeReputation + 4);
+  assert.equal(cultivator.neutralContribution, 40);
+  assert.ok(cultivator.statusEffects.some((effect) => effect.id === "clear-mind" && effect.remainingTicks >= 2));
+
+  const neutralInfo = getSectInfo(world, "yun-zhong-he");
+  assert.equal(neutralInfo?.organizationType, "neutral");
+  assert.equal(neutralInfo?.id, "cang-mu-gu");
+
+  performAction(world, "yun-zhong-he", "leave-neutral-sect");
+  assert.equal(cultivator.neutralSectId, null);
+  assert.equal(cultivator.neutralContribution, 0);
 });
 
 test("sect titles recalculate on cadence", () => {
   const world = createSeedWorld();
+  seedLegacyPlayerSect(world);
   const cultivator = world.cultivators["yun-zhong-he"];
   const sect = world.sects["qing-yun-sect"];
 
@@ -589,19 +641,13 @@ test("strategy exposes the same policy and keeps safety ahead of onboarding", ()
   assert.ok(strategy.decisionPolicy.summary.includes("Safety"));
 });
 
-test("first residence onboarding step recommends a quest-board action when available", () => {
+test("first travel onboarding step recommends a quest-board action when available", () => {
   const world = createSeedWorld();
-  world.daoLogs.unshift({
-    id: "test-log-residence",
-    cultivatorId: "yun-zhong-he",
-    tick: world.tick,
-    title: "Residence practice",
-    content: "Completed the first residence loop.",
-    tags: ["residence"],
-  });
+  const summary = createCultivator(world, { name: "Quest Guide" });
+  const cultivatorId = summary.id;
   world.daoLogs.unshift({
     id: "test-log-travel",
-    cultivatorId: "yun-zhong-he",
+    cultivatorId,
     tick: world.tick,
     title: "Travel loop",
     content: "Completed the first travel loop.",
@@ -609,18 +655,95 @@ test("first residence onboarding step recommends a quest-board action when avail
   });
   world.daoLogs.unshift({
     id: "test-log-action",
-    cultivatorId: "yun-zhong-he",
+    cultivatorId,
     tick: world.tick,
     title: "First action",
     content: "Completed the first safe action.",
     tags: ["action-complete"],
   });
 
-  const state = getCultivatorState(world, "yun-zhong-he");
+  const state = getCultivatorState(world, cultivatorId);
 
-  assert.equal(state.onboarding.stage, "first-residence");
+  assert.equal(state.onboarding.stage, "first-travel");
   assert.ok(state.onboarding.hint.includes("quest"));
   assert.match(state.onboarding.nextAction ?? "", /^accept-quest:/);
+});
+
+test("only residence meditation advances the residence cultivation onboarding step", () => {
+  const world = createSeedWorld();
+  const summary = createCultivator(world, { name: "Residence Guide" });
+  const cultivator = world.cultivators[summary.id]!;
+  world.daoLogs.unshift({
+    id: "test-log-action",
+    cultivatorId: cultivator.id,
+    tick: world.tick,
+    title: "First action",
+    content: "Completed the first safe action.",
+    tags: ["action-complete"],
+  });
+  world.daoLogs.unshift({
+    id: "test-log-travel",
+    cultivatorId: cultivator.id,
+    tick: world.tick,
+    title: "Travel loop",
+    content: "Completed the first travel loop.",
+    tags: ["travel"],
+  });
+  world.daoLogs.unshift({
+    id: "test-log-quest",
+    cultivatorId: cultivator.id,
+    tick: world.tick,
+    title: "Quest loop",
+    content: "Completed the first quest.",
+    tags: ["quest-complete"],
+  });
+  world.daoLogs.unshift({
+    id: "test-log-heal",
+    cultivatorId: cultivator.id,
+    tick: world.tick,
+    title: "Residence heal",
+    content: "Recovered at residence.",
+    tags: ["recovery", "residence"],
+  });
+
+  assert.equal(getCultivatorState(world, cultivator.id).onboarding.stage, "first-quest");
+
+  world.daoLogs.unshift({
+    id: "test-log-meditate",
+    cultivatorId: cultivator.id,
+    tick: world.tick,
+    title: "Residence meditation",
+    content: "Completed residence meditation.",
+    tags: ["action-complete", "residence-meditate"],
+  });
+
+  assert.equal(getCultivatorState(world, cultivator.id).onboarding.stage, "first-residence-cultivation");
+});
+
+test("realm breakthrough immediately completes onboarding", () => {
+  const world = createSeedWorld();
+  world.cultivators["yun-zhong-he"].realmLevel = 2;
+
+  const onboarding = getCultivatorState(world, "yun-zhong-he").onboarding;
+
+  assert.equal(onboarding.stage, "completed");
+  assert.ok(onboarding.completedStages.includes("first-breakthrough"));
+});
+
+test("legacy player sect info is still returned through getSectInfo", () => {
+  const world = createSeedWorld();
+  seedLegacyPlayerSect(world);
+  const cultivator = world.cultivators["yun-zhong-he"];
+  cultivator.sectId = "qing-yun-sect";
+  cultivator.sectTitle = "澶栭棬";
+  cultivator.totalContribution = 24;
+  world.sects["qing-yun-sect"]!.memberIds.push(cultivator.id);
+
+  const organization = getSectInfo(world, cultivator.id);
+
+  assert.equal(organization?.organizationType, "player");
+  assert.equal(organization?.id, "qing-yun-sect");
+  assert.equal(organization?.competitive, true);
 });
 
 test("registration records save and surface through cultivator state", () => {
