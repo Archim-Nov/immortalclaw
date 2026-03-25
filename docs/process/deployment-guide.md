@@ -40,6 +40,7 @@ That single deploy includes:
 - the thin Worker entrypoint in `apps/runtime-worker`
 - the `WorldDurableObject` class from `apps/world-do`
 - the Durable Object binding and migration declared in `apps/runtime-worker/wrangler.jsonc`
+- an explicit empty `triggers.crons` list so Wrangler removes any legacy cron trigger still attached to the Worker
 
 This is important: `apps/world-do` is not a separately deployed service. A Worker deploy is also the Durable Object deploy.
 
@@ -357,6 +358,7 @@ If a release is unhealthy, check these in order:
 7. Are `SUPABASE_URL` and `SUPABASE_SECRET_KEY` present for auth calls?
 8. Does the Pages app point at the correct runtime host through `VITE_RUNTIME_BASE_URL` or `RUNTIME_PROXY_BASE_URL`?
 9. Has anyone run the destructive Supabase cleanup too early?
+10. If the Worker logs `Handler does not export a scheduled() function`, does `apps/runtime-worker/wrangler.jsonc` still deploy `triggers.crons: []` so legacy cron triggers get removed?
 
 ## Human Operator Summary
 

@@ -4,6 +4,9 @@
   "account_id": "3a679b3154b8c37c7eb92ffe05ce98fc",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",
+  "triggers": {
+    "crons": []
+  },
   "durable_objects": {
     "bindings": [
       { "name": "WORLD", "class_name": "WorldDurableObject" }
