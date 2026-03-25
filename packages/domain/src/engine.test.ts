@@ -24,6 +24,29 @@ function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: s
   }
 }
 
+function hashString(input: string) {
+  return Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
+}
+
+function findLegacyIdleRewardTick(
+  world: ReturnType<typeof createSeedWorld>,
+  cultivatorId: string,
+  startTick = world.tick + 1,
+  maxSearch = 5000,
+) {
+  const cultivator = world.cultivators[cultivatorId];
+  assert.ok(cultivator);
+
+  for (let tick = startTick; tick < startTick + maxSearch; tick += 1) {
+    const roll = hashString(`${tick}:${cultivator.id}:${cultivator.locationId}:event`);
+    if (roll % 17 === 0) {
+      return tick;
+    }
+  }
+
+  throw new Error(`Unable to find legacy idle reward tick for ${cultivatorId}.`);
+}
+
 function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
   world.sects["qing-yun-sect"] = {
     id: "qing-yun-sect",
@@ -973,6 +996,39 @@ test("seed world and runtime logs omit legacy zone compatibility fields", () => 
   assert.ok(combatLog);
   assert.equal("locationId" in combatLog, true);
   assert.equal("zoneId" in combatLog, false);
+});
+
+test("idle ticks no longer grant legacy passive rewards across locations", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const locations = ["qingzhou:main-city", "qingzhou:wilderness", "qingzhou:dungeon-c"] as const;
+
+  for (const locationId of locations) {
+    cultivator.locationId = locationId;
+    cultivator.activeJobId = null;
+    cultivator.statusEffects = [];
+
+    const before = {
+      spiritStones: cultivator.spiritStones,
+      reputation: cultivator.reputation,
+      factionReputation: { ...cultivator.factionReputation },
+      inventory: { ...cultivator.inventory },
+      statusEffects: [...cultivator.statusEffects],
+      worldEventCount: world.worldEvents.length,
+    };
+
+    const tick = findLegacyIdleRewardTick(world, "yun-zhong-he");
+    world.tick = tick - 1;
+    const summary = advanceWorld(world, 1);
+
+    assert.equal(summary.triggeredEvents.length, 0);
+    assert.equal(world.worldEvents.length, before.worldEventCount);
+    assert.equal(cultivator.spiritStones, before.spiritStones);
+    assert.equal(cultivator.reputation, before.reputation);
+    assert.deepEqual(cultivator.factionReputation, before.factionReputation);
+    assert.deepEqual(cultivator.inventory, before.inventory);
+    assert.deepEqual(cultivator.statusEffects, before.statusEffects);
+  }
 });
 
 test("direct messages are visible to both sender and recipient mailboxes", () => {

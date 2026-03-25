@@ -1840,19 +1840,6 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       addDaoLog(world, job.cultivatorId, "Action Complete", summary, ["action-complete", job.actionId]);
       delete world.jobs[job.id];
     }
-    for (const cultivator of Object.values(world.cultivators)) {
-      const location = world.locations[cultivator.locationId];
-      if (!location) continue;
-      const roll = hashString(`${world.tick}:${cultivator.id}:${cultivator.locationId}:event`); if (cultivator.activeJobId || roll % 17 !== 0) continue;
-      if (location.kind === "safe") {
-        if (canTradeAtLocation(location) && roll % 34 === 0) { cultivator.inventory["sword-manual"] += 1; triggeredEvents.push(addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Black Market Broker", content: "A hidden broker offered a copied sword manual at a suspiciously low price.", severity: "medium", tags: ["event", "market", "black-market"] })); }
-        else if (location.nodeType === "main-city") { const localNeutralSect = getLocalNeutralSect(world, cultivator.locationId); cultivator.factionReputation["qing-yun-sect"] += cultivator.sectId ? 5 : 1; upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: localNeutralSect ? "neutral-sect" : "city", remainingTicks: 3, intensity: 1 }); if (roll % 5 === 0) cultivator.inventory["array-manual"] += 1; triggeredEvents.push(addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: roll % 5 === 0 ? (localNeutralSect ? `${localNeutralSect.name} Duty Notice` : "City Notice Board") : (localNeutralSect ? `${localNeutralSect.name} Notice` : "City Notice"), content: roll % 5 === 0 ? (localNeutralSect ? `A ${localNeutralSect.name} duty payout included a copied manual.` : "A city notice board posted steady work and modest rewards.") : (localNeutralSect ? `Members of ${localNeutralSect.name} are recruiting steady hands for safe duty.` : "The city registrar posted fresh safe work opportunities."), severity: "low", tags: ["event", localNeutralSect ? "neutral-sect" : "city"] })); }
-        else if (canTradeAtLocation(location)) { cultivator.inventory["qi-pill"] += 1; cultivator.factionReputation["market-guild"] += 4; triggeredEvents.push(addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Guild Discount", content: "The market guild gave a free qi pill.", severity: "low", tags: ["event", "market"] })); }
-        else { cultivator.spiritStones += 60; cultivator.factionReputation.townsfolk += 4; triggeredEvents.push(addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Town Rush", content: "A quick town request paid out.", severity: "low", tags: ["event", "town"] })); }
-      }
-      else if (location.kind === "resource") { cultivator.inventory["spirit-ore"] += 1; triggeredEvents.push(addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Vein Surge", content: "A loose ore vein opened nearby.", severity: "medium", tags: ["event", "mine"] })); }
-      else if (location.kind === "adventure") { cultivator.inventory["ruin-fragment"] += 1; upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 }); triggeredEvents.push(addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Ruins Resonance", content: "A broken tablet resonated with you.", severity: "medium", tags: ["event", "ruins"] })); }
-    }
     refreshQuestBoardsIfDue(world);
     updateSectTitlesIfDue(world);
   }
