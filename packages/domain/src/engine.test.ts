@@ -17,6 +17,7 @@ import {
 } from "./index.js";
 import type { CultivationRegistrationRecord } from "./index.js";
 import { createCultivator, starterStateFromRoll } from "./engine.js";
+import { buildFullTopology } from "./topology.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
   while (world.cultivators[cultivatorId]?.activeJobId) {
@@ -51,21 +52,37 @@ function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
   world.sects["qing-yun-sect"] = {
     id: "qing-yun-sect",
     name: "Qing Yun Sect",
-    type: "鍓戜慨",
+    alignment: "正道",
     treasury: 86000,
     memberIds: [],
     spiritVeins: ["Azure Ridge"],
-    headquarters: "qingzhou:main-city",
+    headquarters: "qingzhou:sect-outpost:qing-yun-sect",
     titleSlots: [
-      { title: "澶栭棬", threshold: 0, maxSlots: Number.POSITIVE_INFINITY },
-      { title: "鍐呴棬", threshold: 200, maxSlots: 32 },
-      { title: "绮捐嫳", threshold: 600, maxSlots: 16 },
-      { title: "闀胯€?", threshold: 1500, maxSlots: 4 },
-      { title: "瀹椾富", threshold: Number.POSITIVE_INFINITY, maxSlots: 1 },
+      { title: "外门", threshold: 0, maxSlots: Number.POSITIVE_INFINITY },
+      { title: "内门", threshold: 200, maxSlots: 32 },
+      { title: "精英", threshold: 600, maxSlots: 16 },
+      { title: "长老", threshold: 1500, maxSlots: 4 },
+      { title: "宗主", threshold: Number.POSITIVE_INFINITY, maxSlots: 1 },
     ],
     titleUpdateInterval: 2880,
     lastTitleUpdateTick: 0,
   };
+
+  world.locations["qingzhou:sect-outpost:qing-yun-sect"] = {
+    id: "qingzhou:sect-outpost:qing-yun-sect",
+    stateId: "qingzhou",
+    nodeType: "sect-outpost",
+    name: "Qing Yun Sect Outpost",
+    kind: "safe",
+    risk: "safe",
+    description: "Legacy player sect outpost for tests.",
+    organizationId: "qing-yun-sect",
+    organizationType: "player-sect",
+  };
+  if (!world.states.qingzhou.locationIds.includes("qingzhou:sect-outpost:qing-yun-sect")) {
+    world.states.qingzhou.locationIds.push("qingzhou:sect-outpost:qing-yun-sect");
+  }
+  world.topology = buildFullTopology(world.locations) as typeof world.topology;
 }
 
 function createRegistrationRecord(): CultivationRegistrationRecord {
@@ -243,6 +260,14 @@ test("new cultivators spawn in one of the starter main cities", () => {
   assert.ok(seen.size >= 1);
 });
 
+test("seed world no longer includes fixed official sects", () => {
+  const world = createSeedWorld();
+
+  assert.deepEqual(world.sects, {});
+  assert.equal("qingzhou:sect-outpost:qing-yun-sect" in world.locations, false);
+  assert.ok(world.locations["qingzhou:sect-outpost:cang-mu-gu"]);
+});
+
 test("cultivation action creates a job and advances realm progress after ticks", () => {
   const world = createSeedWorld();
 
@@ -266,6 +291,8 @@ test("joining the sect updates sect state immediately", () => {
   seedLegacyPlayerSect(world);
 
   world.cultivators["yun-zhong-he"].completedBaseQuests = 1;
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:sect-outpost:qing-yun-sect");
+  runUntilIdle(world, "yun-zhong-he");
 
   const result = performAction(world, "yun-zhong-he", "join-sect");
 
@@ -322,14 +349,24 @@ test("accepting and resolving a base quest updates rewards", () => {
 test("neutral sect join, duty, and leave obey availability and reward rules", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
-  const actions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
-  assert.ok(actions.has("join-neutral-sect:cang-mu-gu"));
-  assert.equal(actions.has("join-sect"), false);
-  assert.equal(actions.has("take-sect-errand"), false);
+  const mainCityActions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
+  assert.equal(mainCityActions.has("join-neutral-sect:cang-mu-gu"), false);
+  assert.equal(mainCityActions.has("join-sect"), false);
+  assert.equal(mainCityActions.has("take-sect-errand"), false);
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:sect-outpost:cang-mu-gu");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const outpostActions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
+  assert.ok(outpostActions.has("join-neutral-sect:cang-mu-gu"));
 
   performAction(world, "yun-zhong-he", "join-neutral-sect:cang-mu-gu");
   assert.equal(cultivator.neutralSectId, "cang-mu-gu");
   assert.equal(getCultivatorState(world, "yun-zhong-he").neutralSect?.id, "cang-mu-gu");
+  assert.equal(
+    (getSectInfo(world, "yun-zhong-he") as { alignment?: string } | null)?.alignment,
+    "中立",
+  );
 
   const beforeStones = cultivator.spiritStones;
   const beforeReputation = cultivator.reputation;
@@ -348,6 +385,23 @@ test("neutral sect join, duty, and leave obey availability and reward rules", ()
   performAction(world, "yun-zhong-he", "leave-neutral-sect");
   assert.equal(cultivator.neutralSectId, null);
   assert.equal(cultivator.neutralContribution, 0);
+});
+
+test("sect duties move to the sect outpost and sect info exposes alignment", () => {
+  const world = createSeedWorld();
+  seedLegacyPlayerSect(world);
+  const cultivator = world.cultivators["yun-zhong-he"];
+  cultivator.completedBaseQuests = 1;
+
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:sect-outpost:qing-yun-sect");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "join-sect");
+
+  const outpostActions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
+  assert.ok(outpostActions.has("take-sect-errand"));
+
+  const sectInfo = getSectInfo(world, "yun-zhong-he") as { alignment?: string } | null;
+  assert.equal(sectInfo?.alignment, "正道");
 });
 
 test("sect titles recalculate on cadence", () => {
@@ -758,6 +812,7 @@ test("legacy player sect info is still returned through getSectInfo", () => {
   seedLegacyPlayerSect(world);
   const cultivator = world.cultivators["yun-zhong-he"];
   cultivator.sectId = "qing-yun-sect";
+  // @ts-expect-error legacy title literal is intentionally preserved in this fixture
   cultivator.sectTitle = "澶栭棬";
   cultivator.totalContribution = 24;
   world.sects["qing-yun-sect"]!.memberIds.push(cultivator.id);

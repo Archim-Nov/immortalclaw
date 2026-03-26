@@ -20,7 +20,7 @@ export type StateId = (typeof STATE_IDS)[number];
 export const STARTER_STATES = ["qingzhou", "yangzhou", "wanzhou"] as const satisfies readonly StateId[];
 
 // ---- Node Types ----
-export const NODE_TYPES = [
+export const BASE_NODE_TYPES = [
   "main-city",
   "sub-town-east",
   "sub-town-west",
@@ -30,10 +30,15 @@ export const NODE_TYPES = [
   "dungeon-b",
   "dungeon-a",
 ] as const;
+export type BaseNodeType = (typeof BASE_NODE_TYPES)[number];
+
+export const NODE_TYPES = [...BASE_NODE_TYPES, "sect-outpost"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
 // ---- LocationId ----
-export type LocationId = `${StateId}:${NodeType}`;
+export type BaseLocationId = `${StateId}:${BaseNodeType}`;
+export type SectOutpostLocationId = `${StateId}:sect-outpost:${string}`;
+export type LocationId = BaseLocationId | SectOutpostLocationId;
 
 export type NamedSettlementNodeType =
   | "main-city"
@@ -56,7 +61,7 @@ export const STATE_META: Record<StateId, { name: string; risk: RiskLevel }> = {
 
 // ---- Node Metadata ----
 export const NODE_META: Record<
-  NodeType,
+  BaseNodeType,
   { suffix: string; kind: "safe" | "resource" | "adventure"; riskModifier: number }
 > = {
   "main-city": { suffix: "主城", kind: "safe", riskModifier: 0 },
@@ -198,7 +203,7 @@ export const NEUTRAL_SECTS_BY_STATE: Record<
 export const ZONE_TO_LOCATION_MAP: Record<string, LocationId> = {
   "mortal-town": "qingzhou:main-city",
   market: "qingzhou:sub-town-east",
-  "sect-gate": "qingzhou:main-city",
+  "sect-gate": "qingzhou:sect-outpost:cang-mu-gu",
   "spirit-mine": "qingzhou:wilderness",
   "mystic-ruins": "qingzhou:dungeon-c",
   "healing-sanctuary": "qingzhou:main-city",
@@ -252,6 +257,7 @@ export const DEFAULT_ACTION_DURATIONS: Record<string, number> = {
   "take-neutral-duty": 2,
   "hunt-mine-beast": 3,
   "challenge-guardian": 3,
+  "survey-wilderness": 2,
   "recover-qi": 1,
   "produce-item": 2,
   socialize: 1,
@@ -297,6 +303,7 @@ export const QUEST_BOARD_SLOTS_BY_NODE_TYPE: Partial<Record<NodeType, number>> =
   "sub-town-east": 3,
   "sub-town-west": 3,
   "sub-town-south": 3,
+  "sect-outpost": 0,
 };
 
 export const BASE_QUEST_TEMPLATES: readonly QuestTemplate[] = [
@@ -337,7 +344,7 @@ export const BASE_QUEST_TEMPLATES: readonly QuestTemplate[] = [
     description: "Stable market work with guaranteed payout.",
     durationTicks: 2,
     minReadiness: "poor",
-    sourceNodeTypes: ["main-city"],
+    sourceNodeTypes: ["sect-outpost"],
     reward: { spiritStones: { min: 100, max: 140 }, reputation: 2, karmaChange: -2, contribution: 0 },
     failurePenalty: { injuryTicks: 0, spiritStoneLoss: 0 },
     successRate: 100,
@@ -382,7 +389,7 @@ export const HIGH_RISK_QUEST_TEMPLATES: readonly QuestTemplate[] = [
     description: "Handle high-pressure abnormal threats.",
     durationTicks: 4,
     minReadiness: "ready",
-    sourceNodeTypes: ["main-city"],
+    sourceNodeTypes: ["sect-outpost"],
     reward: { spiritStones: { min: 180, max: 260 }, reputation: 15, karmaChange: 5, contribution: 0 },
     failurePenalty: { injuryTicks: 4, spiritStoneLoss: 40 },
     successRate: 65,
@@ -396,7 +403,7 @@ export const HIGH_RISK_QUEST_TEMPLATES: readonly QuestTemplate[] = [
     description: "A dangerous dungeon trial tied to local rumors.",
     durationTicks: 4,
     minReadiness: "ready",
-    sourceNodeTypes: ["main-city"],
+    sourceNodeTypes: ["sect-outpost"],
     reward: { spiritStones: { min: 190, max: 280 }, reputation: 16, karmaChange: 4, contribution: 0 },
     failurePenalty: { injuryTicks: 4, spiritStoneLoss: 50 },
     successRate: 60,
@@ -410,7 +417,7 @@ export const HIGH_RISK_QUEST_TEMPLATES: readonly QuestTemplate[] = [
     description: "Follow a dangerous event chain and resolve it.",
     durationTicks: 4,
     minReadiness: "ready",
-    sourceNodeTypes: ["main-city"],
+    sourceNodeTypes: ["sect-outpost"],
     reward: { spiritStones: { min: 170, max: 250 }, reputation: 14, karmaChange: 3, contribution: 0 },
     failurePenalty: { injuryTicks: 3, spiritStoneLoss: 35 },
     successRate: 70,

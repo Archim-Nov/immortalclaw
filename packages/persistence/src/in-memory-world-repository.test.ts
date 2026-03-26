@@ -139,3 +139,42 @@ test("world methods expose action, registration, and tick behavior", async () =>
   assert.equal(latestTickRun?.tick, summary.tick);
   assert.ok(registration);
 });
+
+test("legacy world input is hydrated with migrated P3 persistence defaults", async () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  delete (world as unknown as Record<string, unknown>).sects;
+  delete (world as unknown as Record<string, unknown>).wildernessLayers;
+  delete (world as unknown as Record<string, unknown>).wildernessProgress;
+  delete (world as unknown as Record<string, unknown>).guixuNodes;
+  delete (world as unknown as Record<string, unknown>).guixuProgress;
+  delete (world as unknown as Record<string, unknown>).factionWars;
+  delete (world as unknown as Record<string, unknown>).itemDefinitions;
+
+  world.cultivators[cultivatorId]!.inventory = {
+    "healing-pill": 1,
+    "qi-pill": 0,
+    "ward-talisman": 0,
+    "spirit-ore": 0,
+    "ruin-fragment": 0,
+    "beast-core": 0,
+    "sword-manual": 0,
+    "alchemy-manual": 0,
+    "array-manual": 0,
+  } as typeof world.cultivators[typeof cultivatorId]["inventory"];
+
+  const repository = createInMemoryWorldRepository({ world });
+  const hydrated = await repository.readWorld();
+
+  assert.deepEqual(hydrated.sects, {});
+  assert.ok(hydrated.wildernessLayers["eight-wastes-threshold"]);
+  assert.ok(hydrated.guixuNodes["guixu-threshold-gate"]);
+  assert.ok(hydrated.factionWars["war-qingzhou-frontier"]);
+  assert.ok(hydrated.itemDefinitions["legendary-artifact"]);
+  assert.equal(hydrated.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
+});

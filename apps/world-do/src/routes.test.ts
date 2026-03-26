@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeedWorld } from "@immortal-claw/domain";
+import { createSeedWorld, getCultivatorState, getSectInfo, syncCultivatorFromPersona } from "@immortal-claw/domain";
 import { createTestApp, createQuestionnaireRegistrationBody } from "./test-helpers.js";
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,6 +24,27 @@ interface WorldStatusResponse {
 
 interface WorldAgentsResponse {
   agents: unknown[];
+}
+
+function seedPlayerSect(world: ReturnType<typeof createSeedWorld>) {
+  world.sects["qing-yun-sect"] = {
+    id: "qing-yun-sect",
+    name: "青云宗",
+    alignment: "正道",
+    treasury: 86000,
+    memberIds: [],
+    spiritVeins: ["青岚支脉"],
+    headquarters: "qingzhou:sect-outpost:qing-yun-sect",
+    titleSlots: [
+      { title: "外门", threshold: 0, maxSlots: Number.POSITIVE_INFINITY },
+      { title: "内门", threshold: 200, maxSlots: 32 },
+      { title: "精英", threshold: 600, maxSlots: 16 },
+      { title: "长老", threshold: 1500, maxSlots: 4 },
+      { title: "宗主", threshold: Number.POSITIVE_INFINITY, maxSlots: 1 },
+    ],
+    titleUpdateInterval: 2880,
+    lastTitleUpdateTick: 0,
+  };
 }
 
 test("health route returns ok", async () => {
@@ -151,8 +172,42 @@ test("agent sect route returns neutral organization info after joining a neutral
     },
   });
   const actionsPayload = await actionsResponse.json() as { actions: Array<{ actionId: string }> };
-  const joinNeutralAction = actionsPayload.actions.find((action) => action.actionId.startsWith("join-neutral-sect:"));
+  const travelToNeutralOutpost = actionsPayload.actions.find((action) =>
+    action.actionId.startsWith("travel-to:")
+    && /sect-outpost:(cang-mu-gu|ting-chao-ge|wan-xiang-lou)$/.test(action.actionId),
+  );
 
+  assert.ok(travelToNeutralOutpost);
+
+  const travelResponse = await app.request("https://runtime.test/agent/act", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ actionId: travelToNeutralOutpost!.actionId }),
+  });
+  assert.equal(travelResponse.status, 200);
+
+  const tickResponse = await app.request("https://runtime.test/agent/tick", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ steps: 1 }),
+  });
+  assert.equal(tickResponse.status, 200);
+
+  const outpostActionsResponse = await app.request("https://runtime.test/agent/actions", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const outpostActionsPayload = await outpostActionsResponse.json() as { actions: Array<{ actionId: string }> };
+  const joinNeutralAction = outpostActionsPayload.actions.find((action) =>
+    action.actionId.startsWith("join-neutral-sect:"),
+  );
   assert.ok(joinNeutralAction);
 
   const actResponse = await app.request("https://runtime.test/agent/act", {
@@ -171,11 +226,109 @@ test("agent sect route returns neutral organization info after joining a neutral
       authorization: `Bearer ${registerPayload.credential}`,
     },
   });
-  const organization = await organizationResponse.json() as { organizationType: string; id: string };
+  const organization = await organizationResponse.json() as {
+    organizationType: string;
+    id: string;
+    alignment?: string;
+  };
 
   assert.equal(organizationResponse.status, 200);
   assert.equal(organization.organizationType, "neutral");
   assert.match(organization.id, /cang-mu-gu|ting-chao-ge|wan-xiang-lou/);
+  assert.equal(organization.alignment, "中立");
+});
+
+test("cultivator state route exposes sect level and active faction war summary", async () => {
+  const world = createSeedWorld();
+  seedPlayerSect(world);
+  const sect = world.sects["qing-yun-sect"]!;
+  const first = world.cultivators["yun-zhong-he"]!;
+  const secondSummary = syncCultivatorFromPersona(world, {
+    agentId: "agent-routes-sect-peer",
+    name: "Shen Qing",
+  });
+  const second = world.cultivators[secondSummary.selectedCultivatorId]!;
+
+  sect.memberIds = [first.id, second.id];
+  first.sectId = sect.id;
+  second.sectId = sect.id;
+  first.locationId = "qingzhou:main-city";
+  second.locationId = "qingzhou:main-city";
+  first.totalContribution = 3200;
+  second.totalContribution = 1800;
+
+  const app = createTestApp({
+    world: {
+      async getCultivatorState(cultivatorId: string) {
+        return getCultivatorState(world, cultivatorId);
+      },
+    },
+  });
+
+  const response = await app.request("https://runtime.test/cultivator/state?cultivatorId=yun-zhong-he");
+  const payload = await response.json() as {
+    sect: {
+      id: string;
+      alignment?: string;
+      level?: number;
+      bonuses?: Array<{ type: string }>;
+      activeWarId?: string | null;
+      warObjectives?: Array<{ objectiveId: string }>;
+    } | null;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.sect?.id, "qing-yun-sect");
+  assert.equal(payload.sect?.alignment, "正道");
+  assert.equal(payload.sect?.level, 3);
+  assert.ok(payload.sect?.bonuses?.some((bonus) => bonus.type === "resource"));
+  assert.equal(payload.sect?.activeWarId, "war-qingzhou-frontier");
+  assert.ok((payload.sect?.warObjectives?.length ?? 0) > 0);
+});
+
+test("cultivator sect route exposes sect level bonuses and war objectives", async () => {
+  const world = createSeedWorld();
+  seedPlayerSect(world);
+  const sect = world.sects["qing-yun-sect"]!;
+  const first = world.cultivators["yun-zhong-he"]!;
+  const secondSummary = syncCultivatorFromPersona(world, {
+    agentId: "agent-routes-sect-info-peer",
+    name: "Shen Qing",
+  });
+  const second = world.cultivators[secondSummary.selectedCultivatorId]!;
+
+  sect.memberIds = [first.id, second.id];
+  first.sectId = sect.id;
+  second.sectId = sect.id;
+  first.locationId = "qingzhou:main-city";
+  second.locationId = "qingzhou:main-city";
+  first.totalContribution = 3200;
+  second.totalContribution = 1800;
+
+  const app = createTestApp({
+    world: {
+      async readWorld() {
+        return world;
+      },
+    },
+  });
+
+  const response = await app.request("https://runtime.test/cultivator/sect?cultivatorId=yun-zhong-he");
+  const payload = await response.json() as ReturnType<typeof getSectInfo> & {
+    alignment?: string;
+    level?: number;
+    bonuses?: Array<{ type: string }>;
+    activeWarId?: string | null;
+    warObjectives?: Array<{ objectiveId: string }>;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(payload?.organizationType, "player");
+  assert.equal(payload?.alignment, "正道");
+  assert.equal(payload?.level, 3);
+  assert.ok(payload?.bonuses?.some((bonus) => bonus.type === "resource"));
+  assert.equal(payload?.activeWarId, "war-qingzhou-frontier");
+  assert.ok((payload?.warObjectives?.length ?? 0) > 0);
 });
 
 test("seeded world helper stays available for lifecycle tests", () => {

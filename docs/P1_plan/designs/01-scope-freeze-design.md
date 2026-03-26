@@ -265,7 +265,7 @@ CREATE INDEX idx_sect_contributions_sect
 2. 用邻接矩阵生成 `TopologyEdge` 数组
 3. 保留 `ITEM_DEFINITIONS` 和 `createEmptyInventory()` 不变
 4. 新角色默认 `locationId` 从 `"mortal-town"` 改为 `"qingzhou:main-city"`
-5. 新增 3 个宗门的完整数据（当前只有 `qing-yun-sect`）
+5. 默认不预置固定官方玩家宗门数据，`world.sects` 可为空；九大默认中立宗门据点继续 seeded
 
 ---
 

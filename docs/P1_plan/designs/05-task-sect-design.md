@@ -6,8 +6,8 @@
 
 当前代码现状：
 - `packages/domain/src/engine.ts` 中 `take-mortal-task` 是在 `mortal-town` 位置固定可用的 2t 动作
-- `take-sect-errand` 是在 `sect-gate` 位置且已加入宗门时可用的 2t 动作
-- `join-sect` 是即时动作，硬编码加入 `qing-yun-sect`
+- `take-sect-errand` 是在宗门据点且已加入对应玩家宗门时可用的 2t 动作
+- `join-sect` 是即时动作，但只在世界里存在玩家宗门据点时出现
 - `model.ts` 中 `Sect` 接口只有 `id, name, type, treasury, memberIds, spiritVeins`
 - 没有贡献系统、头衔系统、任务板刷新机制
 
@@ -344,7 +344,7 @@ export interface SectTitleSlot {
 export interface Sect {
   readonly id: string;
   readonly name: string;
-  readonly sectAlignment: "正道" | "魔道";
+  readonly sectAlignment: "正道" | "魔道";  // 玩家宗门只使用这两类
   readonly publicIdentity: string;
   readonly treasury: number;
   readonly memberIds: readonly string[];
@@ -353,6 +353,14 @@ export interface Sect {
   readonly titleSlots: readonly SectTitleSlot[];  // 新增：头衔配置
   readonly titleUpdateInterval: 2880;        // 新增：更新周期
   readonly lastTitleUpdateTick: number;      // 新增：上次更新 tick
+}
+
+// 九大默认中立宗门单独建模，不混入玩家宗门模板
+export interface NeutralSect {
+  readonly id: string;
+  readonly name: string;
+  readonly sectAlignment: "中立";
+  readonly headquarters: LocationId;
 }
 
 // 扩展 Cultivator
@@ -372,7 +380,7 @@ export interface Cultivator {
 |---------|----------------|---------|
 | `take-mortal-task` (2t, +140 灵石) | 任务板中的 `market-work` 或 `delivery` 模板 | 从固定动作变为任务板随机刷出；奖励从固定改为区间 |
 | `take-sect-errand` (2t, +180 灵石) | 任务板中的 `sect-delivery` 或 `resource-tribute` 模板 | 同上；新增贡献值奖励 |
-| `join-sect` (即时) | 保留为即时动作，但新增前置条件（至少完成 1 次基础任务） | 支持 3 个宗门选择；新增初始 `sectTitle = "外门"` |
+| `join-sect` (即时) | 保留为即时动作，但新增前置条件（至少完成 1 次基础任务） | 仅在对应玩家宗门据点出现；默认种子世界不预置固定官方宗门 |
 
 ---
 
@@ -705,14 +713,14 @@ describe("宗门头衔系统", () => {
 2. **take-sect-errand** → 由宗门任务板替代
    - 过渡期：同上
 
-3. **join-sect** → 保留为即时动作，扩展为 3 选 1
+3. **join-sect** → 保留为即时动作，但改为按实际玩家宗门据点暴露
    - 新增前置条件
-   - 新增宗门选择参数
+   - 默认种子世界不预置固定官方宗门数据
 
 ### 迁移步骤
 
 1. 在 `model.ts` 中新增所有任务和宗门相关类型
-2. 在 `seed.ts` 中初始化 3 个宗门的完整数据
+2. 在 `seed.ts` 中保留可为空的 `world.sects` 骨架，并继续初始化九大默认中立宗门据点
 3. 实现任务板生成和刷新逻辑
 4. 实现任务接取和结算逻辑
 5. 实现宗门贡献和头衔系统

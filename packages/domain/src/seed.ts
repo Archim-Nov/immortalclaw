@@ -1,6 +1,8 @@
 import type {
   Cultivator,
-  FactionId,
+  FactionWar,
+  GuixuNode,
+  GuixuProgress,
   ItemDefinition,
   ItemId,
   Location,
@@ -8,26 +10,24 @@ import type {
   Sect,
   StateDefinition,
   StatusEffect,
+  WildernessLayer,
   WorldState,
 } from "./model.js";
 import {
+  BASE_NODE_TYPES,
   NEUTRAL_SECTS_BY_STATE,
   NODE_META,
-  NODE_TYPES,
-  SECT_TITLE_SLOTS,
-  SECT_TITLE_UPDATE_INTERVAL,
-  STARTER_STATES,
   SETTLEMENT_DISPLAY_NAMES,
   STATE_IDS,
   STATE_META,
   type LocationId,
+  type BaseNodeType,
   type NamedSettlementNodeType,
-  type NodeType,
   type StateId,
 } from "./constants.js";
 import { createEventPools } from "./events.js";
 import { seedQuestBoards } from "./quest.js";
-import { buildFullTopology, toLocationId } from "./topology.js";
+import { buildFullTopology, toLocationId, toSectOutpostLocationId } from "./topology.js";
 
 const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   "healing-pill": {
@@ -93,46 +93,30 @@ const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
     description: "记载基础阵纹和护体法门，研读后偏向防护。",
     baseValue: 255,
   },
+  "eight-wastes-pass": {
+    id: "eight-wastes-pass",
+    name: "Eight Wastes Pass",
+    category: "material",
+    description: "A pass that allows entry into the Eight Wastes threshold route.",
+    baseValue: 320,
+  },
+  "ancient-artifact": {
+    id: "ancient-artifact",
+    name: "Ancient Artifact",
+    category: "material",
+    description: "A rare relic recovered from ancient hazards and Guixu traces.",
+    baseValue: 480,
+  },
+  "legendary-artifact": {
+    id: "legendary-artifact",
+    name: "Legendary Artifact",
+    category: "material",
+    description: "A top-tier relic recovered from deep Guixu exploration.",
+    baseValue: 880,
+  },
 };
 
-const sects: Record<string, Sect> = {
-  "qing-yun-sect": {
-    id: "qing-yun-sect",
-    name: "青云宗",
-    type: "剑修" as Sect["type"],
-    treasury: 86000,
-    memberIds: [],
-    spiritVeins: ["青岚支脉"],
-    headquarters: "qingzhou:main-city",
-    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
-    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
-    lastTitleUpdateTick: 0,
-  },
-  "dan-xia-sect": {
-    id: "dan-xia-sect",
-    name: "丹霞宗",
-    type: "丹修" as Sect["type"],
-    treasury: 72000,
-    memberIds: [],
-    spiritVeins: ["丹霞灵脉"],
-    headquarters: "yangzhou:main-city",
-    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
-    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
-    lastTitleUpdateTick: 0,
-  },
-  "tian-ji-sect": {
-    id: "tian-ji-sect",
-    name: "天机阁",
-    type: "阵修" as Sect["type"],
-    treasury: 64000,
-    memberIds: [],
-    spiritVeins: ["天机灵脉"],
-    headquarters: "zhongzhou:main-city",
-    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
-    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
-    lastTitleUpdateTick: 0,
-  },
-};
+const sects: Record<string, Sect> = {};
 
 function buildNeutralSects(): Record<string, NeutralSect> {
   const neutralSects: Record<string, NeutralSect> = {};
@@ -145,8 +129,9 @@ function buildNeutralSects(): Record<string, NeutralSect> {
     neutralSects[definition.id] = {
       id: definition.id,
       name: definition.name,
+      alignment: "中立",
       stateId,
-      headquarters: toLocationId(stateId, "main-city"),
+      headquarters: toSectOutpostLocationId(stateId, definition.id),
       description: definition.description,
       rewardMultiplier: definition.rewardMultiplier,
       joinable: true,
@@ -158,10 +143,7 @@ function buildNeutralSects(): Record<string, NeutralSect> {
   return neutralSects;
 }
 
-type ExtendedFactionReputation = Record<FactionId, number> &
-  Record<"dan-xia-sect" | "tian-ji-sect", number>;
-
-function buildLocationDescription(stateId: StateId, nodeType: NodeType): string {
+function buildLocationDescription(stateId: StateId, nodeType: BaseNodeType): string {
   const stateName = STATE_META[stateId].name;
   const risk = STATE_META[stateId].risk;
 
@@ -187,11 +169,35 @@ function buildLocationDescription(stateId: StateId, nodeType: NodeType): string 
   }
 }
 
-function buildAllLocations(): Record<string, Location> {
+function buildOrganizationOutpostLocation(
+  stateId: StateId,
+  organizationId: string,
+  organizationName: string,
+  organizationType: "player-sect" | "neutral-sect",
+): Location {
+  const id = toSectOutpostLocationId(stateId, organizationId);
+
+  return {
+    id,
+    stateId,
+    nodeType: "sect-outpost",
+    name: `${organizationName}据点`,
+    kind: "safe",
+    risk: STATE_META[stateId].risk,
+    description: `Dedicated outpost for ${organizationName} in ${STATE_META[stateId].name}.`,
+    organizationId,
+    organizationType,
+  };
+}
+
+function buildAllLocations(
+  playerSects: Record<string, Sect>,
+  neutralSects: Record<string, NeutralSect>,
+): Record<string, Location> {
   const locations: Record<string, Location> = {};
 
   for (const stateId of STATE_IDS) {
-    for (const nodeType of NODE_TYPES) {
+    for (const nodeType of BASE_NODE_TYPES) {
       const id: LocationId = toLocationId(stateId, nodeType);
       const settlementName = SETTLEMENT_DISPLAY_NAMES[stateId][
         nodeType as NamedSettlementNodeType
@@ -208,10 +214,31 @@ function buildAllLocations(): Record<string, Location> {
     }
   }
 
+  for (const sect of Object.values(playerSects)) {
+    const stateId = sect.headquarters.split(":")[0] as StateId;
+    const outpost = buildOrganizationOutpostLocation(
+      stateId,
+      sect.id,
+      sect.name,
+      "player-sect",
+    );
+    locations[outpost.id] = outpost;
+  }
+
+  for (const neutralSect of Object.values(neutralSects)) {
+    const outpost = buildOrganizationOutpostLocation(
+      neutralSect.stateId,
+      neutralSect.id,
+      neutralSect.name,
+      "neutral-sect",
+    );
+    locations[outpost.id] = outpost;
+  }
+
   return locations;
 }
 
-function buildAllStates(): Record<string, StateDefinition> {
+function buildAllStates(locations: Record<string, Location>): Record<string, StateDefinition> {
   const states: Record<string, StateDefinition> = {};
 
   for (const stateId of STATE_IDS) {
@@ -219,7 +246,9 @@ function buildAllStates(): Record<string, StateDefinition> {
       id: stateId,
       name: STATE_META[stateId].name,
       risk: STATE_META[stateId].risk,
-      locationIds: NODE_TYPES.map((nodeType) => toLocationId(stateId, nodeType)),
+      locationIds: Object.values(locations)
+        .filter((location) => location.stateId === stateId)
+        .map((location) => location.id),
     };
   }
 
@@ -234,6 +263,9 @@ export function createEmptyInventory(): Record<ItemId, number> {
     "spirit-ore": 0,
     "ruin-fragment": 0,
     "beast-core": 0,
+    "eight-wastes-pass": 0,
+    "ancient-artifact": 0,
+    "legendary-artifact": 0,
     "sword-manual": 0,
     "alchemy-manual": 0,
     "array-manual": 0,
@@ -241,15 +273,12 @@ export function createEmptyInventory(): Record<ItemId, number> {
 }
 
 export function createFactionReputation(
-  overrides: Partial<Record<FactionId, number>> = {},
-): ExtendedFactionReputation {
+  overrides: Partial<Record<string, number>> = {},
+): Record<string, number> {
   return {
     townsfolk: 0,
     "market-guild": 0,
-    "qing-yun-sect": 0,
     "rogue-cultivators": 0,
-    "dan-xia-sect": 0,
-    "tian-ji-sect": 0,
     ...overrides,
   };
 }
@@ -287,7 +316,6 @@ const cultivators: Record<string, Cultivator> = {
     factionReputation: createFactionReputation({
       townsfolk: 16,
       "market-guild": 10,
-      "qing-yun-sect": 6,
       "rogue-cultivators": -2,
     }),
     lifespan: 180,
@@ -315,23 +343,146 @@ const cultivators: Record<string, Cultivator> = {
   },
 };
 
+const WILDERNESS_LAYERS: Record<string, WildernessLayer> = {
+  "eight-wastes-threshold": {
+    layerId: "eight-wastes-threshold",
+    name: "Eight Wastes Threshold",
+    type: "wilderness-expansion",
+    tier: 1,
+    status: "active",
+    locationIds: ["qingzhou:dungeon-a"],
+    entryRequirement: {
+      minRealm: "绛戝熀" as WildernessLayer["entryRequirement"]["minRealm"],
+      minContribution: 180,
+      entryTicket: "eight-wastes-pass",
+    },
+    survivalPressure: {
+      maxSurvivalTicks: 3,
+      qiDamagePerTick: 8,
+      spiritualDamagePerTick: 6,
+      injuryTicksOnRetreat: 3,
+    },
+    retreatCost: {
+      spiritStoneLoss: 50,
+      progressLoss: 1,
+      itemLoss: {},
+    },
+    rewardTable: [
+      { itemId: "ancient-artifact", dropRate: 40 },
+      { itemId: "beast-core", dropRate: 100 },
+    ],
+    eventPool: ["wilderness-ancient-guardian"],
+  },
+};
+
+const GUIXU_NODES: Record<string, GuixuNode> = {
+  "guixu-threshold-gate": {
+    nodeId: "guixu-threshold-gate",
+    name: "Guixu Threshold Gate",
+    tier: "entry",
+    unlockRequirement: {
+      wildernessProgress: 2,
+      minRealm: "绛戝熀" as GuixuNode["unlockRequirement"]["minRealm"],
+      uniqueKey: "threshold-gate",
+    },
+    nodeType: "exploration",
+    sharedProgress: false,
+    anchorLocationId: "qingzhou:dungeon-a",
+    explorationDurationTicks: 2,
+    eventPool: ["guixu-threshold-vision"],
+  },
+  "guixu-ancient-seal": {
+    nodeId: "guixu-ancient-seal",
+    name: "Guixu Ancient Seal",
+    tier: "core",
+    unlockRequirement: {
+      wildernessProgress: 2,
+      minRealm: "閲戜腹" as GuixuNode["unlockRequirement"]["minRealm"],
+      uniqueKey: "ancient-seal",
+    },
+    nodeType: "guardian",
+    sharedProgress: true,
+    anchorLocationId: "qingzhou:dungeon-a",
+    explorationDurationTicks: 2,
+    eventPool: ["guixu-ancient-seal"],
+  },
+};
+
+const FACTION_WARS: Record<string, FactionWar> = {
+  "war-qingzhou-frontier": {
+    warId: "war-qingzhou-frontier",
+    stateId: "qingzhou",
+    factions: ["righteous", "demonic"],
+    startTick: 0,
+    endTick: 240,
+    objectives: [
+      {
+        objectiveId: "war-qingzhou-supply-line",
+        type: "capture-node",
+        progress: {
+          righteous: 0,
+          demonic: 0,
+        },
+        target: 180,
+        completed: false,
+      },
+      {
+        objectiveId: "war-qingzhou-seal-raid",
+        type: "defeat-boss",
+        progress: {
+          righteous: 0,
+          demonic: 0,
+        },
+        target: 120,
+        completed: false,
+      },
+    ],
+    rewards: {
+      winnerReward: {
+        spiritStones: 600,
+        contribution: 120,
+      },
+      participationReward: {
+        spiritStones: 180,
+        reputation: 12,
+      },
+    },
+  },
+};
+
+function createGuixuProgress(): GuixuProgress {
+  return {
+    wildernessAttunement: {},
+    personalUnlockedNodeIds: {},
+    sharedUnlockedNodeIds: [],
+    lastResolvedEventIds: {},
+  };
+}
+
 export { ITEM_DEFINITIONS };
 
 export function createSeedWorld(): WorldState {
-  const locations = buildAllLocations();
+  const seededSects = structuredClone(sects);
+  const neutralSects = buildNeutralSects();
+  const locations = buildAllLocations(seededSects, neutralSects);
   const world: WorldState = {
-    version: 4,
+    version: 6,
     tick: 0,
     updatedAt: new Date().toISOString(),
     cultivators: structuredClone(cultivators),
     agentBindings: {},
-    sects: {},
-    neutralSects: buildNeutralSects(),
+    sects: seededSects,
+    neutralSects,
     locations,
-    states: buildAllStates(),
-    topology: buildFullTopology(),
+    states: buildAllStates(locations),
+    topology: buildFullTopology(locations),
     eventPools: createEventPools(locations),
     questBoards: {},
+    wildernessLayers: structuredClone(WILDERNESS_LAYERS),
+    wildernessProgress: {},
+    guixuNodes: structuredClone(GUIXU_NODES),
+    guixuProgress: createGuixuProgress(),
+    factionWars: structuredClone(FACTION_WARS),
     itemDefinitions: structuredClone(ITEM_DEFINITIONS),
     jobs: {},
     daoLogs: [
@@ -349,9 +500,9 @@ export function createSeedWorld(): WorldState {
         id: "msg-1",
         cultivatorId: "yun-zhong-he",
         tick: 0,
-        from: "青云宗外门执事",
-        subject: "山门收徒告示",
-        content: "青云宗近日开山收徒，炼气后期修士可前往山门试录。",
+        from: "青州驿报",
+        subject: "据点近况",
+        content: "青州主城与苍木谷据点近日补录协力修士，想走稳修路线者可前往问讯。",
       },
     ],
     worldEvents: [],

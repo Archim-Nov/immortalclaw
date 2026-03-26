@@ -38,6 +38,8 @@ function createState(): CultivatorStateView {
     },
     sect: null,
     neutralSect: null,
+    wilderness: null,
+    guixu: null,
     inventory: {
       "healing-pill": 1,
       "qi-pill": 1,
@@ -45,6 +47,9 @@ function createState(): CultivatorStateView {
       "spirit-ore": 0,
       "ruin-fragment": 0,
       "beast-core": 0,
+      "eight-wastes-pass": 0,
+      "ancient-artifact": 0,
+      "legendary-artifact": 0,
       "sword-manual": 0,
       "alchemy-manual": 0,
       "array-manual": 0,

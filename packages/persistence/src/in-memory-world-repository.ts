@@ -20,6 +20,7 @@ import type {
   WorldRepository,
 } from "./world-repository.js";
 import type { AuthClient } from "./auth-client.js";
+import { hydrateMigratedP3WorldState } from "./world-shape.js";
 
 export interface InMemoryWorldRepositoryOptions {
   world?: WorldState;
@@ -51,7 +52,7 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
   private readonly agentCredentials = new Map<string, { agentId: string; lastSeenAt: string }>();
 
   constructor(options: InMemoryWorldRepositoryOptions = {}) {
-    this.world = structuredClone(options.world ?? createSeedWorld());
+    this.world = hydrateMigratedP3WorldState(options.world ?? createSeedWorld());
     this.now = options.now ?? (() => new Date().toISOString());
   }
 

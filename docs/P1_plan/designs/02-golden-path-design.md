@@ -12,7 +12,7 @@
 当前代码现状：
 - `packages/domain/src/engine.ts` 中 `createCultivator()` 默认将新角色放在 `"mortal-town"`
 - `packages/domain/src/seed.ts` 中新角色初始补给通过 `starterProfile()` 函数配置
-- 加入宗门是 `join-sect` 即时动作，仅在 `locationId === "sect-gate"` 时可用
+- 加入玩家宗门是 `join-sect` 即时动作，仅在存在玩家宗门的宗门据点时可用；默认种子世界不预置该入口
 - 当前没有任务板概念，`take-mortal-task` 是直接可执行的定时动作
 
 P1 黄金路径的 8 个阶段必须在新架构下全部跑通。
@@ -256,7 +256,7 @@ export interface Residence {
 | 3: 外出循环 | ≤20 分钟 | ≤12 ticks | 2x `POST /action`(travel) | 到达过 wilderness 并返回 |
 | 4: 洞府循环 | ≤20 分钟 | ≤16 ticks | `POST /action`(residence) | 洞府动作结算至少 1 次 |
 | 5: 任务循环 | ≤30 分钟 | ≤24 ticks | `GET /quest-board` + `POST /action` | 任务完成计数 >= 1 |
-| 6: 加入宗门 | ≤35 分钟 | ≤28 ticks | `POST /action`(join-sect) | `cultivator.sectId !== null` |
+| 6: 加入玩家宗门（条件路径） | 条件触发 | 条件触发 | `POST /action`(join-sect) | 世界中存在玩家宗门据点且 `cultivator.sectId !== null` |
 | 7: 宗门任务 | ≤45 分钟 | ≤36 ticks | `POST /action`(sect-quest) | `sectContribution > 0` |
 | 8: 长期目标 | ≤45 分钟 | ≤36 ticks | `GET /state` | onboarding 字段显示头衔信息 |
 

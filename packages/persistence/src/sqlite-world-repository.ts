@@ -18,6 +18,7 @@ import type {
 import type { WorldEvent } from "../../domain/src/model.js";
 import { buildFullTopology } from "../../domain/src/topology.js";
 import type { SqliteDatabaseLike } from "./sqlite-schema.js";
+import { hydrateMigratedP3WorldState } from "./world-shape.js";
 import type { TickRunRecord, WorldRepository } from "./world-repository.js";
 
 const DEFAULT_WORLD_KEY = "primary";
@@ -139,17 +140,10 @@ function normalizeLegacyZoneField<T extends { locationId?: string; zoneId?: stri
 }
 
 function normalizeStoredWorldShape(world: WorldState): WorldState {
-  const copy = structuredClone(world);
+  const copy = hydrateMigratedP3WorldState(world);
   const seedWorld = createSeedWorld();
 
   delete (copy as WorldState & { zones?: unknown }).zones;
-
-  if (!copy.sects) {
-    copy.sects = {};
-  }
-  if (!copy.neutralSects || Object.keys(copy.neutralSects).length === 0) {
-    copy.neutralSects = structuredClone(seedWorld.neutralSects);
-  }
 
   for (const cultivator of Object.values(copy.cultivators)) {
     delete (cultivator as typeof cultivator & { nextTribulationTick?: unknown }).nextTribulationTick;
@@ -173,17 +167,18 @@ function normalizeStoredWorldShape(world: WorldState): WorldState {
 }
 
 function deserializeStoredWorld(world: WorldState): WorldState {
+  const legacyDistanceMatrix = world.topology?.distanceMatrix as unknown;
   const copy = normalizeStoredWorldShape(world);
-  if (!copy.topology || !copy.topology.distanceMatrix) {
-    copy.topology = buildFullTopology() as WorldState["topology"];
-  }
-
-  const rawDistanceMatrix = copy.topology.distanceMatrix as unknown;
+  const rawDistanceMatrix = legacyDistanceMatrix ?? (copy.topology?.distanceMatrix as unknown);
   const distanceMatrixEntries = rawDistanceMatrix instanceof Map
     ? Array.from(rawDistanceMatrix.entries()).map(([key, value]) => [key, deserializeFiniteNumber(value)] as const)
     : Object.entries((rawDistanceMatrix as Record<string, unknown>) ?? {})
         .map(([key, value]) => [key, deserializeFiniteNumber(value)] as const);
-  copy.topology.distanceMatrix = new Map(distanceMatrixEntries);
+  const rebuiltTopology = buildFullTopology(copy.locations) as WorldState["topology"];
+  for (const [key, value] of distanceMatrixEntries) {
+    rebuiltTopology.distanceMatrix.set(key, value);
+  }
+  copy.topology = rebuiltTopology;
 
   for (const sect of Object.values(copy.sects)) {
     sect.titleSlots = sect.titleSlots.map((slot) => ({

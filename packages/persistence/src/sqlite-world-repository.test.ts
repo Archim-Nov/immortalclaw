@@ -202,7 +202,7 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
     neutralContribution: undefined as never,
     nextTribulationTick: 42,
   } as typeof cultivator & { nextTribulationTick: number };
-  delete (world as typeof world & { neutralSects?: unknown }).neutralSects;
+  delete (world as unknown as Record<string, unknown>).neutralSects;
   world.worldEvents = [
     {
       id: "legacy-event",
@@ -247,4 +247,46 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
   assert.equal(normalizedCombat.locationId, legacyEventLocationId);
   assert.equal(normalized.topology.distanceMatrix.get("legacy-edge"), Infinity);
   assert.equal(normalized.topology.distanceMatrix.get("finite-edge"), 12);
+});
+
+test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapshots", () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  delete (world as unknown as Record<string, unknown>).sects;
+  delete (world as unknown as Record<string, unknown>).wildernessLayers;
+  delete (world as unknown as Record<string, unknown>).wildernessProgress;
+  delete (world as unknown as Record<string, unknown>).guixuNodes;
+  delete (world as unknown as Record<string, unknown>).guixuProgress;
+  delete (world as unknown as Record<string, unknown>).factionWars;
+  delete (world as unknown as Record<string, unknown>).itemDefinitions;
+
+  const cultivator = world.cultivators[cultivatorId]!;
+  cultivator.inventory = {
+    "healing-pill": 1,
+    "qi-pill": 0,
+    "ward-talisman": 0,
+    "spirit-ore": 0,
+    "ruin-fragment": 0,
+    "beast-core": 0,
+    "sword-manual": 0,
+    "alchemy-manual": 0,
+    "array-manual": 0,
+  } as typeof cultivator.inventory;
+
+  const normalized = deserializeStoredWorld(world as never);
+
+  assert.deepEqual(normalized.sects, {});
+  assert.ok(normalized.wildernessLayers["eight-wastes-threshold"]);
+  assert.deepEqual(normalized.wildernessProgress, {});
+  assert.ok(normalized.guixuNodes["guixu-threshold-gate"]);
+  assert.ok(normalized.guixuProgress);
+  assert.ok(normalized.factionWars["war-qingzhou-frontier"]);
+  assert.ok(normalized.itemDefinitions["eight-wastes-pass"]);
+  assert.equal(normalized.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
+  assert.equal(normalized.cultivators[cultivatorId]!.inventory["legendary-artifact"], 0);
 });

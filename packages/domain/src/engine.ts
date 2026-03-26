@@ -2,13 +2,12 @@ import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
   CreateCultivatorInput, DecisionPolicyView, FactionId, FiveElementId, ItemId, Message, RegistrationAnswer,
-  NeutralSect, OrganizationInfoView, RegistrationGameplayEffectsView, RegistrationGameplayModifierView,
+  NeutralSect, OrganizationInfoView, RegistrationGameplayEffectsView, RegistrationGameplayModifierView, Sect,
   RegistrationQuestionId, ResidenceActionId, SectTitle, StatusEffect, TimedActionId, StrategySnapshot, TickSummary,
   WorldEvent, WorldState, OnboardingProgress, OnboardingStage,
 } from "./model.js";
 import {
   DEFAULT_ACTION_DURATIONS,
-  NEUTRAL_SECTS_BY_STATE,
   RESIDENCE_PRODUCTION_RECIPES,
   STARTER_STATES,
   type StateId,
@@ -38,6 +37,17 @@ import {
   computeReadiness,
   computeRecoveryState,
 } from "./economy.js";
+import { getActiveFactionWarForState, recordFactionWarContribution } from "./faction-war.js";
+import {
+  canUnlockGuixuNode,
+  getCultivatorUnlockedGuixuNodeIds,
+  getGuixuNodeById,
+  isGuixuNodeUnlockedForCultivator,
+  listGuixuNodesForLocation,
+  pickGuixuEventId,
+  resolveGuixuExploration,
+  unlockGuixuNode,
+} from "./guixu-service.js";
 import {
   resolveBehaviorAspectId,
   normalizeCultivationRegistrationRecord,
@@ -46,13 +56,27 @@ import {
   resolveTemperamentId,
 } from "./registration-taxonomy.js";
 import { createEmptyInventory, createFactionReputation } from "./seed.js";
+import { buildSectLevel, sectBonusValue } from "./sect-level.js";
 import { getDistance, getNeighbors, type TopologyGraph as RuntimeTopologyGraph } from "./topology.js";
+import {
+  applyWildernessPressure,
+  canEnterWilderness,
+  enterWildernessExpedition,
+  getActiveWildernessProgress,
+  getWildernessLayerById,
+  getWildernessLayerForLocation,
+  pickWildernessSurveyEventId,
+  resolveWildernessSurvey,
+  withdrawFromWilderness,
+} from "./wilderness-service.js";
 
 const TICKS_PER_YEAR = 4380;
 const TIMED_ACTION_IDS = new Set<string>(Object.keys(DEFAULT_ACTION_DURATIONS));
 const DEFAULT_STARTER_STATE = STARTER_STATES[0];
 const FACTION_NAMES: Record<FactionId, string> = {
-  townsfolk: "Townsfolk", "market-guild": "Market Guild", "qing-yun-sect": "Qing Yun Sect", "rogue-cultivators": "Rogue Cultivators",
+  townsfolk: "Townsfolk",
+  "market-guild": "Market Guild",
+  "rogue-cultivators": "Rogue Cultivators",
 };
 const ELEMENT_LABELS: Record<FiveElementId, string> = {
   metal: "Metal",
@@ -90,8 +114,11 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const hashString = (input: string) => Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 const travelActionIdOf = (locationId: string) => `travel-to:${locationId}` as const;
 const parseTravelDestination = (actionId: ActionId) => actionId.startsWith("travel-to:") ? actionId.slice("travel-to:".length) : null;
+const parseEnterWildernessLayer = (actionId: ActionId) => actionId.startsWith("enter-wilderness:") ? actionId.slice("enter-wilderness:".length) : null;
+const parseUnlockGuixuNode = (actionId: ActionId) => actionId.startsWith("unlock-guixu:") ? actionId.slice("unlock-guixu:".length) : null;
 const parseAcceptQuestId = (actionId: ActionId) => actionId.startsWith("accept-quest:") ? actionId.slice("accept-quest:".length) : null;
 const parseExecuteQuestId = (actionId: ActionId) => actionId.startsWith("execute-quest:") ? actionId.slice("execute-quest:".length) : null;
+const parseExploreGuixuNode = (actionId: ActionId) => actionId.startsWith("explore-guixu:") ? actionId.slice("explore-guixu:".length) : null;
 const parseResidenceOption = (actionId: ActionId, prefix: string) => actionId.startsWith(prefix) ? actionId.slice(prefix.length) : null;
 const parseJoinNeutralSectId = (actionId: ActionId) =>
   actionId.startsWith("join-neutral-sect:") ? actionId.slice("join-neutral-sect:".length) : null;
@@ -101,6 +128,7 @@ const getDistanceBetween = (world: WorldState, fromLocationId: string, toLocatio
 const getNeighborLocations = (world: WorldState, locationId: string) =>
   getNeighbors(topologyOf(world), locationId as never).map((neighbor) => ({ locationId: neighbor.locationId as string, ticks: neighbor.ticks }));
 const isMainCityNode = (nodeType: string) => nodeType === "main-city";
+const isSectOutpostNode = (nodeType: string) => nodeType === "sect-outpost";
 const isSubTownNode = (nodeType: string) => nodeType.startsWith("sub-town-");
 const isDungeonNode = (nodeType: string) => nodeType.startsWith("dungeon-");
 const stateIdFromLocationId = (locationId: string) => locationId.split(":")[0] as StateId;
@@ -112,6 +140,7 @@ const isLowRiskAction = (actionId: ActionId) =>
   || actionId === "heal"
   || actionId === "residence-recover-qi"
   || actionId === "residence-heal"
+  || actionId === "withdraw-from-wilderness"
   || actionId === "take-neutral-duty"
   || actionId === "take-mortal-task"
   || actionId.startsWith("travel-to:");
@@ -128,6 +157,24 @@ const findNearestLocationId = (world: WorldState, fromLocationId: string, predic
   }
   return bestLocationId;
 };
+
+function buildEnterWildernessAction(
+  cultivator: Cultivator,
+  layer: NonNullable<ReturnType<typeof getWildernessLayerForLocation>>,
+): AvailableAction {
+  const gate = canEnterWilderness(cultivator, layer);
+  const gateText = gate.allowed
+    ? `Consumes ${layer.entryRequirement.entryTicket ?? "no ticket"} and grants ${layer.survivalPressure.maxSurvivalTicks} survival ticks.`
+    : gate.reason ?? "Cannot enter yet.";
+
+  return {
+    actionId: `enter-wilderness:${layer.layerId}` as ActionId,
+    label: `Enter ${layer.name}`,
+    description: `${gateText} Pressure ${layer.survivalPressure.qiDamagePerTick}/${layer.survivalPressure.spiritualDamagePerTick} per tick.`,
+    durationTicks: 0,
+    kind: "immediate",
+  };
+}
 const normalizeAgentId = (input: string | null | undefined) => input?.trim() ? input.trim() : null;
 export function starterStateFromRoll(roll: number): StateId {
   const normalized = Number.isFinite(roll) ? roll : 0;
@@ -148,16 +195,48 @@ function getCultivatorNeutralSect(world: WorldState, cultivator: Cultivator): Ne
   }
   return world.neutralSects[cultivator.neutralSectId] ?? null;
 }
+
+function getCultivatorSect(world: WorldState, cultivator: Cultivator): Sect | null {
+  if (!cultivator.sectId) {
+    return null;
+  }
+
+  return world.sects[cultivator.sectId] ?? null;
+}
+
+function locationOrganizationIdOf(
+  location: WorldState["locations"][string] | undefined,
+  organizationType: "player-sect" | "neutral-sect",
+): string | null {
+  if (!location || !isSectOutpostNode(location.nodeType)) {
+    return null;
+  }
+
+  if (location.organizationType !== organizationType || !location.organizationId) {
+    return null;
+  }
+
+  return location.organizationId;
+}
+
+function getLocalSect(world: WorldState, locationId: string): Sect | null {
+  const location = world.locations[locationId];
+  const sectId = locationOrganizationIdOf(location, "player-sect");
+  if (!sectId) {
+    return null;
+  }
+
+  return world.sects[sectId] ?? null;
+}
+
 function getLocalNeutralSect(world: WorldState, locationId: string): NeutralSect | null {
   const location = world.locations[locationId];
-  if (!location || location.nodeType !== "main-city") {
+  const neutralSectId = locationOrganizationIdOf(location, "neutral-sect");
+  if (!neutralSectId) {
     return null;
   }
-  const definition = NEUTRAL_SECTS_BY_STATE[location.stateId as StateId];
-  if (!definition) {
-    return null;
-  }
-  return world.neutralSects[definition.id] ?? null;
+
+  return world.neutralSects[neutralSectId] ?? null;
 }
 const getAgentBinding = (world: WorldState, agentId: string) => world.agentBindings[agentId] ?? null;
 function ensureAgentBinding(world: WorldState, agentId: string): AgentBinding {
@@ -470,10 +549,13 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const travelDestination = parseTravelDestination(actionId);
   const executeQuestId = parseExecuteQuestId(actionId);
+  const guixuNodeId = parseExploreGuixuNode(actionId);
   const duration = travelDestination
     ? getDistanceBetween(world, cultivator.locationId, travelDestination)
     : executeQuestId
       ? (cultivator.activeQuests.find((quest) => quest.id === executeQuestId)?.durationTicks ?? NaN)
+      : guixuNodeId
+        ? (getGuixuNodeById(world, guixuNodeId)?.explorationDurationTicks ?? NaN)
       : DEFAULT_ACTION_DURATIONS[actionId];
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error(`Invalid action duration for ${actionId}.`);
@@ -498,7 +580,17 @@ function defaultResidenceAt(locationId: string, cultivatorId: string) {
 }
 
 function starterProfile() {
-  return { techniques: ["Loose Breathing", "Light Body"], spiritStones: 360, inventory: { ...createEmptyInventory(), "healing-pill": 1, "qi-pill": 1 }, reputation: 12, factionReputation: createFactionReputation({ townsfolk: 8, "qing-yun-sect": 0, "market-guild": 4, "rogue-cultivators": 6 }) };
+  return {
+    techniques: ["Loose Breathing", "Light Body"],
+    spiritStones: 360,
+    inventory: { ...createEmptyInventory(), "healing-pill": 1, "qi-pill": 1 },
+    reputation: 12,
+    factionReputation: createFactionReputation({
+      townsfolk: 8,
+      "market-guild": 4,
+      "rogue-cultivators": 6,
+    }),
+  };
 }
 function toSummary(cultivator: Cultivator, selectedCultivatorId: string | null): CharacterSummary {
   return { id: cultivator.id, name: cultivator.name, genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, realm: cultivator.realm, realmLevel: cultivator.realmLevel, locationId: cultivator.locationId, sectId: cultivator.sectId, neutralSectId: cultivator.neutralSectId, isSelected: cultivator.id === selectedCultivatorId };
@@ -770,7 +862,14 @@ function guidance(world: WorldState, cultivator: Cultivator) {
               : mainCityTravelAction,
         );
       } else if (cultivator.sectId) {
-        suggestedActions.push(mainCityTravelAction);
+        const sect = getCultivatorSect(world, cultivator);
+        suggestedActions.push(
+          sect && cultivator.locationId === sect.headquarters
+            ? "take-sect-errand"
+            : sect
+              ? travelActionIdOf(sect.headquarters)
+              : mainCityTravelAction,
+        );
       }
     }
     if (registration.fortuneBonus >= 8) suggestedActions.push(location && isDungeonNode(location.nodeType) ? "search-fortune" : dungeonTravelAction);
@@ -971,8 +1070,71 @@ export function getStrategySnapshot(world: WorldState, cultivatorId: string): St
   };
 }
 
+function buildWildernessView(world: WorldState, cultivator: Cultivator): CultivatorStateView["wilderness"] {
+  const progress = getActiveWildernessProgress(world, cultivator.id);
+  if (!progress) {
+    return null;
+  }
+
+  const layer = getWildernessLayerById(world, progress.layerId);
+  if (!layer) {
+    return null;
+  }
+
+  return {
+    layerId: layer.layerId,
+    layerName: layer.name,
+    ticksSurvived: progress.ticksSurvived,
+    remainingSurvivalTicks: progress.remainingSurvivalTicks,
+    status: progress.status,
+  };
+}
+
+function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorStateView["guixu"] {
+  const unlockedNodeIds = getCultivatorUnlockedGuixuNodeIds(world, cultivator.id);
+  const availableNodeIds = listGuixuNodesForLocation(world, cultivator.locationId)
+    .filter((node) => canUnlockGuixuNode(world, cultivator, node).allowed || unlockedNodeIds.includes(node.nodeId))
+    .map((node) => node.nodeId);
+
+  return {
+    wildernessAttunement: world.guixuProgress.wildernessAttunement[cultivator.id] ?? 0,
+    unlockedNodeIds,
+    sharedUnlockedNodeIds: [...world.guixuProgress.sharedUnlockedNodeIds],
+    availableNodeIds,
+  };
+}
+
+function buildSectStateView(world: WorldState, cultivator: Cultivator): CultivatorStateView["sect"] {
+  if (!cultivator.sectId) {
+    return null;
+  }
+
+  const sect = world.sects[cultivator.sectId];
+  if (!sect) {
+    return null;
+  }
+
+  const sectLevel = buildSectLevel(world, sect.id);
+  const headquartersStateId = sect.headquarters.split(":")[0] ?? sect.headquarters;
+  const activeWar = getActiveFactionWarForState(world, headquartersStateId);
+
+  return {
+    id: sect.id,
+    name: sect.name,
+    alignment: sect.alignment,
+    role: cultivator.sectTitle ?? "澶栭棬",
+    treasury: sect.treasury,
+    memberCount: sect.memberIds.length,
+    level: sectLevel?.level,
+    bonuses: sectLevel?.bonuses ?? [],
+    activeWarId: activeWar?.warId ?? null,
+    warObjectives: activeWar ? structuredClone(activeWar.objectives) : [],
+  };
+}
+
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
   const cultivator = getCultivatorOrThrow(world, cultivatorId); const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
+  const sectView = buildSectStateView(world, cultivator);
   const policy = decisionPolicy();
   const derivedState = {
     readiness: computeReadiness(cultivator),
@@ -984,18 +1146,25 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     tick: world.tick,
     cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, karma: cultivator.karma, reputation: cultivator.reputation, lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament },
     cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
-    neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
-    sect: sect ? { id: sect.id, name: sect.name, role: cultivator.sectTitle ?? "外门", treasury: sect.treasury, memberCount: sect.memberIds.length } : null,
+    neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
+    sect: sectView,
     inventory: cultivator.inventory,
     inventoryDetails: Object.entries(cultivator.inventory).filter(([, count]) => count > 0).map(([itemId, count]) => ({ id: itemId as ItemId, name: world.itemDefinitions[itemId as ItemId].name, category: world.itemDefinitions[itemId as ItemId].category, description: world.itemDefinitions[itemId as ItemId].description, count, baseValue: world.itemDefinitions[itemId as ItemId].baseValue })),
     currentJob: cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
     nearbyOpportunities: [location && canTradeAtLocation(location) ? "Sell or buy supplies." : "Move for a better opportunity.", location?.nodeType === "wilderness" ? "Mine or hunt a beast." : "Stay aware of local events."],
     statusEffects: cultivator.statusEffects.map((effect) => ({ id: effect.id, name: effect.name, description: effect.description, remainingTicks: effect.remainingTicks, source: effect.source })),
-    factionReputation: (Object.keys(cultivator.factionReputation) as FactionId[]).map((factionId) => ({ factionId, name: FACTION_NAMES[factionId], value: cultivator.factionReputation[factionId], standing: standing(cultivator.factionReputation[factionId]) })),
+    factionReputation: Object.entries(cultivator.factionReputation).map(([factionId, value]) => ({
+      factionId,
+      name: factionNameOf(world, factionId),
+      value,
+      standing: standing(value),
+    })),
     recentEvents: getRecentWorldEvents(world, cultivatorId, 5),
     recentCombats: getCombatLogs(world, cultivatorId, 4),
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
+    wilderness: buildWildernessView(world, cultivator),
+    guixu: buildGuixuView(world, cultivator),
     derivedState,
     onboarding: computeOnboardingProgress(world, cultivator),
     decisionPolicy: policy,
@@ -1059,16 +1228,22 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const cultivator = getCultivatorOrThrow(world, cultivatorId); if (cultivator.activeJobId) return [];
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
+  const localSect = getLocalSect(world, cultivator.locationId);
   const localNeutralSect = getLocalNeutralSect(world, cultivator.locationId);
   const joinedNeutralSect = getCultivatorNeutralSect(world, cultivator);
-  const actions: AvailableAction[] = getNeighborLocations(world, cultivator.locationId)
-    .map(({ locationId: neighborId, ticks }) => ({
-      actionId: travelActionIdOf(neighborId) as ActionId,
-      label: `Travel to ${world.locations[neighborId]?.name ?? neighborId}`,
-      description: `Travel to ${world.locations[neighborId]?.name ?? neighborId}.`,
-      durationTicks: ticks,
-      kind: "timed" as const,
-    }));
+  const joinedSect = getCultivatorSect(world, cultivator);
+  const activeWilderness = getActiveWildernessProgress(world, cultivator.id);
+  const wildernessLayer = getWildernessLayerForLocation(world, cultivator.locationId);
+  const actions: AvailableAction[] = activeWilderness
+    ? []
+    : getNeighborLocations(world, cultivator.locationId)
+      .map(({ locationId: neighborId, ticks }) => ({
+        actionId: travelActionIdOf(neighborId) as ActionId,
+        label: `Travel to ${world.locations[neighborId]?.name ?? neighborId}`,
+        description: `Travel to ${world.locations[neighborId]?.name ?? neighborId}.`,
+        durationTicks: ticks,
+        kind: "timed" as const,
+      }));
   actions.push({ actionId: "meditate", label: "Meditate", description: "Recover spiritual power.", durationTicks: DEFAULT_ACTION_DURATIONS.meditate, kind: "timed" });
   if (cultivator.inventory["healing-pill"] > 0) actions.push({ actionId: "use-healing-pill", label: "Use healing pill", description: "Restore qi.", durationTicks: 0, kind: "immediate" });
   if (cultivator.inventory["qi-pill"] > 0) actions.push({ actionId: "use-qi-pill", label: "Use qi pill", description: "Restore spiritual power.", durationTicks: 0, kind: "immediate" });
@@ -1077,6 +1252,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   if (cultivator.inventory["alchemy-manual"] > 0) actions.push({ actionId: "study-alchemy-manual", label: "Study alchemy manual", description: "Consume a manual for recovery-focused insight.", durationTicks: 0, kind: "immediate" });
   if (cultivator.inventory["array-manual"] > 0) actions.push({ actionId: "study-array-manual", label: "Study array manual", description: "Consume a manual for protective insight.", durationTicks: 0, kind: "immediate" });
   if (cultivator.injuryTicksRemaining > 0) {
+    if (activeWilderness) {
+      actions.push({
+        actionId: "withdraw-from-wilderness",
+        label: "Withdraw from wilderness",
+        description: "Retreat before the expedition becomes fatal.",
+        durationTicks: 0,
+        kind: "immediate",
+      });
+      return actions;
+    }
     if (isAtResidence(cultivator)) {
       actions.push(
         {
@@ -1147,14 +1332,18 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (cultivator.inventory["ruin-fragment"] > 0) actions.push({ actionId: "sell-ruin-fragment", label: "Sell ruin fragment", description: `${sellPrice(cultivator, 145)} spirit stones.`, durationTicks: 0, kind: "immediate" });
     if (cultivator.inventory["beast-core"] > 0) actions.push({ actionId: "sell-beast-core", label: "Sell beast core", description: `${sellPrice(cultivator, 210)} spirit stones.`, durationTicks: 0, kind: "immediate" });
   }
-  if (location.nodeType === "main-city") {
-    if (!cultivator.sectId && !cultivator.neutralSectId && localNeutralSect?.joinable) {
-      actions.push({ actionId: `join-neutral-sect:${localNeutralSect.id}`, label: `Join ${localNeutralSect.name}`, description: "Join the local neutral organization for a safer progression loop.", durationTicks: 0, kind: "immediate" });
-    }
-    if (joinedNeutralSect?.headquarters === cultivator.locationId) {
-      actions.push({ actionId: "take-neutral-duty", label: "Take neutral duty", description: "A safe but slower organization duty.", durationTicks: DEFAULT_ACTION_DURATIONS["take-neutral-duty"], kind: "timed" });
-      actions.push({ actionId: "leave-neutral-sect", label: "Leave neutral sect", description: "End neutral sect membership and reset neutral contribution.", durationTicks: 0, kind: "immediate" });
-    }
+  if (!cultivator.sectId && !cultivator.neutralSectId && localNeutralSect?.joinable) {
+    actions.push({ actionId: `join-neutral-sect:${localNeutralSect.id}`, label: `Join ${localNeutralSect.name}`, description: "Join the local neutral organization for a safer progression loop.", durationTicks: 0, kind: "immediate" });
+  }
+  if (!cultivator.sectId && !cultivator.neutralSectId && localSect && cultivator.completedBaseQuests >= 1) {
+    actions.push({ actionId: "join-sect", label: `Join ${localSect.name}`, description: "Join the local sect at its outpost.", durationTicks: 0, kind: "immediate" });
+  }
+  if (joinedNeutralSect?.headquarters === cultivator.locationId) {
+    actions.push({ actionId: "take-neutral-duty", label: "Take neutral duty", description: "A safe but slower organization duty.", durationTicks: DEFAULT_ACTION_DURATIONS["take-neutral-duty"], kind: "timed" });
+    actions.push({ actionId: "leave-neutral-sect", label: "Leave neutral sect", description: "End neutral sect membership and reset neutral contribution.", durationTicks: 0, kind: "immediate" });
+  }
+  if (joinedSect?.headquarters === cultivator.locationId) {
+    actions.push({ actionId: "take-sect-errand", label: "Take sect errand", description: "Take a sect assignment from the outpost.", durationTicks: DEFAULT_ACTION_DURATIONS["take-sect-errand"], kind: "timed" });
   }
   const board = getQuestBoard(world, cultivator.locationId);
   if (board) {
@@ -1177,6 +1366,51 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       kind: "timed",
     });
   }
+  if (activeWilderness) {
+    actions.push(
+      {
+        actionId: "survey-wilderness",
+        label: "Survey wilderness",
+        description: "Push deeper into the Eight Wastes for dedicated events and rare drops.",
+        durationTicks: DEFAULT_ACTION_DURATIONS["survey-wilderness"],
+        kind: "timed",
+      },
+      {
+        actionId: "withdraw-from-wilderness",
+        label: "Withdraw from wilderness",
+        description: "Retreat before survival pressure forces a worse exit.",
+        durationTicks: 0,
+        kind: "immediate",
+      },
+    );
+  } else if (wildernessLayer) {
+    actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
+  }
+  if (!activeWilderness) {
+    for (const node of listGuixuNodesForLocation(world, cultivator.locationId)) {
+      if (isGuixuNodeUnlockedForCultivator(world, cultivator.id, node.nodeId)) {
+        actions.push({
+          actionId: `explore-guixu:${node.nodeId}` as ActionId,
+          label: `Explore ${node.name}`,
+          description: `Push into ${node.name} and resolve a Guixu event.`,
+          durationTicks: node.explorationDurationTicks,
+          kind: "timed",
+        });
+        continue;
+      }
+
+      const unlockCheck = canUnlockGuixuNode(world, cultivator, node);
+      if (unlockCheck.allowed) {
+        actions.push({
+          actionId: `unlock-guixu:${node.nodeId}` as ActionId,
+          label: `Unlock ${node.name}`,
+          description: `Use wilderness attunement to unlock ${node.name}.`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    }
+  }
   if (location.nodeType === "wilderness") actions.push({ actionId: "mine-spirit-stones", label: "Mine spirit stones", description: "Gather stones and ore.", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" }, { actionId: "hunt-mine-beast", label: "Hunt mine beast", description: "PVE combat for better loot.", durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"], kind: "timed" });
   if (isDungeonNode(location.nodeType)) actions.push({ actionId: "search-fortune", label: "Search ruins", description: "Look for fragments and gains.", durationTicks: DEFAULT_ACTION_DURATIONS["search-fortune"], kind: "timed" }, { actionId: "challenge-guardian", label: "Challenge guardian", description: "PVE combat for rare loot.", durationTicks: DEFAULT_ACTION_DURATIONS["challenge-guardian"], kind: "timed" });
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
@@ -1187,9 +1421,20 @@ function requireIdle(cultivator: Cultivator) { if (cultivator.activeJobId) throw
 function isResidenceAction(actionId: ActionId): actionId is ResidenceActionId {
   return actionId.startsWith("residence-") && !actionId.startsWith("residence-produce:") && !actionId.startsWith("residence-heal:") && !actionId.startsWith("residence-recover-qi:");
 }
+function factionNameOf(world: WorldState, factionId: string): string {
+  return world.sects[factionId]?.name
+    ?? world.neutralSects[factionId]?.name
+    ?? FACTION_NAMES[factionId as FactionId]
+    ?? factionId;
+}
+
+function addFactionReputation(cultivator: Cultivator, factionId: string, amount: number): void {
+  cultivator.factionReputation[factionId] = (cultivator.factionReputation[factionId] ?? 0) + amount;
+}
+
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
-  const allowed = new Set<ActionId>(["meditate", "heal", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "study-sword-manual", "study-alchemy-manual", "study-array-manual", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect"]);
+  const allowed = new Set<ActionId>(["meditate", "heal", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "study-sword-manual", "study-alchemy-manual", "study-array-manual", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness"]);
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (!allowed.has(actionId)) throw new Error("Cultivator is injured and can only do safe actions.");
@@ -1217,6 +1462,28 @@ function marketSell(world: WorldState, cultivator: Cultivator, itemId: ItemId, b
 }
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
+  const wildernessLayerId = parseEnterWildernessLayer(actionId);
+  if (wildernessLayerId) {
+    enterWildernessExpedition(world, cultivator, wildernessLayerId);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} entered ${getWildernessLayerById(world, wildernessLayerId)?.name ?? wildernessLayerId}.`,
+    };
+  }
+  const guixuNodeId = parseUnlockGuixuNode(actionId);
+  if (guixuNodeId) {
+    const node = unlockGuixuNode(world, cultivator, guixuNodeId);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} unlocked ${node.name}.`,
+    };
+  }
   const joinNeutralSectId = parseJoinNeutralSectId(actionId);
   if (actionId === "buy-healing-pill" || actionId === "buy-qi-pill" || actionId === "buy-ward-talisman") {
     const location = world.locations[cultivator.locationId];
@@ -1239,11 +1506,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   }
   if (joinNeutralSectId) {
     const location = world.locations[cultivator.locationId];
-    if (!location || location.nodeType !== "main-city") throw new Error("You must be in a main city to join a neutral sect.");
+    if (!location || !isSectOutpostNode(location.nodeType)) throw new Error("You must be at a neutral sect outpost to join.");
     if (cultivator.sectId || cultivator.neutralSectId) throw new Error("Cultivator already belongs to an organization.");
     const neutralSect = world.neutralSects[joinNeutralSectId];
     if (!neutralSect) throw new Error(`Neutral sect not found: ${joinNeutralSectId}`);
-    if (neutralSect.headquarters !== cultivator.locationId) throw new Error("You can only join the neutral sect based in this state's main city.");
+    if (neutralSect.headquarters !== cultivator.locationId) throw new Error("You can only join the neutral sect at its outpost.");
     cultivator.neutralSectId = neutralSect.id;
     cultivator.neutralContribution = 0;
     cultivator.reputation += 4;
@@ -1264,18 +1531,28 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   }
   if (actionId === "join-sect") {
     const location = world.locations[cultivator.locationId];
-    if (!location || location.nodeType !== "main-city") throw new Error("You must be in a main city to join a sect.");
+    if (!location || !isSectOutpostNode(location.nodeType)) {
+      throw new Error("You must be at a sect outpost to join a sect.");
+    }
     if (cultivator.sectId || cultivator.neutralSectId) throw new Error("Cultivator has already joined an organization.");
     if (cultivator.completedBaseQuests < 1) throw new Error("Join sect requires completing at least 1 base quest.");
-    const sect = world.sects["qing-yun-sect"];
+    const sect = getLocalSect(world, cultivator.locationId);
+    if (!sect) throw new Error("No player sect is available at this outpost.");
     cultivator.sectId = sect.id;
     cultivator.sectTitle = "外门";
     cultivator.reputation += 10;
-    cultivator.factionReputation["qing-yun-sect"] += 15;
+    addFactionReputation(cultivator, sect.id, 15);
     sect.memberIds.push(cultivator.id);
-    addMessage(world, cultivator.id, "Sect", "Accepted", `${cultivator.name} joined ${sect.name}.`);
+    addMessage(world, cultivator.id, sect.name, "Accepted", `${cultivator.name} joined ${sect.name}.`);
     addDaoLog(world, cultivator.id, "Joined Sect", `${cultivator.name} joined ${sect.name}.`, ["sect", "join-sect"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${sect.name}.` };
+  }
+  if (actionId === "withdraw-from-wilderness") {
+    const summary = withdrawFromWilderness(world, cultivator, "manual-withdraw");
+    if (!summary) {
+      throw new Error("No active wilderness expedition to withdraw from.");
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
   throw new Error(`Unsupported action: ${actionId}`);
 }
@@ -1283,6 +1560,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId); cultivator.activeJobId = null;
   const registration = registrationModifiersOf(cultivator);
   const executeQuestId = parseExecuteQuestId(job.actionId);
+  const guixuNodeId = parseExploreGuixuNode(job.actionId);
   const travelDestination = parseTravelDestination(job.actionId);
   if (travelDestination) {
     const destination = world.locations[travelDestination];
@@ -1302,12 +1580,14 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   }
   if (executeQuestId) {
     const resolved = resolveActiveQuest(world, cultivator, executeQuestId, `${world.tick}:${job.id}:${executeQuestId}`);
-    if (resolved.success) {
-      if (resolved.quest.category === "sect") {
-        cultivator.factionReputation["qing-yun-sect"] += 8;
-      } else {
-        cultivator.factionReputation.townsfolk += 4;
-      }
+      if (resolved.success) {
+        if (resolved.quest.category === "sect") {
+          if (cultivator.sectId) {
+            addFactionReputation(cultivator, cultivator.sectId, 8);
+          }
+        } else {
+          cultivator.factionReputation.townsfolk += 4;
+        }
       addDaoLog(
         world,
         cultivator.id,
@@ -1325,6 +1605,12 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       );
     }
     return resolved.summary;
+  }
+  if (job.actionId === "survey-wilderness") {
+    return resolveWildernessSurvey(world, cultivator, job);
+  }
+  if (guixuNodeId) {
+    return resolveGuixuExploration(world, cultivator, job);
   }
   if (job.actionId === "meditate") {
     cultivator.spiritualPower = clamp(
@@ -1501,16 +1787,42 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} finished neutral sect duty.`;
   }
   if (job.actionId === "take-sect-errand") {
+    const sect = getCultivatorSect(world, cultivator);
+    const sectLevel = cultivator.sectId ? buildSectLevel(world, cultivator.sectId) : null;
+    const resourceBonus = sectBonusValue(sectLevel, "resource");
+    const contributionDelta =
+      60 +
+      Math.floor((registration?.sectBonus ?? 0) / 2) +
+      resourceBonus;
     const previousContribution = cultivator.totalContribution;
-    cultivator.spiritStones += 180 + ((registration?.sectBonus ?? 0) * 12);
+    cultivator.spiritStones += 180 + ((registration?.sectBonus ?? 0) * 12) + (resourceBonus * 10);
     cultivator.reputation += 6 + Math.floor((registration?.sectBonus ?? 0) / 2);
-    cultivator.factionReputation["qing-yun-sect"] += 12 + (registration?.sectBonus ?? 0);
-    cultivator.totalContribution += 60 + Math.floor((registration?.sectBonus ?? 0) / 2);
+    if (sect) {
+      addFactionReputation(
+        cultivator,
+        sect.id,
+        12 +
+          (registration?.sectBonus ?? 0) +
+          Math.floor(resourceBonus / 2),
+      );
+    }
+    cultivator.totalContribution += contributionDelta;
     if (cultivator.totalContribution > previousContribution) {
       cultivator.contributionReachedAt = world.tick;
     }
+    const warProgress = recordFactionWarContribution(world, cultivator, Math.max(20, contributionDelta));
     upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 });
     addDaoLog(world, cultivator.id, "Sect Duty", `${cultivator.name} completed a sect errand.`, ["sect", "sect-quest-complete"]);
+    if (warProgress) {
+      addWorldEvent(world, {
+        cultivatorId: cultivator.id,
+        locationId: cultivator.locationId,
+        title: "Faction War Progress",
+        content: `${cultivator.name} advanced ${warProgress.objectiveId} for ${warProgress.faction}.`,
+        severity: "medium",
+        tags: ["sect", "faction-war", warProgress.faction],
+      });
+    }
     return `${cultivator.name} finished a sect errand.`;
   }
   if (job.actionId === "mine-spirit-stones") {
@@ -1591,7 +1903,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   if (job.actionId === "heal") { cultivator.qi = clamp(cultivator.qi + 45 + (registration?.healBonus ?? 0), 0, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - 4 - Math.floor((registration?.healBonus ?? 0) / 4)); cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned"); upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 }); syncWounded(cultivator); return `${cultivator.name} recovered from injuries.`; }
   if (job.actionId === "cultivate") { cultivator.realmProgress = clamp(cultivator.realmProgress + 18 + Math.floor(cultivator.realmLevel / 2) + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (hasEffect(cultivator, "qi-surge") ? 6 : 0) - (hasEffect(cultivator, "poisoned") ? 8 : 0), 0, 200); if (cultivator.realmProgress >= 100 && cultivator.realmLevel < 9) { cultivator.realmProgress -= 100; cultivator.realmLevel += 1; cultivator.realm = cultivator.realmLevel <= 3 ? "炼气" : cultivator.realmLevel <= 6 ? "筑基" : "金丹"; cultivator.maxQi += 12; cultivator.maxSpiritualPower += 12; cultivator.qi = cultivator.maxQi; cultivator.spiritualPower = cultivator.maxSpiritualPower; cultivator.lifespan += 12; return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`; } return `${cultivator.name} gained cultivation progress.`; }
   if (job.actionId === "take-mortal-task") { cultivator.spiritStones += 140; cultivator.reputation += 8; cultivator.karma = Math.max(0, cultivator.karma - 2); cultivator.factionReputation.townsfolk += 8; return `${cultivator.name} finished a town task.`; }
-  if (job.actionId === "take-sect-errand") { cultivator.spiritStones += 180; cultivator.reputation += 6; cultivator.factionReputation["qing-yun-sect"] += 12; upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 }); return `${cultivator.name} finished a sect errand.`; }
+  if (job.actionId === "take-sect-errand") { cultivator.spiritStones += 180; cultivator.reputation += 6; upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 }); return `${cultivator.name} finished a sect errand.`; }
   if (job.actionId === "mine-spirit-stones") { const roll = hashString(`${world.tick}:${job.id}`); cultivator.spiritStones += 110 + (roll % 80); cultivator.inventory["spirit-ore"] += 1 + (roll % 2); cultivator.qi = clamp(cultivator.qi - 14, 1, cultivator.maxQi); if (roll % 5 === 0) { cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 5); syncWounded(cultivator); } return `${cultivator.name} mined stones and ore.`; }
   if (job.actionId === "search-fortune") { const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}`); if (roll % 3 === 0) cultivator.inventory["ruin-fragment"] += hasEffect(cultivator, "fortune-marked") ? 2 : 1; else if (roll % 3 === 1) { cultivator.realmProgress = clamp(cultivator.realmProgress + 10, 0, 200); upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 }); } else { cultivator.spiritStones += 220; cultivator.inventory["ruin-fragment"] += 1; } cultivator.factionReputation["rogue-cultivators"] += 3; return `${cultivator.name} searched the ruins.`; }
   const encounterId = job.actionId === "hunt-mine-beast" ? "mine-beast" : "ruins-guardian"; const roll = hashString(`${world.tick}:${job.id}:${encounterId}`); const power = cultivator.qi + Math.floor(cultivator.spiritualPower * 0.6) + cultivator.realmLevel * 10 + Math.floor(cultivator.reputation / 3) + (hasEffect(cultivator, "qi-surge") ? 18 : 0) + (hasEffect(cultivator, "warded") ? 14 : 0) + (job.actionId === "challenge-guardian" && hasEffect(cultivator, "fortune-marked") ? 12 : 0) - (hasEffect(cultivator, "poisoned") ? 12 : 0) + (roll % 22); const threat = job.actionId === "hunt-mine-beast" ? 145 + (roll % 20) : 172 + (roll % 24); cultivator.spiritualPower = clamp(cultivator.spiritualPower - (job.actionId === "hunt-mine-beast" ? 16 : 24), 0, cultivator.maxSpiritualPower);
@@ -1753,7 +2065,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   }
   const travelDestination = parseTravelDestination(actionId);
   const executeQuestId = parseExecuteQuestId(actionId);
-  if (travelDestination || executeQuestId || TIMED_ACTION_IDS.has(actionId)) {
+  const exploreGuixuNodeId = parseExploreGuixuNode(actionId);
+  if (travelDestination || executeQuestId || exploreGuixuNodeId || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -1769,14 +2082,57 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         activeQuestId: executeQuestId,
       });
     }
+    if (actionId === "survey-wilderness") {
+      const progress = getActiveWildernessProgress(world, cultivator.id);
+      if (!progress) {
+        throw new Error("Survey wilderness requires an active wilderness expedition.");
+      }
+      const layer = getWildernessLayerById(world, progress.layerId);
+      if (!layer) {
+        throw new Error(`Wilderness layer not found: ${progress.layerId}`);
+      }
+      const eventId = pickWildernessSurveyEventId(
+        layer,
+        `${world.tick}:${cultivator.id}:${world.nextJobSequence}:survey-wilderness`,
+      );
+      return startJob(world, cultivator, actionId as TimedActionId, `Survey ${layer.name}`, {
+        wildernessLayerId: layer.layerId,
+        wildernessEventId: eventId,
+      });
+    }
+    if (exploreGuixuNodeId) {
+      const node = getGuixuNodeById(world, exploreGuixuNodeId);
+      if (!node) {
+        throw new Error(`Guixu node not found: ${exploreGuixuNodeId}`);
+      }
+      if (node.anchorLocationId !== cultivator.locationId) {
+        throw new Error("Current location does not connect to this Guixu node.");
+      }
+      if (!isGuixuNodeUnlockedForCultivator(world, cultivator.id, exploreGuixuNodeId)) {
+        throw new Error(`Guixu node not unlocked: ${exploreGuixuNodeId}`);
+      }
+      const eventId = pickGuixuEventId(
+        node,
+        `${world.tick}:${cultivator.id}:${world.nextJobSequence}:${exploreGuixuNodeId}:guixu`,
+      );
+      return startJob(world, cultivator, actionId as TimedActionId, `Explore ${node.name}`, {
+        guixuNodeId: node.nodeId,
+        guixuEventId: eventId,
+      });
+    }
     if (actionId === "cultivate") { if (cultivator.spiritStones < 80) throw new Error("Not enough spirit stones."); if (cultivator.spiritualPower < 20) throw new Error("Not enough spiritual power."); cultivator.spiritStones -= 80; cultivator.spiritualPower -= 20; }
     if ((actionId === "mine-spirit-stones" || actionId === "hunt-mine-beast") && location.nodeType !== "wilderness") throw new Error("Action only available in wilderness.");
     if ((actionId === "search-fortune" || actionId === "challenge-guardian") && !isDungeonNode(location.nodeType)) throw new Error("Action only available in dungeons.");
     if (actionId === "take-mortal-task" && location.kind !== "safe") throw new Error("Action only available in safe settlements.");
-    if (actionId === "take-sect-errand" && (location.nodeType !== "main-city" || !cultivator.sectId)) throw new Error("Sect errand requires a main city and sect membership.");
+    if (actionId === "take-sect-errand") {
+      const sect = getCultivatorSect(world, cultivator);
+      if (!sect || cultivator.locationId !== sect.headquarters) {
+        throw new Error("Sect errand requires sect membership at the sect outpost.");
+      }
+    }
     if (actionId === "take-neutral-duty") {
       const neutralSect = getCultivatorNeutralSect(world, cultivator);
-      if (!neutralSect || cultivator.locationId !== neutralSect.headquarters || location.nodeType !== "main-city") {
+      if (!neutralSect || cultivator.locationId !== neutralSect.headquarters) {
         throw new Error("Neutral duty requires neutral sect membership at its headquarters.");
       }
     }
@@ -1810,6 +2166,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         return effect.remainingTicks > 0;
       });
       syncWounded(cultivator);
+      applyWildernessPressure(world, cultivator);
     }
     for (const job of Object.values(world.jobs)) {
       job.remainingTicks -= 1;
@@ -1852,11 +2209,14 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
   const neutralSect = getCultivatorNeutralSect(world, cultivator);
   const role = (cultivator.sectTitle ?? "外门") as SectTitle;
   if (sect) {
+    const sectLevel = buildSectLevel(world, sect.id);
+    const headquartersStateId = sect.headquarters.split(":")[0] ?? sect.headquarters;
+    const activeWar = getActiveFactionWarForState(world, headquartersStateId);
     return {
       organizationType: "player",
       id: sect.id,
       name: sect.name,
-      type: sect.type,
+      alignment: sect.alignment,
       treasury: sect.treasury,
       memberCount: sect.memberIds.length,
       spiritVeins: sect.spiritVeins,
@@ -1864,6 +2224,10 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
       role,
       totalContribution: cultivator.totalContribution,
       lastTitleUpdateTick: sect.lastTitleUpdateTick,
+      level: sectLevel?.level,
+      bonuses: sectLevel?.bonuses ?? [],
+      activeWarId: activeWar?.warId ?? null,
+      warObjectives: activeWar ? structuredClone(activeWar.objectives) : [],
       competitive: true,
     };
   }
@@ -1874,6 +2238,7 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
     organizationType: "neutral",
     id: neutralSect.id,
     name: neutralSect.name,
+    alignment: neutralSect.alignment,
     stateId: neutralSect.stateId,
     headquarters: neutralSect.headquarters,
     description: neutralSect.description,

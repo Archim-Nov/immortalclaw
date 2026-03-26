@@ -66,16 +66,21 @@ export type RegistrationSpiritRootKindId = "single-root" | "dual-root";
 
 // ---- New location system types (P1 migration) ----
 // Core types are defined in constants.ts - re-exported here for convenience
-export type { StateId, NodeType, LocationId, RiskLevel } from "./constants.js";
+export type { BaseNodeType, StateId, NodeType, LocationId, RiskLevel } from "./constants.js";
+
+export type SectAlignment = "正道" | "魔道";
+export type OrganizationAlignment = SectAlignment | "中立";
 
 export interface Location {
-  id: string; // LocationId format: "{stateId}:{nodeType}"
-  stateId: string;
-  nodeType: string;
+  id: import("./constants.js").LocationId;
+  stateId: import("./constants.js").StateId;
+  nodeType: import("./constants.js").NodeType;
   name: string;
   kind: "safe" | "resource" | "adventure";
-  risk: string;
+  risk: import("./constants.js").RiskLevel;
   description: string;
+  organizationId?: string | null;
+  organizationType?: "player-sect" | "neutral-sect" | null;
 }
 
 export interface StateDefinition {
@@ -291,6 +296,9 @@ export type ItemId =
   | "spirit-ore"
   | "ruin-fragment"
   | "beast-core"
+  | "eight-wastes-pass"
+  | "ancient-artifact"
+  | "legendary-artifact"
   | "sword-manual"
   | "alchemy-manual"
   | "array-manual";
@@ -300,7 +308,6 @@ export type ItemCategory = "consumable" | "talisman" | "material" | "manual";
 export type FactionId =
   | "townsfolk"
   | "market-guild"
-  | "qing-yun-sect"
   | "rogue-cultivators";
 
 export type StatusEffectId =
@@ -317,6 +324,7 @@ export type StatusEffectId =
 export type TimedActionId =
   | `travel-to:${string}`
   | `execute-quest:${string}`
+  | `explore-guixu:${string}`
   | "meditate"
   | "heal"
   | "cultivate"
@@ -332,6 +340,7 @@ export type TimedActionId =
   | "take-neutral-duty"
   | "hunt-mine-beast"
   | "challenge-guardian"
+  | "survey-wilderness"
   | `residence-produce:${string}`
   | `residence-heal:${"use-pill" | "no-pill"}`
   | `residence-recover-qi:${"use-pill" | "no-pill"}`;
@@ -352,8 +361,121 @@ export interface ProductionRecipe {
   durationTicks: number;
 }
 
+export interface WildernessReward {
+  itemId: ItemId;
+  dropRate: number;
+}
+
+export interface WildernessLayer {
+  layerId: string;
+  name: string;
+  type: "wilderness-expansion";
+  tier: 1 | 2 | 3;
+  status: "active" | "prototype";
+  locationIds: string[];
+  entryRequirement: {
+    minRealm: RealmStage;
+    minContribution?: number;
+    entryTicket?: ItemId;
+  };
+  survivalPressure: {
+    maxSurvivalTicks: number;
+    qiDamagePerTick: number;
+    spiritualDamagePerTick: number;
+    injuryTicksOnRetreat: number;
+  };
+  retreatCost: {
+    spiritStoneLoss: number;
+    progressLoss: number;
+    itemLoss: Partial<Record<ItemId, number>>;
+  };
+  rewardTable: WildernessReward[];
+  eventPool: string[];
+}
+
+export interface WildernessProgress {
+  cultivatorId: string;
+  layerId: string;
+  enteredAtTick: number;
+  ticksSurvived: number;
+  remainingSurvivalTicks: number;
+  status: "active" | "withdrawn";
+  lastEventId: string | null;
+}
+
+export type GuixuTier = "entry" | "mid" | "deep" | "core";
+export type GuixuNodeType = "exploration" | "guardian" | "resource" | "sanctuary";
+
+export interface GuixuNode {
+  nodeId: string;
+  name: string;
+  tier: GuixuTier;
+  unlockRequirement: {
+    wildernessProgress: number;
+    minRealm: RealmStage;
+    uniqueKey?: string;
+  };
+  nodeType: GuixuNodeType;
+  sharedProgress: boolean;
+  anchorLocationId: string;
+  explorationDurationTicks: number;
+  eventPool: string[];
+}
+
+export interface GuixuProgress {
+  wildernessAttunement: Record<string, number>;
+  personalUnlockedNodeIds: Record<string, string[]>;
+  sharedUnlockedNodeIds: string[];
+  lastResolvedEventIds: Record<string, string | null>;
+}
+
+export type WarFaction = "righteous" | "demonic";
+
+export interface WarObjective {
+  objectiveId: string;
+  type: "capture-node" | "defeat-boss" | "collect-resource";
+  progress: Record<WarFaction, number>;
+  target: number;
+  completed: boolean;
+}
+
+export interface FactionWar {
+  warId: string;
+  stateId: string;
+  factions: [WarFaction, WarFaction];
+  startTick: number;
+  endTick: number;
+  objectives: WarObjective[];
+  rewards: {
+    winnerReward: {
+      spiritStones: number;
+      contribution: number;
+    };
+    participationReward: {
+      spiritStones: number;
+      reputation: number;
+    };
+  };
+}
+
+export interface SectBonus {
+  type: "damage" | "defense" | "production" | "resource";
+  value: number;
+  appliesTo: "all-members";
+}
+
+export interface SectLevel {
+  sectId: string;
+  level: number;
+  experience: number;
+  nextLevelExp: number;
+  bonuses: SectBonus[];
+}
+
 export type ImmediateActionId =
   | `accept-quest:${string}`
+  | `enter-wilderness:${string}`
+  | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
   | "buy-healing-pill"
   | "buy-qi-pill"
@@ -368,14 +490,15 @@ export type ImmediateActionId =
   | "study-alchemy-manual"
   | "study-array-manual"
   | "join-sect"
-  | "leave-neutral-sect";
+  | "leave-neutral-sect"
+  | "withdraw-from-wilderness";
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
 export interface Sect {
   id: string;
   name: string;
-  type: "剑修" | "丹修" | "阵修";
+  alignment: SectAlignment;
   treasury: number;
   memberIds: string[];
   spiritVeins: string[];
@@ -388,6 +511,7 @@ export interface Sect {
 export interface NeutralSect {
   id: string;
   name: string;
+  alignment: "中立";
   stateId: import("./constants.js").StateId;
   headquarters: import("./constants.js").LocationId;
   description: string;
@@ -434,7 +558,7 @@ export interface Cultivator {
   maxSpiritualPower: number;
   karma: number;
   reputation: number;
-  factionReputation: Record<FactionId, number>;
+  factionReputation: Record<string, number>;
   lifespan: number;
   age: number;
   sectId: string | null;
@@ -584,6 +708,10 @@ export interface ActionJob {
     residenceHealUsePill?: boolean;
     residenceRecoverQiUsePill?: boolean;
     activeQuestId?: string;
+    wildernessLayerId?: string;
+    wildernessEventId?: string;
+    guixuNodeId?: string;
+    guixuEventId?: string;
   };
 }
 
@@ -708,7 +836,7 @@ export interface InventoryEntryView {
 }
 
 export interface FactionStandingView {
-  factionId: FactionId;
+  factionId: string;
   name: string;
   value: number;
   standing: "hostile" | "cold" | "neutral" | "trusted" | "favored";
@@ -725,14 +853,20 @@ export interface StatusEffectView {
 export interface PlayerSectView {
   id: string;
   name: string;
+  alignment: SectAlignment;
   role: string;
   treasury: number;
   memberCount: number;
+  level?: number;
+  bonuses?: SectBonus[];
+  activeWarId?: string | null;
+  warObjectives?: WarObjective[];
 }
 
 export interface NeutralSectView {
   id: string;
   name: string;
+  alignment: "中立";
   stateId: import("./constants.js").StateId;
   headquarters: import("./constants.js").LocationId;
   role: "member";
@@ -746,7 +880,7 @@ export interface PlayerSectInfoView {
   organizationType: "player";
   id: string;
   name: string;
-  type: Sect["type"];
+  alignment: Sect["alignment"];
   treasury: number;
   memberCount: number;
   spiritVeins: string[];
@@ -754,6 +888,10 @@ export interface PlayerSectInfoView {
   role: SectTitle;
   totalContribution: number;
   lastTitleUpdateTick: number;
+  level?: number;
+  bonuses?: SectBonus[];
+  activeWarId?: string | null;
+  warObjectives?: WarObjective[];
   competitive: true;
 }
 
@@ -761,6 +899,7 @@ export interface NeutralSectInfoView {
   organizationType: "neutral";
   id: string;
   name: string;
+  alignment: "中立";
   stateId: import("./constants.js").StateId;
   headquarters: import("./constants.js").LocationId;
   description: string;
@@ -813,6 +952,19 @@ export interface CultivatorStateView {
   recentCombats: CombatLogEntry[];
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
+  wilderness: {
+    layerId: string;
+    layerName: string;
+    ticksSurvived: number;
+    remainingSurvivalTicks: number;
+    status: "active" | "withdrawn";
+  } | null;
+  guixu: {
+    wildernessAttunement: number;
+    unlockedNodeIds: string[];
+    sharedUnlockedNodeIds: string[];
+    availableNodeIds: string[];
+  } | null;
   derivedState: DerivedStateView;
   onboarding: OnboardingProgress;
   decisionPolicy: DecisionPolicyView;
@@ -847,6 +999,11 @@ export interface WorldState {
   topology: TopologyGraph;
   eventPools: EventPools;
   questBoards: Record<string, QuestBoard>;
+  wildernessLayers: Record<string, WildernessLayer>;
+  wildernessProgress: Record<string, WildernessProgress>;
+  guixuNodes: Record<string, GuixuNode>;
+  guixuProgress: GuixuProgress;
+  factionWars: Record<string, FactionWar>;
   itemDefinitions: Record<ItemId, ItemDefinition>;
   jobs: Record<string, ActionJob>;
   daoLogs: DaoLogEntry[];
