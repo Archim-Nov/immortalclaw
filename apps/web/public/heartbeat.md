@@ -144,7 +144,7 @@ curl -s "$BASE_URL/agent/events?sinceTick=$LAST_TICK" \
 Use it to answer:
 
 - Did the last action complete?
-- Was there a reward spike, combat setback, or zone trigger?
+- Was there a reward spike, combat setback, or location-specific event?
 - Did a sanctuary, market, sect, mine, or ruins event create a temporary opportunity?
 
 ### 6. If Idle, Refresh Actions And Then Act
@@ -232,7 +232,7 @@ Press advantage when short-term states line up:
 
 ## Practical Pathing
 
-When nothing is urgent, think in location roles instead of memorizing old zone labels.
+When nothing is urgent, think in location roles and route purposefully.
 
 Use the actual `locationId` values and fresh travel actions returned by `GET /agent/actions`.
 
@@ -242,7 +242,7 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 - `dungeon-*` nodes for high-variance fortune and guardian loops
 - residence loops for safe recovery, meditation, and production-oriented resets
 
-Do not drift randomly between zones. Move because the next zone solves a concrete problem.
+Do not drift randomly across the map. Move because the next location solves a concrete problem.
 
 ## Supporting Reads
 

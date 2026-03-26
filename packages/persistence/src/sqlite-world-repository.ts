@@ -16,6 +16,7 @@ import type {
   WorldState,
 } from "../../domain/src/runtime.js";
 import type { WorldEvent } from "../../domain/src/model.js";
+import { STATE_IDS } from "../../domain/src/constants.js";
 import { buildFullTopology } from "../../domain/src/topology.js";
 import type { SqliteDatabaseLike } from "./sqlite-schema.js";
 import { hydrateMigratedP3WorldState } from "./world-shape.js";
@@ -139,20 +140,66 @@ function normalizeLegacyZoneField<T extends { locationId?: string; zoneId?: stri
   return entry;
 }
 
+function stripLegacyCityShellStandings(factionReputation: Record<string, number>): Record<string, number> {
+  const copy = { ...factionReputation };
+  delete copy.townsfolk;
+  delete copy["market-guild"];
+  delete copy["rogue-cultivators"];
+  return copy;
+}
+
+function normalizeStateReputation(
+  stateReputation: unknown,
+  legacyReputation: unknown,
+  locationId: string,
+): Record<(typeof STATE_IDS)[number], number> {
+  const normalized = Object.fromEntries(STATE_IDS.map((stateId) => [stateId, 0])) as Record<(typeof STATE_IDS)[number], number>;
+  let hasExplicitStateValue = false;
+
+  if (stateReputation && typeof stateReputation === "object") {
+    for (const stateId of STATE_IDS) {
+      const rawValue = (stateReputation as Record<string, unknown>)[stateId];
+      if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+        normalized[stateId] = rawValue;
+        hasExplicitStateValue = true;
+      }
+    }
+  }
+
+  if (!hasExplicitStateValue && typeof legacyReputation === "number" && Number.isFinite(legacyReputation)) {
+    normalized[locationId.split(":")[0] as (typeof STATE_IDS)[number]] = legacyReputation;
+  }
+
+  return normalized;
+}
+
 function normalizeStoredWorldShape(world: WorldState): WorldState {
   const copy = hydrateMigratedP3WorldState(world);
-  const seedWorld = createSeedWorld();
 
   delete (copy as WorldState & { zones?: unknown }).zones;
 
   for (const cultivator of Object.values(copy.cultivators)) {
-    delete (cultivator as typeof cultivator & { nextTribulationTick?: unknown }).nextTribulationTick;
+    const legacyCultivator = cultivator as typeof cultivator & {
+      nextTribulationTick?: unknown;
+      reputation?: unknown;
+      karma?: unknown;
+      stateReputation?: unknown;
+    };
+    delete legacyCultivator.nextTribulationTick;
     if (cultivator.neutralSectId === undefined) {
       cultivator.neutralSectId = null;
     }
     if (cultivator.neutralContribution === undefined) {
       cultivator.neutralContribution = 0;
     }
+    cultivator.stateReputation = normalizeStateReputation(
+      legacyCultivator.stateReputation,
+      legacyCultivator.reputation,
+      cultivator.locationId,
+    );
+    delete legacyCultivator.reputation;
+    delete legacyCultivator.karma;
+    cultivator.factionReputation = stripLegacyCityShellStandings(cultivator.factionReputation ?? {});
   }
 
   for (const event of copy.worldEvents) {

@@ -109,7 +109,6 @@ export interface EventEffect {
   injuryTicksRemaining?: number;
   itemRewards?: ReadonlyArray<{ itemId: ItemId; count: number }>;
   statusEffects?: ReadonlyArray<{ effectId: StatusEffectId; ticks: number }>;
-  karmaChange?: number;
   reputationChange?: number;
 }
 
@@ -212,7 +211,6 @@ export interface OnboardingProgress {
 export interface QuestRewardRange {
   spiritStones: { min: number; max: number };
   reputation: number;
-  karmaChange: number;
   contribution: number;
 }
 
@@ -239,7 +237,6 @@ export interface QuestTemplate {
 export interface QuestReward {
   spiritStones: number;
   reputation: number;
-  karmaChange: number;
   contribution: number;
 }
 
@@ -305,10 +302,8 @@ export type ItemId =
 
 export type ItemCategory = "consumable" | "talisman" | "material" | "manual";
 
-export type FactionId =
-  | "townsfolk"
-  | "market-guild"
-  | "rogue-cultivators";
+export type FactionId = string;
+export type StateReputation = Record<import("./constants.js").StateId, number>;
 
 export type StatusEffectId =
   | "wounded"
@@ -556,8 +551,7 @@ export interface Cultivator {
   maxQi: number;
   spiritualPower: number;
   maxSpiritualPower: number;
-  karma: number;
-  reputation: number;
+  stateReputation: StateReputation;
   factionReputation: Record<string, number>;
   lifespan: number;
   age: number;
@@ -927,7 +921,6 @@ export interface CultivatorStateView {
     maxQi: number;
     spiritualPower: number;
     maxSpiritualPower: number;
-    karma: number;
     reputation: number;
     lifespan: number;
     age: number;

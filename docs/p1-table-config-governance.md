@@ -64,7 +64,7 @@ This document is the Phase 7 baseline map for all newly introduced or auto-confi
 1. Add/edit templates in `events.ts` builders; avoid manually mutating seeded pool shape in persistence layers.
 2. Keep template IDs stable once used by downstream logs/analytics.
 3. Prefer weight tuning in `applyOverlayWeights()` instead of adding ad-hoc route-level filters.
-4. Preserve `WorldEvent.zoneId` compatibility semantics unless doing a coordinated contract migration.
+4. Keep runtime and storage contracts on `WorldEvent.locationId`; any legacy `zoneId` handling must stay confined to one-way persistence normalization.
 
 ---
 

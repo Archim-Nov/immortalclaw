@@ -22,6 +22,12 @@ const hashString = (input: string) =>
   Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const currentStateIdOf = (cultivator: Cultivator) => cultivator.locationId.split(":")[0] as keyof Cultivator["stateReputation"];
+
+function addCurrentStateReputation(cultivator: Cultivator, delta: number) {
+  const stateId = currentStateIdOf(cultivator);
+  cultivator.stateReputation[stateId] = Math.max(0, (cultivator.stateReputation[stateId] ?? 0) + delta);
+}
 
 function rewardValueFor(template: QuestTemplate, seed: string): number {
   const range = template.reward.spiritStones;
@@ -72,7 +78,6 @@ function instantiateQuest(template: QuestTemplate, locationId: string, tick: num
     reward: {
       spiritStones,
       reputation: template.reward.reputation,
-      karmaChange: template.reward.karmaChange,
       contribution: template.reward.contribution,
     },
     failurePenalty: template.failurePenalty,
@@ -198,8 +203,7 @@ export function resolveActiveQuest(
 
   if (success) {
     cultivator.spiritStones += quest.reward.spiritStones;
-    cultivator.reputation += quest.reward.reputation;
-    cultivator.karma += quest.reward.karmaChange;
+    addCurrentStateReputation(cultivator, quest.reward.reputation);
     if (quest.category === "base") {
       cultivator.completedBaseQuests += 1;
     }

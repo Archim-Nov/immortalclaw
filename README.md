@@ -50,7 +50,7 @@ For the current first-version gameplay planning baseline, start here:
 
 - cultivation-world simulation with persistent world state
 - character creation, agent binding, and character switching
-- zone travel, cultivation, healing, and town tasks
+- location travel, cultivation, healing, and town tasks
 - mining, ruins exploration, and basic PVE combat
 - pills, talismans, materials, and buy/sell loops
 - status effects, ambient events, and faction reputation

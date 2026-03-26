@@ -16,6 +16,7 @@ import {
   syncCultivatorFromPersona,
 } from "./index.js";
 import type { CultivationRegistrationRecord } from "./index.js";
+import { STATE_IDS } from "./constants.js";
 import { createCultivator, starterStateFromRoll } from "./engine.js";
 import { buildFullTopology } from "./topology.js";
 
@@ -27,6 +28,15 @@ function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: s
 
 function hashString(input: string) {
   return Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
+}
+
+type StateReputationOverrides = Partial<Record<(typeof STATE_IDS)[number], number>>;
+type StateReputationMap = Record<(typeof STATE_IDS)[number], number>;
+
+function createStateReputation(overrides: StateReputationOverrides = {}): StateReputationMap {
+  return Object.fromEntries(
+    STATE_IDS.map((stateId) => [stateId, overrides[stateId] ?? 0]),
+  ) as StateReputationMap;
 }
 
 function findLegacyIdleRewardTick(
@@ -322,33 +332,45 @@ test("quest boards exist and refresh on 12-tick cadence", () => {
   assert.notDeepEqual(afterIds, beforeIds);
 });
 
-test("accepting and resolving a base quest updates rewards", () => {
+test("accepting and resolving a base quest updates local state reputation", () => {
   const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"] as typeof world.cultivators["yun-zhong-he"] & {
+    stateReputation?: Record<string, number>;
+    reputation?: number;
+  };
+
+  cultivator.stateReputation = createStateReputation({ qingzhou: 11, yangzhou: 4 });
+  cultivator.reputation = 0;
 
   performAction(world, "yun-zhong-he", "travel-to:qingzhou:sub-town-east");
   runUntilIdle(world, "yun-zhong-he");
 
   const board = world.questBoards["qingzhou:sub-town-east"];
   const candidate = board.quests[0]!;
-  const beforeStones = world.cultivators["yun-zhong-he"].spiritStones;
-  const beforeReputation = world.cultivators["yun-zhong-he"].reputation;
+  const beforeStones = cultivator.spiritStones;
+  const beforeQingzhouReputation = cultivator.stateReputation.qingzhou;
+  const beforeYangzhouReputation = cultivator.stateReputation.yangzhou;
 
   performAction(world, "yun-zhong-he", `accept-quest:${candidate.id}`);
-  const active = world.cultivators["yun-zhong-he"].activeQuests[0]!;
+  const active = cultivator.activeQuests[0]!;
   active.successRate = 100;
 
   performAction(world, "yun-zhong-he", `execute-quest:${active.id}`);
   runUntilIdle(world, "yun-zhong-he");
 
-  const after = world.cultivators["yun-zhong-he"];
-  assert.equal(after.activeQuests.length, 0);
-  assert.ok(after.spiritStones > beforeStones);
-  assert.ok(after.reputation >= beforeReputation);
+  assert.equal(cultivator.activeQuests.length, 0);
+  assert.ok(cultivator.spiritStones > beforeStones);
+  assert.equal(cultivator.stateReputation.qingzhou, beforeQingzhouReputation + candidate.reward.reputation);
+  assert.equal(cultivator.stateReputation.yangzhou, beforeYangzhouReputation);
+  assert.equal(cultivator.reputation, 0);
 });
 
 test("neutral sect join, duty, and leave obey availability and reward rules", () => {
   const world = createSeedWorld();
-  const cultivator = world.cultivators["yun-zhong-he"];
+  const cultivator = world.cultivators["yun-zhong-he"] as typeof world.cultivators["yun-zhong-he"] & {
+    stateReputation?: Record<string, number>;
+  };
+  cultivator.stateReputation = createStateReputation({ qingzhou: 12 });
   const mainCityActions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
   assert.equal(mainCityActions.has("join-neutral-sect:cang-mu-gu"), false);
   assert.equal(mainCityActions.has("join-sect"), false);
@@ -369,12 +391,12 @@ test("neutral sect join, duty, and leave obey availability and reward rules", ()
   );
 
   const beforeStones = cultivator.spiritStones;
-  const beforeReputation = cultivator.reputation;
+  const beforeReputation = cultivator.stateReputation.qingzhou;
   performAction(world, "yun-zhong-he", "take-neutral-duty");
   runUntilIdle(world, "yun-zhong-he");
 
   assert.equal(cultivator.spiritStones, beforeStones + 120);
-  assert.equal(cultivator.reputation, beforeReputation + 4);
+  assert.equal(cultivator.stateReputation.qingzhou, beforeReputation + 4);
   assert.equal(cultivator.neutralContribution, 40);
   assert.ok(cultivator.statusEffects.some((effect) => effect.id === "clear-mind" && effect.remainingTicks >= 2));
 
@@ -1029,6 +1051,91 @@ test("registration bonuses improve task rewards without exposing tribulation sta
   assert.ok((registeredAfter - registeredBefore) > (baselineAfter - baselineBefore));
 });
 
+test("seed world no longer exposes legacy city-shell faction standings", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"] as typeof world.cultivators["yun-zhong-he"] & {
+    stateReputation?: Record<string, number>;
+    reputation?: number;
+    karma?: number;
+  };
+
+  cultivator.stateReputation = createStateReputation({ qingzhou: 27, yangzhou: 3 });
+  cultivator.reputation = 5;
+  cultivator.karma = 99;
+  const state = getCultivatorState(world, "yun-zhong-he") as ReturnType<typeof getCultivatorState> & {
+    cultivator: ReturnType<typeof getCultivatorState>["cultivator"] & { karma?: unknown };
+  };
+
+  assert.deepEqual(cultivator.factionReputation, {});
+  assert.deepEqual(state.factionReputation, []);
+  assert.equal(state.cultivator.reputation, 27);
+  assert.equal("karma" in state.cultivator, false);
+});
+
+test("trade uses the current state's reputation without recreating legacy city-shell standings", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"] as typeof world.cultivators["yun-zhong-he"] & {
+    stateReputation?: Record<string, number>;
+    reputation?: number;
+  };
+
+  cultivator.stateReputation = createStateReputation({ qingzhou: 80, yangzhou: 0 });
+  cultivator.reputation = 0;
+  cultivator.locationId = "qingzhou:main-city";
+
+  const beforeQingzhouPurchase = cultivator.spiritStones;
+  performAction(world, "yun-zhong-he", "buy-healing-pill");
+  const qingzhouCost = beforeQingzhouPurchase - cultivator.spiritStones;
+
+  cultivator.spiritStones = beforeQingzhouPurchase;
+  cultivator.locationId = "yangzhou:main-city";
+
+  const beforeYangzhouPurchase = cultivator.spiritStones;
+  performAction(world, "yun-zhong-he", "buy-healing-pill");
+  const yangzhouCost = beforeYangzhouPurchase - cultivator.spiritStones;
+
+  assert.ok(qingzhouCost < yangzhouCost);
+  assert.deepEqual(cultivator.factionReputation, {});
+
+  cultivator.locationId = "qingzhou:sub-town-east";
+  const beforeQingzhouReputation = cultivator.stateReputation.qingzhou;
+  performAction(world, "yun-zhong-he", "take-mortal-task");
+  runUntilIdle(world, "yun-zhong-he");
+
+  assert.equal(cultivator.stateReputation.qingzhou, beforeQingzhouReputation + 8);
+  assert.deepEqual(cultivator.factionReputation, {});
+});
+
+test("combat resolution ignores legacy numeric reputation", () => {
+  const lowStandingWorld = createSeedWorld();
+  const highStandingWorld = createSeedWorld();
+  const lowStandingCultivator = lowStandingWorld.cultivators["yun-zhong-he"] as typeof lowStandingWorld.cultivators["yun-zhong-he"] & {
+    reputation?: number;
+  };
+  const highStandingCultivator = highStandingWorld.cultivators["yun-zhong-he"] as typeof highStandingWorld.cultivators["yun-zhong-he"] & {
+    reputation?: number;
+  };
+
+  lowStandingCultivator.reputation = 0;
+  highStandingCultivator.reputation = 120;
+
+  performAction(lowStandingWorld, "yun-zhong-he", "travel-to:qingzhou:dungeon-c");
+  performAction(highStandingWorld, "yun-zhong-he", "travel-to:qingzhou:dungeon-c");
+  runUntilIdle(lowStandingWorld, "yun-zhong-he");
+  runUntilIdle(highStandingWorld, "yun-zhong-he");
+
+  performAction(lowStandingWorld, "yun-zhong-he", "challenge-guardian");
+  performAction(highStandingWorld, "yun-zhong-he", "challenge-guardian");
+  runUntilIdle(lowStandingWorld, "yun-zhong-he");
+  runUntilIdle(highStandingWorld, "yun-zhong-he");
+
+  assert.equal(highStandingWorld.combatLogs[0]?.outcome, lowStandingWorld.combatLogs[0]?.outcome);
+  assert.equal(highStandingCultivator.qi, lowStandingCultivator.qi);
+  assert.equal(highStandingCultivator.realmProgress, lowStandingCultivator.realmProgress);
+  assert.equal(highStandingCultivator.inventory["ruin-fragment"], lowStandingCultivator.inventory["ruin-fragment"]);
+  assert.equal(highStandingCultivator.inventory["ward-talisman"], lowStandingCultivator.inventory["ward-talisman"]);
+});
+
 test("seed world and runtime logs omit legacy zone compatibility fields", () => {
   const world = createSeedWorld();
 
@@ -1065,7 +1172,9 @@ test("idle ticks no longer grant legacy passive rewards across locations", () =>
 
     const before = {
       spiritStones: cultivator.spiritStones,
-      reputation: cultivator.reputation,
+      stateReputation: {
+        ...((cultivator as typeof cultivator & { stateReputation?: Record<string, number> }).stateReputation ?? {}),
+      },
       factionReputation: { ...cultivator.factionReputation },
       inventory: { ...cultivator.inventory },
       statusEffects: [...cultivator.statusEffects],
@@ -1079,7 +1188,10 @@ test("idle ticks no longer grant legacy passive rewards across locations", () =>
     assert.equal(summary.triggeredEvents.length, 0);
     assert.equal(world.worldEvents.length, before.worldEventCount);
     assert.equal(cultivator.spiritStones, before.spiritStones);
-    assert.equal(cultivator.reputation, before.reputation);
+    assert.deepEqual(
+      (cultivator as typeof cultivator & { stateReputation?: Record<string, number> }).stateReputation ?? {},
+      before.stateReputation,
+    );
     assert.deepEqual(cultivator.factionReputation, before.factionReputation);
     assert.deepEqual(cultivator.inventory, before.inventory);
     assert.deepEqual(cultivator.statusEffects, before.statusEffects);

@@ -12,7 +12,7 @@ interface StatResponse {
     status: "idle" | "busy" | "injured"; location: string;
     spiritStones: number; qi: number; maxQi: number;
     spiritualPower: number; maxSpiritualPower: number;
-    karma: number; reputation: number; lifespan: number; age: number;
+    reputation: number; lifespan: number; age: number;
     genderPresentation: string; pronouns: string; origin: string; temperament: string;
   };
   cultivation: { mainTechnique: string; techniques: string[] };
@@ -140,7 +140,7 @@ export function PlayerStatPage() {
         <div className="stat-header-meta">
           <span className="stat-chip gold">{cultivator.realm} Lv.{cultivator.realmLevel}</span>
           <span className="stat-chip">{cultivator.origin || "Unknown Origin"}</span>
-          <span className="stat-chip jade">{sect?.name || "散修 (Rogue Cultivator)"}</span>
+          <span className="stat-chip jade">{sect?.name || "散修"}</span>
         </div>
         <div className="stat-header-meta" style={{ marginTop: "1rem", opacity: 0.8 }}>
           <span style={{ fontSize: "0.9rem" }}>{cultivator.temperament} • {cultivator.genderPresentation}</span>
@@ -197,11 +197,7 @@ export function PlayerStatPage() {
               <span className="stat-value" style={{ color: "var(--accent-gold)" }}>{cultivator.spiritStones.toLocaleString()}</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Karma</span>
-              <span className="stat-value">{cultivator.karma.toLocaleString()}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Reputation</span>
+              <span className="stat-label">State Reputation</span>
               <span className="stat-value">{cultivator.reputation.toLocaleString()}</span>
             </div>
           </div>

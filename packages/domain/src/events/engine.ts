@@ -22,6 +22,12 @@ const STATUS_META: Record<StatusEffectId, { name: string; description: string }>
   insight: { name: "Insight", description: "Short-term bonus to cultivation and combat." },
   "spirit-saturated": { name: "Spirit Saturated", description: "Short-term cultivation boost." },
 };
+const currentStateIdOf = (cultivator: Cultivator) => cultivator.locationId.split(":")[0] as keyof Cultivator["stateReputation"];
+
+function addCurrentStateReputation(cultivator: Cultivator, delta: number) {
+  const stateId = currentStateIdOf(cultivator);
+  cultivator.stateReputation[stateId] = Math.max(0, (cultivator.stateReputation[stateId] ?? 0) + delta);
+}
 
 function applyOverlayWeights(candidates: WeightedEvent[], cultivator: Cultivator): WeightedEvent[] {
   const dominantElement = cultivator.registrationRecord
@@ -204,11 +210,8 @@ export function applyEventEffects(cultivator: Cultivator, template: EventTemplat
   if (typeof effects.injuryTicksRemaining === "number") {
     cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, effects.injuryTicksRemaining);
   }
-  if (typeof effects.karmaChange === "number") {
-    cultivator.karma = Math.max(0, cultivator.karma + effects.karmaChange);
-  }
   if (typeof effects.reputationChange === "number") {
-    cultivator.reputation = Math.max(0, cultivator.reputation + effects.reputationChange);
+    addCurrentStateReputation(cultivator, effects.reputationChange);
   }
 
   for (const reward of effects.itemRewards ?? []) {

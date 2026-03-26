@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import { STATE_IDS } from "../../domain/src/constants.js";
 import {
   createSeedWorld,
   saveCultivationRegistration,
@@ -188,6 +189,7 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
 
   const cultivator = world.cultivators[cultivatorId];
   const legacyEventLocationId = cultivator.locationId;
+  const legacyStateId = legacyEventLocationId.split(":")[0] as (typeof STATE_IDS)[number];
 
   (world as typeof world & { zones?: Record<string, unknown> }).zones = {
     legacy: { id: "legacy" },
@@ -200,6 +202,15 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
     ...cultivator,
     neutralSectId: undefined as never,
     neutralContribution: undefined as never,
+    reputation: 34,
+    karma: 12,
+    stateReputation: undefined as never,
+    factionReputation: {
+      townsfolk: 12,
+      "market-guild": 7,
+      "rogue-cultivators": 4,
+      "qing-yun-sect": 9,
+    },
     nextTribulationTick: 42,
   } as typeof cultivator & { nextTribulationTick: number };
   delete (world as unknown as Record<string, unknown>).neutralSects;
@@ -238,8 +249,17 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
 
   assert.equal("zones" in normalized, false);
   assert.equal("nextTribulationTick" in normalizedCultivator, false);
+  assert.equal("karma" in normalizedCultivator, false);
+  assert.equal("reputation" in normalizedCultivator, false);
   assert.equal(normalizedCultivator.neutralSectId, null);
   assert.equal(normalizedCultivator.neutralContribution, 0);
+  assert.deepEqual(
+    normalizedCultivator.stateReputation,
+    Object.fromEntries(
+      STATE_IDS.map((stateId) => [stateId, stateId === legacyStateId ? 34 : 0]),
+    ),
+  );
+  assert.deepEqual(normalizedCultivator.factionReputation, { "qing-yun-sect": 9 });
   assert.ok(Object.keys(normalized.neutralSects).length > 0);
   assert.equal("zoneId" in normalizedEvent, false);
   assert.equal(normalizedEvent.locationId, legacyEventLocationId);

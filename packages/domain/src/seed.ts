@@ -275,12 +275,24 @@ export function createEmptyInventory(): Record<ItemId, number> {
 export function createFactionReputation(
   overrides: Partial<Record<string, number>> = {},
 ): Record<string, number> {
-  return {
-    townsfolk: 0,
-    "market-guild": 0,
-    "rogue-cultivators": 0,
-    ...overrides,
-  };
+  const normalized: Record<string, number> = {};
+  for (const [factionId, value] of Object.entries(overrides)) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      normalized[factionId] = value;
+    }
+  }
+  return normalized;
+}
+
+export function createStateReputation(
+  overrides: Partial<Cultivator["stateReputation"]> = {},
+): Cultivator["stateReputation"] {
+  return Object.fromEntries(
+    STATE_IDS.map((stateId) => {
+      const value = overrides[stateId];
+      return [stateId, typeof value === "number" && Number.isFinite(value) ? value : 0];
+    }),
+  ) as Cultivator["stateReputation"];
 }
 
 function createStatusEffects(...effects: StatusEffect[]): StatusEffect[] {
@@ -311,13 +323,8 @@ const cultivators: Record<string, Cultivator> = {
     maxQi: 100,
     spiritualPower: 68,
     maxSpiritualPower: 100,
-    karma: 12,
-    reputation: 34,
-    factionReputation: createFactionReputation({
-      townsfolk: 16,
-      "market-guild": 10,
-      "rogue-cultivators": -2,
-    }),
+    stateReputation: createStateReputation({ qingzhou: 34 }),
+    factionReputation: createFactionReputation(),
     lifespan: 180,
     age: 23,
     sectId: null,

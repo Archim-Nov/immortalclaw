@@ -21,7 +21,7 @@ Add a small registration-to-runtime translation layer inside `packages/domain/sr
 
 ### Task 2
 
-- wire registration modifiers into guidance, tribulation preview, manual study, cultivation, errands, mining, ruins, and combat resolution
+- wire registration modifiers into guidance, manual study, cultivation, errands, mining, ruins, and combat resolution
 - keep modifiers small and deterministic within the existing action system
 
 ### Task 3

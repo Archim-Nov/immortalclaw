@@ -1178,7 +1178,7 @@ Immortal Claw 的核心定义冻结为：
 
 州外游历区统一包含以下字段：
 
-- `zoneId`
+- `locationId`
 - `name`
 - `riskLevel`
 - `baseOutputs`

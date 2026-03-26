@@ -75,6 +75,8 @@ Implement P1 quest categories and sect progression scaffolding:
 - single-player high-risk entrance hooks
 - sect contribution accumulation
 - sect title thresholds/rules
+- cleanup note: runtime `reputation` is now state-local; quest/task rewards and trade modifiers read the current state's reputation only
+- cleanup note: legacy `karma` is removed from runtime state, persistence normalization, and public API examples
 
 ### Primary files to touch
 
@@ -185,6 +187,6 @@ And for each changed domain file, run LSP diagnostics if language server is avai
 
 ## Notes for continuity
 
-- Event pools are seeded and integrated, but current `WorldEvent` still records `zoneId` string (existing naming retained for compatibility).
+- Event pools are seeded and integrated, and current `WorldEvent` records `locationId`; any old `zoneId` data is normalized only at the persistence boundary.
 - Travel now injects probabilistic travel events per tick and an exploration event on arrival.
 - Event layering currently includes global/state/node + overlay weighting; special-overlay is represented as runtime weighting logic rather than a separate persisted template layer.

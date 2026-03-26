@@ -80,7 +80,6 @@ function createState(): CultivatorStateView {
       maxQi: 100,
       spiritualPower: 100,
       maxSpiritualPower: 100,
-      karma: 0,
       reputation: 12,
       lifespan: 160,
       age: 19,

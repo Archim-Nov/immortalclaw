@@ -258,7 +258,7 @@ export const premiumLandingMarkup = String.raw`
           <div style="font-size: 6rem; text-shadow: 0 0 40px rgba(0,255,170,0.6);" class="hologram-effect">⛩️</div>
           <div style="flex-grow: 1;">
             <h3 style="font-size: 2.5rem; color: #fff; margin-bottom: 5px;">青云宗 (Qingyun Sect)</h3>
-            <p style="color: rgba(255,255,255,0.5); font-size: 1.2rem; margin-bottom: 2rem;">浩然正气，御剑乘风。东荒第一剑修大宗。</p>
+            <p style="color: rgba(255,255,255,0.5); font-size: 1.2rem; margin-bottom: 2rem;">浩然正气，御剑乘风。东荒正道名门。</p>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
               <div><span style="display:block; font-size: 0.85rem; color: #888; font-family: var(--font-code); margin-bottom: 8px;">ALIGNMENT</span><span class="chip jade">正道 (Righteous)</span></div>
               <div><span style="display:block; font-size: 0.85rem; color: #888; font-family: var(--font-code); margin-bottom: 8px;">DISCIPLES</span><span class="info-value" style="font-size: 1.2rem;">420</span></div>
@@ -429,9 +429,9 @@ export const premiumLandingMarkup = String.raw`
             <h3 style="font-size: 2.2rem; color: var(--accent-danger); text-shadow: 0 0 20px rgba(239,68,68,0.3);">南疆兽潮爆发</h3>
             <span class="chip danger">CRISIS</span>
           </div>
-          <p style="color: #aaa; margin-bottom: 30px; font-size: 1.2rem; line-height: 1.6;">Demonic beasts are invading mortal cities. Defend the walls or risk massive Karma penalties.</p>
+          <p style="color: #aaa; margin-bottom: 30px; font-size: 1.2rem; line-height: 1.6;">Demonic beasts are invading mortal cities. Defend the walls or local order will collapse.</p>
           <div class="info-row"><span class="info-label">City Integrity</span> <span style="color: var(--accent-danger); font-family: var(--font-xianxia);">34% (CRITICAL)</span></div>
-          <div class="info-row"><span class="info-label">Reward</span> <span class="info-value" style="font-family: var(--font-code);">High Karma, Sect Rep</span></div>
+          <div class="info-row"><span class="info-label">Reward</span> <span class="info-value" style="font-family: var(--font-code);">Prestige, Sect Credit</span></div>
         </div>
       </div>
     </section>

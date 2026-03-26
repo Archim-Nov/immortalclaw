@@ -18,7 +18,6 @@ export interface EventEffect {
   readonly injuryTicksRemaining?: number;
   readonly itemRewards?: ReadonlyArray<{ itemId: ItemId; count: number }>;
   readonly statusEffects?: ReadonlyArray<{ effectId: StatusEffectId; ticks: number }>;
-  readonly karmaChange?: number;
   readonly reputationChange?: number;
 }
 

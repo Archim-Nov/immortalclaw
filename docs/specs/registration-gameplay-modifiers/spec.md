@@ -22,7 +22,7 @@ The repo already stores `registration_record`, but the result is mostly passive 
 
 ## User-Visible Behavior
 
-After saving a registration record, the cultivator state should expose dominant elements and a short list of gameplay modifiers. Those modifiers should slightly change current outcomes for cultivation, meditation, healing, errands, mining, ruins exploration, combat, and tribulation preparation.
+After saving a registration record, the cultivator state should expose dominant elements and a short list of gameplay modifiers. Those modifiers should slightly change current outcomes for cultivation, meditation, healing, errands, mining, ruins exploration, and combat.
 
 ## Constraints
 
@@ -33,8 +33,7 @@ After saving a registration record, the cultivator state should expose dominant 
 ## Acceptance Criteria
 
 - `getCultivatorState` returns `registrationEffects` when a registration record exists.
-- `getTribulationPreview` includes registration-derived support.
-- Current prototype actions receive light registration-derived modifiers.
+- Current prototype actions receive light registration-derived modifiers without reviving retired tribulation state.
 - Domain tests cover at least state surfacing, cultivation gain, and one non-cultivation outcome.
 
 ## Open Questions
