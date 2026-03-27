@@ -1,5 +1,10 @@
-import type { ProductionRecipe } from "./model.js";
-import type { QuestTemplate, SectTitleSlot } from "./model.js";
+import type {
+  ProductionRecipe,
+  QuestTemplate,
+  RegistrationCultivationMotiveId,
+  SectMotiveBucketId,
+  SectTitleSlot,
+} from "./model.js";
 
 // ---- Core risk levels ----
 export type RiskLevel = "safe" | "low" | "medium" | "high";
@@ -287,6 +292,23 @@ export const QUEST_BOARD_REFRESH_INTERVAL = 12;
 export const SECT_TITLE_UPDATE_INTERVAL = 2880;
 export const MAX_ACTIVE_BASE_QUESTS = 2;
 export const MAX_ACTIVE_SECT_QUESTS = 1;
+export const PLAYER_SECT_FOUNDING_STONE_COST = 8000;
+export const PLAYER_SECT_FOUNDING_REPUTATION_COST = 120;
+export const PLAYER_SECT_APPLICATION_TTL = 600;
+export const PLAYER_SECT_POLICY_UPDATE_COOLDOWN = 600;
+export const PLAYER_SECT_PAGE_LIMIT = 50;
+export const PLAYER_SECT_NAME_MIN_LENGTH = 2;
+export const PLAYER_SECT_NAME_MAX_LENGTH = 16;
+export const PLAYER_SECT_MOTIVE_BUCKETS: Record<
+  SectMotiveBucketId,
+  readonly RegistrationCultivationMotiveId[]
+> = {
+  "longevity-order": ["seek-longevity", "honor-the-clan"],
+  "dao-truth": ["prove-the-great-dao", "seek-truth"],
+  "guard-world": ["protect-the-beloved", "serve-the-world"],
+  "strife-defiance": ["avenge-old-grudges", "compete-for-supremacy", "defy-fate"],
+  "freedom-wander": ["seek-freedom"],
+};
 
 export const QUEST_BOARD_SLOTS_BY_NODE_TYPE: Partial<Record<NodeType, number>> = {
   "main-city": 5,

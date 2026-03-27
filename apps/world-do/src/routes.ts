@@ -1,12 +1,16 @@
 import type { Hono } from "hono";
 import {
   advanceAuthenticatedAgentWorld,
+  applyAuthenticatedPlayerSectApplication,
   buildAuthenticatedAgentActions,
   buildAuthenticatedAgentEvents,
   buildAuthenticatedAgentState,
   buildPublicAgentDirectory,
   buildPublicAgentState,
   createRuntimeService,
+  foundAuthenticatedPlayerSect,
+  listAuthenticatedPlayerSectRecruitment,
+  listAuthenticatedSectApplications,
   listAuthenticatedAgentMessages,
   performAuthenticatedAgentAction,
   readAuthenticatedAgentDaoLogs,
@@ -15,16 +19,22 @@ import {
   readAuthenticatedAgentStrategy,
   registerAgentWorkflow,
   resetAuthenticatedAgentCredential,
+  reviewAuthenticatedSectApplication,
   saveAuthenticatedAgentRegistration,
   sendAuthenticatedAgentMessage,
   syncAgentPersonaWorkflow,
+  updateAuthenticatedSectAdmissionPolicy,
 } from "@immortal-claw/application";
 import type {
   AdvanceWorldRequest,
   AgentSendMessageRequest,
   CultivatorActionsResponse,
+  FoundPlayerSectRequest,
   PerformActionRequest,
+  PlayerSectApplicationRequest,
   RuntimeHealthResponse,
+  ReviewSectApplicationRequest,
+  UpdateSectAdmissionPolicyRequest,
 } from "@immortal-claw/contracts";
 import {
   deriveRegistrationRecordFromAnswers,
@@ -118,6 +128,21 @@ function readOptionalSinceTick(value: string | undefined): number | undefined {
   return Math.max(0, Math.floor(parsed));
 }
 
+function readOptionalPageLimit(value: string | undefined): number | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw createStatusError(400, "limit must be a positive number.");
+  }
+  return Math.floor(parsed);
+}
+
+function readOptionalCursor(value: string | undefined): string | undefined {
+  return value?.trim() ? value.trim() : undefined;
+}
+
 function readCultivatorIdFromBody(body: Record<string, unknown>): string {
   const cultivatorId = readOptionalBodyString(body.cultivatorId);
   if (!cultivatorId) {
@@ -149,6 +174,59 @@ function normalizeRegistrationRecordForRequest(
 
 function readNormalizedRegistrationRecord(body: Record<string, unknown>): CultivationRegistrationRecord {
   return normalizeRegistrationRecordForRequest(readRegistrationRecord(body));
+}
+
+function readSectAdmissionPolicy(value: unknown): UpdateSectAdmissionPolicyRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw createStatusError(400, "Body must include an admissionPolicy object.");
+  }
+  const policy = value as Record<string, unknown>;
+  if (typeof policy.minimumRealmLevel !== "number" || !Number.isFinite(policy.minimumRealmLevel)) {
+    throw createStatusError(400, "admissionPolicy.minimumRealmLevel must be a number.");
+  }
+  if (!Array.isArray(policy.allowedMotiveBuckets) || policy.allowedMotiveBuckets.some((entry) => typeof entry !== "string")) {
+    throw createStatusError(400, "admissionPolicy.allowedMotiveBuckets must be a string array.");
+  }
+  return {
+    minimumRealmLevel: Math.floor(policy.minimumRealmLevel),
+    allowedMotiveBuckets: policy.allowedMotiveBuckets as UpdateSectAdmissionPolicyRequest["allowedMotiveBuckets"],
+  };
+}
+
+const PLAYER_SECT_STATE_IDS: readonly FoundPlayerSectRequest["stateId"][] = [
+  "qingzhou",
+  "yangzhou",
+  "zhongzhou",
+  "shuzhou",
+  "youzhou",
+  "liangzhou",
+  "leizhou",
+  "cangzhou",
+  "wanzhou",
+];
+
+function readPlayerSectStateId(value: unknown): FoundPlayerSectRequest["stateId"] {
+  const stateId = readRequiredBodyString(value, "Body must include stateId.");
+  if (!PLAYER_SECT_STATE_IDS.includes(stateId as FoundPlayerSectRequest["stateId"])) {
+    throw createStatusError(400, "stateId is invalid.");
+  }
+  return stateId as FoundPlayerSectRequest["stateId"];
+}
+
+function readPlayerSectAlignment(value: unknown): FoundPlayerSectRequest["alignment"] {
+  const alignment = readRequiredBodyString(value, "Body must include alignment.");
+  if (alignment !== "\u6b63\u9053" && alignment !== "\u9b54\u9053") {
+    throw createStatusError(400, "alignment must be \u6b63\u9053 or \u9b54\u9053.");
+  }
+  return alignment;
+}
+
+function readReviewDecision(value: unknown): ReviewSectApplicationRequest["decision"] {
+  const decision = readRequiredBodyString(value, "Body must include decision.");
+  if (decision !== "approve" && decision !== "reject") {
+    throw createStatusError(400, "decision must be approve or reject.");
+  }
+  return decision;
 }
 
 function readOptionalRegistrationRecord(body: Record<string, unknown>): CultivationRegistrationRecord | undefined {
@@ -480,6 +558,96 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const auth = context.get("auth");
     const agent = await readAuthenticatedAgent(context.req.raw, auth);
     return context.json(await readAuthenticatedAgentSectInfo({ world, agent }));
+  });
+
+  app.post("/agent/sects/found", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const body = (await context.req.json()) as FoundPlayerSectRequest & Record<string, unknown>;
+    return context.json(
+      await foundAuthenticatedPlayerSect({
+        world,
+        agent,
+        input: {
+          name: readRequiredBodyString(body.name, "Body must include name."),
+          stateId: readPlayerSectStateId(body.stateId),
+          alignment: readPlayerSectAlignment(body.alignment),
+          admissionPolicy: readSectAdmissionPolicy(body.admissionPolicy),
+        },
+      }),
+    );
+  });
+
+  app.get("/agent/player-sects/recruitment", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    return context.json(
+      await listAuthenticatedPlayerSectRecruitment({
+        world,
+        agent,
+        limit: readOptionalPageLimit(context.req.query("limit")),
+        cursor: readOptionalCursor(context.req.query("cursor")),
+      }),
+    );
+  });
+
+  app.post("/agent/player-sect-applications", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const body = (await context.req.json()) as PlayerSectApplicationRequest & Record<string, unknown>;
+    return context.json(
+      await applyAuthenticatedPlayerSectApplication({
+        world,
+        agent,
+        sectId: readRequiredBodyString(body.sectId, "Body must include sectId."),
+      }),
+    );
+  });
+
+  app.get("/agent/sect/applications", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    return context.json(
+      await listAuthenticatedSectApplications({
+        world,
+        agent,
+        limit: readOptionalPageLimit(context.req.query("limit")),
+        cursor: readOptionalCursor(context.req.query("cursor")),
+      }),
+    );
+  });
+
+  app.post("/agent/sect/applications/review", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const body = (await context.req.json()) as ReviewSectApplicationRequest & Record<string, unknown>;
+    return context.json(
+      await reviewAuthenticatedSectApplication({
+        world,
+        agent,
+        applicationId: readRequiredBodyString(body.applicationId, "Body must include applicationId."),
+        decision: readReviewDecision(body.decision),
+      }),
+    );
+  });
+
+  app.post("/agent/sect/admission-policy", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const body = (await context.req.json()) as UpdateSectAdmissionPolicyRequest & Record<string, unknown>;
+    return context.json(
+      await updateAuthenticatedSectAdmissionPolicy({
+        world,
+        agent,
+        policy: readSectAdmissionPolicy(body),
+      }),
+    );
   });
 
   app.get("/agent/dao-heart", async (context) => {

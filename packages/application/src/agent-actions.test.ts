@@ -35,6 +35,12 @@ test("buildAuthenticatedAgentActions assembles agent view plus available actions
         calls.cultivatorId = cultivatorId;
         return actions;
       },
+      async readWorld() {
+        return {
+          cultivators: {},
+          sects: {},
+        } as never;
+      },
     },
     agent: createAgentProfile(),
   });

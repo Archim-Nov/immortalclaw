@@ -31,6 +31,8 @@ function seedPlayerSect(world: ReturnType<typeof createSeedWorld>) {
     id: "qing-yun-sect",
     name: "青云宗",
     alignment: "正道",
+    stateId: "qingzhou",
+    founderCultivatorId: "yun-zhong-he",
     treasury: 86000,
     memberIds: [],
     spiritVeins: ["青岚支脉"],
@@ -44,6 +46,11 @@ function seedPlayerSect(world: ReturnType<typeof createSeedWorld>) {
     ],
     titleUpdateInterval: 2880,
     lastTitleUpdateTick: 0,
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+    admissionPolicyUpdatedAtTick: 0,
   };
 }
 

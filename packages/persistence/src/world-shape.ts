@@ -128,16 +128,48 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
   };
   copy.factionWars = mergeRecordDefaults(seedWorld.factionWars, copy.factionWars);
   copy.itemDefinitions = mergeRecordDefaults(seedWorld.itemDefinitions, copy.itemDefinitions);
+  copy.pendingSectApplications =
+    copy.pendingSectApplications && typeof copy.pendingSectApplications === "object"
+      ? copy.pendingSectApplications
+      : {};
+  copy.sectReapplyCooldowns =
+    copy.sectReapplyCooldowns && typeof copy.sectReapplyCooldowns === "object"
+      ? copy.sectReapplyCooldowns
+      : {};
+  copy.nextSectApplicationSequence =
+    typeof copy.nextSectApplicationSequence === "number" && Number.isFinite(copy.nextSectApplicationSequence)
+      ? copy.nextSectApplicationSequence
+      : 1;
+  copy.nextSectCooldownSequence =
+    typeof copy.nextSectCooldownSequence === "number" && Number.isFinite(copy.nextSectCooldownSequence)
+      ? copy.nextSectCooldownSequence
+      : 1;
 
   for (const [sectId, sect] of Object.entries(copy.sects)) {
     const currentStateId = (sect.headquarters?.split(":")[0] ?? "qingzhou") as StateId;
     sect.alignment = sect.alignment ?? seedWorld.sects[sectId]?.alignment ?? "正道";
+    sect.stateId = sect.stateId ?? currentStateId;
+    sect.founderCultivatorId = sect.founderCultivatorId ?? sect.memberIds[0] ?? "";
     sect.headquarters = ensureOrganizationOutpost(copy, seedWorld, {
       organizationId: sect.id,
       organizationName: sect.name,
       organizationType: "player-sect",
-      stateId: currentStateId,
+      stateId: sect.stateId,
     });
+    sect.admissionPolicy = sect.admissionPolicy ?? {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: [
+        "longevity-order",
+        "dao-truth",
+        "guard-world",
+        "strife-defiance",
+        "freedom-wander",
+      ],
+    };
+    sect.admissionPolicyUpdatedAtTick =
+      typeof sect.admissionPolicyUpdatedAtTick === "number" && Number.isFinite(sect.admissionPolicyUpdatedAtTick)
+        ? sect.admissionPolicyUpdatedAtTick
+        : 0;
   }
 
   for (const [neutralSectId, neutralSect] of Object.entries(copy.neutralSects)) {
@@ -162,6 +194,7 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
       ...createFactionReputation(),
       ...(cultivator.factionReputation ?? {}),
     };
+    cultivator.pendingSectApplicationId = cultivator.pendingSectApplicationId ?? null;
   }
 
   return copy;

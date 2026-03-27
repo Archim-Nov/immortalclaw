@@ -62,6 +62,12 @@ export type RegistrationCultivationMotiveId =
   | "honor-the-clan"
   | "defy-fate"
   | "seek-freedom";
+export type SectMotiveBucketId =
+  | "longevity-order"
+  | "dao-truth"
+  | "guard-world"
+  | "strife-defiance"
+  | "freedom-wander";
 export type RegistrationSpiritRootKindId = "single-root" | "dual-root";
 
 // ---- New location system types (P1 migration) ----
@@ -286,6 +292,27 @@ export interface SectTitleSlot {
   maxSlots: number;
 }
 
+export interface SectAdmissionPolicy {
+  minimumRealmLevel: number;
+  allowedMotiveBuckets: SectMotiveBucketId[];
+}
+
+export interface SectApplication {
+  id: string;
+  sectId: string;
+  cultivatorId: string;
+  appliedAtTick: number;
+  expiresAtTick: number;
+}
+
+export interface SectReapplyCooldown {
+  id: string;
+  sectId: string;
+  cultivatorId: string;
+  rejectedAtTick: number;
+  expiresAtTick: number;
+}
+
 export type ItemId =
   | "healing-pill"
   | "qi-pill"
@@ -472,6 +499,8 @@ export type ImmediateActionId =
   | `enter-wilderness:${string}`
   | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
+  | "open-player-sect-recruitment"
+  | "review-player-sect-applications"
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
@@ -494,6 +523,8 @@ export interface Sect {
   id: string;
   name: string;
   alignment: SectAlignment;
+  stateId: import("./constants.js").StateId;
+  founderCultivatorId: string;
   treasury: number;
   memberIds: string[];
   spiritVeins: string[];
@@ -501,6 +532,8 @@ export interface Sect {
   titleSlots: SectTitleSlot[];
   titleUpdateInterval: number;
   lastTitleUpdateTick: number;
+  admissionPolicy: SectAdmissionPolicy;
+  admissionPolicyUpdatedAtTick: number;
 }
 
 export interface NeutralSect {
@@ -558,6 +591,7 @@ export interface Cultivator {
   sectId: string | null;
   neutralSectId: string | null;
   sectTitle: SectTitle | null;
+  pendingSectApplicationId: string | null;
   totalContribution: number;
   neutralContribution: number;
   contributionReachedAt: number;
@@ -875,6 +909,8 @@ export interface PlayerSectInfoView {
   id: string;
   name: string;
   alignment: Sect["alignment"];
+  stateId: Sect["stateId"];
+  founderCultivatorId: Sect["founderCultivatorId"];
   treasury: number;
   memberCount: number;
   spiritVeins: string[];
@@ -882,6 +918,8 @@ export interface PlayerSectInfoView {
   role: SectTitle;
   totalContribution: number;
   lastTitleUpdateTick: number;
+  admissionPolicy: SectAdmissionPolicy;
+  admissionPolicyUpdatedAtTick: number;
   level?: number;
   bonuses?: SectBonus[];
   activeWarId?: string | null;
@@ -905,6 +943,73 @@ export interface NeutralSectInfoView {
 }
 
 export type OrganizationInfoView = PlayerSectInfoView | NeutralSectInfoView;
+
+export interface PlayerSectRecruitmentView {
+  sectId: string;
+  name: string;
+  stateId: Sect["stateId"];
+  alignment: Sect["alignment"];
+  headquartersLocationId: string;
+  memberCount: number;
+  minimumRealmLevel: number;
+  allowedMotiveBuckets: SectMotiveBucketId[];
+}
+
+export interface PlayerSectRecruitmentListView {
+  cultivatorId: string;
+  sects: PlayerSectRecruitmentView[];
+  nextCursor: string | null;
+}
+
+export interface SectApplicationView {
+  applicationId: string;
+  sectId: string;
+  cultivatorId: string;
+  applicantName: string;
+  applicantRealmLevel: number;
+  applicantMotiveBucket: SectMotiveBucketId | null;
+  appliedAtTick: number;
+  expiresAtTick: number;
+}
+
+export interface SectApplicationListView {
+  cultivatorId: string;
+  sectId: string;
+  applications: SectApplicationView[];
+  nextCursor: string | null;
+}
+
+export interface FoundPlayerSectResult {
+  tick: number;
+  cultivatorId: string;
+  sectId: string;
+  headquartersLocationId: string;
+  summary: string;
+}
+
+export interface PlayerSectApplicationResult {
+  tick: number;
+  cultivatorId: string;
+  applicationId: string;
+  sectId: string;
+  summary: string;
+}
+
+export interface ReviewSectApplicationResult {
+  tick: number;
+  cultivatorId: string;
+  applicationId: string;
+  sectId: string;
+  decision: "approve" | "reject";
+  summary: string;
+}
+
+export interface UpdateSectAdmissionPolicyResult {
+  tick: number;
+  cultivatorId: string;
+  sectId: string;
+  summary: string;
+}
 
 export interface CultivatorStateView {
   tick: number;
@@ -992,6 +1097,8 @@ export interface WorldState {
   topology: TopologyGraph;
   eventPools: EventPools;
   questBoards: Record<string, QuestBoard>;
+  pendingSectApplications: Record<string, SectApplication>;
+  sectReapplyCooldowns: Record<string, SectReapplyCooldown>;
   wildernessLayers: Record<string, WildernessLayer>;
   wildernessProgress: Record<string, WildernessProgress>;
   guixuNodes: Record<string, GuixuNode>;
@@ -1009,4 +1116,6 @@ export interface WorldState {
   nextMessageSequence: number;
   nextEventSequence: number;
   nextCombatSequence: number;
+  nextSectApplicationSequence: number;
+  nextSectCooldownSequence: number;
 }

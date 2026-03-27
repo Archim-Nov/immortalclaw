@@ -215,9 +215,8 @@ function buildAllLocations(
   }
 
   for (const sect of Object.values(playerSects)) {
-    const stateId = sect.headquarters.split(":")[0] as StateId;
     const outpost = buildOrganizationOutpostLocation(
-      stateId,
+      sect.stateId,
       sect.id,
       sect.name,
       "player-sect",
@@ -330,6 +329,7 @@ const cultivators: Record<string, Cultivator> = {
     sectId: null,
     neutralSectId: null,
     sectTitle: null,
+    pendingSectApplicationId: null,
     totalContribution: 0,
     neutralContribution: 0,
     contributionReachedAt: 0,
@@ -473,7 +473,7 @@ export function createSeedWorld(): WorldState {
   const neutralSects = buildNeutralSects();
   const locations = buildAllLocations(seededSects, neutralSects);
   const world: WorldState = {
-    version: 6,
+    version: 7,
     tick: 0,
     updatedAt: new Date().toISOString(),
     cultivators: structuredClone(cultivators),
@@ -485,6 +485,8 @@ export function createSeedWorld(): WorldState {
     topology: buildFullTopology(locations),
     eventPools: createEventPools(locations),
     questBoards: {},
+    pendingSectApplications: {},
+    sectReapplyCooldowns: {},
     wildernessLayers: structuredClone(WILDERNESS_LAYERS),
     wildernessProgress: {},
     guixuNodes: structuredClone(GUIXU_NODES),
@@ -520,6 +522,8 @@ export function createSeedWorld(): WorldState {
     nextMessageSequence: 2,
     nextEventSequence: 1,
     nextCombatSequence: 1,
+    nextSectApplicationSequence: 1,
+    nextSectCooldownSequence: 1,
   };
   seedQuestBoards(world);
   return world;

@@ -2,13 +2,26 @@ import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
   CreateCultivatorInput, DecisionPolicyView, FiveElementId, ItemId, Message, RegistrationAnswer,
-  NeutralSect, OrganizationInfoView, RegistrationGameplayEffectsView, RegistrationGameplayModifierView, Sect,
-  RegistrationQuestionId, ResidenceActionId, SectTitle, StatusEffect, TimedActionId, StrategySnapshot, TickSummary,
-  WorldEvent, WorldState, OnboardingProgress, OnboardingStage,
+  FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
+  PlayerSectRecruitmentListView, RegistrationGameplayEffectsView, RegistrationGameplayModifierView,
+  ReviewSectApplicationResult, Sect, SectAdmissionPolicy, SectApplication, SectApplicationListView,
+  SectApplicationView, SectMotiveBucketId, SectReapplyCooldown, SectTitle, StatusEffect, TimedActionId,
+  StrategySnapshot, TickSummary, UpdateSectAdmissionPolicyResult, WorldEvent, WorldState, OnboardingProgress,
+  OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
 } from "./model.js";
 import {
   DEFAULT_ACTION_DURATIONS,
+  PLAYER_SECT_APPLICATION_TTL,
+  PLAYER_SECT_FOUNDING_REPUTATION_COST,
+  PLAYER_SECT_FOUNDING_STONE_COST,
+  PLAYER_SECT_PAGE_LIMIT,
+  PLAYER_SECT_MOTIVE_BUCKETS,
+  PLAYER_SECT_NAME_MAX_LENGTH,
+  PLAYER_SECT_NAME_MIN_LENGTH,
+  PLAYER_SECT_POLICY_UPDATE_COOLDOWN,
   RESIDENCE_PRODUCTION_RECIPES,
+  SECT_TITLE_SLOTS,
+  SECT_TITLE_UPDATE_INTERVAL,
   STARTER_STATES,
   type StateId,
 } from "./constants.js";
@@ -57,7 +70,13 @@ import {
 } from "./registration-taxonomy.js";
 import { createEmptyInventory, createFactionReputation, createStateReputation } from "./seed.js";
 import { buildSectLevel, sectBonusValue } from "./sect-level.js";
-import { getDistance, getNeighbors, type TopologyGraph as RuntimeTopologyGraph } from "./topology.js";
+import {
+  buildFullTopology,
+  getDistance,
+  getNeighbors,
+  toSectOutpostLocationId,
+  type TopologyGraph as RuntimeTopologyGraph,
+} from "./topology.js";
 import {
   applyWildernessPressure,
   canEnterWilderness,
@@ -161,6 +180,232 @@ const findNearestLocationId = (world: WorldState, fromLocationId: string, predic
   }
   return bestLocationId;
 };
+const PLAYER_SECT_MOTIVE_BUCKET_IDS = Object.keys(PLAYER_SECT_MOTIVE_BUCKETS) as SectMotiveBucketId[];
+const PLAYER_SECT_REVIEW_TITLES = new Set<SectTitle>(["宗主", "长老"]);
+
+function normalizePlayerSectName(name: string): string {
+  return name.trim().replace(/\s+/g, "").toLocaleLowerCase("en-US");
+}
+
+function validatePlayerSectName(name: string): string {
+  const trimmed = name.trim();
+  const length = Array.from(trimmed).length;
+  if (!trimmed || length < PLAYER_SECT_NAME_MIN_LENGTH || length > PLAYER_SECT_NAME_MAX_LENGTH) {
+    throw new Error(`Sect name must be ${PLAYER_SECT_NAME_MIN_LENGTH}-${PLAYER_SECT_NAME_MAX_LENGTH} characters.`);
+  }
+  return trimmed;
+}
+
+function normalizePageLimit(limit?: number): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return PLAYER_SECT_PAGE_LIMIT;
+  }
+  return Math.max(1, Math.min(PLAYER_SECT_PAGE_LIMIT, Math.floor(limit)));
+}
+
+function normalizePageCursor(cursor?: string): number {
+  if (!cursor?.trim()) {
+    return 0;
+  }
+  const parsed = Number(cursor);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error("Cursor must be a non-negative number.");
+  }
+  return Math.floor(parsed);
+}
+
+function nextCursorForSlice(total: number, offset: number, limit: number): string | null {
+  const nextOffset = offset + limit;
+  return nextOffset < total ? String(nextOffset) : null;
+}
+
+function cultivatorHasOrganization(cultivator: Cultivator): boolean {
+  return Boolean(cultivator.sectId || cultivator.neutralSectId);
+}
+
+function normalizeSectAdmissionPolicy(input: SectAdmissionPolicy): SectAdmissionPolicy {
+  const minimumRealmLevel = Number.isFinite(input.minimumRealmLevel)
+    ? Math.max(1, Math.floor(input.minimumRealmLevel))
+    : 1;
+  const bucketSet = new Set<SectMotiveBucketId>();
+  for (const bucketId of input.allowedMotiveBuckets ?? []) {
+    if (PLAYER_SECT_MOTIVE_BUCKET_IDS.includes(bucketId)) {
+      bucketSet.add(bucketId);
+    }
+  }
+  const allowedMotiveBuckets = Array.from(bucketSet);
+  if (allowedMotiveBuckets.length === 0) {
+    throw new Error("Admission policy must allow at least one motive bucket.");
+  }
+  return {
+    minimumRealmLevel,
+    allowedMotiveBuckets,
+  };
+}
+
+function isAllMotiveBucketsAllowed(policy: SectAdmissionPolicy): boolean {
+  return PLAYER_SECT_MOTIVE_BUCKET_IDS.every((bucketId) => policy.allowedMotiveBuckets.includes(bucketId));
+}
+
+function motiveBucketForRegistration(
+  record: CultivationRegistrationRecord | null,
+): SectMotiveBucketId | null {
+  if (!record) {
+    return null;
+  }
+  const motiveId = (
+    record.result.cultivation_motive_id
+    ?? resolveCultivationMotiveId(record.result.cultivation_motive)
+  ) as RegistrationCultivationMotiveId | undefined;
+  if (!motiveId) {
+    return null;
+  }
+  for (const [bucketId, motiveIds] of Object.entries(PLAYER_SECT_MOTIVE_BUCKETS) as Array<
+    [SectMotiveBucketId, readonly RegistrationCultivationMotiveId[]]
+  >) {
+    if (motiveIds.includes(motiveId)) {
+      return bucketId;
+    }
+  }
+  return null;
+}
+
+function policyMatchesCultivator(sect: Sect, cultivator: Cultivator): boolean {
+  if (cultivator.realmLevel < sect.admissionPolicy.minimumRealmLevel) {
+    return false;
+  }
+  if (isAllMotiveBucketsAllowed(sect.admissionPolicy)) {
+    return true;
+  }
+  const bucketId = motiveBucketForRegistration(cultivator.registrationRecord);
+  return bucketId ? sect.admissionPolicy.allowedMotiveBuckets.includes(bucketId) : false;
+}
+
+function removePendingSectApplication(world: WorldState, applicationId: string): void {
+  const application = world.pendingSectApplications[applicationId];
+  if (!application) {
+    return;
+  }
+  const cultivator = world.cultivators[application.cultivatorId];
+  if (cultivator?.pendingSectApplicationId === applicationId) {
+    cultivator.pendingSectApplicationId = null;
+  }
+  delete world.pendingSectApplications[applicationId];
+}
+
+function isSectApplicationExpired(world: WorldState, application: SectApplication): boolean {
+  return world.tick >= application.expiresAtTick;
+}
+
+function cleanupCultivatorPendingSectApplication(world: WorldState, cultivator: Cultivator): void {
+  if (!cultivator.pendingSectApplicationId) {
+    return;
+  }
+  const application = world.pendingSectApplications[cultivator.pendingSectApplicationId];
+  if (!application || isSectApplicationExpired(world, application)) {
+    removePendingSectApplication(world, cultivator.pendingSectApplicationId);
+  }
+}
+
+function activeReapplyCooldown(
+  world: WorldState,
+  sectId: string,
+  cultivatorId: string,
+): SectReapplyCooldown | null {
+  for (const cooldown of Object.values(world.sectReapplyCooldowns)) {
+    if (cooldown.sectId !== sectId || cooldown.cultivatorId !== cultivatorId) {
+      continue;
+    }
+    if (world.tick >= cooldown.expiresAtTick) {
+      delete world.sectReapplyCooldowns[cooldown.id];
+      continue;
+    }
+    return cooldown;
+  }
+  return null;
+}
+
+function ensurePlayerSectOutpost(world: WorldState, sect: Sect): string {
+  const headquartersLocationId = toSectOutpostLocationId(sect.stateId, sect.id);
+  if (!world.locations[headquartersLocationId]) {
+    world.locations[headquartersLocationId] = {
+      id: headquartersLocationId,
+      stateId: sect.stateId,
+      nodeType: "sect-outpost",
+      name: `${sect.name}据点`,
+      kind: "safe",
+      risk: (world.states[sect.stateId]?.risk ?? "safe") as WorldState["locations"][string]["risk"],
+      description: `${sect.name}在${sect.stateId}的玩家宗门据点。`,
+      organizationId: sect.id,
+      organizationType: "player-sect",
+    };
+  }
+  const state = world.states[sect.stateId];
+  if (state && !state.locationIds.includes(headquartersLocationId)) {
+    state.locationIds.push(headquartersLocationId);
+  }
+  world.topology = buildFullTopology(world.locations) as WorldState["topology"];
+  if (!world.questBoards[headquartersLocationId]) {
+    world.questBoards[headquartersLocationId] = {
+      locationId: headquartersLocationId,
+      slots: 0,
+      quests: [],
+      lastRefreshedTick: world.tick,
+    };
+  }
+  return headquartersLocationId;
+}
+
+function ensureSectReviewer(world: WorldState, cultivator: Cultivator): Sect {
+  const sect = getCultivatorSect(world, cultivator);
+  if (!sect) {
+    throw new Error("Cultivator is not in a player sect.");
+  }
+  if (!cultivator.sectTitle || !PLAYER_SECT_REVIEW_TITLES.has(cultivator.sectTitle)) {
+    throw new Error("Only 宗主 or 长老 can review sect applications.");
+  }
+  return sect;
+}
+
+function notifySectReviewers(world: WorldState, sect: Sect, subject: string, content: string): void {
+  for (const memberId of sect.memberIds) {
+    const member = world.cultivators[memberId];
+    if (!member?.sectTitle || !PLAYER_SECT_REVIEW_TITLES.has(member.sectTitle)) {
+      continue;
+    }
+    addMessage(world, member.id, sect.name, subject, content);
+  }
+}
+
+function buildSectApplicationView(world: WorldState, application: SectApplication): SectApplicationView | null {
+  const applicant = world.cultivators[application.cultivatorId];
+  const sect = world.sects[application.sectId];
+  if (!applicant || !sect) {
+    return null;
+  }
+  if (applicant.pendingSectApplicationId !== application.id) {
+    return null;
+  }
+  if (cultivatorHasOrganization(applicant)) {
+    return null;
+  }
+  if (isSectApplicationExpired(world, application)) {
+    return null;
+  }
+  if (!policyMatchesCultivator(sect, applicant)) {
+    return null;
+  }
+  return {
+    applicationId: application.id,
+    sectId: application.sectId,
+    cultivatorId: applicant.id,
+    applicantName: applicant.name,
+    applicantRealmLevel: applicant.realmLevel,
+    applicantMotiveBucket: motiveBucketForRegistration(applicant.registrationRecord),
+    appliedAtTick: application.appliedAtTick,
+    expiresAtTick: application.expiresAtTick,
+  };
+}
 
 function buildEnterWildernessAction(
   cultivator: Cultivator,
@@ -690,7 +935,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
   const agentId = normalizeAgentId(input.agentId); const starter = starterProfile();
   const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
   const starterLocationId = starterLocationIdFromRoll(Math.random());
-  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
+  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, pendingSectApplicationId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
   world.cultivators[cultivator.id] = cultivator;
   let selectedCultivatorId: string | null = null;
   if (agentId) { const binding = ensureAgentBinding(world, agentId); binding.cultivatorIds.push(cultivator.id); binding.selectedCultivatorId = cultivator.id; selectedCultivatorId = cultivator.id; }
@@ -1485,6 +1730,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     };
   }
   const joinNeutralSectId = parseJoinNeutralSectId(actionId);
+  if (actionId === "open-player-sect-recruitment" || actionId === "review-player-sect-applications") {
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: false,
+      summary: "This is a generic inbox action. Use the dedicated player-sect route instead.",
+    };
+  }
   if (actionId === "buy-healing-pill" || actionId === "buy-qi-pill" || actionId === "buy-ward-talisman") {
     const location = world.locations[cultivator.locationId];
     if (!location || !canTradeAtLocation(location)) throw new Error("You must be in a trading safe settlement."); const itemId = actionId === "buy-healing-pill" ? "healing-pill" : actionId === "buy-qi-pill" ? "qi-pill" : "ward-talisman"; const base = itemId === "healing-pill" ? 100 : itemId === "qi-pill" ? 60 : 180; const price = buyPrice(cultivator, base); if (cultivator.spiritStones < price) throw new Error("Not enough spirit stones."); cultivator.spiritStones -= price; cultivator.inventory[itemId] += 1; return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} bought ${itemId} for ${price}.` };
@@ -2211,6 +2465,8 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
       id: sect.id,
       name: sect.name,
       alignment: sect.alignment,
+      stateId: sect.stateId,
+      founderCultivatorId: sect.founderCultivatorId,
       treasury: sect.treasury,
       memberCount: sect.memberIds.length,
       spiritVeins: sect.spiritVeins,
@@ -2218,6 +2474,8 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
       role,
       totalContribution: cultivator.totalContribution,
       lastTitleUpdateTick: sect.lastTitleUpdateTick,
+      admissionPolicy: structuredClone(sect.admissionPolicy),
+      admissionPolicyUpdatedAtTick: sect.admissionPolicyUpdatedAtTick,
       level: sectLevel?.level,
       bonuses: sectLevel?.bonuses ?? [],
       activeWarId: activeWar?.warId ?? null,
@@ -2241,5 +2499,264 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
     neutralContribution: cultivator.neutralContribution,
     rewardMultiplier: neutralSect.rewardMultiplier,
     competitive: false,
+  };
+}
+
+export function foundPlayerSect(
+  world: WorldState,
+  cultivatorId: string,
+  input: {
+    name: string;
+    stateId: StateId;
+    alignment: Sect["alignment"];
+    admissionPolicy: SectAdmissionPolicy;
+  },
+): FoundPlayerSectResult {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const name = validatePlayerSectName(input.name);
+  const normalizedName = normalizePlayerSectName(name);
+  const currentLocation = world.locations[cultivator.locationId];
+  if (!currentLocation || !isMainCityNode(currentLocation.nodeType) || currentLocation.stateId !== input.stateId) {
+    throw new Error("Founding a player sect requires standing in the target state's main city.");
+  }
+  if (cultivatorHasOrganization(cultivator)) {
+    throw new Error("Cultivator already belongs to an organization.");
+  }
+  if (cultivator.spiritStones < PLAYER_SECT_FOUNDING_STONE_COST) {
+    throw new Error(`Founding requires ${PLAYER_SECT_FOUNDING_STONE_COST} spirit stones.`);
+  }
+  if (reputationForState(cultivator, input.stateId) < PLAYER_SECT_FOUNDING_REPUTATION_COST) {
+    throw new Error(`Founding requires ${PLAYER_SECT_FOUNDING_REPUTATION_COST} reputation in the target state.`);
+  }
+  for (const existingSect of Object.values(world.sects)) {
+    if (normalizePlayerSectName(existingSect.name) === normalizedName) {
+      throw new Error("Sect name must be globally unique.");
+    }
+  }
+
+  const sectId = normalizedName;
+  const sect: Sect = {
+    id: sectId,
+    name,
+    alignment: input.alignment,
+    stateId: input.stateId,
+    founderCultivatorId: cultivator.id,
+    treasury: PLAYER_SECT_FOUNDING_STONE_COST,
+    memberIds: [cultivator.id],
+    spiritVeins: [`${name}灵脉`],
+    headquarters: toSectOutpostLocationId(input.stateId, sectId),
+    titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
+    titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
+    lastTitleUpdateTick: world.tick,
+    admissionPolicy: normalizeSectAdmissionPolicy(input.admissionPolicy),
+    admissionPolicyUpdatedAtTick: world.tick,
+  };
+  world.sects[sectId] = sect;
+  cultivator.spiritStones -= PLAYER_SECT_FOUNDING_STONE_COST;
+  cultivator.sectId = sectId;
+  cultivator.sectTitle = "宗主";
+  cultivator.pendingSectApplicationId = null;
+  const headquartersLocationId = ensurePlayerSectOutpost(world, sect);
+  sect.headquarters = headquartersLocationId;
+  addMessage(world, cultivator.id, sect.name, "立派成功", `${cultivator.name}创立了${sect.name}。`);
+  addDaoLog(world, cultivator.id, "Founded Sect", `${cultivator.name} founded ${sect.name}.`, ["sect", "found-sect"]);
+
+  return {
+    tick: world.tick,
+    cultivatorId,
+    sectId,
+    headquartersLocationId,
+    summary: `${cultivator.name} founded ${sect.name}.`,
+  };
+}
+
+export function listRecruitablePlayerSects(
+  world: WorldState,
+  cultivatorId: string,
+  options: { limit?: number; cursor?: string } = {},
+): PlayerSectRecruitmentListView {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const stateId = world.locations[cultivator.locationId]?.stateId;
+  const sorted = Object.values(world.sects)
+    .filter((sect) => !stateId || sect.stateId === stateId)
+    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+  const offset = normalizePageCursor(options.cursor);
+  const limit = normalizePageLimit(options.limit);
+  return {
+    cultivatorId,
+    sects: sorted.slice(offset, offset + limit).map((sect) => ({
+      sectId: sect.id,
+      name: sect.name,
+      stateId: sect.stateId,
+      alignment: sect.alignment,
+      headquartersLocationId: sect.headquarters,
+      memberCount: sect.memberIds.length,
+      minimumRealmLevel: sect.admissionPolicy.minimumRealmLevel,
+      allowedMotiveBuckets: [...sect.admissionPolicy.allowedMotiveBuckets],
+    })),
+    nextCursor: nextCursorForSlice(sorted.length, offset, limit),
+  };
+}
+
+export function applyToPlayerSect(
+  world: WorldState,
+  cultivatorId: string,
+  input: { sectId: string },
+): PlayerSectApplicationResult {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const sect = world.sects[input.sectId];
+  if (!sect) {
+    throw new Error(`Player sect not found: ${input.sectId}`);
+  }
+  cleanupCultivatorPendingSectApplication(world, cultivator);
+  if (cultivator.pendingSectApplicationId) {
+    throw new Error("Cultivator already has a pending sect application.");
+  }
+  if (cultivatorHasOrganization(cultivator)) {
+    throw new Error("Cultivator already belongs to an organization.");
+  }
+  if (cultivator.locationId !== sect.headquarters && cultivator.locationId !== mainCityLocationIdOf(sect.stateId)) {
+    throw new Error("Player-sect applications must be submitted at the sect's state main city or sect outpost.");
+  }
+  if (activeReapplyCooldown(world, sect.id, cultivator.id)) {
+    throw new Error(`Reapplying to this sect is blocked for ${PLAYER_SECT_APPLICATION_TTL} ticks after rejection.`);
+  }
+  if (!cultivator.registrationRecord && !isAllMotiveBucketsAllowed(sect.admissionPolicy)) {
+    throw new Error("Application requires a saved registration record for motive screening.");
+  }
+  if (!policyMatchesCultivator(sect, cultivator)) {
+    throw new Error("Cultivator does not satisfy the current sect admission policy.");
+  }
+
+  const applicationId = `sect-application-${world.nextSectApplicationSequence++}`;
+  world.pendingSectApplications[applicationId] = {
+    id: applicationId,
+    sectId: sect.id,
+    cultivatorId,
+    appliedAtTick: world.tick,
+    expiresAtTick: world.tick + PLAYER_SECT_APPLICATION_TTL,
+  };
+  cultivator.pendingSectApplicationId = applicationId;
+  notifySectReviewers(world, sect, "新入派申请", `${cultivator.name}提交了加入${sect.name}的申请。`);
+  addMessage(world, cultivator.id, sect.name, "申请已提交", `${cultivator.name}提交了加入${sect.name}的申请。`);
+  addDaoLog(world, cultivator.id, "Sect Application", `${cultivator.name} applied to ${sect.name}.`, ["sect", "sect-application"]);
+
+  return {
+    tick: world.tick,
+    cultivatorId,
+    applicationId,
+    sectId: sect.id,
+    summary: `${cultivator.name} applied to ${sect.name}.`,
+  };
+}
+
+export function listSectApplications(
+  world: WorldState,
+  cultivatorId: string,
+  options: { limit?: number; cursor?: string } = {},
+): SectApplicationListView {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const sect = ensureSectReviewer(world, cultivator);
+  const filtered = Object.values(world.pendingSectApplications)
+    .filter((application) => application.sectId === sect.id)
+    .map((application) => buildSectApplicationView(world, application))
+    .filter((application): application is SectApplicationView => Boolean(application))
+    .sort((left, right) =>
+      left.appliedAtTick === right.appliedAtTick
+        ? left.applicationId.localeCompare(right.applicationId)
+        : left.appliedAtTick - right.appliedAtTick);
+  const offset = normalizePageCursor(options.cursor);
+  const limit = normalizePageLimit(options.limit);
+  return {
+    cultivatorId,
+    sectId: sect.id,
+    applications: filtered.slice(offset, offset + limit),
+    nextCursor: nextCursorForSlice(filtered.length, offset, limit),
+  };
+}
+
+export function reviewSectApplication(
+  world: WorldState,
+  cultivatorId: string,
+  input: {
+    applicationId: string;
+    decision: "approve" | "reject";
+  },
+): ReviewSectApplicationResult {
+  const reviewer = getCultivatorOrThrow(world, cultivatorId);
+  const sect = ensureSectReviewer(world, reviewer);
+  const application = world.pendingSectApplications[input.applicationId];
+  if (!application || application.sectId !== sect.id) {
+    throw new Error("Sect application not found.");
+  }
+  const applicant = world.cultivators[application.cultivatorId];
+  if (
+    !applicant
+    || applicant.pendingSectApplicationId !== application.id
+    || cultivatorHasOrganization(applicant)
+    || isSectApplicationExpired(world, application)
+    || !policyMatchesCultivator(sect, applicant)
+  ) {
+    removePendingSectApplication(world, input.applicationId);
+    throw new Error("Sect application is no longer valid.");
+  }
+
+  removePendingSectApplication(world, input.applicationId);
+  if (input.decision === "approve") {
+    applicant.sectId = sect.id;
+    applicant.sectTitle = "外门";
+    if (!sect.memberIds.includes(applicant.id)) {
+      sect.memberIds.push(applicant.id);
+    }
+    addMessage(world, applicant.id, sect.name, "入派通过", `${applicant.name}加入了${sect.name}，头衔为外门。`);
+    addDaoLog(world, applicant.id, "Sect Admission Approved", `${applicant.name} joined ${sect.name}.`, ["sect", "sect-approved"]);
+  } else {
+    const cooldownId = `sect-cooldown-${world.nextSectCooldownSequence++}`;
+    world.sectReapplyCooldowns[cooldownId] = {
+      id: cooldownId,
+      sectId: sect.id,
+      cultivatorId: applicant.id,
+      rejectedAtTick: world.tick,
+      expiresAtTick: world.tick + PLAYER_SECT_APPLICATION_TTL,
+    };
+    addMessage(world, applicant.id, sect.name, "入派驳回", `${PLAYER_SECT_APPLICATION_TTL} ticks 内不可向${sect.name}重申。`);
+    addDaoLog(world, applicant.id, "Sect Admission Rejected", `${applicant.name} was rejected by ${sect.name}.`, ["sect", "sect-rejected"]);
+  }
+
+  return {
+    tick: world.tick,
+    cultivatorId,
+    applicationId: input.applicationId,
+    sectId: sect.id,
+    decision: input.decision,
+    summary:
+      input.decision === "approve"
+        ? `${reviewer.name} approved ${applicant.name}.`
+        : `${reviewer.name} rejected ${applicant.name}.`,
+  };
+}
+
+export function updateSectAdmissionPolicy(
+  world: WorldState,
+  cultivatorId: string,
+  input: SectAdmissionPolicy,
+): UpdateSectAdmissionPolicyResult {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const sect = getCultivatorSect(world, cultivator);
+  if (!sect || sect.founderCultivatorId !== cultivator.id || cultivator.sectTitle !== "宗主") {
+    throw new Error("Only the sect 宗主 can update admission policy.");
+  }
+  if (world.tick - sect.admissionPolicyUpdatedAtTick < PLAYER_SECT_POLICY_UPDATE_COOLDOWN) {
+    throw new Error(`Admission policy can only change every ${PLAYER_SECT_POLICY_UPDATE_COOLDOWN} ticks.`);
+  }
+  sect.admissionPolicy = normalizeSectAdmissionPolicy(input);
+  sect.admissionPolicyUpdatedAtTick = world.tick;
+  addMessage(world, cultivator.id, sect.name, "招人规则已更新", `${sect.name}更新了招人规则。`);
+  addDaoLog(world, cultivator.id, "Sect Admission Policy Updated", `${cultivator.name} updated ${sect.name} admission policy.`, ["sect", "sect-policy-update"]);
+  return {
+    tick: world.tick,
+    cultivatorId,
+    sectId: sect.id,
+    summary: `${cultivator.name} updated ${sect.name} admission policy.`,
   };
 }

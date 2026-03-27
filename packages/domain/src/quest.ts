@@ -248,12 +248,20 @@ function recalculateSectTitles(world: WorldState, sectId: string): void {
     }
     return left.id.localeCompare(right.id);
   });
+  const founder = sect.founderCultivatorId
+    ? members.find((member) => member.id === sect.founderCultivatorId) ?? null
+    : null;
+  const rankedMembers = founder ? sorted.filter((member) => member.id !== founder.id) : sorted;
 
   let innerSlots = sect.titleSlots.find((slot) => slot.title === "内门")?.maxSlots ?? 32;
   let eliteSlots = sect.titleSlots.find((slot) => slot.title === "精英")?.maxSlots ?? 16;
   let elderSlots = sect.titleSlots.find((slot) => slot.title === "长老")?.maxSlots ?? 4;
 
-  for (const member of sorted) {
+  if (founder) {
+    founder.sectTitle = "宗主";
+  }
+
+  for (const member of rankedMembers) {
     const desired = titlePriority(member.totalContribution);
     let assigned: SectTitle = "外门";
     if (desired === "长老" && elderSlots > 0) {

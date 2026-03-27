@@ -63,6 +63,8 @@ function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
     id: "qing-yun-sect",
     name: "Qing Yun Sect",
     alignment: "正道",
+    stateId: "qingzhou",
+    founderCultivatorId: "yun-zhong-he",
     treasury: 86000,
     memberIds: [],
     spiritVeins: ["Azure Ridge"],
@@ -76,6 +78,11 @@ function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
     ],
     titleUpdateInterval: 2880,
     lastTitleUpdateTick: 0,
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+    admissionPolicyUpdatedAtTick: 0,
   };
 
   world.locations["qingzhou:sect-outpost:qing-yun-sect"] = {
@@ -429,7 +436,11 @@ test("sect duties move to the sect outpost and sect info exposes alignment", () 
 test("sect titles recalculate on cadence", () => {
   const world = createSeedWorld();
   seedLegacyPlayerSect(world);
-  const cultivator = world.cultivators["yun-zhong-he"];
+  const memberSummary = syncCultivatorFromPersona(world, {
+    agentId: "agent-sect-title-member",
+    name: "Sect Title Member",
+  });
+  const cultivator = world.cultivators[memberSummary.selectedCultivatorId];
   const sect = world.sects["qing-yun-sect"];
 
   cultivator.sectId = sect.id;
@@ -834,8 +845,7 @@ test("legacy player sect info is still returned through getSectInfo", () => {
   seedLegacyPlayerSect(world);
   const cultivator = world.cultivators["yun-zhong-he"];
   cultivator.sectId = "qing-yun-sect";
-  // @ts-expect-error legacy title literal is intentionally preserved in this fixture
-  cultivator.sectTitle = "澶栭棬";
+  cultivator.sectTitle = "外门";
   cultivator.totalContribution = 24;
   world.sects["qing-yun-sect"]!.memberIds.push(cultivator.id);
 

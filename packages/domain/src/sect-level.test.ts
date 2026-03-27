@@ -21,6 +21,8 @@ function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
     id: "qing-yun-sect",
     name: "Qing Yun Sect",
     alignment: "正道",
+    stateId: "qingzhou",
+    founderCultivatorId: "yun-zhong-he",
     treasury: 86000,
     memberIds: [],
     spiritVeins: ["Azure Ridge"],
@@ -34,6 +36,11 @@ function seedLegacyPlayerSect(world: ReturnType<typeof createSeedWorld>) {
     ],
     titleUpdateInterval: 2880,
     lastTitleUpdateTick: 0,
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+    admissionPolicyUpdatedAtTick: 0,
   };
 
   world.locations["qingzhou:sect-outpost:qing-yun-sect"] = {

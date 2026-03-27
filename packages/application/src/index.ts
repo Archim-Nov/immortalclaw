@@ -55,3 +55,12 @@ export {
   signPayload,
 } from "./webhook-dispatch.js";
 export type { WebhookTarget } from "./webhook-dispatch.js";
+export {
+  applyAuthenticatedPlayerSectApplication,
+  foundAuthenticatedPlayerSect,
+  listAuthenticatedPlayerSectRecruitment,
+  listAuthenticatedSectApplications,
+  reviewAuthenticatedSectApplication,
+  updateAuthenticatedSectAdmissionPolicy,
+} from "./player-sects.js";
+export type { PlayerSectRepository } from "./player-sects.js";

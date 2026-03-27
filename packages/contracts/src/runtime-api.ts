@@ -1,5 +1,4 @@
 export type {
-  DetailedAttributeId,
   ActionExecutionResult,
   ActionId,
   AvailableAction,
@@ -7,21 +6,30 @@ export type {
   CultivationRegistrationView,
   CultivatorStateView,
   DecisionPolicyView,
-  Message,
+  DetailedAttributeId,
+  FoundPlayerSectResult,
   MainAttributeId,
+  Message,
   NeutralSect,
   NeutralSectInfoView,
   NeutralSectView,
   OrganizationInfoView,
+  PlayerSectApplicationResult,
   PlayerSectInfoView,
+  PlayerSectRecruitmentListView,
   PlayerSectView,
   RegistrationAnswer,
+  RegistrationGameplayEffectsView,
   RegistrationProfileView,
   RegistrationQuestionId,
   RegistrationQuestionnaireView,
-  RegistrationGameplayEffectsView,
+  ReviewSectApplicationResult,
+  SectAdmissionPolicy,
+  SectApplicationListView,
+  SectMotiveBucketId,
   StrategySnapshot,
   TickSummary,
+  UpdateSectAdmissionPolicyResult,
 } from "../../domain/src/runtime.js";
 
 import type {
@@ -34,15 +42,22 @@ import type {
   CultivatorStateView,
   DecisionPolicyView,
   FiveElementId,
+  FoundPlayerSectResult,
   Message,
   OrganizationInfoView,
+  PlayerSectApplicationResult,
+  PlayerSectRecruitmentListView,
   RegistrationAnswer,
+  RegistrationGameplayEffectsView,
   RegistrationProfileView,
   RegistrationQuestionId,
   RegistrationQuestionnaireView,
-  RegistrationGameplayEffectsView,
+  ReviewSectApplicationResult,
+  SectAdmissionPolicy,
+  SectApplicationListView,
   StrategySnapshot,
   TickSummary,
+  UpdateSectAdmissionPolicyResult,
   WorldEvent,
 } from "../../domain/src/runtime.js";
 import type { DetailedAttributeId, MainAttributeId } from "../../domain/src/attributes.js";
@@ -166,3 +181,52 @@ export interface AgentWebhookBindResponse {
 }
 
 export type AgentStrategyResponse = StrategySnapshot;
+
+export interface FoundPlayerSectRequest {
+  name: string;
+  stateId:
+    | "qingzhou"
+    | "yangzhou"
+    | "zhongzhou"
+    | "shuzhou"
+    | "youzhou"
+    | "liangzhou"
+    | "leizhou"
+    | "cangzhou"
+    | "wanzhou";
+  alignment: "\u6b63\u9053" | "\u9b54\u9053";
+  admissionPolicy: SectAdmissionPolicy;
+}
+
+export type FoundPlayerSectResponse = FoundPlayerSectResult;
+
+export interface PlayerSectRecruitmentRequest {
+  limit?: number;
+  cursor?: string;
+}
+
+export type PlayerSectRecruitmentResponse = PlayerSectRecruitmentListView;
+
+export interface PlayerSectApplicationRequest {
+  sectId: string;
+}
+
+export type PlayerSectApplicationResponse = PlayerSectApplicationResult;
+
+export interface SectApplicationsRequest {
+  limit?: number;
+  cursor?: string;
+}
+
+export type SectApplicationsResponse = SectApplicationListView;
+
+export interface ReviewSectApplicationRequest {
+  applicationId: string;
+  decision: "approve" | "reject";
+}
+
+export type ReviewSectApplicationResponse = ReviewSectApplicationResult;
+
+export interface UpdateSectAdmissionPolicyRequest extends SectAdmissionPolicy {}
+
+export type UpdateSectAdmissionPolicyResponse = UpdateSectAdmissionPolicyResult;
