@@ -22,6 +22,13 @@ export interface PublicAgentStateWorldRepository {
 
 export interface PublicAgentStateAuthClient extends Pick<AuthClient, "getAgentProfile"> {}
 
+const REALM_PHASES = ["\u524d\u671f", "\u4e2d\u671f", "\u540e\u671f"] as const;
+
+function realmPhaseOfLevel(realmLevel: number) {
+  const normalizedLevel = Math.max(1, Math.floor(realmLevel));
+  return REALM_PHASES[(normalizedLevel - 1) % REALM_PHASES.length]!;
+}
+
 function locationNameOf(world: WorldState, locationId: string): string {
   return world.locations[locationId]?.name ?? locationId;
 }
@@ -39,6 +46,7 @@ function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
       name: cultivator.name,
       realm: cultivator.realm,
       realmLevel: cultivator.realmLevel,
+      realmPhase: realmPhaseOfLevel(cultivator.realmLevel),
       realmProgress: cultivator.realmProgress,
       status: statusOf(cultivator),
       location: locationNameOf(world, cultivator.locationId),

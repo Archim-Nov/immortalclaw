@@ -16,6 +16,7 @@ function createState(): CultivatorStateView {
       name: "Su Mingyue",
       realm: "炼气",
       realmLevel: 1,
+      realmPhase: "\u524d\u671f",
       realmProgress: 14,
       status: "idle",
       location: "Qinghe City",

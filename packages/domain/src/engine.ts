@@ -2,8 +2,8 @@ import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   BreakthroughCategory, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, DecisionPolicyView, DungeonExpeditionProgress, DungeonExpeditionReport, DungeonExpeditionStateView, DungeonGrade, DungeonRank, DungeonRankYieldHint, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
-  MoralityAlignment, PendingMoralityChoiceResponse,
+  CreateCultivatorInput, DecisionPolicyView, DungeonExpeditionProgress, DungeonExpeditionReport, DungeonExpeditionStateView, DungeonGrade, DungeonRank, DungeonRankYieldHint, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RealmPhase, RegistrationAnswer,
+  MoralityAlignment, PendingMoralityChoiceResponse, PlayerSectFoundingBlockerCode, PlayerSectFoundingOptionsView,
   FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
   ResolveMoralityChoiceResult,
   PlayerSectRecruitmentListView, RegistrationGameplayEffectsView, RegistrationGameplayModifierView,
@@ -221,6 +221,7 @@ const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
     poisonTicks: 4,
   },
 };
+const REALM_PHASES: readonly RealmPhase[] = ["\u524d\u671f", "\u4e2d\u671f", "\u540e\u671f"];
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
   "registered",
   "first-action",
@@ -239,6 +240,10 @@ const DECISION_POLICY_PRIORITY_ORDER: readonly DecisionPolicyView["priorityOrder
 ];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const hashString = (input: string) => Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
+const realmPhaseOfLevel = (realmLevel: number): RealmPhase => {
+  const normalizedLevel = Math.max(1, Math.floor(realmLevel));
+  return REALM_PHASES[(normalizedLevel - 1) % REALM_PHASES.length]!;
+};
 const travelActionIdOf = (locationId: string) => `travel-to:${locationId}` as const;
 const parseTravelDestination = (actionId: ActionId) => actionId.startsWith("travel-to:") ? actionId.slice("travel-to:".length) : null;
 const parseEnterWildernessLayer = (actionId: ActionId) => actionId.startsWith("enter-wilderness:") ? actionId.slice("enter-wilderness:".length) : null;
@@ -376,6 +381,13 @@ const findNearestLocationId = (world: WorldState, fromLocationId: string, predic
 const PLAYER_SECT_MOTIVE_BUCKET_IDS = Object.keys(PLAYER_SECT_MOTIVE_BUCKETS) as SectMotiveBucketId[];
 const PLAYER_SECT_REVIEW_TITLES = new Set<SectTitle>(["宗主", "长老"]);
 
+function defaultPlayerSectAdmissionPolicy(): SectAdmissionPolicy {
+  return {
+    minimumRealmLevel: 1,
+    allowedMotiveBuckets: [...PLAYER_SECT_MOTIVE_BUCKET_IDS],
+  };
+}
+
 function normalizePlayerSectName(name: string): string {
   return name.trim().replace(/\s+/g, "").toLocaleLowerCase("en-US");
 }
@@ -414,6 +426,48 @@ function nextCursorForSlice(total: number, offset: number, limit: number): strin
 
 function cultivatorHasOrganization(cultivator: Cultivator): boolean {
   return Boolean(cultivator.sectId || cultivator.neutralSectId);
+}
+
+function getPlayerSectFoundingBlockers(
+  world: WorldState,
+  cultivator: Cultivator,
+): {
+  currentStateId: StateId | null;
+  currentMainCityLocationId: PlayerSectFoundingOptionsView["currentMainCityLocationId"];
+  blockers: PlayerSectFoundingBlockerCode[];
+} {
+  const currentLocation = world.locations[cultivator.locationId];
+  const currentStateId = currentLocation?.stateId ?? null;
+  const currentMainCityLocationId = currentStateId
+    ? mainCityLocationIdOf(currentStateId) as PlayerSectFoundingOptionsView["currentMainCityLocationId"]
+    : null;
+  const blockers: PlayerSectFoundingBlockerCode[] = [];
+
+  if (
+    !currentLocation
+    || !currentStateId
+    || !currentMainCityLocationId
+    || !isMainCityNode(currentLocation.nodeType)
+    || cultivator.locationId !== currentMainCityLocationId
+  ) {
+    blockers.push("not-in-main-city");
+  }
+  if (cultivatorHasOrganization(cultivator)) {
+    blockers.push("already-in-organization");
+  }
+  if (cultivator.spiritStones < PLAYER_SECT_FOUNDING_STONE_COST) {
+    blockers.push("insufficient-spirit-stones");
+  }
+  const currentStateReputation = currentStateId ? reputationForState(cultivator, currentStateId) : 0;
+  if (currentStateReputation < PLAYER_SECT_FOUNDING_REPUTATION_COST) {
+    blockers.push("insufficient-state-reputation");
+  }
+
+  return {
+    currentStateId,
+    currentMainCityLocationId,
+    blockers,
+  };
 }
 
 function normalizeSectAdmissionPolicy(input: SectAdmissionPolicy): SectAdmissionPolicy {
@@ -2581,7 +2635,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   };
   return {
     tick: world.tick,
-    cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
+    cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmPhase: realmPhaseOfLevel(cultivator.realmLevel), realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
     cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
     sect: sectView,
@@ -3079,7 +3133,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   }
   const joinNeutralSectId = parseJoinNeutralSectId(actionId);
   if (
-    actionId === "open-player-sect-recruitment"
+    actionId === "open-player-sect-founding"
+    || actionId === "open-player-sect-recruitment"
     || actionId === "review-player-sect-applications"
     || actionId === "resolve-morality-event-choice"
   ) {
@@ -4127,63 +4182,105 @@ export function resolveMoralityChoice(
   };
 }
 
+export function getPlayerSectFoundingOptions(
+  world: WorldState,
+  cultivatorId: string,
+): PlayerSectFoundingOptionsView {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const { currentStateId, currentMainCityLocationId, blockers } = getPlayerSectFoundingBlockers(world, cultivator);
+  const currentStateReputation = currentStateId ? reputationForState(cultivator, currentStateId) : 0;
+
+  return {
+    tick: world.tick,
+    cultivatorId,
+    currentStateId,
+    currentMainCityLocationId,
+    currentLocationId: cultivator.locationId,
+    canFound: blockers.length === 0,
+    blockers,
+    requirements: {
+      spiritStones: {
+        current: cultivator.spiritStones,
+        required: PLAYER_SECT_FOUNDING_STONE_COST,
+      },
+      stateReputation: {
+        current: currentStateReputation,
+        required: PLAYER_SECT_FOUNDING_REPUTATION_COST,
+      },
+      mustBeInMainCity: true,
+      mustHaveNoOrganization: true,
+    },
+    derivedFounding: {
+      alignment: moralityAlignmentOfCultivator(cultivator),
+      admissionPolicy: defaultPlayerSectAdmissionPolicy(),
+    },
+    nameRules: {
+      minLength: PLAYER_SECT_NAME_MIN_LENGTH,
+      maxLength: PLAYER_SECT_NAME_MAX_LENGTH,
+      globallyUnique: true,
+    },
+  };
+}
+
 export function foundPlayerSect(
   world: WorldState,
   cultivatorId: string,
   input: {
     name: string;
-    stateId: StateId;
-    alignment: Sect["alignment"];
-    admissionPolicy: SectAdmissionPolicy;
   },
 ): FoundPlayerSectResult {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const name = validatePlayerSectName(input.name);
   const normalizedName = normalizePlayerSectName(name);
-  const currentLocation = world.locations[cultivator.locationId];
-  if (!currentLocation || !isMainCityNode(currentLocation.nodeType) || currentLocation.stateId !== input.stateId) {
-    throw new Error("Founding a player sect requires standing in the target state's main city.");
+  const founding = getPlayerSectFoundingOptions(world, cultivatorId);
+  if (founding.blockers.includes("not-in-main-city")) {
+    throw new Error("Founding a player sect requires standing in the current state's main city.");
   }
-  if (cultivatorHasOrganization(cultivator)) {
+  if (founding.blockers.includes("already-in-organization")) {
     throw new Error("Cultivator already belongs to an organization.");
   }
-  if (moralityAlignmentOfCultivator(cultivator) !== input.alignment) {
-    throw new Error("Cultivator morality alignment must match the sect alignment when founding.");
-  }
-  if (cultivator.spiritStones < PLAYER_SECT_FOUNDING_STONE_COST) {
+  if (founding.blockers.includes("insufficient-spirit-stones")) {
     throw new Error(`Founding requires ${PLAYER_SECT_FOUNDING_STONE_COST} spirit stones.`);
   }
-  if (reputationForState(cultivator, input.stateId) < PLAYER_SECT_FOUNDING_REPUTATION_COST) {
-    throw new Error(`Founding requires ${PLAYER_SECT_FOUNDING_REPUTATION_COST} reputation in the target state.`);
+  if (founding.blockers.includes("insufficient-state-reputation")) {
+    throw new Error(`Founding requires ${PLAYER_SECT_FOUNDING_REPUTATION_COST} reputation in the current state.`);
   }
   for (const existingSect of Object.values(world.sects)) {
     if (normalizePlayerSectName(existingSect.name) === normalizedName) {
       throw new Error("Sect name must be globally unique.");
     }
   }
+  if (!founding.currentStateId) {
+    throw new Error("Could not resolve the current state for player-sect founding.");
+  }
+
+  const stateId = founding.currentStateId;
+  const alignment = founding.derivedFounding.alignment;
+  const admissionPolicy = normalizeSectAdmissionPolicy(founding.derivedFounding.admissionPolicy);
 
   const sectId = normalizedName;
   const sect: Sect = {
     id: sectId,
     name,
-    alignment: input.alignment,
-    stateId: input.stateId,
+    alignment,
+    stateId,
     founderCultivatorId: cultivator.id,
     treasury: PLAYER_SECT_FOUNDING_STONE_COST,
     memberIds: [cultivator.id],
     spiritVeins: [`${name}灵脉`],
-    headquarters: toSectOutpostLocationId(input.stateId, sectId),
+    headquarters: toSectOutpostLocationId(stateId, sectId),
     titleSlots: SECT_TITLE_SLOTS.map((slot) => ({ ...slot })),
     titleUpdateInterval: SECT_TITLE_UPDATE_INTERVAL,
     lastTitleUpdateTick: world.tick,
-    admissionPolicy: normalizeSectAdmissionPolicy(input.admissionPolicy),
-    admissionPolicyUpdatedAtTick: world.tick,
+    admissionPolicy,
+    // Founding uses the default policy; the first manual edit should not spend the cooldown.
+    admissionPolicyUpdatedAtTick: world.tick - PLAYER_SECT_POLICY_UPDATE_COOLDOWN,
   };
   world.sects[sectId] = sect;
   cultivator.spiritStones -= PLAYER_SECT_FOUNDING_STONE_COST;
   cultivator.sectId = sectId;
   cultivator.sectTitle = "宗主";
-  applyMoralityDelta(world, cultivator, input.alignment === "正道" ? 12 : -12, "found-sect");
+  applyMoralityDelta(world, cultivator, alignment === "正道" ? 12 : -12, "found-sect");
   cultivator.pendingSectApplicationId = null;
   const headquartersLocationId = ensurePlayerSectOutpost(world, sect);
   sect.headquarters = headquartersLocationId;
@@ -4195,6 +4292,9 @@ export function foundPlayerSect(
     cultivatorId,
     sectId,
     headquartersLocationId,
+    stateId,
+    alignment,
+    admissionPolicy: structuredClone(admissionPolicy),
     summary: `${cultivator.name} founded ${sect.name}.`,
   };
 }

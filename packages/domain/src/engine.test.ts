@@ -303,6 +303,21 @@ test("cultivation action creates a job and advances realm progress after ticks",
   assert.ok(after.cultivator.realmProgress > before.cultivator.realmProgress);
 });
 
+test("cultivator state exposes the current in-realm phase instead of forcing clients to infer it from total level", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 4;
+  assert.equal(getCultivatorState(world, "yun-zhong-he").cultivator.realmPhase, "前期");
+
+  cultivator.realmLevel = 5;
+  assert.equal(getCultivatorState(world, "yun-zhong-he").cultivator.realmPhase, "中期");
+
+  cultivator.realmLevel = 6;
+  assert.equal(getCultivatorState(world, "yun-zhong-he").cultivator.realmPhase, "后期");
+});
+
 test("joining the sect updates sect state immediately", () => {
   const world = createSeedWorld();
   seedLegacyPlayerSect(world);

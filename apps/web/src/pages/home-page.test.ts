@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import {
   type AgentMessage,
@@ -115,7 +115,8 @@ test("buildAgentDirectoryMarkup renders live registered agents", () => {
           id: "cultivator-9",
           name: "Su Mingyue",
           realm: "Qi Refining",
-          realmLevel: 1,
+          realmLevel: 4,
+          realmPhase: "鍓嶆湡",
           realmProgress: 18,
           status: "idle",
           location: "Mortal Town",
@@ -131,6 +132,8 @@ test("buildAgentDirectoryMarkup renders live registered agents", () => {
   assert.match(markup, /MEDITATE/);
   assert.match(markup, /Qing Yun Sect/);
   assert.match(markup, /meditate/);
+  assert.match(markup, /Qi Refining[^<]*鍓嶆湡/);
+  assert.doesNotMatch(markup, /Lv\.4/);
   assert.match(markup, /CURRENTLY ROAMING THE REALM: <span[^>]*>1 SOUL<\/span>/);
 });
 
@@ -177,7 +180,8 @@ test("buildAgentDirectoryMarkup wraps each agent card with a stat page link", ()
           id: "c-1",
           name: "Luo Binghe",
           realm: "Foundation Building",
-          realmLevel: 2,
+          realmLevel: 5,
+          realmPhase: "涓湡",
           realmProgress: 45,
           status: "idle",
           location: "Misty Peak",
@@ -369,6 +373,7 @@ test("buildMessagePanelMarkup renders direct message contacts and history", () =
           name: "Li Aotian",
           realm: "Qi Refining",
           realmLevel: 2,
+          realmPhase: "涓湡",
           realmProgress: 25,
           status: "idle",
           location: "Sect Gate",
@@ -395,8 +400,8 @@ test("buildMessagePanelMarkup renders direct message contacts and history", () =
         key: "agent:agent-recipient",
         type: "agent",
         label: "Li Aotian",
-        subtitle: "[ID: agent-recipient] • Qi Refining Lv.2",
-        avatar: "⛩️",
+        subtitle: "[ID: agent-recipient] 鈥?Qi Refining Lv.2",
+        avatar: "鉀╋笍",
         statusClass: "status-online",
         preview: "Meet me at the market.",
         timestampLabel: "TICK 9",
@@ -416,5 +421,8 @@ test("buildMessagePanelMarkup renders direct message contacts and history", () =
   assert.match(markup, /Meet me at the market/);
   assert.match(markup, /Target Agent ID/);
   assert.match(markup, /agent-recipient/);
-  assert.match(markup, /传音 \(SEND\)/);
+  assert.match(markup, /SEND/);
 });
+
+
+

@@ -1,4 +1,5 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
+export type RealmPhase = "\u524d\u671f" | "\u4e2d\u671f" | "\u540e\u671f";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
 export type RegistrationQuestionId =
@@ -619,6 +620,7 @@ export type ImmediateActionId =
   | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
   | "abort-dungeon-expedition"
+  | "open-player-sect-founding"
   | "open-player-sect-recruitment"
   | "review-player-sect-applications"
   | "resolve-morality-event-choice"
@@ -1239,6 +1241,43 @@ export interface PlayerSectRecruitmentListView {
   nextCursor: string | null;
 }
 
+export type PlayerSectFoundingBlockerCode =
+  | "not-in-main-city"
+  | "already-in-organization"
+  | "insufficient-spirit-stones"
+  | "insufficient-state-reputation";
+
+export interface PlayerSectFoundingOptionsView {
+  tick: number;
+  cultivatorId: string;
+  currentStateId: import("./constants.js").StateId | null;
+  currentMainCityLocationId: import("./constants.js").LocationId | null;
+  currentLocationId: string;
+  canFound: boolean;
+  blockers: PlayerSectFoundingBlockerCode[];
+  requirements: {
+    spiritStones: {
+      current: number;
+      required: number;
+    };
+    stateReputation: {
+      current: number;
+      required: number;
+    };
+    mustBeInMainCity: true;
+    mustHaveNoOrganization: true;
+  };
+  derivedFounding: {
+    alignment: SectAlignment;
+    admissionPolicy: SectAdmissionPolicy;
+  };
+  nameRules: {
+    minLength: number;
+    maxLength: number;
+    globallyUnique: true;
+  };
+}
+
 export interface PendingMoralityChoiceResponse {
   tick: number;
   cultivatorId: string;
@@ -1268,6 +1307,9 @@ export interface FoundPlayerSectResult {
   cultivatorId: string;
   sectId: string;
   headquartersLocationId: string;
+  stateId: Sect["stateId"];
+  alignment: Sect["alignment"];
+  admissionPolicy: SectAdmissionPolicy;
   summary: string;
 }
 
@@ -1312,6 +1354,7 @@ export interface CultivatorStateView {
     name: string;
     realm: RealmStage;
     realmLevel: number;
+    realmPhase: RealmPhase;
     realmProgress: number;
     status: "idle" | "busy" | "injured";
     location: string;

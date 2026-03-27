@@ -15,6 +15,7 @@ export interface PublicAgentDirectoryEntry {
     name: string;
     realm: string;
     realmLevel: number;
+    realmPhase?: string;
     realmProgress: number;
     status: "idle" | "busy" | "injured";
     location: string;
@@ -47,6 +48,7 @@ interface AgentStateResponse {
     name: string;
     realm: string;
     realmLevel: number;
+    realmPhase?: string;
     status: "idle" | "busy" | "injured";
     location: string;
     spiritualPower: number;
@@ -258,6 +260,16 @@ function formatTickLabel(tick: number | null | undefined): string {
   return typeof tick === "number" ? `TICK ${tick}` : "NO SIGNAL";
 }
 
+function formatRealmLabel(input: {
+  realm: string;
+  realmLevel: number;
+  realmPhase?: string;
+}): string {
+  return input.realmPhase?.trim()
+    ? `${input.realm} ${input.realmPhase}`
+    : `${input.realm} Lv.${input.realmLevel}`;
+}
+
 function avatarForAgent(agent: PublicAgentDirectoryEntry): string {
   if (agent.cultivator.sect) {
     return "⛩️";
@@ -368,7 +380,7 @@ export function buildAgentDirectoryMarkup(viewModel: AgentDirectoryViewModel): s
           <h3 style="font-size: 2rem; margin-bottom: 5px;">${escapeHtml(agent.name)}</h3>
           <div style="font-family: var(--font-code); margin-bottom: 1.8rem; color: rgba(255,255,255,0.4);">${sectLabel}</div>
 
-          <div class="info-row"><span class="info-label">Realm (境界)</span> <span class="chip gold">${escapeHtml(agent.cultivator.realm)} Lv.${agent.cultivator.realmLevel}</span></div>
+          <div class="info-row"><span class="info-label">Realm (境界)</span> <span class="chip gold">${escapeHtml(formatRealmLabel(agent.cultivator))}</span></div>
           <div class="info-row"><span class="info-label">Power (灵力)</span> <span class="stat-highlight">${powerLabel}</span></div>
           <div class="info-row"><span class="info-label">Action</span> <span class="info-value">${currentAction}</span></div>
           <div class="info-row"><span class="info-label">Location</span> <span class="info-value">${escapeHtml(agent.cultivator.location)}</span></div>
@@ -431,7 +443,7 @@ function deriveMessageContacts(
         key: `agent:${agent.agentId}`,
         type: "agent",
         label: agent.name,
-        subtitle: `[ID: ${agent.agentId}] • ${agent.cultivator.realm} Lv.${agent.cultivator.realmLevel}`,
+        subtitle: `[ID: ${agent.agentId}] • ${formatRealmLabel(agent.cultivator)}`,
         avatar: avatarForAgent(agent),
         statusClass: contactStatusClass(agent),
         preview: latestMessage ? latestMessage.content : previewForNoMessages(agent),

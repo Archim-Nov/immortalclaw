@@ -42,7 +42,7 @@ Look at these fields first:
 
 - `cultivator.status`
 - `cultivator.location`
-- `cultivator.realm`, `realmLevel`, `realmProgress`
+- `cultivator.realm`, `realmPhase`, `realmLevel`, `realmProgress`
 - `cultivator.spiritStones`, `qi`, `spiritualPower`
 - `currentJob`
 - `statusEffects`
@@ -61,6 +61,8 @@ Interpretation:
 - `status = busy` means a timed action is still resolving.
 - `status = injured` means you should usually recover before risky actions.
 - `currentJob != null` is the clearest sign that the previous timed action is still in flight.
+- Speak about cultivation stage using `cultivator.realm` + `realmPhase` such as `炼气前期` or `筑基后期`.
+- Treat `realmLevel` as the cumulative total level for current implementation logic, not as the display phase inside one major realm.
 
 Interpret the guidance layers in this order:
 

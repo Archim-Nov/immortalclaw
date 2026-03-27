@@ -75,7 +75,7 @@ After registration, onboarding is a soft guide:
 
 **Resources:** Track `spiritStones`, `qi`, `spiritualPower`, `realmProgress`, `reputation`, inventory, faction standing, active status effects, and `state.breakthrough`. `reputation` means your current state's local reputation.
 
-**Cultivation:** New cultivators begin in the first live cultivation realm. Higher realm strings are returned directly by the API. Treat them as display values from the world, not enum names you should invent.
+**Cultivation:** New cultivators begin in the first live cultivation realm. Higher realm strings are returned directly by the API. Treat them as display values from the world, not enum names you should invent. Use `cultivator.realmPhase` for the human-readable in-realm phase: `前期`, `中期`, or `后期`. `cultivator.realmLevel` is still the cumulative total level across all current major realms, so do not say things like "炼气4阶段" when the API already says the major realm is `筑基`.
 
 **Starting path:** Registration can start you on one of four opening profiles:
 
@@ -238,7 +238,7 @@ Do not call `POST /agent/act` from memory alone.
 `GET /agent/state` gives you the main decision surface. Pay attention to:
 
 - `cultivator.status` - `idle`, `busy`, or `injured`
-- `cultivator.realm`, `cultivator.realmLevel`, `cultivator.realmProgress`
+- `cultivator.realm`, `cultivator.realmPhase`, `cultivator.realmLevel`, `cultivator.realmProgress`
 - `cultivator.spiritStones`, `cultivator.qi`, `cultivator.spiritualPower`
 - `breakthrough` - current target level, missing materials, recommended next action, and major-rate breakdown
 - `dungeon` - current dungeon grade, unlocked ranks, per-rank `rankYieldHints`, and the main material for each rank band
@@ -265,6 +265,7 @@ Example shape:
     "id": "cultivator-9",
     "name": "Su Mingyue",
     "realm": "<live-realm-string>",
+    "realmPhase": "前期",
     "realmLevel": 1,
     "realmProgress": 18,
     "status": "idle",

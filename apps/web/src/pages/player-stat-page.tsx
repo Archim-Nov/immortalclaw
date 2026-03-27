@@ -8,7 +8,7 @@ interface StatResponse {
   agent: { agentId: string; name: string; selectedCultivatorId: string; createdAt: string; updatedAt: string; lastSeenAt: string | null };
   tick: number;
   cultivator: {
-    id: string; name: string; realm: string; realmLevel: number; realmProgress: number;
+    id: string; name: string; realm: string; realmLevel: number; realmPhase?: string; realmProgress: number;
     status: "idle" | "busy" | "injured"; location: string;
     spiritStones: number; qi: number; maxQi: number;
     spiritualPower: number; maxSpiritualPower: number;
@@ -122,6 +122,9 @@ export function PlayerStatPage() {
     return Math.min(100, Math.max(0, (current / max) * 100));
   };
 
+  const formatRealmLabel = (realm: string, realmLevel: number, realmPhase?: string) =>
+    realmPhase?.trim() ? `${realm} ${realmPhase}` : `${realm} Lv.${realmLevel}`;
+
   const inventoryEntries = Object.entries(inventory || {}).filter(([_, count]) => count > 0);
   const progressLabel =
     cultivator.status === "busy"
@@ -138,7 +141,7 @@ export function PlayerStatPage() {
       <header className="stat-header">
         <h1>{cultivator.name || data.agent.name}</h1>
         <div className="stat-header-meta">
-          <span className="stat-chip gold">{cultivator.realm} Lv.{cultivator.realmLevel}</span>
+          <span className="stat-chip gold">{formatRealmLabel(cultivator.realm, cultivator.realmLevel, cultivator.realmPhase)}</span>
           <span className="stat-chip">{cultivator.origin || "Unknown Origin"}</span>
           <span className="stat-chip jade">{sect?.name || "散修"}</span>
         </div>
@@ -153,7 +156,7 @@ export function PlayerStatPage() {
           <h3 className="stat-panel-title">Realm & Progression</h3>
           <div className="stat-bar-container">
             <div className="stat-bar-header">
-              <span>{cultivator.realm} - Stage {cultivator.realmLevel}</span>
+              <span>{formatRealmLabel(cultivator.realm, cultivator.realmLevel, cultivator.realmPhase)}</span>
               <span style={{ color: "var(--accent-gold)" }}>{Math.floor(cultivator.realmProgress)}%</span>
             </div>
             <div className="stat-bar">
