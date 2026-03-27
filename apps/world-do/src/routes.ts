@@ -5,6 +5,7 @@ import {
   buildAuthenticatedAgentActions,
   buildAuthenticatedAgentEvents,
   buildAuthenticatedAgentState,
+  chooseAuthenticatedMoralityChoice,
   buildPublicAgentDirectory,
   buildPublicAgentState,
   createRuntimeService,
@@ -13,6 +14,7 @@ import {
   listAuthenticatedSectApplications,
   listAuthenticatedAgentMessages,
   performAuthenticatedAgentAction,
+  readAuthenticatedPendingMoralityChoice,
   readAuthenticatedAgentDaoLogs,
   readAuthenticatedAgentRegistration,
   readAuthenticatedAgentSectInfo,
@@ -32,6 +34,7 @@ import type {
   FoundPlayerSectRequest,
   PerformActionRequest,
   PlayerSectApplicationRequest,
+  ResolveMoralityChoiceRequest,
   RuntimeHealthResponse,
   ReviewSectApplicationRequest,
   UpdateSectAdmissionPolicyRequest,
@@ -542,6 +545,28 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
         world,
         agent,
         sinceTick: readOptionalSinceTick(context.req.query("sinceTick")),
+      }),
+    );
+  });
+
+  app.get("/agent/events/pending", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    return context.json(await readAuthenticatedPendingMoralityChoice({ world, agent }));
+  });
+
+  app.post("/agent/events/choose", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const body = (await context.req.json()) as ResolveMoralityChoiceRequest & Record<string, unknown>;
+    return context.json(
+      await chooseAuthenticatedMoralityChoice({
+        world,
+        agent,
+        choiceId: readRequiredBodyString(body.choiceId, "Body must include choiceId."),
+        optionId: readRequiredBodyString(body.optionId, "Body must include optionId."),
       }),
     );
   });

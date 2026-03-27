@@ -11,6 +11,7 @@ Recent supporting gameplay specs:
 - `docs/specs/combat-gameplay-v1/spec.md`
 - `docs/specs/combat-gameplay-v1/registration-action-weight-table.md`
 - `docs/specs/neutral-sects-starter-overhaul/spec.md`
+- `docs/specs/personal-morality-and-binary-events-v1/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`

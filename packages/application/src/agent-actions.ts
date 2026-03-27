@@ -1,5 +1,6 @@
 import type { AgentActionsResponse } from "../../contracts/src/runtime-api.js";
 import {
+  getPendingMoralityChoice,
   listRecruitablePlayerSects,
   listSectApplications,
   type AvailableAction,
@@ -49,6 +50,16 @@ export async function buildAuthenticatedAgentActions(options: {
     }
   } catch {
     // Non-reviewers simply do not receive the generic review todo.
+  }
+
+  if (getPendingMoralityChoice(snapshot, agent.selectedCultivatorId).choice) {
+    genericActions.push({
+      actionId: "resolve-morality-event-choice",
+      label: "Resolve morality event choice",
+      description: "Open the pending crossroads event and choose how to act.",
+      durationTicks: 0,
+      kind: "immediate",
+    });
   }
 
   const dedupedActions = [...baseActions];

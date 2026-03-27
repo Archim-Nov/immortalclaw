@@ -76,6 +76,7 @@ export type { BaseNodeType, StateId, NodeType, LocationId, RiskLevel } from "./c
 
 export type SectAlignment = "正道" | "魔道";
 export type OrganizationAlignment = SectAlignment | "中立";
+export type MoralityAlignment = SectAlignment;
 
 export interface Location {
   id: import("./constants.js").LocationId;
@@ -118,6 +119,21 @@ export interface EventEffect {
   reputationChange?: number;
 }
 
+export interface MoralityChoiceOption {
+  id: string;
+  label: string;
+  summary: string;
+  moralityDelta: number;
+  effectBundle: EventEffect;
+}
+
+export interface MoralityChoiceTemplate {
+  title: string;
+  prompt: string;
+  expiresInTicks: number;
+  options: readonly [MoralityChoiceOption, MoralityChoiceOption];
+}
+
 export interface EventTemplate {
   id: string;
   layer: "global-common" | "state-specific" | "node-specific" | "special-overlay";
@@ -132,6 +148,7 @@ export interface EventTemplate {
   nodeType: import("./constants.js").NodeType | null;
   minRealm: RealmStage | null;
   effects: EventEffect;
+  moralityChoice?: MoralityChoiceTemplate;
 }
 
 export interface EventPools {
@@ -501,6 +518,7 @@ export type ImmediateActionId =
   | `join-neutral-sect:${string}`
   | "open-player-sect-recruitment"
   | "review-player-sect-applications"
+  | "resolve-morality-event-choice"
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
@@ -591,7 +609,9 @@ export interface Cultivator {
   sectId: string | null;
   neutralSectId: string | null;
   sectTitle: SectTitle | null;
+  moralityScore: number;
   pendingSectApplicationId: string | null;
+  pendingMoralityChoiceId: string | null;
   totalContribution: number;
   neutralContribution: number;
   contributionReachedAt: number;
@@ -772,6 +792,29 @@ export interface WorldEvent {
   content: string;
   severity: "low" | "medium" | "high";
   tags: string[];
+}
+
+export interface PendingMoralityChoice {
+  id: string;
+  cultivatorId: string;
+  createdAtTick: number;
+  expiresAtTick: number;
+  title: string;
+  prompt: string;
+  options: [MoralityChoiceOption, MoralityChoiceOption];
+}
+
+export interface PendingMoralityChoiceView {
+  choiceId: string;
+  title: string;
+  prompt: string;
+  createdAtTick: number;
+  expiresAtTick: number;
+  options: Array<{
+    id: string;
+    label: string;
+    summary: string;
+  }>;
 }
 
 export interface CombatLogEntry {
@@ -961,6 +1004,12 @@ export interface PlayerSectRecruitmentListView {
   nextCursor: string | null;
 }
 
+export interface PendingMoralityChoiceResponse {
+  tick: number;
+  cultivatorId: string;
+  choice: PendingMoralityChoiceView | null;
+}
+
 export interface SectApplicationView {
   applicationId: string;
   sectId: string;
@@ -1004,6 +1053,16 @@ export interface ReviewSectApplicationResult {
   summary: string;
 }
 
+export interface ResolveMoralityChoiceResult {
+  tick: number;
+  cultivatorId: string;
+  choiceId: string;
+  optionId: string;
+  moralityScore: number;
+  moralityAlignment: MoralityAlignment;
+  summary: string;
+}
+
 export interface UpdateSectAdmissionPolicyResult {
   tick: number;
   cultivatorId: string;
@@ -1028,12 +1087,14 @@ export interface CultivatorStateView {
     maxSpiritualPower: number;
     reputation: number;
     lifespan: number;
-    age: number;
-    genderPresentation: GenderPresentation;
-    pronouns: string;
-    origin: string;
-    temperament: string;
-  };
+      age: number;
+      genderPresentation: GenderPresentation;
+      pronouns: string;
+      origin: string;
+      temperament: string;
+      moralityScore: number;
+      moralityAlignment: MoralityAlignment;
+    };
   cultivation: {
     mainTechnique: string;
     techniques: string[];
@@ -1098,6 +1159,7 @@ export interface WorldState {
   eventPools: EventPools;
   questBoards: Record<string, QuestBoard>;
   pendingSectApplications: Record<string, SectApplication>;
+  pendingMoralityChoices: Record<string, PendingMoralityChoice>;
   sectReapplyCooldowns: Record<string, SectReapplyCooldown>;
   wildernessLayers: Record<string, WildernessLayer>;
   wildernessProgress: Record<string, WildernessProgress>;
@@ -1117,5 +1179,6 @@ export interface WorldState {
   nextEventSequence: number;
   nextCombatSequence: number;
   nextSectApplicationSequence: number;
+  nextMoralityChoiceSequence: number;
   nextSectCooldownSequence: number;
 }

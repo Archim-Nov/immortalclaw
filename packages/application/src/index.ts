@@ -64,3 +64,8 @@ export {
   updateAuthenticatedSectAdmissionPolicy,
 } from "./player-sects.js";
 export type { PlayerSectRepository } from "./player-sects.js";
+export {
+  chooseAuthenticatedMoralityChoice,
+  readAuthenticatedPendingMoralityChoice,
+} from "./morality-events.js";
+export type { MoralityEventsRepository } from "./morality-events.js";

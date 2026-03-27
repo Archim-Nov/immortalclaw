@@ -24,6 +24,7 @@ The product direction for this repository is:
 - preserve the ClawCity gameplay skeleton for world actions, social play, organizations, assets, and logs
 - add cultivation-specific differentiation through OC, attributes, five elements, realms, and combat extensions
 - support two organization paths: low-friction neutral sects and high-commitment player sects with explicit founding and approval rules
+- let cultivators accumulate a personal righteous/demonic direction through organization behavior and explicit binary event choices
 - keep the world model explicit and executable
 - make actions resolve through rules and ticks rather than ad hoc scripts
 - preserve room for agent integration through stable interfaces

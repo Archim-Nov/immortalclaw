@@ -1,5 +1,5 @@
 import type { DrawnEvent, EventSourceType, EventTemplate } from "../events.js";
-import type { Cultivator, StatusEffectId, WorldState } from "../model.js";
+import type { Cultivator, EventEffect, StatusEffectId, WorldState } from "../model.js";
 
 interface WeightedEvent {
   readonly template: EventTemplate;
@@ -138,7 +138,14 @@ export function drawEvent(
   seedInput?: string,
 ): DrawnEvent | null {
   const baseCandidates = candidatesFor(world, source, locationId);
-  const weighted = applyOverlayWeights(baseCandidates, cultivator);
+  const hasPendingMoralityChoice =
+    cultivator.pendingMoralityChoiceId
+    && world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId]
+    && world.tick < world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId]!.expiresAtTick;
+  const eligibleCandidates = hasPendingMoralityChoice
+    ? baseCandidates.filter((entry) => !entry.template.moralityChoice)
+    : baseCandidates;
+  const weighted = applyOverlayWeights(eligibleCandidates, cultivator);
   const baseSeed = seedInput ?? `${world.tick}:${cultivator.id}:${source}:${locationId}`;
   const mainEvent = weightedPick(weighted, `${baseSeed}:main`);
   if (!mainEvent) {
@@ -146,7 +153,7 @@ export function drawEvent(
   }
 
   let subEvent: EventTemplate | null = null;
-  if (mainEvent.resultType !== "combat") {
+  if (mainEvent.resultType !== "combat" && !mainEvent.moralityChoice) {
     const subRoll = hashString(`${baseSeed}:sub-roll`) % 100;
     if (subRoll < 30) {
       const storyCandidates = weighted.filter(
@@ -188,9 +195,11 @@ function upsertStatusEffect(
   });
 }
 
-export function applyEventEffects(cultivator: Cultivator, template: EventTemplate): void {
-  const effects = template.effects;
-
+export function applyEventEffectBundle(
+  cultivator: Cultivator,
+  effects: EventEffect,
+  source = "event",
+): void {
   if (typeof effects.spiritStones === "number") {
     cultivator.spiritStones = Math.max(0, cultivator.spiritStones + effects.spiritStones);
   }
@@ -218,8 +227,12 @@ export function applyEventEffects(cultivator: Cultivator, template: EventTemplat
     cultivator.inventory[reward.itemId] = (cultivator.inventory[reward.itemId] ?? 0) + reward.count;
   }
   for (const status of effects.statusEffects ?? []) {
-    upsertStatusEffect(cultivator, status.effectId, status.ticks, `event:${template.id}`);
+    upsertStatusEffect(cultivator, status.effectId, status.ticks, source);
   }
+}
+
+export function applyEventEffects(cultivator: Cultivator, template: EventTemplate): void {
+  applyEventEffectBundle(cultivator, template.effects, `event:${template.id}`);
 }
 
 export function eventSeverityOf(template: EventTemplate): "low" | "medium" | "high" {

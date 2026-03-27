@@ -329,7 +329,9 @@ const cultivators: Record<string, Cultivator> = {
     sectId: null,
     neutralSectId: null,
     sectTitle: null,
+    moralityScore: 0,
     pendingSectApplicationId: null,
+    pendingMoralityChoiceId: null,
     totalContribution: 0,
     neutralContribution: 0,
     contributionReachedAt: 0,
@@ -473,7 +475,7 @@ export function createSeedWorld(): WorldState {
   const neutralSects = buildNeutralSects();
   const locations = buildAllLocations(seededSects, neutralSects);
   const world: WorldState = {
-    version: 7,
+    version: 8,
     tick: 0,
     updatedAt: new Date().toISOString(),
     cultivators: structuredClone(cultivators),
@@ -486,6 +488,7 @@ export function createSeedWorld(): WorldState {
     eventPools: createEventPools(locations),
     questBoards: {},
     pendingSectApplications: {},
+    pendingMoralityChoices: {},
     sectReapplyCooldowns: {},
     wildernessLayers: structuredClone(WILDERNESS_LAYERS),
     wildernessProgress: {},
@@ -523,6 +526,7 @@ export function createSeedWorld(): WorldState {
     nextEventSequence: 1,
     nextCombatSequence: 1,
     nextSectApplicationSequence: 1,
+    nextMoralityChoiceSequence: 1,
     nextSectCooldownSequence: 1,
   };
   seedQuestBoards(world);

@@ -2,7 +2,9 @@ import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
   CreateCultivatorInput, DecisionPolicyView, FiveElementId, ItemId, Message, RegistrationAnswer,
+  MoralityAlignment, PendingMoralityChoiceResponse,
   FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
+  ResolveMoralityChoiceResult,
   PlayerSectRecruitmentListView, RegistrationGameplayEffectsView, RegistrationGameplayModifierView,
   ReviewSectApplicationResult, Sect, SectAdmissionPolicy, SectApplication, SectApplicationListView,
   SectApplicationView, SectMotiveBucketId, SectReapplyCooldown, SectTitle, StatusEffect, TimedActionId,
@@ -25,7 +27,7 @@ import {
   STARTER_STATES,
   type StateId,
 } from "./constants.js";
-import { applyEventEffects, drawEvent, eventSeverityOf, type EventSourceType } from "./events.js";
+import { applyEventEffectBundle, applyEventEffects, drawEvent, eventSeverityOf, type EventSourceType } from "./events.js";
 import {
   acceptQuest,
   getActiveQuest,
@@ -270,6 +272,136 @@ function motiveBucketForRegistration(
   return null;
 }
 
+function clampMoralityScore(value: number): number {
+  return clamp(Math.round(value), MORALITY_SCORE_MIN, MORALITY_SCORE_MAX);
+}
+
+function moralityAlignmentOfScore(score: number): MoralityAlignment {
+  return score >= 0 ? "正道" : "魔道";
+}
+
+function moralityAlignmentOfCultivator(cultivator: Cultivator): MoralityAlignment {
+  return moralityAlignmentOfScore(cultivator.moralityScore);
+}
+
+function applyMoralityDelta(
+  world: WorldState,
+  cultivator: Cultivator,
+  delta: number,
+  reason: string,
+): { moralityScore: number; moralityAlignment: MoralityAlignment } {
+  cultivator.moralityScore = clampMoralityScore(cultivator.moralityScore + delta);
+  addDaoLog(
+    world,
+    cultivator.id,
+    "Morality Shift",
+    `${cultivator.name} ${delta >= 0 ? "gained" : "lost"} ${Math.abs(delta)} morality from ${reason}.`,
+    ["morality", reason, delta >= 0 ? "positive" : "negative"],
+  );
+  return {
+    moralityScore: cultivator.moralityScore,
+    moralityAlignment: moralityAlignmentOfCultivator(cultivator),
+  };
+}
+
+function isPendingMoralityChoiceExpired(
+  world: WorldState,
+  choice: WorldState["pendingMoralityChoices"][string],
+): boolean {
+  return world.tick >= choice.expiresAtTick;
+}
+
+function cleanupCultivatorPendingMoralityChoice(world: WorldState, cultivator: Cultivator): void {
+  if (!cultivator.pendingMoralityChoiceId) {
+    return;
+  }
+  const choice = world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId];
+  if (!choice || isPendingMoralityChoiceExpired(world, choice)) {
+    if (cultivator.pendingMoralityChoiceId) {
+      delete world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId];
+    }
+    cultivator.pendingMoralityChoiceId = null;
+  }
+}
+
+function buildPendingMoralityChoiceView(
+  world: WorldState,
+  cultivator: Cultivator,
+): PendingMoralityChoiceResponse {
+  const pendingId = cultivator.pendingMoralityChoiceId;
+  if (!pendingId) {
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      choice: null,
+    };
+  }
+  const choice = world.pendingMoralityChoices[pendingId];
+  if (!choice || choice.cultivatorId !== cultivator.id || isPendingMoralityChoiceExpired(world, choice)) {
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      choice: null,
+    };
+  }
+  return {
+    tick: world.tick,
+    cultivatorId: cultivator.id,
+    choice: {
+      choiceId: choice.id,
+      title: choice.title,
+      prompt: choice.prompt,
+      createdAtTick: choice.createdAtTick,
+      expiresAtTick: choice.expiresAtTick,
+      options: choice.options.map((option) => ({
+        id: option.id,
+        label: option.label,
+        summary: option.summary,
+      })),
+    },
+  };
+}
+
+function maybeQueueMoralityChoice(
+  world: WorldState,
+  cultivator: Cultivator,
+  locationId: string,
+  template: WorldState["eventPools"]["globalCommon"][number],
+): WorldEvent[] | null {
+  if (!template.moralityChoice) {
+    return null;
+  }
+  cleanupCultivatorPendingMoralityChoice(world, cultivator);
+  if (cultivator.pendingMoralityChoiceId) {
+    return [];
+  }
+  const choiceId = `morality-choice-${world.nextMoralityChoiceSequence++}`;
+  const choice = template.moralityChoice;
+  world.pendingMoralityChoices[choiceId] = {
+    id: choiceId,
+    cultivatorId: cultivator.id,
+    createdAtTick: world.tick,
+    expiresAtTick: world.tick + Math.max(1, choice.expiresInTicks || MORALITY_EVENT_TTL),
+    title: choice.title,
+    prompt: choice.prompt,
+    options: [
+      { ...choice.options[0], effectBundle: { ...choice.options[0].effectBundle } },
+      { ...choice.options[1], effectBundle: { ...choice.options[1].effectBundle } },
+    ],
+  };
+  cultivator.pendingMoralityChoiceId = choiceId;
+  return [
+    addWorldEvent(world, {
+      cultivatorId: cultivator.id,
+      locationId,
+      title: `[choice] ${choice.title}`,
+      content: choice.prompt,
+      severity: "medium",
+      tags: ["event-pool", "morality-choice", "pending"],
+    }),
+  ];
+}
+
 function policyMatchesCultivator(sect: Sect, cultivator: Cultivator): boolean {
   if (cultivator.realmLevel < sect.admissionPolicy.minimumRealmLevel) {
     return false;
@@ -279,6 +411,10 @@ function policyMatchesCultivator(sect: Sect, cultivator: Cultivator): boolean {
   }
   const bucketId = motiveBucketForRegistration(cultivator.registrationRecord);
   return bucketId ? sect.admissionPolicy.allowedMotiveBuckets.includes(bucketId) : false;
+}
+
+function cultivatorMatchesSectAlignment(sect: Sect, cultivator: Cultivator): boolean {
+  return moralityAlignmentOfCultivator(cultivator) === sect.alignment;
 }
 
 function removePendingSectApplication(world: WorldState, applicationId: string): void {
@@ -390,6 +526,9 @@ function buildSectApplicationView(world: WorldState, application: SectApplicatio
     return null;
   }
   if (isSectApplicationExpired(world, application)) {
+    return null;
+  }
+  if (!cultivatorMatchesSectAlignment(sect, applicant)) {
     return null;
   }
   if (!policyMatchesCultivator(sect, applicant)) {
@@ -521,6 +660,10 @@ const addMessage = (
   world.messages.unshift(message);
   return message;
 };
+const MORALITY_SCORE_MIN = -100;
+const MORALITY_SCORE_MAX = 100;
+const MORALITY_EVENT_TTL = 6;
+
 const addWorldEvent = (world: WorldState, event: Omit<WorldEvent, "id" | "tick">): WorldEvent =>
   (world.worldEvents.unshift({ id: `event-${world.nextEventSequence++}`, tick: world.tick, ...event }), world.worldEvents[0]!);
 const addCombatLog = (world: WorldState, entry: Omit<CombatLogEntry, "id" | "tick">): CombatLogEntry =>
@@ -533,9 +676,15 @@ function triggerLocationEvent(
   locationId: string,
   seed: string,
 ): WorldEvent[] {
+  cleanupCultivatorPendingMoralityChoice(world, cultivator);
   const drawn = drawEvent(world, source, cultivator, locationId, seed);
   if (!drawn) {
     return [];
+  }
+
+  const queuedChoiceEvents = maybeQueueMoralityChoice(world, cultivator, locationId, drawn.template);
+  if (queuedChoiceEvents) {
+    return queuedChoiceEvents;
   }
 
   const emitted: WorldEvent[] = [];
@@ -935,7 +1084,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
   const agentId = normalizeAgentId(input.agentId); const starter = starterProfile();
   const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
   const starterLocationId = starterLocationIdFromRoll(Math.random());
-  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, pendingSectApplicationId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
+  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, moralityScore: 0, pendingSectApplicationId: null, pendingMoralityChoiceId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
   world.cultivators[cultivator.id] = cultivator;
   let selectedCultivatorId: string | null = null;
   if (agentId) { const binding = ensureAgentBinding(world, agentId); binding.cultivatorIds.push(cultivator.id); binding.selectedCultivatorId = cultivator.id; selectedCultivatorId = cultivator.id; }
@@ -1390,7 +1539,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   };
   return {
     tick: world.tick,
-    cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament },
+    cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
     cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
     sect: sectView,
@@ -1730,13 +1879,17 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     };
   }
   const joinNeutralSectId = parseJoinNeutralSectId(actionId);
-  if (actionId === "open-player-sect-recruitment" || actionId === "review-player-sect-applications") {
+  if (
+    actionId === "open-player-sect-recruitment"
+    || actionId === "review-player-sect-applications"
+    || actionId === "resolve-morality-event-choice"
+  ) {
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: false,
-      summary: "This is a generic inbox action. Use the dedicated player-sect route instead.",
+      summary: "This is a generic inbox action. Use the dedicated route instead.",
     };
   }
   if (actionId === "buy-healing-pill" || actionId === "buy-qi-pill" || actionId === "buy-ward-talisman") {
@@ -1792,10 +1945,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (cultivator.completedBaseQuests < 1) throw new Error("Join sect requires completing at least 1 base quest.");
     const sect = getLocalSect(world, cultivator.locationId);
     if (!sect) throw new Error("No player sect is available at this outpost.");
+    if (!cultivatorMatchesSectAlignment(sect, cultivator)) {
+      throw new Error("Cultivator morality alignment does not match this sect.");
+    }
     cultivator.sectId = sect.id;
     cultivator.sectTitle = "外门";
     addCurrentStateReputation(cultivator, 10);
     addFactionReputation(cultivator, sect.id, 15);
+    applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 8 : -8, "join-sect");
     sect.memberIds.push(cultivator.id);
     addMessage(world, cultivator.id, sect.name, "Accepted", `${cultivator.name} joined ${sect.name}.`);
     addDaoLog(world, cultivator.id, "Joined Sect", `${cultivator.name} joined ${sect.name}.`, ["sect", "join-sect"]);
@@ -2056,6 +2213,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
           (registration?.sectBonus ?? 0) +
           Math.floor(resourceBonus / 2),
       );
+    }
+    if (sect) {
+      applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 2 : -2, "take-sect-errand");
     }
     cultivator.totalContribution += contributionDelta;
     if (cultivator.totalContribution > previousContribution) {
@@ -2502,6 +2662,62 @@ export function getSectInfo(world: WorldState, cultivatorId: string): Organizati
   };
 }
 
+export function getPendingMoralityChoice(
+  world: WorldState,
+  cultivatorId: string,
+): PendingMoralityChoiceResponse {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  return buildPendingMoralityChoiceView(world, cultivator);
+}
+
+export function resolveMoralityChoice(
+  world: WorldState,
+  cultivatorId: string,
+  input: {
+    choiceId: string;
+    optionId: string;
+  },
+): ResolveMoralityChoiceResult {
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  cleanupCultivatorPendingMoralityChoice(world, cultivator);
+  if (!cultivator.pendingMoralityChoiceId || cultivator.pendingMoralityChoiceId !== input.choiceId) {
+    throw new Error("Morality choice is no longer available.");
+  }
+  const choice = world.pendingMoralityChoices[input.choiceId];
+  if (!choice || isPendingMoralityChoiceExpired(world, choice) || choice.cultivatorId !== cultivator.id) {
+    if (cultivator.pendingMoralityChoiceId === input.choiceId) {
+      cultivator.pendingMoralityChoiceId = null;
+    }
+    delete world.pendingMoralityChoices[input.choiceId];
+    throw new Error("Morality choice is no longer available.");
+  }
+  const option = choice.options.find((entry) => entry.id === input.optionId);
+  if (!option) {
+    throw new Error("Morality choice option not found.");
+  }
+  applyEventEffectBundle(cultivator, option.effectBundle, `morality-choice:${choice.id}`);
+  const morality = applyMoralityDelta(world, cultivator, option.moralityDelta, `morality-choice:${option.id}`);
+  cultivator.pendingMoralityChoiceId = null;
+  delete world.pendingMoralityChoices[choice.id];
+  addWorldEvent(world, {
+    cultivatorId: cultivator.id,
+    locationId: cultivator.locationId,
+    title: `[choice] ${choice.title}`,
+    content: `${cultivator.name} chose ${option.label}. ${option.summary}`,
+    severity: "medium",
+    tags: ["event-pool", "morality-choice", option.moralityDelta >= 0 ? "positive" : "negative"],
+  });
+  return {
+    tick: world.tick,
+    cultivatorId,
+    choiceId: choice.id,
+    optionId: option.id,
+    moralityScore: morality.moralityScore,
+    moralityAlignment: morality.moralityAlignment,
+    summary: `${cultivator.name} resolved ${choice.title} by choosing ${option.label}.`,
+  };
+}
+
 export function foundPlayerSect(
   world: WorldState,
   cultivatorId: string,
@@ -2521,6 +2737,9 @@ export function foundPlayerSect(
   }
   if (cultivatorHasOrganization(cultivator)) {
     throw new Error("Cultivator already belongs to an organization.");
+  }
+  if (moralityAlignmentOfCultivator(cultivator) !== input.alignment) {
+    throw new Error("Cultivator morality alignment must match the sect alignment when founding.");
   }
   if (cultivator.spiritStones < PLAYER_SECT_FOUNDING_STONE_COST) {
     throw new Error(`Founding requires ${PLAYER_SECT_FOUNDING_STONE_COST} spirit stones.`);
@@ -2555,6 +2774,7 @@ export function foundPlayerSect(
   cultivator.spiritStones -= PLAYER_SECT_FOUNDING_STONE_COST;
   cultivator.sectId = sectId;
   cultivator.sectTitle = "宗主";
+  applyMoralityDelta(world, cultivator, input.alignment === "正道" ? 12 : -12, "found-sect");
   cultivator.pendingSectApplicationId = null;
   const headquartersLocationId = ensurePlayerSectOutpost(world, sect);
   sect.headquarters = headquartersLocationId;
@@ -2623,6 +2843,9 @@ export function applyToPlayerSect(
   }
   if (!cultivator.registrationRecord && !isAllMotiveBucketsAllowed(sect.admissionPolicy)) {
     throw new Error("Application requires a saved registration record for motive screening.");
+  }
+  if (!cultivatorMatchesSectAlignment(sect, cultivator)) {
+    throw new Error("Cultivator morality alignment does not match this sect.");
   }
   if (!policyMatchesCultivator(sect, cultivator)) {
     throw new Error("Cultivator does not satisfy the current sect admission policy.");
@@ -2695,6 +2918,7 @@ export function reviewSectApplication(
     || applicant.pendingSectApplicationId !== application.id
     || cultivatorHasOrganization(applicant)
     || isSectApplicationExpired(world, application)
+    || !cultivatorMatchesSectAlignment(sect, applicant)
     || !policyMatchesCultivator(sect, applicant)
   ) {
     removePendingSectApplication(world, input.applicationId);
@@ -2705,6 +2929,7 @@ export function reviewSectApplication(
   if (input.decision === "approve") {
     applicant.sectId = sect.id;
     applicant.sectTitle = "外门";
+    applyMoralityDelta(world, applicant, sect.alignment === "正道" ? 8 : -8, "sect-approved");
     if (!sect.memberIds.includes(applicant.id)) {
       sect.memberIds.push(applicant.id);
     }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createSeedWorld } from "../../domain/src/runtime.js";
 import type { AvailableAction } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
 import { buildAuthenticatedAgentActions } from "./agent-actions.js";
@@ -28,6 +29,16 @@ test("buildAuthenticatedAgentActions assembles agent view plus available actions
       kind: "timed",
     },
   ];
+  const world = createSeedWorld();
+  const seedCultivatorId = Object.keys(world.cultivators)[0];
+  if (!seedCultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+  world.cultivators["cultivator-9"] = {
+    ...world.cultivators[seedCultivatorId]!,
+    id: "cultivator-9",
+    pendingMoralityChoiceId: null,
+  };
 
   const payload = await buildAuthenticatedAgentActions({
     world: {
@@ -36,10 +47,7 @@ test("buildAuthenticatedAgentActions assembles agent view plus available actions
         return actions;
       },
       async readWorld() {
-        return {
-          cultivators: {},
-          sects: {},
-        } as never;
+        return world;
       },
     },
     agent: createAgentProfile(),

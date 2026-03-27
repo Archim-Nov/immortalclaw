@@ -87,6 +87,8 @@ function createState(): CultivatorStateView {
       pronouns: "she/her",
       origin: "Frost Harbor",
       temperament: "Calm and exacting",
+      moralityScore: 0,
+      moralityAlignment: "正道",
     },
     cultivation: {
       mainTechnique: "Loose Breathing",

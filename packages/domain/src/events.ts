@@ -1,5 +1,6 @@
 import type {
   ItemId,
+  MoralityChoiceTemplate,
   RealmStage,
   StatusEffectId,
 } from "./model.js";
@@ -35,6 +36,7 @@ export interface EventTemplate {
   readonly nodeType: NodeType | null;
   readonly minRealm: RealmStage | null;
   readonly effects: EventEffect;
+  readonly moralityChoice?: MoralityChoiceTemplate;
 }
 
 export interface EventPools {
@@ -52,4 +54,4 @@ export interface DrawnEvent {
 }
 
 export { createEventPools } from "./events/catalog.js";
-export { applyEventEffects, drawEvent, eventSeverityOf } from "./events/engine.js";
+export { applyEventEffectBundle, applyEventEffects, drawEvent, eventSeverityOf } from "./events/engine.js";

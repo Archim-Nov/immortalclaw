@@ -24,7 +24,39 @@ export function buildStateSpecificEvents(stateId: StateId): EventTemplate[] {
     { id: `${prefix}-t-02`, semanticType: "training", resultType: "combat", title: "Local Beast", titleCn: "州野妖兽", effects: { qi: -9, spiritStones: 20 } },
     { id: `${prefix}-t-03`, semanticType: "training", resultType: "resource", title: "Terrain Harvest", titleCn: "地形采集", effects: { spiritStones: 35 } },
     { id: `${prefix}-h-01`, semanticType: "human", resultType: "resource", title: "Sect Courier", titleCn: "宗门传信", effects: { spiritStones: 35, reputationChange: 1 } },
-    { id: `${prefix}-h-02`, semanticType: "human", resultType: "story", title: "Hidden Local", titleCn: "山间隐者", effects: {} },
+    {
+      id: `${prefix}-h-02`,
+      semanticType: "human",
+      resultType: "story",
+      title: "Hidden Local",
+      titleCn: "山间隐者",
+      effects: {},
+      moralityChoice: {
+        title: `${label}-Hidden Local`,
+        prompt: "A local guide offers a shortcut that also exposes a weaker rival. Choose your approach.",
+        expiresInTicks: 6,
+        options: [
+          {
+            id: "warn",
+            label: "Warn the rival",
+            summary: "Keep the local peace even if you lose the shortcut.",
+            moralityDelta: 3,
+            effectBundle: {
+              reputationChange: 1,
+            },
+          },
+          {
+            id: "betray",
+            label: "Take the shortcut",
+            summary: "Use the tip for personal gain and ignore the fallout.",
+            moralityDelta: -3,
+            effectBundle: {
+              spiritStones: 35,
+            },
+          },
+        ] as const,
+      },
+    },
     { id: `${prefix}-h-03`, semanticType: "human", resultType: "status", title: "Supply Contract", titleCn: "物资求购", effects: { spiritStones: 30, statusEffects: [{ effectId: "fortune-marked", ticks: 2 }] } },
   ] as const;
 
@@ -42,5 +74,6 @@ export function buildStateSpecificEvents(stateId: StateId): EventTemplate[] {
     nodeType: null,
     minRealm: null,
     effects: row.effects,
+    ...("moralityChoice" in row ? { moralityChoice: row.moralityChoice } : {}),
   }));
 }

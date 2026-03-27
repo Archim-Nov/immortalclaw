@@ -14,6 +14,7 @@ export type {
   NeutralSectInfoView,
   NeutralSectView,
   OrganizationInfoView,
+  PendingMoralityChoiceResponse,
   PlayerSectApplicationResult,
   PlayerSectInfoView,
   PlayerSectRecruitmentListView,
@@ -23,6 +24,7 @@ export type {
   RegistrationProfileView,
   RegistrationQuestionId,
   RegistrationQuestionnaireView,
+  ResolveMoralityChoiceResult,
   ReviewSectApplicationResult,
   SectAdmissionPolicy,
   SectApplicationListView,
@@ -45,6 +47,7 @@ import type {
   FoundPlayerSectResult,
   Message,
   OrganizationInfoView,
+  PendingMoralityChoiceResponse,
   PlayerSectApplicationResult,
   PlayerSectRecruitmentListView,
   RegistrationAnswer,
@@ -52,6 +55,7 @@ import type {
   RegistrationProfileView,
   RegistrationQuestionId,
   RegistrationQuestionnaireView,
+  ResolveMoralityChoiceResult,
   ReviewSectApplicationResult,
   SectAdmissionPolicy,
   SectApplicationListView,
@@ -161,6 +165,15 @@ export interface AgentEventsResponse {
   events: WorldEvent[];
   combats: CombatLogEntry[];
 }
+
+export type PendingMoralityChoiceResponseBody = PendingMoralityChoiceResponse;
+
+export interface ResolveMoralityChoiceRequest {
+  choiceId: string;
+  optionId: string;
+}
+
+export type ResolveMoralityChoiceResponse = ResolveMoralityChoiceResult;
 
 export type AgentSectResponse = OrganizationInfoView | null;
 
