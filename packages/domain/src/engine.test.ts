@@ -715,6 +715,93 @@ test("studying a manual adds technique and strategy recommends safe progression"
   assert.ok(strategy.recommendedSequence.length > 0);
 });
 
+test("item-backed actions expose structured metadata and inventory actionability", () => {
+  const world = createSeedWorld();
+  const actions = listAvailableActions(world, "yun-zhong-he");
+  const state = getCultivatorState(world, "yun-zhong-he");
+
+  const buyHealing = actions.find((action) => action.actionId === "buy-healing-pill");
+  const useHealing = actions.find((action) => action.actionId === "use-healing-pill");
+  const studySword = actions.find((action) => action.actionId === "study-sword-manual");
+  const sellOre = actions.find((action) => action.actionId === "sell-spirit-ore");
+  const healingEntry = state.inventoryDetails.find((entry) => entry.id === "healing-pill");
+  const swordEntry = state.inventoryDetails.find((entry) => entry.id === "sword-manual");
+  const oreEntry = state.inventoryDetails.find((entry) => entry.id === "spirit-ore");
+
+  assert.deepEqual(buyHealing?.itemBinding, { itemId: "healing-pill", operation: "buy" });
+  assert.ok((buyHealing?.costs?.spiritStones ?? 0) > 0);
+  assert.ok((buyHealing?.costs?.spiritStones ?? 0) <= (healingEntry?.trade.buyBasePrice ?? 0));
+  assert.deepEqual(useHealing?.itemBinding, { itemId: "healing-pill", operation: "use" });
+  assert.equal(useHealing?.costs?.itemConsumes?.[0]?.itemId, "healing-pill");
+  assert.equal(useHealing?.effects?.qi, 35);
+  assert.equal(useHealing?.effects?.injuryTicksDelta, -2);
+  assert.deepEqual(studySword?.itemBinding, { itemId: "sword-manual", operation: "study" });
+  assert.equal(studySword?.effects?.realmProgress, 8);
+  assert.deepEqual(studySword?.effects?.techniques, ["青霄剑意"]);
+  assert.deepEqual(studySword?.effects?.statusEffectIds, ["insight"]);
+  assert.deepEqual(sellOre?.itemBinding, { itemId: "spirit-ore", operation: "sell" });
+  assert.equal(sellOre?.costs?.itemConsumes?.[0]?.count, 1);
+  assert.ok((sellOre?.effects?.spiritStones ?? 0) > 0);
+
+  assert.equal(healingEntry?.use.kind, "consume");
+  assert.equal(healingEntry?.trade.buyBasePrice, 100);
+  assert.ok(healingEntry?.availableActionIds.includes("use-healing-pill"));
+  assert.equal(swordEntry?.use.kind, "study");
+  assert.ok(swordEntry?.availableActionIds.includes("study-sword-manual"));
+  assert.equal(oreEntry?.use.kind, "material");
+  assert.ok(oreEntry?.availableActionIds.includes("sell-spirit-ore"));
+});
+
+test("catalog-driven immediate item actions preserve consumable behavior", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.qi = 40;
+  cultivator.injuryTicksRemaining = 3;
+  cultivator.spiritualPower = 10;
+  cultivator.inventory["ward-talisman"] = 1;
+
+  performAction(world, "yun-zhong-he", "use-healing-pill");
+  assert.equal(cultivator.inventory["healing-pill"], 0);
+  assert.equal(cultivator.qi, 75);
+  assert.equal(cultivator.injuryTicksRemaining, 1);
+
+  performAction(world, "yun-zhong-he", "use-qi-pill");
+  assert.equal(cultivator.inventory["qi-pill"], 0);
+  assert.equal(cultivator.spiritualPower, 40);
+  assert.ok(cultivator.statusEffects.some((effect) => effect.id === "spirit-saturated"));
+
+  performAction(world, "yun-zhong-he", "use-ward-talisman");
+  assert.equal(cultivator.inventory["ward-talisman"], 0);
+  assert.ok(cultivator.statusEffects.some((effect) => effect.id === "warded"));
+});
+
+test("all manual study actions remain functional under the item catalog", () => {
+  const cases = [
+    { itemId: "sword-manual", actionId: "study-sword-manual", technique: "青霄剑意", status: "insight" },
+    { itemId: "alchemy-manual", actionId: "study-alchemy-manual", technique: "回元火候", status: "clear-mind" },
+    { itemId: "array-manual", actionId: "study-array-manual", technique: "护脉阵纹", status: "warded" },
+  ] as const;
+
+  for (const testCase of cases) {
+    const world = createSeedWorld();
+    const cultivator = world.cultivators["yun-zhong-he"];
+    cultivator.inventory["sword-manual"] = 0;
+    cultivator.inventory["alchemy-manual"] = 0;
+    cultivator.inventory["array-manual"] = 0;
+    cultivator.inventory[testCase.itemId] = 1;
+    const beforeProgress = cultivator.realmProgress;
+
+    const result = performAction(world, "yun-zhong-he", testCase.actionId);
+
+    assert.equal(result.accepted, true);
+    assert.equal(cultivator.inventory[testCase.itemId], 0);
+    assert.ok(cultivator.techniques.includes(testCase.technique));
+    assert.ok(cultivator.realmProgress > beforeProgress);
+    assert.ok(cultivator.statusEffects.some((effect) => effect.id === testCase.status));
+  }
+});
+
 test("state marks onboarding as optional and exposes the decision policy", () => {
   const world = createSeedWorld();
 

@@ -307,6 +307,9 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   assert.ok(normalized.guixuProgress);
   assert.ok(normalized.factionWars["war-qingzhou-frontier"]);
   assert.ok(normalized.itemDefinitions["eight-wastes-pass"]);
+  assert.ok(normalized.itemDefinitions["healing-pill"].tags.includes("pill"));
+  assert.equal(normalized.itemDefinitions["eight-wastes-pass"].use.kind, "ticket");
+  assert.deepEqual(normalized.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(normalized.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
   assert.equal(normalized.cultivators[cultivatorId]!.inventory["legendary-artifact"], 0);
 });

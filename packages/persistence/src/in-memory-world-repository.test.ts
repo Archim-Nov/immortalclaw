@@ -176,5 +176,8 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   assert.ok(hydrated.guixuNodes["guixu-threshold-gate"]);
   assert.ok(hydrated.factionWars["war-qingzhou-frontier"]);
   assert.ok(hydrated.itemDefinitions["legendary-artifact"]);
+  assert.ok(hydrated.itemDefinitions["healing-pill"].tags.includes("pill"));
+  assert.equal(hydrated.itemDefinitions["eight-wastes-pass"].use.kind, "ticket");
+  assert.deepEqual(hydrated.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(hydrated.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
 });

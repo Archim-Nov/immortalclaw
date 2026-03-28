@@ -114,6 +114,7 @@ export interface EventEffect {
   spiritualPower?: number;
   realmProgress?: number;
   injuryTicksRemaining?: number;
+  injuryTicksDelta?: number;
   itemRewards?: ReadonlyArray<{ itemId: ItemId; count: number }>;
   statusEffects?: ReadonlyArray<{ effectId: StatusEffectId; ticks: number }>;
   reputationChange?: number;
@@ -538,6 +539,46 @@ export type ImmediateActionId =
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
+export type ItemTradeScope = "settlement" | "none";
+export type ItemUseKind = "consume" | "study" | "ticket" | "material";
+export type ItemActionOperation = "buy" | "sell" | "use" | "study";
+
+export interface ItemTradeDefinition {
+  buyBasePrice: number | null;
+  sellBasePrice: number | null;
+  tradableAt: ItemTradeScope;
+}
+
+export interface ItemUseDefinition {
+  kind: ItemUseKind;
+  actionId: ActionId | null;
+  consumesOnUse: boolean;
+  effectSummary: string | null;
+  effectBundle: EventEffect | null;
+  grantsTechnique: string | null;
+  ticketTargets: string[] | null;
+}
+
+export interface ActionItemBinding {
+  itemId: ItemId;
+  operation: ItemActionOperation;
+}
+
+export interface ActionCostSummary {
+  spiritStones?: number;
+  itemConsumes?: Array<{ itemId: ItemId; count: number }>;
+}
+
+export interface ActionEffectSummary {
+  spiritStones?: number;
+  qi?: number;
+  spiritualPower?: number;
+  realmProgress?: number;
+  injuryTicksDelta?: number;
+  statusEffectIds?: StatusEffectId[];
+  techniques?: string[];
+}
+
 export interface Sect {
   id: string;
   name: string;
@@ -574,6 +615,9 @@ export interface ItemDefinition {
   category: ItemCategory;
   description: string;
   baseValue: number;
+  tags: string[];
+  trade: ItemTradeDefinition;
+  use: ItemUseDefinition;
 }
 
 export interface StatusEffect {
@@ -876,6 +920,9 @@ export interface AvailableAction {
   description: string;
   durationTicks: number;
   kind: "timed" | "immediate";
+  itemBinding?: ActionItemBinding;
+  costs?: ActionCostSummary;
+  effects?: ActionEffectSummary;
 }
 
 export interface ActionExecutionResult {
@@ -905,6 +952,10 @@ export interface InventoryEntryView {
   description: string;
   count: number;
   baseValue: number;
+  tags: string[];
+  trade: ItemTradeDefinition;
+  use: ItemUseDefinition;
+  availableActionIds: ActionId[];
 }
 
 export interface FactionStandingView {

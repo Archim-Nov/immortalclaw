@@ -9,6 +9,7 @@ Recent supporting gameplay specs:
 - `docs/specs/gameplay-build-foundation/spec.md`
 - `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - `docs/specs/combat-gameplay-v1/spec.md`
+- `docs/specs/item-catalog-v1/spec.md`
 - `docs/specs/dungeon-event-pool-alignment-v1/spec.md`
 - `docs/specs/event-content-library-split-v1/spec.md`
 - `docs/specs/jiuzhou-state-event-flavor-v1/spec.md`
@@ -27,3 +28,4 @@ Recommended shape:
 - optional supporting notes in the same folder
 
 Use this directory for meaningful behavior, architecture, workflow, or harness changes before implementation begins.
+For agent-facing systems, specs should call out how structured runtime data reduces rule guessing.

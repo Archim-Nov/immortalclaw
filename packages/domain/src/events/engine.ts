@@ -264,6 +264,9 @@ export function applyEventEffectBundle(
   if (typeof effects.injuryTicksRemaining === "number") {
     cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, effects.injuryTicksRemaining);
   }
+  if (typeof effects.injuryTicksDelta === "number") {
+    cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining + effects.injuryTicksDelta);
+  }
   if (typeof effects.reputationChange === "number") {
     addCurrentStateReputation(cultivator, effects.reputationChange);
   }

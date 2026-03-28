@@ -1,7 +1,7 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, DecisionPolicyView, FiveElementId, ItemId, Message, RegistrationAnswer,
+  CreateCultivatorInput, DecisionPolicyView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
   MoralityAlignment, PendingMoralityChoiceResponse,
   FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
   ResolveMoralityChoiceResult,
@@ -77,6 +77,7 @@ import {
   resolveSpiritRootKindId,
   resolveTemperamentId,
 } from "./registration-taxonomy.js";
+import { getItemActionBinding, getItemOperationActionId } from "./items/catalog.js";
 import { createEmptyInventory, createFactionReputation, createStateReputation } from "./seed.js";
 import { buildSectLevel, sectBonusValue } from "./sect-level.js";
 import {
@@ -193,11 +194,13 @@ const DECISION_POLICY_PRIORITY_ORDER: readonly DecisionPolicyView["priorityOrder
   "onboarding",
   "free-exploration",
 ];
+/* Legacy manual mapping replaced by item catalog metadata.
 const MANUAL_TECHNIQUES: Record<"study-sword-manual" | "study-alchemy-manual" | "study-array-manual", { itemId: ItemId; technique: string; summary: string; effect: StatusEffect }> = {
   "study-sword-manual": { itemId: "sword-manual", technique: "青霄剑意", summary: "Learned a sword manual and sharpened combat instincts.", effect: { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "manual", remainingTicks: 5, intensity: 1 } },
   "study-alchemy-manual": { itemId: "alchemy-manual", technique: "回元火候", summary: "Learned an alchemy manual and stabilized recovery.", effect: { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "manual", remainingTicks: 6, intensity: 1 } },
   "study-array-manual": { itemId: "array-manual", technique: "护脉阵纹", summary: "Learned an array manual and improved protection.", effect: { id: "warded", name: "Warded", description: "Lower combat risk.", source: "manual", remainingTicks: 6, intensity: 1 } },
 };
+*/
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const hashString = (input: string) => Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
@@ -1312,6 +1315,123 @@ function marketStandingDiscount(cultivator: Cultivator) { return Math.max(0, Mat
 function buyPrice(cultivator: Cultivator, base: number) { return Math.max(Math.floor(base * 0.65), base - marketStandingDiscount(cultivator)); }
 function marketStandingBonus(cultivator: Cultivator) { return Math.max(-20, Math.min(40, Math.floor(currentStateReputation(cultivator) / 20) * 10)); }
 function sellPrice(cultivator: Cultivator, base: number) { return Math.max(15, base + marketStandingBonus(cultivator)); }
+function itemDefinition(world: WorldState, itemId: ItemId) {
+  const definition = world.itemDefinitions[itemId];
+  if (!definition) {
+    throw new Error(`Item definition not found: ${itemId}`);
+  }
+  return definition;
+}
+function itemActionLabel(itemId: ItemId, operation: "buy" | "sell" | "use" | "study") {
+  const noun = itemId.replace(/-/g, " ");
+  return `${operation[0].toUpperCase()}${operation.slice(1)} ${noun}`;
+}
+function resolveItemEffectBundle(
+  definition: WorldState["itemDefinitions"][ItemId],
+  registration?: ReturnType<typeof registrationModifiersOf>,
+): EventEffect | null {
+  if (!definition.use.effectBundle) {
+    return null;
+  }
+  const bundle = structuredClone(definition.use.effectBundle);
+  if (definition.use.kind === "study" && (registration?.studyBonus ?? 0) !== 0) {
+    bundle.realmProgress = (bundle.realmProgress ?? 0) + (registration?.studyBonus ?? 0);
+  }
+  return bundle;
+}
+function summarizeItemEffects(
+  effectBundle: EventEffect | null,
+  technique: string | null,
+): AvailableAction["effects"] | undefined {
+  let hasContent = false;
+  const effects: NonNullable<AvailableAction["effects"]> = {};
+  if (typeof effectBundle?.spiritStones === "number") {
+    effects.spiritStones = effectBundle.spiritStones;
+    hasContent = true;
+  }
+  if (typeof effectBundle?.qi === "number") {
+    effects.qi = effectBundle.qi;
+    hasContent = true;
+  }
+  if (typeof effectBundle?.spiritualPower === "number") {
+    effects.spiritualPower = effectBundle.spiritualPower;
+    hasContent = true;
+  }
+  if (typeof effectBundle?.realmProgress === "number") {
+    effects.realmProgress = effectBundle.realmProgress;
+    hasContent = true;
+  }
+  if (typeof effectBundle?.injuryTicksDelta === "number") {
+    effects.injuryTicksDelta = effectBundle.injuryTicksDelta;
+    hasContent = true;
+  }
+  const statusEffectIds = effectBundle?.statusEffects?.map((status) => status.effectId) ?? [];
+  if (statusEffectIds.length > 0) {
+    effects.statusEffectIds = statusEffectIds;
+    hasContent = true;
+  }
+  if (technique) {
+    effects.techniques = [technique];
+    hasContent = true;
+  }
+  return hasContent ? effects : undefined;
+}
+function buildItemAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: ActionId,
+  registration = registrationModifiersOf(cultivator),
+): AvailableAction {
+  const binding = getItemActionBinding(actionId);
+  if (!binding) {
+    throw new Error(`Action is not item-backed: ${actionId}`);
+  }
+  const definition = itemDefinition(world, binding.itemId);
+  if (binding.operation === "buy") {
+    const base = definition.trade.buyBasePrice;
+    if (base === null) {
+      throw new Error(`Item cannot be bought: ${binding.itemId}`);
+    }
+    const price = buyPrice(cultivator, base);
+    return {
+      actionId,
+      label: itemActionLabel(binding.itemId, binding.operation),
+      description: `${price} spirit stones.`,
+      durationTicks: 0,
+      kind: "immediate",
+      itemBinding: binding,
+      costs: { spiritStones: price },
+    };
+  }
+  if (binding.operation === "sell") {
+    const base = definition.trade.sellBasePrice;
+    if (base === null) {
+      throw new Error(`Item cannot be sold: ${binding.itemId}`);
+    }
+    const income = sellPrice(cultivator, base);
+    return {
+      actionId,
+      label: itemActionLabel(binding.itemId, binding.operation),
+      description: `${income} spirit stones.`,
+      durationTicks: 0,
+      kind: "immediate",
+      itemBinding: binding,
+      costs: { itemConsumes: [{ itemId: binding.itemId, count: 1 }] },
+      effects: { spiritStones: income },
+    };
+  }
+  const effectBundle = resolveItemEffectBundle(definition, registration);
+  return {
+    actionId,
+    label: itemActionLabel(binding.itemId, binding.operation),
+    description: definition.use.effectSummary ?? definition.description,
+    durationTicks: 0,
+    kind: "immediate",
+    itemBinding: binding,
+    costs: { itemConsumes: [{ itemId: binding.itemId, count: 1 }] },
+    effects: summarizeItemEffects(effectBundle, binding.operation === "study" ? definition.use.grantsTechnique : null),
+  };
+}
 function guidance(world: WorldState, cultivator: Cultivator) {
   const registration = registrationModifiersOf(cultivator);
   const location = world.locations[cultivator.locationId];
@@ -1633,6 +1753,16 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   const cultivator = getCultivatorOrThrow(world, cultivatorId); const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
   const sectView = buildSectStateView(world, cultivator);
   const policy = decisionPolicy();
+  const availableItemActionIds = new Map<ItemId, ActionId[]>();
+  for (const action of listAvailableActions(world, cultivatorId)) {
+    const binding = action.itemBinding ?? getItemActionBinding(action.actionId);
+    if (!binding) {
+      continue;
+    }
+    const existing = availableItemActionIds.get(binding.itemId) ?? [];
+    existing.push(action.actionId);
+    availableItemActionIds.set(binding.itemId, existing);
+  }
   const derivedState = {
     readiness: computeReadiness(cultivator),
     recoveryState: computeRecoveryState(cultivator),
@@ -1646,7 +1776,24 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
     sect: sectView,
     inventory: cultivator.inventory,
-    inventoryDetails: Object.entries(cultivator.inventory).filter(([, count]) => count > 0).map(([itemId, count]) => ({ id: itemId as ItemId, name: world.itemDefinitions[itemId as ItemId].name, category: world.itemDefinitions[itemId as ItemId].category, description: world.itemDefinitions[itemId as ItemId].description, count, baseValue: world.itemDefinitions[itemId as ItemId].baseValue })),
+    inventoryDetails: Object.entries(cultivator.inventory)
+      .filter(([, count]) => count > 0)
+      .map(([itemId, count]) => {
+        const id = itemId as ItemId;
+        const definition = itemDefinition(world, id);
+        return {
+          id,
+          name: definition.name,
+          category: definition.category,
+          description: definition.description,
+          count,
+          baseValue: definition.baseValue,
+          tags: definition.tags,
+          trade: definition.trade,
+          use: definition.use,
+          availableActionIds: availableItemActionIds.get(id) ?? [],
+        };
+      }),
     currentJob: cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
     nearbyOpportunities: [location && canTradeAtLocation(location) ? "Sell or buy supplies." : "Move for a better opportunity.", location?.nodeType === "wilderness" ? "Mine or hunt a beast." : "Stay aware of local events."],
     statusEffects: cultivator.statusEffects.map((effect) => ({ id: effect.id, name: effect.name, description: effect.description, remainingTicks: effect.remainingTicks, source: effect.source })),
@@ -1725,6 +1872,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const cultivator = getCultivatorOrThrow(world, cultivatorId); if (cultivator.activeJobId) return [];
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
+  const registration = registrationModifiersOf(cultivator);
   const localSect = getLocalSect(world, cultivator.locationId);
   const localNeutralSect = getLocalNeutralSect(world, cultivator.locationId);
   const joinedNeutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -1742,12 +1890,17 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         kind: "timed" as const,
       }));
   actions.push({ actionId: "meditate", label: "Meditate", description: "Recover spiritual power.", durationTicks: DEFAULT_ACTION_DURATIONS.meditate, kind: "timed" });
-  if (cultivator.inventory["healing-pill"] > 0) actions.push({ actionId: "use-healing-pill", label: "Use healing pill", description: "Restore qi.", durationTicks: 0, kind: "immediate" });
-  if (cultivator.inventory["qi-pill"] > 0) actions.push({ actionId: "use-qi-pill", label: "Use qi pill", description: "Restore spiritual power.", durationTicks: 0, kind: "immediate" });
-  if (cultivator.inventory["ward-talisman"] > 0) actions.push({ actionId: "use-ward-talisman", label: "Use ward talisman", description: "Gain warded status.", durationTicks: 0, kind: "immediate" });
-  if (cultivator.inventory["sword-manual"] > 0) actions.push({ actionId: "study-sword-manual", label: "Study sword manual", description: "Consume a manual for a new technique and insight.", durationTicks: 0, kind: "immediate" });
-  if (cultivator.inventory["alchemy-manual"] > 0) actions.push({ actionId: "study-alchemy-manual", label: "Study alchemy manual", description: "Consume a manual for recovery-focused insight.", durationTicks: 0, kind: "immediate" });
-  if (cultivator.inventory["array-manual"] > 0) actions.push({ actionId: "study-array-manual", label: "Study array manual", description: "Consume a manual for protective insight.", durationTicks: 0, kind: "immediate" });
+  for (const [itemId, count] of Object.entries(cultivator.inventory) as Array<[ItemId, number]>) {
+    if (count <= 0) {
+      continue;
+    }
+    const definition = itemDefinition(world, itemId);
+    const operation = definition.use.kind === "study" ? "study" : "use";
+    if (!definition.use.actionId || (operation !== "use" && operation !== "study")) {
+      continue;
+    }
+    actions.push(buildItemAction(world, cultivator, definition.use.actionId, registration));
+  }
   if (cultivator.injuryTicksRemaining > 0) {
     if (activeWilderness) {
       actions.push({
@@ -1824,10 +1977,21 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   actions.push({ actionId: "cultivate", label: "Cultivate", description: "Spend spirit stones to gain progress.", durationTicks: DEFAULT_ACTION_DURATIONS.cultivate, kind: "timed" });
   if (location.kind === "safe") actions.push({ actionId: "take-mortal-task", label: "Take town task", description: "Stable income.", durationTicks: DEFAULT_ACTION_DURATIONS["take-mortal-task"], kind: "timed" });
   if (canTradeAtLocation(location)) {
-    actions.push({ actionId: "buy-healing-pill", label: "Buy healing pill", description: `${buyPrice(cultivator, 100)} spirit stones.`, durationTicks: 0, kind: "immediate" }, { actionId: "buy-qi-pill", label: "Buy qi pill", description: `${buyPrice(cultivator, 60)} spirit stones.`, durationTicks: 0, kind: "immediate" }, { actionId: "buy-ward-talisman", label: "Buy ward talisman", description: `${buyPrice(cultivator, 180)} spirit stones.`, durationTicks: 0, kind: "immediate" });
-    if (cultivator.inventory["spirit-ore"] > 0) actions.push({ actionId: "sell-spirit-ore", label: "Sell spirit ore", description: `${sellPrice(cultivator, 115)} spirit stones.`, durationTicks: 0, kind: "immediate" });
-    if (cultivator.inventory["ruin-fragment"] > 0) actions.push({ actionId: "sell-ruin-fragment", label: "Sell ruin fragment", description: `${sellPrice(cultivator, 145)} spirit stones.`, durationTicks: 0, kind: "immediate" });
-    if (cultivator.inventory["beast-core"] > 0) actions.push({ actionId: "sell-beast-core", label: "Sell beast core", description: `${sellPrice(cultivator, 210)} spirit stones.`, durationTicks: 0, kind: "immediate" });
+    for (const itemId of ["healing-pill", "qi-pill", "ward-talisman"] as const) {
+      const actionId = getItemOperationActionId(itemId, "buy");
+      if (actionId) {
+        actions.push(buildItemAction(world, cultivator, actionId, registration));
+      }
+    }
+    for (const [itemId, count] of Object.entries(cultivator.inventory) as Array<[ItemId, number]>) {
+      if (count <= 0) {
+        continue;
+      }
+      const actionId = getItemOperationActionId(itemId, "sell");
+      if (actionId) {
+        actions.push(buildItemAction(world, cultivator, actionId, registration));
+      }
+    }
   }
   if (!cultivator.sectId && !cultivator.neutralSectId && localNeutralSect?.joinable) {
     actions.push({ actionId: `join-neutral-sect:${localNeutralSect.id}`, label: `Join ${localNeutralSect.name}`, description: "Join the local neutral organization for a safer progression loop.", durationTicks: 0, kind: "immediate" });
@@ -1956,6 +2120,71 @@ function marketSell(world: WorldState, cultivator: Cultivator, itemId: ItemId, b
   const income = sellPrice(cultivator, base); cultivator.inventory[itemId] -= 1; cultivator.spiritStones += income;
   return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sold 1 ${itemId} for ${income}.` };
 }
+function executeItemImmediateAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: ActionId,
+  registration: ReturnType<typeof registrationModifiersOf>,
+): ActionExecutionResult | null {
+  const binding = getItemActionBinding(actionId);
+  if (!binding) {
+    return null;
+  }
+  const definition = itemDefinition(world, binding.itemId);
+  if (binding.operation === "buy") {
+    const location = world.locations[cultivator.locationId];
+    if (!location || !canTradeAtLocation(location)) {
+      throw new Error("You must be in a trading safe settlement.");
+    }
+    const base = definition.trade.buyBasePrice;
+    if (base === null) {
+      throw new Error(`Item cannot be bought: ${binding.itemId}`);
+    }
+    const price = buyPrice(cultivator, base);
+    if (cultivator.spiritStones < price) {
+      throw new Error("Not enough spirit stones.");
+    }
+    cultivator.spiritStones -= price;
+    cultivator.inventory[binding.itemId] += 1;
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} bought ${binding.itemId} for ${price}.`,
+    };
+  }
+  if (binding.operation === "sell") {
+    const base = definition.trade.sellBasePrice;
+    if (base === null) {
+      throw new Error(`Item cannot be sold: ${binding.itemId}`);
+    }
+    return marketSell(world, cultivator, binding.itemId, base, actionId);
+  }
+  if (cultivator.inventory[binding.itemId] <= 0) {
+    throw new Error(`Item not available: ${binding.itemId}`);
+  }
+  if (definition.use.consumesOnUse) {
+    cultivator.inventory[binding.itemId] -= 1;
+  }
+  const effectBundle = resolveItemEffectBundle(definition, registration);
+  if (effectBundle) {
+    applyEventEffectBundle(cultivator, effectBundle, `item:${binding.itemId}`);
+  }
+  if (binding.operation === "study" && definition.use.grantsTechnique && !cultivator.techniques.includes(definition.use.grantsTechnique)) {
+    cultivator.techniques.push(definition.use.grantsTechnique);
+  }
+  syncWounded(cultivator);
+  return {
+    tick: world.tick,
+    cultivatorId: cultivator.id,
+    actionId,
+    accepted: true,
+    summary: binding.operation === "study"
+      ? `${cultivator.name} studied ${binding.itemId} and gained new insight.`
+      : `${cultivator.name} used ${binding.itemId}.`,
+  };
+}
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
   const wildernessLayerId = parseEnterWildernessLayer(actionId);
@@ -1994,24 +2223,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       summary: "This is a generic inbox action. Use the dedicated route instead.",
     };
   }
-  if (actionId === "buy-healing-pill" || actionId === "buy-qi-pill" || actionId === "buy-ward-talisman") {
-    const location = world.locations[cultivator.locationId];
-    if (!location || !canTradeAtLocation(location)) throw new Error("You must be in a trading safe settlement."); const itemId = actionId === "buy-healing-pill" ? "healing-pill" : actionId === "buy-qi-pill" ? "qi-pill" : "ward-talisman"; const base = itemId === "healing-pill" ? 100 : itemId === "qi-pill" ? 60 : 180; const price = buyPrice(cultivator, base); if (cultivator.spiritStones < price) throw new Error("Not enough spirit stones."); cultivator.spiritStones -= price; cultivator.inventory[itemId] += 1; return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} bought ${itemId} for ${price}.` };
-  }
-  if (actionId === "sell-spirit-ore") return marketSell(world, cultivator, "spirit-ore", 115, actionId);
-  if (actionId === "sell-ruin-fragment") return marketSell(world, cultivator, "ruin-fragment", 145, actionId);
-  if (actionId === "sell-beast-core") return marketSell(world, cultivator, "beast-core", 210, actionId);
-  if (actionId === "use-healing-pill") { if (cultivator.inventory["healing-pill"] <= 0) throw new Error("Item not available: healing-pill"); cultivator.inventory["healing-pill"] -= 1; cultivator.qi = clamp(cultivator.qi + 35, 0, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - 2); syncWounded(cultivator); return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} restored qi with a healing pill.` }; }
-  if (actionId === "use-qi-pill") { if (cultivator.inventory["qi-pill"] <= 0) throw new Error("Item not available: qi-pill"); cultivator.inventory["qi-pill"] -= 1; cultivator.spiritualPower = clamp(cultivator.spiritualPower + 30, 0, cultivator.maxSpiritualPower); upsertEffect(cultivator, { id: "spirit-saturated", name: "Spirit Saturated", description: "Short-term cultivation boost.", source: "qi-pill", remainingTicks: 4, intensity: 1 }); return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} restored spiritual power with a qi pill.` }; }
-  if (actionId === "use-ward-talisman") { if (cultivator.inventory["ward-talisman"] <= 0) throw new Error("Item not available: ward-talisman"); cultivator.inventory["ward-talisman"] -= 1; upsertEffect(cultivator, { id: "warded", name: "Warded", description: "Lower combat risk.", source: "talisman", remainingTicks: 6, intensity: 1 }); return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} is now warded.` }; }
-  if (actionId === "study-sword-manual" || actionId === "study-alchemy-manual" || actionId === "study-array-manual") {
-    const manual = MANUAL_TECHNIQUES[actionId];
-    if (cultivator.inventory[manual.itemId] <= 0) throw new Error(`Item not available: ${manual.itemId}`);
-    cultivator.inventory[manual.itemId] -= 1;
-    if (!cultivator.techniques.includes(manual.technique)) cultivator.techniques.push(manual.technique);
-    cultivator.realmProgress = clamp(cultivator.realmProgress + 8 + (registration?.studyBonus ?? 0), 0, 200);
-    upsertEffect(cultivator, manual.effect);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} studied a manual and gained new insight.` };
+  const itemResult = executeItemImmediateAction(world, cultivator, actionId, registration);
+  if (itemResult) {
+    return itemResult;
   }
   if (joinNeutralSectId) {
     const location = world.locations[cultivator.locationId];
@@ -2411,7 +2625,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       throw new Error(`No guardian tuning for node type: ${location.nodeType}`);
     }
 
-    const encounterId = `ruins-guardian:${location.nodeType}`;
+    const encounterId = "ruins-guardian" as const;
     const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
     const power =
       cultivator.qi +

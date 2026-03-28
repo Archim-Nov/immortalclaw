@@ -3,7 +3,6 @@ import type {
   FactionWar,
   GuixuNode,
   GuixuProgress,
-  ItemDefinition,
   ItemId,
   Location,
   NeutralSect,
@@ -26,9 +25,11 @@ import {
   type StateId,
 } from "./constants.js";
 import { createEventPools } from "./events.js";
+import { ITEM_CATALOG, ITEM_IDS } from "./items/catalog.js";
 import { seedQuestBoards } from "./quest.js";
 import { buildFullTopology, toLocationId, toSectOutpostLocationId } from "./topology.js";
 
+/* Legacy inline item table retained only for migration context.
 const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   "healing-pill": {
     id: "healing-pill",
@@ -115,6 +116,7 @@ const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
     baseValue: 880,
   },
 };
+*/
 
 const sects: Record<string, Sect> = {};
 
@@ -255,20 +257,7 @@ function buildAllStates(locations: Record<string, Location>): Record<string, Sta
 }
 
 export function createEmptyInventory(): Record<ItemId, number> {
-  return {
-    "healing-pill": 0,
-    "qi-pill": 0,
-    "ward-talisman": 0,
-    "spirit-ore": 0,
-    "ruin-fragment": 0,
-    "beast-core": 0,
-    "eight-wastes-pass": 0,
-    "ancient-artifact": 0,
-    "legendary-artifact": 0,
-    "sword-manual": 0,
-    "alchemy-manual": 0,
-    "array-manual": 0,
-  };
+  return Object.fromEntries(ITEM_IDS.map((itemId) => [itemId, 0])) as Record<ItemId, number>;
 }
 
 export function createFactionReputation(
@@ -468,14 +457,12 @@ function createGuixuProgress(): GuixuProgress {
   };
 }
 
-export { ITEM_DEFINITIONS };
-
 export function createSeedWorld(): WorldState {
   const seededSects = structuredClone(sects);
   const neutralSects = buildNeutralSects();
   const locations = buildAllLocations(seededSects, neutralSects);
   const world: WorldState = {
-    version: 8,
+    version: 9,
     tick: 0,
     updatedAt: new Date().toISOString(),
     cultivators: structuredClone(cultivators),
@@ -495,7 +482,7 @@ export function createSeedWorld(): WorldState {
     guixuNodes: structuredClone(GUIXU_NODES),
     guixuProgress: createGuixuProgress(),
     factionWars: structuredClone(FACTION_WARS),
-    itemDefinitions: structuredClone(ITEM_DEFINITIONS),
+    itemDefinitions: structuredClone(ITEM_CATALOG),
     jobs: {},
     daoLogs: [
       {
