@@ -27,7 +27,14 @@ import {
   STARTER_STATES,
   type StateId,
 } from "./constants.js";
-import { applyEventEffectBundle, applyEventEffects, drawEvent, eventSeverityOf, type EventSourceType } from "./events.js";
+import {
+  applyEventEffectBundle,
+  applyEventEffects,
+  drawEvent,
+  drawNodeSpecificEvent,
+  eventSeverityOf,
+  type EventSourceType,
+} from "./events.js";
 import {
   acceptQuest,
   getActiveQuest,
@@ -104,6 +111,72 @@ const ELEMENT_LABELS: Record<FiveElementId, string> = {
 const REALM_QI = "炼气" as Cultivator["realm"];
 const REALM_FOUNDATION = "筑基" as Cultivator["realm"];
 const REALM_CORE = "金丹" as Cultivator["realm"];
+type DungeonNodeType = "dungeon-c" | "dungeon-b" | "dungeon-a";
+const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
+  threatBase: number;
+  threatVariance: number;
+  spiritStoneBase: number;
+  spiritStoneVariance: number;
+  fragmentBase: number;
+  fragmentVariance: number;
+  realmProgressReward: number;
+  wardReward: number;
+  defeatQiBase: number;
+  defeatQiVariance: number;
+  defeatInjuryTicks: number;
+  poisonTicks: number;
+  manualReward: ItemId | null;
+  manualDropModulo: number | null;
+}> = {
+  "dungeon-c": {
+    threatBase: 156,
+    threatVariance: 12,
+    spiritStoneBase: 90,
+    spiritStoneVariance: 24,
+    fragmentBase: 1,
+    fragmentVariance: 1,
+    realmProgressReward: 8,
+    wardReward: 1,
+    defeatQiBase: 24,
+    defeatQiVariance: 6,
+    defeatInjuryTicks: 4,
+    poisonTicks: 0,
+    manualReward: null,
+    manualDropModulo: null,
+  },
+  "dungeon-b": {
+    threatBase: 176,
+    threatVariance: 18,
+    spiritStoneBase: 132,
+    spiritStoneVariance: 30,
+    fragmentBase: 1,
+    fragmentVariance: 2,
+    realmProgressReward: 12,
+    wardReward: 1,
+    defeatQiBase: 30,
+    defeatQiVariance: 8,
+    defeatInjuryTicks: 6,
+    poisonTicks: 2,
+    manualReward: "array-manual",
+    manualDropModulo: 5,
+  },
+  "dungeon-a": {
+    threatBase: 198,
+    threatVariance: 24,
+    spiritStoneBase: 180,
+    spiritStoneVariance: 42,
+    fragmentBase: 2,
+    fragmentVariance: 2,
+    realmProgressReward: 16,
+    wardReward: 1,
+    defeatQiBase: 38,
+    defeatQiVariance: 10,
+    defeatInjuryTicks: 8,
+    poisonTicks: 4,
+    manualReward: "sword-manual",
+    manualDropModulo: 3,
+  },
+};
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
   "registered",
   "first-action",
@@ -147,6 +220,10 @@ const isMainCityNode = (nodeType: string) => nodeType === "main-city";
 const isSectOutpostNode = (nodeType: string) => nodeType === "sect-outpost";
 const isSubTownNode = (nodeType: string) => nodeType.startsWith("sub-town-");
 const isDungeonNode = (nodeType: string) => nodeType.startsWith("dungeon-");
+const guardianTuningForLocation = (location: WorldState["locations"][string]) =>
+  isDungeonNode(location.nodeType)
+    ? DUNGEON_GUARDIAN_TUNING[location.nodeType as DungeonNodeType]
+    : null;
 const stateIdFromLocationId = (locationId: string) => locationId.split(":")[0] as StateId;
 const mainCityLocationIdOf = (stateId: StateId) => `${stateId}:main-city`;
 const ensureStateReputation = (cultivator: Cultivator) => cultivator.stateReputation ?? (cultivator.stateReputation = createStateReputation());
@@ -715,6 +792,31 @@ function triggerLocationEvent(
   }
 
   return emitted;
+}
+
+function triggerNodeSpecificEvent(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionTag: string,
+  locationId: string,
+  seed: string,
+): WorldEvent[] {
+  const drawn = drawNodeSpecificEvent(world, cultivator, locationId, seed);
+  if (!drawn) {
+    return [];
+  }
+
+  applyEventEffects(cultivator, drawn.template);
+  return [
+    addWorldEvent(world, {
+      cultivatorId: cultivator.id,
+      locationId,
+      title: `[${actionTag}] ${drawn.template.name}`,
+      content: drawn.template.description,
+      severity: eventSeverityOf(drawn.template),
+      tags: ["event-pool", "node-specific", actionTag, drawn.template.semanticType, drawn.template.resultType],
+    }),
+  ];
 }
 const REGISTRATION_QUESTIONS: RegistrationQuestionId[] = [
   "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18",
@@ -2263,8 +2365,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     }
     return `${cultivator.name} searched the ruins.`;
   }
-  if (job.actionId === "hunt-mine-beast" || job.actionId === "challenge-guardian") {
-    const encounterId = job.actionId === "hunt-mine-beast" ? "mine-beast" : "ruins-guardian";
+  if (job.actionId === "hunt-mine-beast") {
+    const encounterId = "mine-beast";
     const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
     const power =
       cultivator.qi +
@@ -2272,40 +2374,99 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.realmLevel * 10 +
       (hasEffect(cultivator, "qi-surge") ? 18 : 0) +
       (hasEffect(cultivator, "warded") ? 14 : 0) +
-      (job.actionId === "challenge-guardian" && hasEffect(cultivator, "fortune-marked") ? 12 : 0) +
       (registration?.combatBonus ?? 0) -
       (hasEffect(cultivator, "poisoned") ? 12 : 0) +
       (roll % 22);
-    const threat = job.actionId === "hunt-mine-beast" ? 145 + (roll % 20) : 172 + (roll % 24);
-    cultivator.spiritualPower = clamp(cultivator.spiritualPower - (job.actionId === "hunt-mine-beast" ? 16 : 24), 0, cultivator.maxSpiritualPower);
+    const threat = 145 + (roll % 20);
+    cultivator.spiritualPower = clamp(cultivator.spiritualPower - 16, 0, cultivator.maxSpiritualPower);
     if (power >= threat) {
-      if (job.actionId === "hunt-mine-beast") {
-        cultivator.inventory["spirit-ore"] += 2 + (roll % 2);
-        cultivator.spiritStones += 120 + (roll % 60);
-        if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1;
-        upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 });
-      } else {
-        cultivator.inventory["ruin-fragment"] += 1 + (roll % 2);
-        cultivator.inventory["ward-talisman"] += 1;
-        cultivator.realmProgress = clamp(cultivator.realmProgress + 12, 0, 200);
-        upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 });
-      }
-      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "victory", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} won the encounter.` });
+      cultivator.inventory["spirit-ore"] += 2 + (roll % 2);
+      cultivator.spiritStones += 120 + (roll % 60);
+      if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1;
+      upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 });
+      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: "Mine Beast", outcome: "victory", damageTaken: 0, spiritualPowerSpent: 16, loot: {}, summary: `${cultivator.name} won the encounter.` });
       return `${cultivator.name} won a combat encounter.`;
     }
     cultivator.qi = clamp(
-      cultivator.qi - Math.max(8, (job.actionId === "hunt-mine-beast" ? 24 + (roll % 10) : 32 + (roll % 12)) - ((registration?.combatGuard ?? 0) * 2)),
+      cultivator.qi - Math.max(8, 24 + (roll % 10) - ((registration?.combatGuard ?? 0) * 2)),
       1,
       cultivator.maxQi,
     );
     cultivator.injuryTicksRemaining = Math.max(
       cultivator.injuryTicksRemaining,
-      Math.max(2, (job.actionId === "hunt-mine-beast" ? 5 : 7) - (registration?.combatGuard ?? 0)),
+      Math.max(2, 5 - (registration?.combatGuard ?? 0)),
     );
-    if (job.actionId === "challenge-guardian") upsertEffect(cultivator, { id: "poisoned", name: "Poisoned", description: "Loses qi each tick.", source: "guardian", remainingTicks: 4, intensity: 1 });
     syncWounded(cultivator);
-    addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} lost the encounter.` });
+    addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: "Mine Beast", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: 16, loot: {}, summary: `${cultivator.name} lost the encounter.` });
     return `${cultivator.name} lost a combat encounter.`;
+  }
+  if (job.actionId === "challenge-guardian") {
+    const location = world.locations[cultivator.locationId];
+    if (!location || !isDungeonNode(location.nodeType)) {
+      throw new Error("Challenge guardian requires a dungeon node.");
+    }
+
+    const tuning = guardianTuningForLocation(location);
+    if (!tuning) {
+      throw new Error(`No guardian tuning for node type: ${location.nodeType}`);
+    }
+
+    const encounterId = `ruins-guardian:${location.nodeType}`;
+    const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
+    const power =
+      cultivator.qi +
+      Math.floor(cultivator.spiritualPower * 0.6) +
+      cultivator.realmLevel * 10 +
+      (hasEffect(cultivator, "qi-surge") ? 18 : 0) +
+      (hasEffect(cultivator, "warded") ? 14 : 0) +
+      (hasEffect(cultivator, "fortune-marked") ? 12 : 0) +
+      (registration?.combatBonus ?? 0) -
+      (hasEffect(cultivator, "poisoned") ? 12 : 0) +
+      (roll % 22);
+    const threat = tuning.threatBase + (roll % tuning.threatVariance);
+
+    cultivator.spiritualPower = clamp(cultivator.spiritualPower - 24, 0, cultivator.maxSpiritualPower);
+    if (power >= threat) {
+      cultivator.inventory["ruin-fragment"] += tuning.fragmentBase + (roll % tuning.fragmentVariance);
+      cultivator.inventory["ward-talisman"] += tuning.wardReward;
+      cultivator.spiritStones += tuning.spiritStoneBase + (roll % tuning.spiritStoneVariance);
+      cultivator.realmProgress = clamp(cultivator.realmProgress + tuning.realmProgressReward, 0, 200);
+      upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 });
+      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "victory", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} broke the guardian seal at ${location.name}.` });
+      addWorldEvent(world, {
+        cultivatorId: cultivator.id,
+        locationId: cultivator.locationId,
+        title: `${location.name} Guardian Broken`,
+        content: `${cultivator.name} defeated the guardian of ${location.name} and claimed the sealed reward cache.`,
+        severity: "medium",
+        tags: ["guardian", location.nodeType, "victory"],
+      });
+      return `${cultivator.name} defeated the guardian of ${location.name}.`;
+    }
+
+    cultivator.qi = clamp(
+      cultivator.qi - Math.max(8, tuning.defeatQiBase + (roll % tuning.defeatQiVariance) - ((registration?.combatGuard ?? 0) * 2)),
+      1,
+      cultivator.maxQi,
+    );
+    cultivator.injuryTicksRemaining = Math.max(
+      cultivator.injuryTicksRemaining,
+      Math.max(2, tuning.defeatInjuryTicks - (registration?.combatGuard ?? 0)),
+    );
+    if (tuning.poisonTicks > 0) {
+      upsertEffect(cultivator, { id: "poisoned", name: "Poisoned", description: "Loses qi each tick.", source: "guardian", remainingTicks: tuning.poisonTicks, intensity: 1 });
+    }
+    syncWounded(cultivator);
+    addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "defeat", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} was repelled by the guardian of ${location.name}.` });
+    addWorldEvent(world, {
+      cultivatorId: cultivator.id,
+      locationId: cultivator.locationId,
+      title: `${location.name} Guardian Counterattack`,
+      content: `${cultivator.name} was forced back by the guardian of ${location.name}.`,
+      severity: "high",
+      tags: ["guardian", location.nodeType, "defeat"],
+    });
+    return `${cultivator.name} was repelled by the guardian of ${location.name}.`;
   }
   /* Legacy fallback block kept temporarily during the registration modifier patch.
   if (job.actionId === "meditate") { cultivator.spiritualPower = clamp(cultivator.spiritualPower + 28 + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (registration?.meditateBonus ?? 0), 0, cultivator.maxSpiritualPower); return `${cultivator.name} recovered spiritual power.`; }
@@ -2375,26 +2536,51 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   }
   if (job.actionId === "search-fortune") {
     cultivator.activeJobId = null;
+    const location = world.locations[cultivator.locationId];
+    if (!location || !isDungeonNode(location.nodeType)) {
+      throw new Error("Search fortune requires a dungeon node.");
+    }
     const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}:fortune-enhanced`);
+    const fragmentBonus = (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
+    const spiritStoneBase = location.nodeType === "dungeon-a" ? 270 : location.nodeType === "dungeon-b" ? 235 : 190;
+    const spiritStoneVariance = location.nodeType === "dungeon-a" ? 70 : location.nodeType === "dungeon-b" ? 55 : 40;
+    const progressBase = location.nodeType === "dungeon-a" ? 16 : location.nodeType === "dungeon-b" ? 12 : 8;
     if (roll % 4 === 0) {
-      cultivator.inventory["ruin-fragment"] += (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
-      if (roll % 8 === 0) cultivator.inventory["sword-manual"] += 1;
+      cultivator.inventory["ruin-fragment"] += fragmentBonus + (location.nodeType === "dungeon-c" ? 0 : 1);
+      if (location.nodeType === "dungeon-a" && roll % 8 === 0) cultivator.inventory["sword-manual"] += 1;
     } else if (roll % 4 === 1) {
-      cultivator.realmProgress = clamp(cultivator.realmProgress + 10 + (registration?.fortuneBonus ?? 0), 0, 200);
+      cultivator.realmProgress = clamp(cultivator.realmProgress + progressBase + (registration?.fortuneBonus ?? 0), 0, 200);
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
     } else if (roll % 4 === 2) {
-      cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
-      cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
-      if (roll % 6 === 0) cultivator.inventory["alchemy-manual"] += 1;
+      cultivator.spiritStones += spiritStoneBase + (roll % spiritStoneVariance) + ((registration?.fortuneBonus ?? 0) * 10);
+      cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0) + (location.nodeType === "dungeon-a" ? 1 : 0);
+      if (location.nodeType === "dungeon-b" && roll % 6 === 0) cultivator.inventory["alchemy-manual"] += 1;
+      if (location.nodeType === "dungeon-a" && roll % 6 === 0) cultivator.inventory["array-manual"] += 1;
     } else {
-      upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "ruins", remainingTicks: 5, intensity: 1 });
-      if (roll % 5 === 0) cultivator.inventory["array-manual"] += 1;
+      upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "ruins", remainingTicks: location.nodeType === "dungeon-a" ? 6 : 5, intensity: 1 });
+      if (location.nodeType === "dungeon-b" && roll % 5 === 0) cultivator.inventory["array-manual"] += 1;
+      if (location.nodeType === "dungeon-a") cultivator.inventory["ward-talisman"] += 1;
     }
-    return `${cultivator.name} searched the ruins.`;
+    triggerNodeSpecificEvent(
+      world,
+      cultivator,
+      "search-fortune",
+      cultivator.locationId,
+      `${world.tick}:${job.id}:${cultivator.locationId}:node-search`,
+    );
+    return `${cultivator.name} searched the ruins at ${location.name}.`;
   }
   const summary = resolveJob(world, job);
-  if (job.actionId === "challenge-guardian" && summary.includes("won")) {
-    if (hashString(`${world.tick}:${job.id}:guardian`) % 3 === 0) cultivator.inventory["sword-manual"] += 1;
+  if (job.actionId === "challenge-guardian" && summary.includes("defeated")) {
+    const location = world.locations[cultivator.locationId];
+    const tuning = location ? guardianTuningForLocation(location) : null;
+    if (
+      tuning?.manualReward
+      && tuning.manualDropModulo
+      && hashString(`${world.tick}:${job.id}:guardian:${location?.nodeType ?? "unknown"}`) % tuning.manualDropModulo === 0
+    ) {
+      cultivator.inventory[tuning.manualReward] += 1;
+    }
   }
   return summary;
 }

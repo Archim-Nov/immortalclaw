@@ -42,6 +42,7 @@ export interface EventTemplate {
 export interface EventPools {
   readonly globalCommon: readonly EventTemplate[];
   readonly stateSpecific: Readonly<Record<StateId, readonly EventTemplate[]>>;
+  readonly travelStateSpecific: Readonly<Record<StateId, readonly EventTemplate[]>>;
   readonly nodeSpecific: Readonly<Record<string, readonly EventTemplate[]>>;
   readonly travelPool: readonly EventTemplate[];
 }
@@ -54,4 +55,4 @@ export interface DrawnEvent {
 }
 
 export { createEventPools } from "./events/catalog.js";
-export { applyEventEffectBundle, applyEventEffects, drawEvent, eventSeverityOf } from "./events/engine.js";
+export { applyEventEffectBundle, applyEventEffects, drawEvent, drawNodeSpecificEvent, eventSeverityOf } from "./events/engine.js";

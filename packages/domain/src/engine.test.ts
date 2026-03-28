@@ -1146,6 +1146,73 @@ test("combat resolution ignores legacy numeric reputation", () => {
   assert.equal(highStandingCultivator.inventory["ward-talisman"], lowStandingCultivator.inventory["ward-talisman"]);
 });
 
+test("search-fortune emits a node-specific dungeon event", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.locationId = "qingzhou:dungeon-b";
+  const beforeEvents = world.worldEvents.length;
+  const beforeSpiritStones = cultivator.spiritStones;
+
+  performAction(world, "yun-zhong-he", "search-fortune");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const pooledEvent = world.worldEvents.find((event) =>
+    event.locationId === "qingzhou:dungeon-b"
+    && event.tags.includes("event-pool")
+    && event.tags.includes("node-specific")
+    && event.tags.includes("search-fortune"),
+  );
+
+  assert.ok(pooledEvent);
+  assert.ok(world.worldEvents.length > beforeEvents);
+  assert.ok(
+    cultivator.inventory["ruin-fragment"] > 0
+      || cultivator.spiritStones > beforeSpiritStones
+      || cultivator.statusEffects.length > 0,
+  );
+});
+
+test("guardian rewards scale up with dungeon tier", () => {
+  const lowTierWorld = createSeedWorld();
+  const highTierWorld = createSeedWorld();
+  const lowTierCultivator = lowTierWorld.cultivators["yun-zhong-he"];
+  const highTierCultivator = highTierWorld.cultivators["yun-zhong-he"];
+
+  lowTierCultivator.locationId = "qingzhou:dungeon-c";
+  highTierCultivator.locationId = "qingzhou:dungeon-a";
+  lowTierCultivator.realm = "金丹" as typeof lowTierCultivator.realm;
+  highTierCultivator.realm = "金丹" as typeof highTierCultivator.realm;
+  lowTierCultivator.realmLevel = 9;
+  highTierCultivator.realmLevel = 9;
+  lowTierCultivator.qi = lowTierCultivator.maxQi = 420;
+  highTierCultivator.qi = highTierCultivator.maxQi = 420;
+  lowTierCultivator.spiritualPower = lowTierCultivator.maxSpiritualPower = 420;
+  highTierCultivator.spiritualPower = highTierCultivator.maxSpiritualPower = 420;
+
+  const lowTierStoneBefore = lowTierCultivator.spiritStones;
+  const highTierStoneBefore = highTierCultivator.spiritStones;
+
+  performAction(lowTierWorld, "yun-zhong-he", "challenge-guardian");
+  performAction(highTierWorld, "yun-zhong-he", "challenge-guardian");
+  runUntilIdle(lowTierWorld, "yun-zhong-he");
+  runUntilIdle(highTierWorld, "yun-zhong-he");
+
+  assert.equal(lowTierWorld.combatLogs[0]?.outcome, "victory");
+  assert.equal(highTierWorld.combatLogs[0]?.outcome, "victory");
+  assert.ok(highTierCultivator.inventory["ruin-fragment"] >= lowTierCultivator.inventory["ruin-fragment"]);
+  assert.ok(highTierCultivator.realmProgress >= lowTierCultivator.realmProgress);
+  assert.ok(
+    highTierCultivator.spiritStones - highTierStoneBefore
+      > lowTierCultivator.spiritStones - lowTierStoneBefore,
+  );
+  assert.ok(
+    highTierWorld.worldEvents.some((event) =>
+      event.tags.includes("guardian") && event.tags.includes("dungeon-a") && event.tags.includes("victory"),
+    ),
+  );
+});
+
 test("seed world and runtime logs omit legacy zone compatibility fields", () => {
   const world = createSeedWorld();
 

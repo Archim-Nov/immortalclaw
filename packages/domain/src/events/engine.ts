@@ -110,6 +110,14 @@ function candidatesFor(
     for (const event of pool.travelPool) {
       candidates.push({ template: event, weight: event.baseWeight });
     }
+
+    const stateTravelEvents = pool.travelStateSpecific[location.stateId] ?? [];
+    for (const event of stateTravelEvents) {
+      if (event.source === source) {
+        candidates.push({ template: event, weight: event.baseWeight * 1.5 });
+      }
+    }
+
     return candidates;
   }
 
@@ -128,6 +136,13 @@ function candidatesFor(
   }
 
   return candidates;
+}
+
+function nodeCandidatesFor(world: WorldState, locationId: string): WeightedEvent[] {
+  const nodeEvents = world.eventPools.nodeSpecific[locationId] ?? [];
+  return nodeEvents
+    .filter((event) => event.source === "exploration")
+    .map((event) => ({ template: event, weight: event.baseWeight }));
 }
 
 export function drawEvent(
@@ -166,6 +181,36 @@ export function drawEvent(
   return {
     template: mainEvent,
     subEvent,
+    locationId,
+    tick: world.tick,
+  };
+}
+
+export function drawNodeSpecificEvent(
+  world: WorldState,
+  cultivator: Cultivator,
+  locationId: string,
+  seedInput?: string,
+): DrawnEvent | null {
+  if (!world.locations[locationId]) {
+    return null;
+  }
+
+  const baseCandidates = nodeCandidatesFor(world, locationId);
+  if (baseCandidates.length === 0) {
+    return null;
+  }
+
+  const weighted = applyOverlayWeights(baseCandidates, cultivator);
+  const baseSeed = seedInput ?? `${world.tick}:${cultivator.id}:node:${locationId}`;
+  const mainEvent = weightedPick(weighted, `${baseSeed}:node-main`);
+  if (!mainEvent) {
+    return null;
+  }
+
+  return {
+    template: mainEvent,
+    subEvent: null,
     locationId,
     tick: world.tick,
   };

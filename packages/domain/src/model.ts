@@ -154,6 +154,7 @@ export interface EventTemplate {
 export interface EventPools {
   globalCommon: readonly EventTemplate[];
   stateSpecific: Readonly<Record<import("./constants.js").StateId, readonly EventTemplate[]>>;
+  travelStateSpecific: Readonly<Record<import("./constants.js").StateId, readonly EventTemplate[]>>;
   nodeSpecific: Readonly<Record<string, readonly EventTemplate[]>>;
   travelPool: readonly EventTemplate[];
 }

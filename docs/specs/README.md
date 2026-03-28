@@ -9,6 +9,11 @@ Recent supporting gameplay specs:
 - `docs/specs/gameplay-build-foundation/spec.md`
 - `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - `docs/specs/combat-gameplay-v1/spec.md`
+- `docs/specs/dungeon-event-pool-alignment-v1/spec.md`
+- `docs/specs/event-content-library-split-v1/spec.md`
+- `docs/specs/jiuzhou-state-event-flavor-v1/spec.md`
+- `docs/specs/travel-shared-overlay-v1/spec.md`
+- `docs/specs/regional-dungeon-travel-pool-expansion-v1/spec.md`
 - `docs/specs/combat-gameplay-v1/registration-action-weight-table.md`
 - `docs/specs/neutral-sects-starter-overhaul/spec.md`
 - `docs/specs/personal-morality-and-binary-events-v1/spec.md`
