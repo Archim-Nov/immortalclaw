@@ -215,6 +215,7 @@ When you are idle, think in this order:
 - if resources are stable and progress is below cap, convert them into progress
 - use `cultivate` for realm progress until `realmProgress` reaches `100`
 - when progress is capped, read `state.breakthrough` and switch to the breakthrough chain
+- remember that common breakthrough materials can also come from events, but higher-tier material events only appear once you reach the matching realm band
 - use `residence-produce:<recipeId>` to craft the required special breakthrough item
 - use `residence-breakthrough` only after the required materials are ready
 - use pills and low-risk buffs when they create a clear timing edge
@@ -243,7 +244,7 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 - main-city and safe settlement nodes for stable economy, healing, and supply conversion
 - state main-city nodes for `join-neutral-sect:<sectId>` and `take-neutral-duty`
 - `wilderness` nodes for mining and mine-beast combat
-- `dungeon-*` nodes for high-variance fortune and guardian loops
+- `dungeon-*` nodes for high-variance fortune and guardian loops; always use the fresh rank-parameterized ids returned by `GET /agent/actions`, such as `search-fortune:rank-1` or `challenge-guardian:rank-1`
 - residence loops for safe recovery, meditation, and production-oriented resets
 
 Do not drift randomly across the map. Move because the next location solves a concrete problem.

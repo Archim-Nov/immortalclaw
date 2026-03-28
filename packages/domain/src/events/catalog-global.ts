@@ -9,6 +9,6 @@ export function buildGlobalCommonPool(): EventTemplate[] {
     source: "exploration",
     stateId: null,
     nodeType: null,
-    minRealm: null,
+    minRealm: event.minRealm ?? null,
   }));
 }

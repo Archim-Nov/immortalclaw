@@ -156,6 +156,7 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   delete (world as unknown as Record<string, unknown>).factionWars;
   delete (world as unknown as Record<string, unknown>).itemDefinitions;
   delete (world.cultivators[cultivatorId] as unknown as Record<string, unknown>).breakthroughRecords;
+  delete (world.cultivators[cultivatorId] as unknown as Record<string, unknown>).dungeonProgress;
   world.cultivators[cultivatorId]!.realmProgress = 145;
 
   world.cultivators[cultivatorId]!.inventory = ({
@@ -185,6 +186,11 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   assert.deepEqual(hydrated.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(hydrated.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
   assert.deepEqual(hydrated.cultivators[cultivatorId]!.breakthroughRecords, []);
+  assert.deepEqual(hydrated.cultivators[cultivatorId]!.dungeonProgress, {
+    丙: { highestClearedRank: 0 },
+    乙: { highestClearedRank: 0 },
+    甲: { highestClearedRank: 0 },
+  });
   assert.equal(hydrated.cultivators[cultivatorId]!.realmProgress, 100);
   assert.equal("sword-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
   assert.equal("alchemy-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);

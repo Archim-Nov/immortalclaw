@@ -1,12 +1,18 @@
 import type { DrawnEvent, EventSourceType, EventTemplate } from "../events.js";
-import type { Cultivator, EventEffect, StatusEffectId, WorldState } from "../model.js";
+import type { Cultivator, DungeonGrade, DungeonRank, EventEffect, StatusEffectId, WorldState } from "../model.js";
 
 interface WeightedEvent {
   readonly template: EventTemplate;
   readonly weight: number;
 }
 
+interface DungeonEventContext {
+  readonly grade: DungeonGrade;
+  readonly rank: DungeonRank;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const REALM_ORDER: Record<Cultivator["realm"], number> = { 炼气: 0, 筑基: 1, 金丹: 2 };
 
 const hashString = (input: string) =>
   Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
@@ -27,6 +33,39 @@ const currentStateIdOf = (cultivator: Cultivator) => cultivator.locationId.split
 function addCurrentStateReputation(cultivator: Cultivator, delta: number) {
   const stateId = currentStateIdOf(cultivator);
   cultivator.stateReputation[stateId] = Math.max(0, (cultivator.stateReputation[stateId] ?? 0) + delta);
+}
+
+function meetsMinRealm(cultivator: Cultivator, minRealm: EventTemplate["minRealm"]) {
+  if (!minRealm) {
+    return true;
+  }
+  return REALM_ORDER[cultivator.realm] >= REALM_ORDER[minRealm];
+}
+
+function meetsDungeonContext(
+  event: EventTemplate,
+  dungeonContext?: DungeonEventContext,
+) {
+  const requiresDungeonContext =
+    !!event.dungeonGrade
+    || event.minDungeonRank !== null && event.minDungeonRank !== undefined
+    || event.maxDungeonRank !== null && event.maxDungeonRank !== undefined;
+  if (!requiresDungeonContext) {
+    return true;
+  }
+  if (!dungeonContext) {
+    return false;
+  }
+  if (event.dungeonGrade && event.dungeonGrade !== dungeonContext.grade) {
+    return false;
+  }
+  if (event.minDungeonRank && dungeonContext.rank < event.minDungeonRank) {
+    return false;
+  }
+  if (event.maxDungeonRank && dungeonContext.rank > event.maxDungeonRank) {
+    return false;
+  }
+  return true;
 }
 
 function applyOverlayWeights(candidates: WeightedEvent[], cultivator: Cultivator): WeightedEvent[] {
@@ -90,7 +129,9 @@ function weightedPick(candidates: WeightedEvent[], seed: string): EventTemplate 
 function candidatesFor(
   world: WorldState,
   source: EventSourceType,
+  cultivator: Cultivator,
   locationId: string,
+  dungeonContext?: DungeonEventContext,
 ): WeightedEvent[] {
   const location = world.locations[locationId];
   if (!location) {
@@ -101,19 +142,21 @@ function candidatesFor(
   const candidates: WeightedEvent[] = [];
 
   for (const event of pool.globalCommon) {
-    if (event.source === source) {
+    if (event.source === source && meetsMinRealm(cultivator, event.minRealm) && meetsDungeonContext(event, dungeonContext)) {
       candidates.push({ template: event, weight: event.baseWeight });
     }
   }
 
   if (source === "travel") {
     for (const event of pool.travelPool) {
-      candidates.push({ template: event, weight: event.baseWeight });
+      if (meetsMinRealm(cultivator, event.minRealm) && meetsDungeonContext(event, dungeonContext)) {
+        candidates.push({ template: event, weight: event.baseWeight });
+      }
     }
 
     const stateTravelEvents = pool.travelStateSpecific[location.stateId] ?? [];
     for (const event of stateTravelEvents) {
-      if (event.source === source) {
+      if (event.source === source && meetsMinRealm(cultivator, event.minRealm) && meetsDungeonContext(event, dungeonContext)) {
         candidates.push({ template: event, weight: event.baseWeight * 1.5 });
       }
     }
@@ -123,14 +166,14 @@ function candidatesFor(
 
   const stateEvents = pool.stateSpecific[location.stateId] ?? [];
   for (const event of stateEvents) {
-    if (event.source === source) {
+    if (event.source === source && meetsMinRealm(cultivator, event.minRealm) && meetsDungeonContext(event, dungeonContext)) {
       candidates.push({ template: event, weight: event.baseWeight * 1.5 });
     }
   }
 
   const nodeEvents = pool.nodeSpecific[locationId] ?? [];
   for (const event of nodeEvents) {
-    if (event.source === source) {
+    if (event.source === source && meetsMinRealm(cultivator, event.minRealm) && meetsDungeonContext(event, dungeonContext)) {
       candidates.push({ template: event, weight: event.baseWeight * 2 });
     }
   }
@@ -138,10 +181,19 @@ function candidatesFor(
   return candidates;
 }
 
-function nodeCandidatesFor(world: WorldState, locationId: string): WeightedEvent[] {
+function nodeCandidatesFor(
+  world: WorldState,
+  cultivator: Cultivator,
+  locationId: string,
+  dungeonContext?: DungeonEventContext,
+): WeightedEvent[] {
   const nodeEvents = world.eventPools.nodeSpecific[locationId] ?? [];
   return nodeEvents
-    .filter((event) => event.source === "exploration")
+    .filter((event) =>
+      event.source === "exploration"
+      && meetsMinRealm(cultivator, event.minRealm)
+      && meetsDungeonContext(event, dungeonContext),
+    )
     .map((event) => ({ template: event, weight: event.baseWeight }));
 }
 
@@ -151,8 +203,9 @@ export function drawEvent(
   cultivator: Cultivator,
   locationId: string,
   seedInput?: string,
+  dungeonContext?: DungeonEventContext,
 ): DrawnEvent | null {
-  const baseCandidates = candidatesFor(world, source, locationId);
+  const baseCandidates = candidatesFor(world, source, cultivator, locationId, dungeonContext);
   const hasPendingMoralityChoice =
     cultivator.pendingMoralityChoiceId
     && world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId]
@@ -191,12 +244,13 @@ export function drawNodeSpecificEvent(
   cultivator: Cultivator,
   locationId: string,
   seedInput?: string,
+  dungeonContext?: DungeonEventContext,
 ): DrawnEvent | null {
   if (!world.locations[locationId]) {
     return null;
   }
 
-  const baseCandidates = nodeCandidatesFor(world, locationId);
+  const baseCandidates = nodeCandidatesFor(world, cultivator, locationId, dungeonContext);
   if (baseCandidates.length === 0) {
     return null;
   }

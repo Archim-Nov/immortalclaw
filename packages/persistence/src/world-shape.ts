@@ -1,6 +1,6 @@
 import { createSeedWorld } from "../../domain/src/runtime.js";
 import type { WorldState } from "../../domain/src/runtime.js";
-import { createEmptyInventory, createFactionReputation } from "../../domain/src/seed.js";
+import { createDungeonProgress, createEmptyInventory, createFactionReputation } from "../../domain/src/seed.js";
 import { buildFullTopology } from "../../domain/src/topology.js";
 import type { Location } from "../../domain/src/model.js";
 import type { LocationId, StateId } from "../../domain/src/constants.js";
@@ -205,6 +205,7 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
     cultivator.breakthroughRecords = Array.isArray(cultivator.breakthroughRecords)
       ? cultivator.breakthroughRecords
       : [];
+    cultivator.dungeonProgress = mergeRecordDefaults(createDungeonProgress(), cultivator.dungeonProgress);
     cultivator.pendingSectApplicationId = cultivator.pendingSectApplicationId ?? null;
     cultivator.realmProgress =
       typeof cultivator.realmProgress === "number" && Number.isFinite(cultivator.realmProgress)

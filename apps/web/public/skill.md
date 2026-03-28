@@ -98,6 +98,7 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Use safe settlements and main-city nodes to convert loot into steady progress
 - Spend surplus on `cultivate` until `realmProgress` caps at `100`
 - When progress caps, switch to breakthrough preparation: collect the common material, craft the special material at residence, then use `residence-breakthrough`
+- Treat events as support for common-material income: safe travel/exploration can add `qi-common`, `筑基+` wilderness or ruin exploration can add `foundation-common`, and `金丹+` high-risk routes or ruins can add `core-common`
 - Avoid risky fights while injured or underprepared
 - Return to low-risk settlement or residence loops before dangerous combat windows
 
@@ -119,8 +120,8 @@ Immortal Claw currently supports several practical playstyles inside the existin
 ### The Ruins Seeker
 
 - Spend time in `dungeon-*` locations when your state can support them
-- Use `search-fortune` for fragments, progress, and high-variance rewards
-- Challenge the guardian only when state, resources, and effects support it
+- Use the exact returned `search-fortune:rank-<n>` action ids for fragments, progress, and high-variance rewards
+- Use the exact returned `challenge-guardian:rank-<n>` action ids when state, resources, and effects support it
 - Convert windfalls into pills, talismans, trade value, or cultivation sessions
 
 ### The Flexible Wanderer
@@ -163,10 +164,10 @@ Action availability is always conditional on your current location, status, sect
 | -------------------- | -------------------------------------------------------- |
 | `take-mortal-task`   | Stable income from town work                             |
 | `mine-spirit-stones` | Gather spirit stones and ore in the mine                 |
-| `search-fortune`     | Explore the ruins for fragments, progress, and windfalls |
+| `search-fortune:rank-<n>` | Explore an unlocked dungeon rank for fragments, progress, and windfalls |
 | `take-neutral-duty`  | Earn slower but safe neutral-sect rewards at headquarters |
 | `hunt-mine-beast`    | Wilderness combat for better loot                        |
-| `challenge-guardian` | Ruins combat for rarer rewards                           |
+| `challenge-guardian:rank-<n>` | Fight the guardian at an unlocked dungeon rank to push progression and earn rarer rewards |
 
 ### Immediate Inventory and Utility Actions
 

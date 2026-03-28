@@ -103,6 +103,40 @@ function buildOrganizationOutpostLocation(
   };
 }
 
+function dungeonMetadataForNodeType(nodeType: BaseNodeType): Location["dungeon"] {
+  switch (nodeType) {
+    case "dungeon-c":
+      return {
+        grade: "丙",
+        maxRank: 9,
+        minRealm: "炼气" as Cultivator["realm"],
+        dangerBase: 1,
+        rewardBand: "low",
+        materialBand: "qi-common",
+      };
+    case "dungeon-b":
+      return {
+        grade: "乙",
+        maxRank: 9,
+        minRealm: "筑基" as Cultivator["realm"],
+        dangerBase: 2,
+        rewardBand: "mid",
+        materialBand: "foundation-common",
+      };
+    case "dungeon-a":
+      return {
+        grade: "甲",
+        maxRank: 9,
+        minRealm: "金丹" as Cultivator["realm"],
+        dangerBase: 3,
+        rewardBand: "high",
+        materialBand: "core-common",
+      };
+    default:
+      return null;
+  }
+}
+
 function buildAllLocations(
   playerSects: Record<string, Sect>,
   neutralSects: Record<string, NeutralSect>,
@@ -123,6 +157,7 @@ function buildAllLocations(
         kind: NODE_META[nodeType].kind,
         risk: STATE_META[stateId].risk,
         description: buildLocationDescription(stateId, nodeType),
+        dungeon: dungeonMetadataForNodeType(nodeType),
       };
     }
   }
@@ -194,6 +229,16 @@ export function createStateReputation(
   ) as Cultivator["stateReputation"];
 }
 
+export function createDungeonProgress(
+  overrides: Partial<Record<keyof Cultivator["dungeonProgress"], number>> = {},
+): Cultivator["dungeonProgress"] {
+  return {
+    丙: { highestClearedRank: Math.max(0, Math.min(9, Math.floor(overrides["丙"] ?? 0))) },
+    乙: { highestClearedRank: Math.max(0, Math.min(9, Math.floor(overrides["乙"] ?? 0))) },
+    甲: { highestClearedRank: Math.max(0, Math.min(9, Math.floor(overrides["甲"] ?? 0))) },
+  };
+}
+
 function createStatusEffects(...effects: StatusEffect[]): StatusEffect[] {
   return effects;
 }
@@ -246,6 +291,7 @@ const cultivators: Record<string, Cultivator> = {
     },
     statusEffects: createStatusEffects(),
     breakthroughRecords: [],
+    dungeonProgress: createDungeonProgress(),
     activeJobId: null,
     injuryTicksRemaining: 0,
     registrationRecord: null,

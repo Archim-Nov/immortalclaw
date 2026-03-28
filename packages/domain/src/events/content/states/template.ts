@@ -21,6 +21,7 @@ export interface StateEventRow {
   readonly titleCn: string;
   readonly description: string;
   readonly baseWeight?: number;
+  readonly minRealm?: EventTemplate["minRealm"];
   readonly effects: EventTemplate["effects"];
   readonly moralityChoice?: EventTemplate["moralityChoice"];
 }
@@ -44,7 +45,7 @@ export function buildStateEventPack(
     baseWeight: row.baseWeight ?? 1,
     stateId,
     nodeType: null,
-    minRealm: null,
+    minRealm: row.minRealm ?? null,
     effects: row.effects,
     ...(row.moralityChoice ? { moralityChoice: row.moralityChoice } : {}),
   }));

@@ -9,6 +9,6 @@ export function buildTravelPool(): EventTemplate[] {
     source: "travel",
     stateId: null,
     nodeType: null,
-    minRealm: null,
+    minRealm: event.minRealm ?? null,
   }));
 }

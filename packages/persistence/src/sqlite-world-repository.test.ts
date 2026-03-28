@@ -203,6 +203,7 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
     neutralSectId: undefined as never,
     neutralContribution: undefined as never,
     breakthroughRecords: undefined as never,
+    dungeonProgress: undefined as never,
     reputation: 34,
     karma: 12,
     stateReputation: undefined as never,
@@ -256,6 +257,11 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
   assert.equal(normalizedCultivator.neutralSectId, null);
   assert.equal(normalizedCultivator.neutralContribution, 0);
   assert.deepEqual(normalizedCultivator.breakthroughRecords, []);
+  assert.deepEqual(normalizedCultivator.dungeonProgress, {
+    丙: { highestClearedRank: 0 },
+    乙: { highestClearedRank: 0 },
+    甲: { highestClearedRank: 0 },
+  });
   assert.equal(normalizedCultivator.realmProgress, 100);
   assert.deepEqual(
     normalizedCultivator.stateReputation,

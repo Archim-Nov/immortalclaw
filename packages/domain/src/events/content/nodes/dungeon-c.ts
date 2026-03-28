@@ -4,42 +4,68 @@ import type { Location } from "../../../model.js";
 import { buildNodeEvent } from "./shared.js";
 
 export function buildDungeonCEventPack(location: Location): EventTemplate[] {
-  return [
+  return ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).flatMap((rank) => [
     buildNodeEvent(location, {
-      idSuffix: "cracked-cache",
+      idSuffix: `rank-${rank}-cache`,
       semanticType: "fortune",
       resultType: "resource",
-      nameSuffix: "Cracked Cache",
-      description: `A cracked cache in ${location.name} still holds fragments and loose stones.`,
-      baseWeight: 1.4,
+      nameSuffix: `Rank ${rank} Cache`,
+      description: `A lower-ruin cache in ${location.name} rank ${rank} still yields basic breakthrough stock and salvage.`,
+      baseWeight: 1.2 + (rank * 0.03),
+      dungeonGrade: "丙",
+      minDungeonRank: rank,
+      maxDungeonRank: rank,
       effects: {
-        spiritStones: 40,
-        itemRewards: [{ itemId: "ruin-fragment", count: 1 }],
+        spiritStones: 18 + (rank * 6),
+        itemRewards: [
+          { itemId: "qi-common", count: 1 },
+          { itemId: "ruin-fragment", count: rank >= 4 ? 1 : 0 },
+        ].filter((reward) => reward.count > 0),
       },
     }),
     buildNodeEvent(location, {
-      idSuffix: "breath-pocket",
+      idSuffix: `rank-${rank}-breath`,
       semanticType: "training",
       resultType: "progression",
-      nameSuffix: "Breath Pocket",
-      description: `A calm pocket of qi in ${location.name} lets you refine one short cycle.`,
-      baseWeight: 1.1,
+      nameSuffix: `Rank ${rank} Breath Pocket`,
+      description: `A brief calm in ${location.name} rank ${rank} lets you refine one clean cycle under pressure.`,
+      baseWeight: 1,
+      dungeonGrade: "丙",
+      minDungeonRank: rank,
+      maxDungeonRank: rank,
       effects: {
-        realmProgress: 6,
-        statusEffects: [{ effectId: "clear-mind", ticks: 2 }],
+        realmProgress: 2 + rank,
+        statusEffects: [{ effectId: rank >= 6 ? "insight" : "clear-mind", ticks: rank >= 6 ? 2 : 3 }],
       },
     }),
     buildNodeEvent(location, {
-      idSuffix: "camp-remains",
-      semanticType: "human",
-      resultType: "status",
-      nameSuffix: "Camp Remains",
-      description: `The remains of a prior scouting camp leave behind route notes and one intact charm.`,
-      baseWeight: 0.9,
+      idSuffix: `rank-${rank}-hazard`,
+      semanticType: "training",
+      resultType: "combat",
+      nameSuffix: `Rank ${rank} Hazard`,
+      description: `A narrow chamber in ${location.name} rank ${rank} forces a bruising adjustment in footing and breath.`,
+      baseWeight: 0.82,
+      dungeonGrade: "丙",
+      minDungeonRank: rank,
+      maxDungeonRank: rank,
       effects: {
-        itemRewards: [{ itemId: "ward-talisman", count: 1 }],
-        statusEffects: [{ effectId: "fortune-marked", ticks: 2 }],
+        qi: -(6 + rank),
+        spiritStones: 10 + (rank * 3),
       },
     }),
-  ];
+    buildNodeEvent(location, {
+      idSuffix: `rank-${rank}-notes`,
+      semanticType: "human",
+      resultType: "status",
+      nameSuffix: `Rank ${rank} Scout Notes`,
+      description: `Scattered scout notes in ${location.name} rank ${rank} improve your route sense for the next push.`,
+      baseWeight: 0.78,
+      dungeonGrade: "丙",
+      minDungeonRank: rank,
+      maxDungeonRank: rank,
+      effects: {
+        statusEffects: [{ effectId: "fortune-marked", ticks: 2 + Math.floor(rank / 3) }],
+      },
+    }),
+  ]);
 }

@@ -905,17 +905,48 @@ test("dungeon searches no longer mint removed manual items", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
 
-  performAction(world, "yun-zhong-he", "travel-to:qingzhou:dungeon-a");
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:dungeon-c");
   runUntilIdle(world, "yun-zhong-he");
 
   const beforeInventoryKeys = new Set(Object.keys(cultivator.inventory));
-  performAction(world, "yun-zhong-he", "search-fortune");
+  performAction(world, "yun-zhong-he", "search-fortune:rank-1");
   runUntilIdle(world, "yun-zhong-he");
 
   assert.equal("sword-manual" in (cultivator.inventory as Record<string, number>), false);
   assert.equal("alchemy-manual" in (cultivator.inventory as Record<string, number>), false);
   assert.equal("array-manual" in (cultivator.inventory as Record<string, number>), false);
   assert.equal(beforeInventoryKeys.has("sword-manual"), false);
+});
+
+test("state.dungeon surfaces shared rank progression and realm-gated dungeon actions", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  let state = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(state.dungeon?.grade, "丙");
+  assert.equal(state.dungeon?.highestClearedRank, 0);
+  assert.equal(state.dungeon?.highestUnlockedRank, 1);
+  assert.deepEqual(state.dungeon?.availableRanks, [1]);
+  assert.equal(state.dungeon?.frontierRank, 1);
+  assert.equal(state.dungeon?.materialBand, "qi-common");
+  assert.equal(state.dungeon?.lockReason, null);
+  assert.ok(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "search-fortune:rank-1"));
+  assert.equal(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "search-fortune:rank-2"), false);
+
+  cultivator.dungeonProgress["丙"].highestClearedRank = 3;
+  cultivator.locationId = "yangzhou:dungeon-c";
+  state = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(state.dungeon?.highestClearedRank, 3);
+  assert.equal(state.dungeon?.highestUnlockedRank, 4);
+  assert.deepEqual(state.dungeon?.availableRanks, [1, 2, 3, 4]);
+  assert.ok(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "challenge-guardian:rank-4"));
+  assert.equal(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "challenge-guardian:rank-5"), false);
+
+  cultivator.locationId = "qingzhou:dungeon-b";
+  state = getCultivatorState(world, "yun-zhong-he");
+  assert.ok(state.dungeon?.lockReason);
+  assert.equal(listAvailableActions(world, "yun-zhong-he").some((action) => String(action.actionId).startsWith("search-fortune:rank-")), false);
 });
 
 test("state marks onboarding as optional and exposes the decision policy", () => {
@@ -1337,8 +1368,8 @@ test("combat resolution ignores legacy numeric reputation", () => {
   runUntilIdle(lowStandingWorld, "yun-zhong-he");
   runUntilIdle(highStandingWorld, "yun-zhong-he");
 
-  performAction(lowStandingWorld, "yun-zhong-he", "challenge-guardian");
-  performAction(highStandingWorld, "yun-zhong-he", "challenge-guardian");
+  performAction(lowStandingWorld, "yun-zhong-he", "challenge-guardian:rank-1");
+  performAction(highStandingWorld, "yun-zhong-he", "challenge-guardian:rank-1");
   runUntilIdle(lowStandingWorld, "yun-zhong-he");
   runUntilIdle(highStandingWorld, "yun-zhong-he");
 
@@ -1353,18 +1384,23 @@ test("search-fortune emits a node-specific dungeon event", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
 
+  cultivator.realm = "绛戝熀" as typeof cultivator.realm;
+  cultivator.realmLevel = 4;
   cultivator.locationId = "qingzhou:dungeon-b";
+  cultivator.realm = "炼气" as typeof cultivator.realm;
+  cultivator.realmLevel = 3;
+  cultivator.locationId = "qingzhou:dungeon-c";
   const beforeEvents = world.worldEvents.length;
   const beforeSpiritStones = cultivator.spiritStones;
 
-  performAction(world, "yun-zhong-he", "search-fortune");
+  performAction(world, "yun-zhong-he", "search-fortune:rank-1");
   runUntilIdle(world, "yun-zhong-he");
 
   const pooledEvent = world.worldEvents.find((event) =>
-    event.locationId === "qingzhou:dungeon-b"
+    event.locationId === "qingzhou:dungeon-c"
     && event.tags.includes("event-pool")
     && event.tags.includes("node-specific")
-    && event.tags.includes("search-fortune"),
+    && event.tags.includes("search-fortune:rank-1"),
   );
 
   assert.ok(pooledEvent);
@@ -1396,8 +1432,8 @@ test("guardian rewards scale up with dungeon tier", () => {
   const lowTierStoneBefore = lowTierCultivator.spiritStones;
   const highTierStoneBefore = highTierCultivator.spiritStones;
 
-  performAction(lowTierWorld, "yun-zhong-he", "challenge-guardian");
-  performAction(highTierWorld, "yun-zhong-he", "challenge-guardian");
+  performAction(lowTierWorld, "yun-zhong-he", "challenge-guardian:rank-1");
+  performAction(highTierWorld, "yun-zhong-he", "challenge-guardian:rank-1");
   runUntilIdle(lowTierWorld, "yun-zhong-he");
   runUntilIdle(highTierWorld, "yun-zhong-he");
 

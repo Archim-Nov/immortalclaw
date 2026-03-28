@@ -1,4 +1,6 @@
 import type {
+  DungeonGrade,
+  DungeonRank,
   ItemId,
   MoralityChoiceTemplate,
   RealmStage,
@@ -35,6 +37,9 @@ export interface EventTemplate {
   readonly stateId: StateId | null;
   readonly nodeType: NodeType | null;
   readonly minRealm: RealmStage | null;
+  readonly dungeonGrade?: DungeonGrade | null;
+  readonly minDungeonRank?: DungeonRank | null;
+  readonly maxDungeonRank?: DungeonRank | null;
   readonly effects: EventEffect;
   readonly moralityChoice?: MoralityChoiceTemplate;
 }

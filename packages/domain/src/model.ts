@@ -78,6 +78,18 @@ export type SectAlignment = "正道" | "魔道";
 export type OrganizationAlignment = SectAlignment | "中立";
 export type MoralityAlignment = SectAlignment;
 
+export type DungeonGrade = "丙" | "乙" | "甲";
+export type DungeonRank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+export interface DungeonLocationMetadata {
+  grade: DungeonGrade;
+  maxRank: DungeonRank;
+  minRealm: RealmStage;
+  dangerBase: number;
+  rewardBand: "low" | "mid" | "high";
+  materialBand: ItemId;
+}
+
 export interface Location {
   id: import("./constants.js").LocationId;
   stateId: import("./constants.js").StateId;
@@ -86,6 +98,7 @@ export interface Location {
   kind: "safe" | "resource" | "adventure";
   risk: import("./constants.js").RiskLevel;
   description: string;
+  dungeon?: DungeonLocationMetadata | null;
   organizationId?: string | null;
   organizationType?: "player-sect" | "neutral-sect" | null;
 }
@@ -148,6 +161,9 @@ export interface EventTemplate {
   stateId: import("./constants.js").StateId | null;
   nodeType: import("./constants.js").NodeType | null;
   minRealm: RealmStage | null;
+  dungeonGrade?: DungeonGrade | null;
+  minDungeonRank?: DungeonRank | null;
+  maxDungeonRank?: DungeonRank | null;
   effects: EventEffect;
   moralityChoice?: MoralityChoiceTemplate;
 }
@@ -385,11 +401,11 @@ export type TimedActionId =
   | "residence-socialize"
   | "take-mortal-task"
   | "mine-spirit-stones"
-  | "search-fortune"
+  | `search-fortune:rank-${DungeonRank}`
   | "take-sect-errand"
   | "take-neutral-duty"
   | "hunt-mine-beast"
-  | "challenge-guardian"
+  | `challenge-guardian:rank-${DungeonRank}`
   | "survey-wilderness"
   | `residence-produce:${string}`
   | `residence-heal:${"use-pill" | "no-pill"}`
@@ -648,6 +664,12 @@ export interface BreakthroughRecord {
   rateBreakdown?: BreakthroughRateModifier[];
 }
 
+export interface DungeonGradeProgress {
+  highestClearedRank: number;
+}
+
+export type DungeonProgress = Record<DungeonGrade, DungeonGradeProgress>;
+
 export interface StatusEffect {
   id: StatusEffectId;
   name: string;
@@ -694,6 +716,7 @@ export interface Cultivator {
   inventory: Record<ItemId, number>;
   statusEffects: StatusEffect[];
   breakthroughRecords: BreakthroughRecord[];
+  dungeonProgress: DungeonProgress;
   activeJobId: string | null;
   injuryTicksRemaining: number;
   registrationRecord: CultivationRegistrationRecord | null;
@@ -841,6 +864,8 @@ export interface ActionJob {
     activeQuestId?: string;
     wildernessLayerId?: string;
     wildernessEventId?: string;
+    dungeonGrade?: DungeonGrade;
+    dungeonRank?: DungeonRank;
     guixuNodeId?: string;
     guixuEventId?: string;
   };
@@ -1039,6 +1064,18 @@ export interface BreakthroughStateView {
   recommendedAction: ActionId | null;
 }
 
+export interface DungeonStateView {
+  grade: DungeonGrade;
+  minRealm: RealmStage;
+  highestClearedRank: number;
+  highestUnlockedRank: DungeonRank;
+  availableRanks: DungeonRank[];
+  frontierRank: DungeonRank;
+  recommendedRank: DungeonRank;
+  materialBand: ItemId;
+  lockReason: string | null;
+}
+
 export interface PlayerSectView {
   id: string;
   name: string;
@@ -1230,6 +1267,7 @@ export interface CultivatorStateView {
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
   breakthrough: BreakthroughStateView | null;
+  dungeon: DungeonStateView | null;
   wilderness: {
     layerId: string;
     layerName: string;

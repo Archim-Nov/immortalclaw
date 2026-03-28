@@ -10,6 +10,10 @@ interface NodeEventSpec {
   readonly nameCnSuffix?: string;
   readonly description: string;
   readonly baseWeight: number;
+  readonly minRealm?: EventTemplate["minRealm"];
+  readonly dungeonGrade?: EventTemplate["dungeonGrade"];
+  readonly minDungeonRank?: EventTemplate["minDungeonRank"];
+  readonly maxDungeonRank?: EventTemplate["maxDungeonRank"];
   readonly effects: EventTemplate["effects"];
 }
 
@@ -26,7 +30,10 @@ export function buildNodeEvent(location: Location, spec: NodeEventSpec): EventTe
     baseWeight: spec.baseWeight,
     stateId: location.stateId as StateId,
     nodeType: location.nodeType as NodeType,
-    minRealm: null,
+    minRealm: spec.minRealm ?? null,
+    dungeonGrade: spec.dungeonGrade ?? null,
+    minDungeonRank: spec.minDungeonRank ?? null,
+    maxDungeonRank: spec.maxDungeonRank ?? null,
     effects: spec.effects,
   };
 }

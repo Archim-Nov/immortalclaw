@@ -2,7 +2,7 @@ import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   BreakthroughCategory, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, DecisionPolicyView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
+  CreateCultivatorInput, DecisionPolicyView, DungeonGrade, DungeonRank, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
   MoralityAlignment, PendingMoralityChoiceResponse,
   FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
   ResolveMoralityChoiceResult,
@@ -79,7 +79,7 @@ import {
   resolveTemperamentId,
 } from "./registration-taxonomy.js";
 import { getItemActionBinding, getItemOperationActionId } from "./items/catalog.js";
-import { createEmptyInventory, createFactionReputation, createStateReputation } from "./seed.js";
+import { createDungeonProgress, createEmptyInventory, createFactionReputation, createStateReputation } from "./seed.js";
 import { buildSectLevel, sectBonusValue } from "./sect-level.js";
 import {
   buildFullTopology,
@@ -114,6 +114,7 @@ const BREAKTHROUGH_PROGRESS_REQUIRED = 100;
 const BREAKTHROUGH_FAILURE_PROGRESS = 60;
 const BREAKTHROUGH_MIN_RATE = 20;
 const BREAKTHROUGH_MAX_RATE = 90;
+const DUNGEON_RANKS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const satisfies readonly DungeonRank[];
 type BreakthroughDefinition = {
   category: BreakthroughCategory;
   targetRealm: Cultivator["realm"];
@@ -129,7 +130,7 @@ const REALM_QI = "炼气" as Cultivator["realm"];
 const REALM_FOUNDATION = "筑基" as Cultivator["realm"];
 const REALM_CORE = "金丹" as Cultivator["realm"];
 type DungeonNodeType = "dungeon-c" | "dungeon-b" | "dungeon-a";
-const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
+type DungeonTuning = {
   threatBase: number;
   threatVariance: number;
   spiritStoneBase: number;
@@ -142,7 +143,22 @@ const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
   defeatQiVariance: number;
   defeatInjuryTicks: number;
   poisonTicks: number;
+};
+const DUNGEON_META_BY_NODE_TYPE: Record<DungeonNodeType, {
+  grade: DungeonGrade;
+  minRealm: Cultivator["realm"];
+  materialBand: ItemId;
 }> = {
+  "dungeon-c": { grade: "丙", minRealm: REALM_QI, materialBand: "qi-common" },
+  "dungeon-b": { grade: "乙", minRealm: REALM_FOUNDATION, materialBand: "foundation-common" },
+  "dungeon-a": { grade: "甲", minRealm: REALM_CORE, materialBand: "core-common" },
+};
+const REALM_ORDER: Record<Cultivator["realm"], number> = {
+  [REALM_QI]: 0,
+  [REALM_FOUNDATION]: 1,
+  [REALM_CORE]: 2,
+};
+const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
   "dungeon-c": {
     threatBase: 156,
     threatVariance: 12,
@@ -212,6 +228,20 @@ const parseAcceptQuestId = (actionId: ActionId) => actionId.startsWith("accept-q
 const parseExecuteQuestId = (actionId: ActionId) => actionId.startsWith("execute-quest:") ? actionId.slice("execute-quest:".length) : null;
 const parseExploreGuixuNode = (actionId: ActionId) => actionId.startsWith("explore-guixu:") ? actionId.slice("explore-guixu:".length) : null;
 const parseResidenceOption = (actionId: ActionId, prefix: string) => actionId.startsWith(prefix) ? actionId.slice(prefix.length) : null;
+const parseDungeonRank = (actionId: ActionId, prefix: "search-fortune:rank-" | "challenge-guardian:rank-"): DungeonRank | null => {
+  if (!actionId.startsWith(prefix)) {
+    return null;
+  }
+  const parsed = Number.parseInt(actionId.slice(prefix.length), 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 9) {
+    return null;
+  }
+  return parsed as DungeonRank;
+};
+const parseSearchFortuneRank = (actionId: ActionId) => parseDungeonRank(actionId, "search-fortune:rank-");
+const parseChallengeGuardianRank = (actionId: ActionId) => parseDungeonRank(actionId, "challenge-guardian:rank-");
+const searchFortuneActionIdOf = (rank: DungeonRank) => `search-fortune:rank-${rank}` as const;
+const challengeGuardianActionIdOf = (rank: DungeonRank) => `challenge-guardian:rank-${rank}` as const;
 const parseJoinNeutralSectId = (actionId: ActionId) =>
   actionId.startsWith("join-neutral-sect:") ? actionId.slice("join-neutral-sect:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
@@ -223,10 +253,71 @@ const isMainCityNode = (nodeType: string) => nodeType === "main-city";
 const isSectOutpostNode = (nodeType: string) => nodeType === "sect-outpost";
 const isSubTownNode = (nodeType: string) => nodeType.startsWith("sub-town-");
 const isDungeonNode = (nodeType: string) => nodeType.startsWith("dungeon-");
-const guardianTuningForLocation = (location: WorldState["locations"][string]) =>
-  isDungeonNode(location.nodeType)
-    ? DUNGEON_GUARDIAN_TUNING[location.nodeType as DungeonNodeType]
+const dungeonMetadataOf = (location: WorldState["locations"][string] | undefined) =>
+  location && isDungeonNode(location.nodeType)
+    ? (location.dungeon ?? {
+        grade: DUNGEON_META_BY_NODE_TYPE[location.nodeType as DungeonNodeType].grade,
+        maxRank: 9,
+        minRealm: DUNGEON_META_BY_NODE_TYPE[location.nodeType as DungeonNodeType].minRealm,
+        dangerBase: location.nodeType === "dungeon-c" ? 1 : location.nodeType === "dungeon-b" ? 2 : 3,
+        rewardBand: location.nodeType === "dungeon-c" ? "low" : location.nodeType === "dungeon-b" ? "mid" : "high",
+        materialBand: DUNGEON_META_BY_NODE_TYPE[location.nodeType as DungeonNodeType].materialBand,
+      })
     : null;
+const meetsRealmRequirement = (cultivator: Cultivator, minRealm: Cultivator["realm"]) =>
+  REALM_ORDER[cultivator.realm] >= REALM_ORDER[minRealm];
+const ensureDungeonProgress = (cultivator: Cultivator) =>
+  cultivator.dungeonProgress ?? (cultivator.dungeonProgress = createDungeonProgress());
+const highestClearedRankOf = (cultivator: Cultivator, grade: DungeonGrade) =>
+  clamp(Math.floor(ensureDungeonProgress(cultivator)[grade]?.highestClearedRank ?? 0), 0, 9);
+const highestUnlockedRankOf = (cultivator: Cultivator, grade: DungeonGrade) =>
+  clamp(highestClearedRankOf(cultivator, grade) + 1, 1, 9) as DungeonRank;
+const unlockedDungeonRanksOf = (cultivator: Cultivator, grade: DungeonGrade): DungeonRank[] => {
+  const highestUnlockedRank = highestUnlockedRankOf(cultivator, grade);
+  return DUNGEON_RANKS.filter((rank) => rank <= highestUnlockedRank);
+};
+const rankBandForLevel = (realmLevel: number) => {
+  const relativeLevel = ((realmLevel - 1) % 3) + 1;
+  const minRank = ((relativeLevel - 1) * 3) + 1;
+  const maxRank = minRank + 2;
+  return { minRank: minRank as DungeonRank, maxRank: maxRank as DungeonRank };
+};
+const recommendedDungeonRankOf = (cultivator: Cultivator, grade: DungeonGrade): DungeonRank => {
+  const { minRank, maxRank } = rankBandForLevel(cultivator.realmLevel);
+  const highestUnlockedRank = highestUnlockedRankOf(cultivator, grade);
+  if (highestUnlockedRank < minRank) {
+    return highestUnlockedRank;
+  }
+  return clamp(highestUnlockedRank, minRank, maxRank) as DungeonRank;
+};
+const guardianTuningForDungeon = (grade: DungeonGrade, rank: DungeonRank): DungeonTuning => {
+  const gradeOffset = grade === "丙" ? 0 : grade === "乙" ? 1 : 2;
+  return {
+    threatBase: 136 + (gradeOffset * 34) + ((rank - 1) * 6),
+    threatVariance: 10 + (rank * 2),
+    spiritStoneBase: 82 + (gradeOffset * 42) + ((rank - 1) * 12),
+    spiritStoneVariance: 18 + (rank * 4),
+    fragmentBase: grade === "甲" ? 2 : 1,
+    fragmentVariance: 1 + Math.floor((rank - 1) / 4),
+    realmProgressReward: 6 + (gradeOffset * 4) + Math.floor((rank - 1) / 2),
+    wardReward: grade === "丙" ? (rank >= 7 ? 1 : 0) : 1,
+    defeatQiBase: 20 + (gradeOffset * 8) + ((rank - 1) * 2),
+    defeatQiVariance: 6 + Math.floor(rank / 2),
+    defeatInjuryTicks: 4 + (gradeOffset * 2) + Math.floor((rank - 1) / 3),
+    poisonTicks: grade === "甲" ? 2 + Math.floor((rank - 1) / 3) : grade === "乙" && rank >= 6 ? 1 : 0,
+  };
+};
+const searchTuningForDungeon = (grade: DungeonGrade, rank: DungeonRank) => {
+  const gradeOffset = grade === "丙" ? 0 : grade === "乙" ? 1 : 2;
+  return {
+    spiritStoneBase: 72 + (gradeOffset * 38) + ((rank - 1) * 10),
+    spiritStoneVariance: 28 + (rank * 4),
+    progressBase: 5 + (gradeOffset * 4) + Math.floor((rank - 1) / 2),
+    fragmentBase: grade === "甲" ? 2 : 1,
+    fragmentBonus: grade === "丙" ? 0 : 1,
+    insightTicks: grade === "甲" ? 6 : rank >= 6 ? 5 : 4,
+  };
+};
 const stateIdFromLocationId = (locationId: string) => locationId.split(":")[0] as StateId;
 const mainCityLocationIdOf = (stateId: StateId) => `${stateId}:main-city`;
 const ensureStateReputation = (cultivator: Cultivator) => cultivator.stateReputation ?? (cultivator.stateReputation = createStateReputation());
@@ -803,8 +894,9 @@ function triggerNodeSpecificEvent(
   actionTag: string,
   locationId: string,
   seed: string,
+  dungeonContext?: { grade: DungeonGrade; rank: DungeonRank },
 ): WorldEvent[] {
-  const drawn = drawNodeSpecificEvent(world, cultivator, locationId, seed);
+  const drawn = drawNodeSpecificEvent(world, cultivator, locationId, seed, dungeonContext);
   if (!drawn) {
     return [];
   }
@@ -1053,13 +1145,19 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
   const travelDestination = parseTravelDestination(actionId);
   const executeQuestId = parseExecuteQuestId(actionId);
   const guixuNodeId = parseExploreGuixuNode(actionId);
+  const normalizedActionId =
+    parseSearchFortuneRank(actionId) !== null
+      ? "search-fortune"
+      : parseChallengeGuardianRank(actionId) !== null
+        ? "challenge-guardian"
+        : actionId;
   const duration = travelDestination
     ? getDistanceBetween(world, cultivator.locationId, travelDestination)
     : executeQuestId
       ? (cultivator.activeQuests.find((quest) => quest.id === executeQuestId)?.durationTicks ?? NaN)
       : guixuNodeId
         ? (getGuixuNodeById(world, guixuNodeId)?.explorationDurationTicks ?? NaN)
-      : DEFAULT_ACTION_DURATIONS[actionId];
+      : DEFAULT_ACTION_DURATIONS[normalizedActionId];
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error(`Invalid action duration for ${actionId}.`);
   }
@@ -1189,7 +1287,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
   const agentId = normalizeAgentId(input.agentId); const starter = starterProfile();
   const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
   const starterLocationId = starterLocationIdFromRoll(Math.random());
-  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, moralityScore: 0, pendingSectApplicationId: null, pendingMoralityChoiceId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], breakthroughRecords: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
+  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, moralityScore: 0, pendingSectApplicationId: null, pendingMoralityChoiceId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], breakthroughRecords: [], dungeonProgress: createDungeonProgress(), activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
   world.cultivators[cultivator.id] = cultivator;
   let selectedCultivatorId: string | null = null;
   if (agentId) { const binding = ensureAgentBinding(world, agentId); binding.cultivatorIds.push(cultivator.id); binding.selectedCultivatorId = cultivator.id; selectedCultivatorId = cultivator.id; }
@@ -1546,6 +1644,65 @@ function hasBreakthroughMaterials(cultivator: Cultivator, definition: Breakthrou
   );
 }
 
+function dungeonLockReasonOf(cultivator: Cultivator, location: WorldState["locations"][string]): string | null {
+  const metadata = dungeonMetadataOf(location);
+  if (!metadata) {
+    return null;
+  }
+  return meetsRealmRequirement(cultivator, metadata.minRealm)
+    ? null
+    : `Requires ${metadata.minRealm} realm access.`;
+}
+
+function dungeonViewForLocation(
+  world: WorldState,
+  cultivator: Cultivator,
+  location: WorldState["locations"][string] | undefined,
+): DungeonStateView | null {
+  const metadata = dungeonMetadataOf(location);
+  if (!metadata) {
+    return null;
+  }
+  const highestClearedRank = highestClearedRankOf(cultivator, metadata.grade);
+  const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
+  const availableRanks = meetsRealmRequirement(cultivator, metadata.minRealm)
+    ? unlockedDungeonRanksOf(cultivator, metadata.grade)
+    : [];
+  return {
+    grade: metadata.grade,
+    minRealm: metadata.minRealm,
+    highestClearedRank,
+    highestUnlockedRank,
+    availableRanks,
+    frontierRank: highestUnlockedRank,
+    recommendedRank: recommendedDungeonRankOf(cultivator, metadata.grade),
+    materialBand: metadata.materialBand,
+    lockReason: dungeonLockReasonOf(cultivator, location!),
+  };
+}
+
+function preferredDungeonGuardianAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  nodeType: DungeonNodeType,
+): ActionId | null {
+  const currentLocation = world.locations[cultivator.locationId];
+  if (currentLocation?.nodeType === nodeType) {
+    const dungeonView = dungeonViewForLocation(world, cultivator, currentLocation);
+    if (dungeonView?.lockReason) {
+      return null;
+    }
+    const targetRank = dungeonView ? dungeonView.frontierRank : 1;
+    return challengeGuardianActionIdOf(targetRank);
+  }
+  const nearestDungeonId = findNearestLocationId(
+    world,
+    cultivator.locationId,
+    (candidate) => candidate.nodeType === nodeType,
+  );
+  return nearestDungeonId ? travelActionIdOf(nearestDungeonId) : null;
+}
+
 function preferredCommonMaterialAction(
   world: WorldState,
   cultivator: Cultivator,
@@ -1575,15 +1732,7 @@ function preferredCommonMaterialAction(
     return nearestWildernessId ? travelActionIdOf(nearestWildernessId) : null;
   }
 
-  if (world.locations[cultivator.locationId]?.nodeType === "dungeon-a") {
-    return "challenge-guardian";
-  }
-  const nearestHighRiskDungeonId = findNearestLocationId(
-    world,
-    cultivator.locationId,
-    (candidate) => candidate.nodeType === "dungeon-a",
-  );
-  return nearestHighRiskDungeonId ? travelActionIdOf(nearestHighRiskDungeonId) : null;
+  return preferredDungeonGuardianAction(world, cultivator, "dungeon-a");
 }
 
 function breakthroughRecommendedActionOf(
@@ -1861,7 +2010,14 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   const safeTravelAction = nearestSafeLocationId ? travelActionIdOf(nearestSafeLocationId) : "meditate";
   const nearestMainCityId = findNearestLocationId(world, cultivator.locationId, (candidate) => isMainCityNode(candidate.nodeType));
   const mainCityTravelAction = nearestMainCityId ? travelActionIdOf(nearestMainCityId) : "meditate";
-  const nearestDungeonId = findNearestLocationId(world, cultivator.locationId, (candidate) => isDungeonNode(candidate.nodeType));
+  const nearestDungeonId = findNearestLocationId(
+    world,
+    cultivator.locationId,
+    (candidate) => {
+      const metadata = dungeonMetadataOf(candidate);
+      return !!metadata && meetsRealmRequirement(cultivator, metadata.minRealm);
+    },
+  );
   const dungeonTravelAction = nearestDungeonId ? travelActionIdOf(nearestDungeonId) : "meditate";
   const nearestWildernessId = findNearestLocationId(world, cultivator.locationId, (candidate) => candidate.nodeType === "wilderness");
   const wildernessTravelAction = nearestWildernessId ? travelActionIdOf(nearestWildernessId) : "meditate";
@@ -1916,7 +2072,14 @@ function guidance(world: WorldState, cultivator: Cultivator) {
         );
       }
     }
-    if (registration.fortuneBonus >= 8) suggestedActions.push(location && isDungeonNode(location.nodeType) ? "search-fortune" : dungeonTravelAction);
+    if (registration.fortuneBonus >= 8) {
+      const dungeonView = dungeonViewForLocation(world, cultivator, location);
+      suggestedActions.push(
+        dungeonView && !dungeonView.lockReason
+          ? searchFortuneActionIdOf(dungeonView.recommendedRank)
+          : dungeonTravelAction,
+      );
+    }
     if (registration.mineBonus >= 6) suggestedActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
     if (registration.cultivateBonus >= 8) suggestedActions.push("cultivate");
   }
@@ -2233,6 +2396,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
     breakthrough: breakthroughViewOf(world, cultivator),
+    dungeon: dungeonViewForLocation(world, cultivator, location),
     wilderness: buildWildernessView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
     derivedState,
@@ -2517,7 +2681,31 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
   if (location.nodeType === "wilderness") actions.push({ actionId: "mine-spirit-stones", label: "Mine spirit stones", description: "Gather stones and ore.", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" }, { actionId: "hunt-mine-beast", label: "Hunt mine beast", description: "PVE combat for better loot.", durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"], kind: "timed" });
-  if (isDungeonNode(location.nodeType)) actions.push({ actionId: "search-fortune", label: "Search ruins", description: "Look for fragments and gains.", durationTicks: DEFAULT_ACTION_DURATIONS["search-fortune"], kind: "timed" }, { actionId: "challenge-guardian", label: "Challenge guardian", description: "PVE combat for rare loot.", durationTicks: DEFAULT_ACTION_DURATIONS["challenge-guardian"], kind: "timed" });
+  if (isDungeonNode(location.nodeType)) {
+    const dungeonView = dungeonViewForLocation(world, cultivator, location);
+    if (dungeonView && !dungeonView.lockReason) {
+      for (const rank of dungeonView.availableRanks) {
+        actions.push(
+          {
+            actionId: searchFortuneActionIdOf(rank),
+            label: `Search ruins (rank ${rank})`,
+            description: `Search ${location.name} at ${dungeonView.grade}${rank} tier for ${dungeonView.materialBand}.`,
+            durationTicks: DEFAULT_ACTION_DURATIONS["search-fortune"],
+            kind: "timed",
+          },
+          {
+            actionId: challengeGuardianActionIdOf(rank),
+            label: `Challenge guardian (rank ${rank})`,
+            description: rank === dungeonView.frontierRank
+              ? `Challenge the frontier guardian to unlock rank ${Math.min(rank + 1, 9)}.`
+              : `Reclear ${location.name} at ${dungeonView.grade}${rank} tier for loot.`,
+            durationTicks: DEFAULT_ACTION_DURATIONS["challenge-guardian"],
+            kind: "timed",
+          },
+        );
+      }
+    }
+  }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
@@ -3008,8 +3196,13 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     }
     return `${cultivator.name} mined stones and ore.`;
   }
-  if (job.actionId === "search-fortune") {
+  const fallbackSearchFortuneRank = parseSearchFortuneRank(job.actionId);
+  if (fallbackSearchFortuneRank !== null) {
     const location = world.locations[cultivator.locationId];
+    const metadata = dungeonMetadataOf(location);
+    if (!metadata) {
+      throw new Error("Search fortune requires a dungeon node.");
+    }
     const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}`);
     if (roll % 3 === 0) {
       cultivator.inventory["ruin-fragment"] += (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
@@ -3020,11 +3213,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
     }
-    if (location?.nodeType === "dungeon-a") {
-      cultivator.inventory["core-common"] += 1;
-    } else {
-      cultivator.inventory["foundation-common"] += 1;
-    }
+    cultivator.inventory[metadata.materialBand] += 1;
     return `${cultivator.name} searched the ruins.`;
   }
   if (job.actionId === "hunt-mine-beast") {
@@ -3063,17 +3252,20 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: "Mine Beast", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: 16, loot: {}, summary: `${cultivator.name} lost the encounter.` });
     return `${cultivator.name} lost a combat encounter.`;
   }
-  if (job.actionId === "challenge-guardian") {
+  const challengeGuardianRank = parseChallengeGuardianRank(job.actionId);
+  if (challengeGuardianRank !== null) {
     const location = world.locations[cultivator.locationId];
     if (!location || !isDungeonNode(location.nodeType)) {
       throw new Error("Challenge guardian requires a dungeon node.");
     }
-
-    const tuning = guardianTuningForLocation(location);
-    if (!tuning) {
-      throw new Error(`No guardian tuning for node type: ${location.nodeType}`);
+    const metadata = dungeonMetadataOf(location);
+    if (!metadata) {
+      throw new Error("Challenge guardian requires dungeon metadata.");
     }
-
+    if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
+      throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+    }
+    const tuning = guardianTuningForDungeon(metadata.grade, challengeGuardianRank);
     const encounterId = "ruins-guardian" as const;
     const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
     const power =
@@ -3091,21 +3283,30 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.spiritualPower = clamp(cultivator.spiritualPower - 24, 0, cultivator.maxSpiritualPower);
     if (power >= threat) {
       cultivator.inventory["ruin-fragment"] += tuning.fragmentBase + (roll % tuning.fragmentVariance);
-      cultivator.inventory["ward-talisman"] += tuning.wardReward;
-      cultivator.inventory[location.nodeType === "dungeon-a" ? "core-common" : "foundation-common"] += 1;
+      if (tuning.wardReward > 0) {
+        cultivator.inventory["ward-talisman"] += tuning.wardReward;
+      }
+      cultivator.inventory[metadata.materialBand] += 1;
       cultivator.spiritStones += tuning.spiritStoneBase + (roll % tuning.spiritStoneVariance);
       addRealmProgress(cultivator, tuning.realmProgressReward);
+      const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
+      if (challengeGuardianRank === highestUnlockedRank) {
+        ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(
+          highestClearedRankOf(cultivator, metadata.grade),
+          challengeGuardianRank,
+        );
+      }
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 });
-      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "victory", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} broke the guardian seal at ${location.name}.` });
+      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "victory", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.` });
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
         locationId: cultivator.locationId,
         title: `${location.name} Guardian Broken`,
-        content: `${cultivator.name} defeated the guardian of ${location.name} and claimed the sealed reward cache.`,
+        content: `${cultivator.name} defeated the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name} and claimed the sealed reward cache.`,
         severity: "medium",
-        tags: ["guardian", location.nodeType, "victory"],
+        tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "victory"],
       });
-      return `${cultivator.name} defeated the guardian of ${location.name}.`;
+      return `${cultivator.name} defeated the rank ${challengeGuardianRank} guardian of ${location.name}.`;
     }
 
     cultivator.qi = clamp(
@@ -3126,11 +3327,11 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivatorId: cultivator.id,
       locationId: cultivator.locationId,
       title: `${location.name} Guardian Counterattack`,
-      content: `${cultivator.name} was forced back by the guardian of ${location.name}.`,
+      content: `${cultivator.name} was forced back by the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name}.`,
       severity: "high",
-      tags: ["guardian", location.nodeType, "defeat"],
+      tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "defeat"],
     });
-    return `${cultivator.name} was repelled by the guardian of ${location.name}.`;
+    return `${cultivator.name} was repelled by the rank ${challengeGuardianRank} guardian of ${location.name}.`;
   }
   /* Legacy fallback block kept temporarily during the registration modifier patch.
   if (job.actionId === "meditate") { cultivator.spiritualPower = clamp(cultivator.spiritualPower + 28 + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (registration?.meditateBonus ?? 0), 0, cultivator.maxSpiritualPower); return `${cultivator.name} recovered spiritual power.`; }
@@ -3187,42 +3388,49 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     }
     return summary;
   }
-  if (job.actionId === "search-fortune") {
+  const searchFortuneRank = parseSearchFortuneRank(job.actionId);
+  if (searchFortuneRank !== null) {
     cultivator.activeJobId = null;
     const location = world.locations[cultivator.locationId];
     if (!location || !isDungeonNode(location.nodeType)) {
       throw new Error("Search fortune requires a dungeon node.");
     }
+    const metadata = dungeonMetadataOf(location);
+    if (!metadata) {
+      throw new Error("Search fortune requires dungeon metadata.");
+    }
+    if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
+      throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+    }
+    const tuning = searchTuningForDungeon(metadata.grade, searchFortuneRank);
     const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}:fortune-enhanced`);
     const fragmentBonus = (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
-    const spiritStoneBase = location.nodeType === "dungeon-a" ? 270 : location.nodeType === "dungeon-b" ? 235 : 190;
-    const spiritStoneVariance = location.nodeType === "dungeon-a" ? 70 : location.nodeType === "dungeon-b" ? 55 : 40;
-    const progressBase = location.nodeType === "dungeon-a" ? 16 : location.nodeType === "dungeon-b" ? 12 : 8;
     if (roll % 4 === 0) {
-      cultivator.inventory["ruin-fragment"] += fragmentBonus + (location.nodeType === "dungeon-c" ? 0 : 1);
-      if (location.nodeType === "dungeon-a" && roll % 8 === 0) cultivator.inventory["ward-talisman"] += 1;
+      cultivator.inventory["ruin-fragment"] += tuning.fragmentBase + fragmentBonus + tuning.fragmentBonus;
+      if (metadata.grade === "甲" && roll % 8 === 0) cultivator.inventory["ward-talisman"] += 1;
     } else if (roll % 4 === 1) {
-      addRealmProgress(cultivator, progressBase + (registration?.fortuneBonus ?? 0));
+      addRealmProgress(cultivator, tuning.progressBase + (registration?.fortuneBonus ?? 0));
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
     } else if (roll % 4 === 2) {
-      cultivator.spiritStones += spiritStoneBase + (roll % spiritStoneVariance) + ((registration?.fortuneBonus ?? 0) * 10);
-      cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0) + (location.nodeType === "dungeon-a" ? 1 : 0);
-      if (location.nodeType === "dungeon-b" && roll % 6 === 0) cultivator.inventory["healing-pill"] += 1;
-      if (location.nodeType === "dungeon-a" && roll % 6 === 0) cultivator.inventory["ward-talisman"] += 1;
+      cultivator.spiritStones += tuning.spiritStoneBase + (roll % tuning.spiritStoneVariance) + ((registration?.fortuneBonus ?? 0) * 10);
+      cultivator.inventory["ruin-fragment"] += tuning.fragmentBase + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0) + tuning.fragmentBonus;
+      if (metadata.grade === "乙" && roll % 6 === 0) cultivator.inventory["healing-pill"] += 1;
+      if (metadata.grade === "甲" && roll % 6 === 0) cultivator.inventory["ward-talisman"] += 1;
     } else {
-      upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "ruins", remainingTicks: location.nodeType === "dungeon-a" ? 6 : 5, intensity: 1 });
-      if (location.nodeType === "dungeon-b" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
-      if (location.nodeType === "dungeon-a") cultivator.inventory["ward-talisman"] += 1;
+      upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "ruins", remainingTicks: tuning.insightTicks, intensity: 1 });
+      if (metadata.grade === "乙" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
+      if (metadata.grade === "甲") cultivator.inventory["ward-talisman"] += 1;
     }
-    cultivator.inventory[location.nodeType === "dungeon-a" ? "core-common" : "foundation-common"] += 1;
+    cultivator.inventory[metadata.materialBand] += 1;
     triggerNodeSpecificEvent(
       world,
       cultivator,
-      "search-fortune",
+      searchFortuneActionIdOf(searchFortuneRank),
       cultivator.locationId,
       `${world.tick}:${job.id}:${cultivator.locationId}:node-search`,
+      { grade: metadata.grade, rank: searchFortuneRank },
     );
-    return `${cultivator.name} searched the ruins at ${location.name}.`;
+    return `${cultivator.name} searched the rank ${searchFortuneRank} ruins at ${location.name}.`;
   }
   return resolveJob(world, job);
 }
@@ -3343,7 +3551,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   const travelDestination = parseTravelDestination(actionId);
   const executeQuestId = parseExecuteQuestId(actionId);
   const exploreGuixuNodeId = parseExploreGuixuNode(actionId);
-  if (travelDestination || executeQuestId || exploreGuixuNodeId || TIMED_ACTION_IDS.has(actionId)) {
+  const searchFortuneRank = parseSearchFortuneRank(actionId);
+  const challengeGuardianRank = parseChallengeGuardianRank(actionId);
+  if (travelDestination || executeQuestId || exploreGuixuNodeId || searchFortuneRank || challengeGuardianRank || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -3397,9 +3607,32 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         guixuEventId: eventId,
       });
     }
+    if (searchFortuneRank || challengeGuardianRank) {
+      const metadata = dungeonMetadataOf(location);
+      if (!metadata) {
+        throw new Error("Action only available in dungeons.");
+      }
+      if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
+        throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+      }
+      const selectedRank = (searchFortuneRank ?? challengeGuardianRank)!;
+      const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
+      if (selectedRank > highestUnlockedRank) {
+        throw new Error(`Dungeon rank ${selectedRank} is not unlocked.`);
+      }
+      return startJob(
+        world,
+        cultivator,
+        actionId as TimedActionId,
+        `${searchFortuneRank ? "Search ruins" : "Challenge guardian"} rank ${selectedRank}`,
+        {
+          dungeonGrade: metadata.grade,
+          dungeonRank: selectedRank,
+        },
+      );
+    }
     if (actionId === "cultivate") { if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED) throw new Error("Realm progress is capped. Complete a breakthrough before more cultivation."); if (cultivator.spiritStones < 80) throw new Error("Not enough spirit stones."); if (cultivator.spiritualPower < 20) throw new Error("Not enough spiritual power."); cultivator.spiritStones -= 80; cultivator.spiritualPower -= 20; }
     if ((actionId === "mine-spirit-stones" || actionId === "hunt-mine-beast") && location.nodeType !== "wilderness") throw new Error("Action only available in wilderness.");
-    if ((actionId === "search-fortune" || actionId === "challenge-guardian") && !isDungeonNode(location.nodeType)) throw new Error("Action only available in dungeons.");
     if (actionId === "take-mortal-task" && location.kind !== "safe") throw new Error("Action only available in safe settlements.");
     if (actionId === "take-sect-errand") {
       const sect = getCultivatorSect(world, cultivator);
