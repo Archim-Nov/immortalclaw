@@ -80,6 +80,7 @@ export type MoralityAlignment = SectAlignment;
 
 export type DungeonGrade = "丙" | "乙" | "甲";
 export type DungeonRank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type DungeonExpeditionPolicy = "conservative" | "balanced" | "aggressive";
 
 export interface DungeonLocationMetadata {
   grade: DungeonGrade;
@@ -390,6 +391,7 @@ export type TimedActionId =
   | `travel-to:${string}`
   | `execute-quest:${string}`
   | `explore-guixu:${string}`
+  | `start-dungeon-expedition:rank-${DungeonRank}:${DungeonExpeditionPolicy}`
   | "meditate"
   | "heal"
   | "cultivate"
@@ -470,6 +472,76 @@ export interface WildernessProgress {
   lastEventId: string | null;
 }
 
+export interface DungeonYieldEstimate {
+  min: number;
+  max: number;
+}
+
+export interface DungeonRankYieldHint {
+  rank: DungeonRank;
+  primaryMaterial: ItemId;
+  estimatedExpeditionYieldByPolicy: Record<DungeonExpeditionPolicy, DungeonYieldEstimate>;
+  notableSecondaryDrops: ItemId[];
+}
+
+export interface DungeonExpeditionProgress {
+  cultivatorId: string;
+  jobId: string;
+  locationId: string;
+  grade: DungeonGrade;
+  targetRank: DungeonRank;
+  policy: DungeonExpeditionPolicy;
+  startedAtTick: number;
+  stepIndex: number;
+  maxSteps: number;
+  nextResolutionTick: number;
+  searchSteps: number;
+  guardianSteps: number;
+  primaryMaterialCount: number;
+  secondaryDrops: Partial<Record<ItemId, number>>;
+  spiritStoneGain: number;
+  realmProgressGain: number;
+  unlockedNextRank: boolean;
+  lastResolvedAction: "search" | "guardian" | null;
+}
+
+export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
+
+export interface DungeonExpeditionReport {
+  cultivatorId: string;
+  grade: DungeonGrade;
+  targetRank: DungeonRank;
+  policy: DungeonExpeditionPolicy;
+  outcome: DungeonExpeditionOutcome;
+  startedAtTick: number;
+  endedAtTick: number;
+  stepsResolved: number;
+  primaryMaterial: {
+    itemId: ItemId;
+    count: number;
+  };
+  secondaryDrops: Partial<Record<ItemId, number>>;
+  spiritStoneGain: number;
+  realmProgressGain: number;
+  unlockedNextRank: boolean;
+  returnLocationId: string;
+  summary: string;
+}
+
+export interface DungeonExpeditionStateView {
+  active: {
+    grade: DungeonGrade;
+    targetRank: DungeonRank;
+    policy: DungeonExpeditionPolicy;
+    startedAtTick: number;
+    stepsResolved: number;
+    maxSteps: number;
+    nextResolutionTick: number;
+    remainingTicks: number;
+  } | null;
+  lastReport: DungeonExpeditionReport | null;
+}
+
 export type GuixuTier = "entry" | "mid" | "deep" | "core";
 export type GuixuNodeType = "exploration" | "guardian" | "resource" | "sanctuary";
 
@@ -544,6 +616,7 @@ export type ImmediateActionId =
   | `enter-wilderness:${string}`
   | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
+  | "abort-dungeon-expedition"
   | "open-player-sect-recruitment"
   | "review-player-sect-applications"
   | "resolve-morality-event-choice"
@@ -866,6 +939,10 @@ export interface ActionJob {
     wildernessEventId?: string;
     dungeonGrade?: DungeonGrade;
     dungeonRank?: DungeonRank;
+    dungeonExpeditionPolicy?: DungeonExpeditionPolicy;
+    dungeonExpeditionTargetRank?: DungeonRank;
+    dungeonExpeditionStepIndex?: number;
+    dungeonExpeditionNextResolutionTick?: number;
     guixuNodeId?: string;
     guixuEventId?: string;
   };
@@ -1073,6 +1150,7 @@ export interface DungeonStateView {
   frontierRank: DungeonRank;
   recommendedRank: DungeonRank;
   materialBand: ItemId;
+  rankYieldHints: DungeonRankYieldHint[];
   lockReason: string | null;
 }
 
@@ -1268,6 +1346,7 @@ export interface CultivatorStateView {
   registrationEffects: RegistrationGameplayEffectsView | null;
   breakthrough: BreakthroughStateView | null;
   dungeon: DungeonStateView | null;
+  dungeonExpedition: DungeonExpeditionStateView;
   wilderness: {
     layerId: string;
     layerName: string;
@@ -1320,6 +1399,8 @@ export interface WorldState {
   sectReapplyCooldowns: Record<string, SectReapplyCooldown>;
   wildernessLayers: Record<string, WildernessLayer>;
   wildernessProgress: Record<string, WildernessProgress>;
+  dungeonExpeditions: Record<string, DungeonExpeditionProgress>;
+  dungeonExpeditionReports: Record<string, DungeonExpeditionReport>;
   guixuNodes: Record<string, GuixuNode>;
   guixuProgress: GuixuProgress;
   factionWars: Record<string, FactionWar>;

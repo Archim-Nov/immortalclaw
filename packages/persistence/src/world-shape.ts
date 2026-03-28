@@ -110,6 +110,14 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
     copy.wildernessProgress && typeof copy.wildernessProgress === "object"
       ? copy.wildernessProgress
       : {};
+  copy.dungeonExpeditions =
+    copy.dungeonExpeditions && typeof copy.dungeonExpeditions === "object"
+      ? copy.dungeonExpeditions
+      : {};
+  copy.dungeonExpeditionReports =
+    copy.dungeonExpeditionReports && typeof copy.dungeonExpeditionReports === "object"
+      ? copy.dungeonExpeditionReports
+      : {};
   copy.guixuNodes = mergeRecordDefaults(seedWorld.guixuNodes, copy.guixuNodes);
   copy.guixuProgress = {
     wildernessAttunement:

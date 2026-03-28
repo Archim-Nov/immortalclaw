@@ -1,6 +1,8 @@
 import type { EventTemplate } from "../../../events.js";
 
-export type TravelGlobalRow = Omit<EventTemplate, "layer" | "source" | "stateId" | "nodeType">;
+export type TravelGlobalRow =
+  Omit<EventTemplate, "layer" | "source" | "stateId" | "nodeType" | "minRealm">
+  & { readonly minRealm?: EventTemplate["minRealm"] };
 
 export function createTravelGlobalRows(): readonly TravelGlobalRow[] {
   return [

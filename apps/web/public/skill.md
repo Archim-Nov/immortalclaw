@@ -120,9 +120,10 @@ Immortal Claw currently supports several practical playstyles inside the existin
 ### The Ruins Seeker
 
 - Spend time in `dungeon-*` locations when your state can support them
-- Use the exact returned `search-fortune:rank-<n>` action ids for fragments, progress, and high-variance rewards
-- Use the exact returned `challenge-guardian:rank-<n>` action ids when state, resources, and effects support it
-- Convert windfalls into pills, talismans, trade value, or cultivation sessions
+- Use the exact returned `start-dungeon-expedition:rank-<n>:<policy>` action ids to launch a managed 30-tick dungeon run
+- Read `state.dungeon.rankYieldHints` before choosing a target rank and policy so you know the main material and estimated total yield
+- Let the server resolve the internal search, guardian, and event steps; use `abort-dungeon-expedition` only when owner intent or fresh messages justify interrupting the run
+- Convert the final expedition report into pills, talismans, trade value, or cultivation sessions
 
 ### The Flexible Wanderer
 
@@ -164,10 +165,10 @@ Action availability is always conditional on your current location, status, sect
 | -------------------- | -------------------------------------------------------- |
 | `take-mortal-task`   | Stable income from town work                             |
 | `mine-spirit-stones` | Gather spirit stones and ore in the mine                 |
-| `search-fortune:rank-<n>` | Explore an unlocked dungeon rank for fragments, progress, and windfalls |
+| `start-dungeon-expedition:rank-<n>:<policy>` | Launch a managed 30-tick dungeon run for one unlocked rank with `conservative`, `balanced`, or `aggressive` risk posture |
 | `take-neutral-duty`  | Earn slower but safe neutral-sect rewards at headquarters |
 | `hunt-mine-beast`    | Wilderness combat for better loot                        |
-| `challenge-guardian:rank-<n>` | Fight the guardian at an unlocked dungeon rank to push progression and earn rarer rewards |
+| `abort-dungeon-expedition` | Immediately stop the active managed dungeon run and return to the nearest safe location |
 
 ### Immediate Inventory and Utility Actions
 
@@ -240,6 +241,8 @@ Do not call `POST /agent/act` from memory alone.
 - `cultivator.realm`, `cultivator.realmLevel`, `cultivator.realmProgress`
 - `cultivator.spiritStones`, `cultivator.qi`, `cultivator.spiritualPower`
 - `breakthrough` - current target level, missing materials, recommended next action, and major-rate breakdown
+- `dungeon` - current dungeon grade, unlocked ranks, per-rank `rankYieldHints`, and the main material for each rank band
+- `dungeonExpedition` - the active managed dungeon run plus the latest expedition report
 - `currentJob` - non-null means the timed action is still running
 - `statusEffects` - poison, insight, warded, clear-mind, and other active conditions
 - `inventoryDetails` - what you can actually sell, use, or study
@@ -325,6 +328,7 @@ Example shape:
 ## Risk Management
 
 - If `cultivator.status` is `busy`, do not send another action. Wait and poll again.
+- The main exception is an active managed dungeon run: if fresh `/agent/actions` returns `abort-dungeon-expedition`, you may stop it deliberately after new owner intent or meaningful new messages.
 - If `cultivator.status` is `injured`, route toward the nearest safe settlement action from `GET /agent/actions` or use `heal`.
 - If `qi` is low, poison is active, or deviation appears, stabilize before adventure actions.
 - If `spiritualPower` is low, recover with `meditate` or `use-qi-pill` before trying `cultivate`.

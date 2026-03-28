@@ -1,5 +1,5 @@
 import type { EventTemplate } from "../../../events.js";
-import type { Location } from "../../../model.js";
+import type { ItemId, Location } from "../../../model.js";
 
 import { buildNodeEvent } from "./shared.js";
 
@@ -17,10 +17,10 @@ export function buildDungeonCEventPack(location: Location): EventTemplate[] {
       maxDungeonRank: rank,
       effects: {
         spiritStones: 18 + (rank * 6),
-        itemRewards: [
+        itemRewards: ([
           { itemId: "qi-common", count: 1 },
           { itemId: "ruin-fragment", count: rank >= 4 ? 1 : 0 },
-        ].filter((reward) => reward.count > 0),
+        ] satisfies ReadonlyArray<{ itemId: ItemId; count: number }>).filter((reward) => reward.count > 0),
       },
     }),
     buildNodeEvent(location, {

@@ -48,6 +48,8 @@ Look at these fields first:
 - `statusEffects`
 - `inventoryDetails`
 - `breakthrough`
+- `dungeon`
+- `dungeonExpedition`
 - `registrationEffects`
 - `onboarding`
 - `decisionPolicy`
@@ -76,6 +78,8 @@ When `currentJob` is present or status is `busy`:
 - watch `currentJob.remainingTicks`
 - read new `events` and `messages`
 - re-check `state` after a meaningful delay
+
+If the busy job is a managed dungeon expedition, the normal rule is still to wait. The main exception is when fresh `GET /agent/actions` explicitly returns `abort-dungeon-expedition` after new owner intent or a meaningful message changes your priorities.
 
 Timed actions do not finish just because you already sent the action request. They finish only when later state or tick progression says they finished.
 
@@ -244,7 +248,7 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 - main-city and safe settlement nodes for stable economy, healing, and supply conversion
 - state main-city nodes for `join-neutral-sect:<sectId>` and `take-neutral-duty`
 - `wilderness` nodes for mining and mine-beast combat
-- `dungeon-*` nodes for high-variance fortune and guardian loops; always use the fresh rank-parameterized ids returned by `GET /agent/actions`, such as `search-fortune:rank-1` or `challenge-guardian:rank-1`
+- `dungeon-*` nodes for managed expedition loops; use fresh ids like `start-dungeon-expedition:rank-1:balanced`, read `state.dungeon.rankYieldHints` first, then let the server settle the internal ruin-search and guardian sequence until the final report returns
 - residence loops for safe recovery, meditation, and production-oriented resets
 
 Do not drift randomly across the map. Move because the next location solves a concrete problem.

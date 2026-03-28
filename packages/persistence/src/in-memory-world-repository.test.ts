@@ -151,6 +151,8 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   delete (world as unknown as Record<string, unknown>).sects;
   delete (world as unknown as Record<string, unknown>).wildernessLayers;
   delete (world as unknown as Record<string, unknown>).wildernessProgress;
+  delete (world as unknown as Record<string, unknown>).dungeonExpeditions;
+  delete (world as unknown as Record<string, unknown>).dungeonExpeditionReports;
   delete (world as unknown as Record<string, unknown>).guixuNodes;
   delete (world as unknown as Record<string, unknown>).guixuProgress;
   delete (world as unknown as Record<string, unknown>).factionWars;
@@ -176,6 +178,8 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
 
   assert.deepEqual(hydrated.sects, {});
   assert.ok(hydrated.wildernessLayers["eight-wastes-threshold"]);
+  assert.deepEqual((hydrated as typeof hydrated & { dungeonExpeditions?: Record<string, unknown> }).dungeonExpeditions, {});
+  assert.deepEqual((hydrated as typeof hydrated & { dungeonExpeditionReports?: Record<string, unknown> }).dungeonExpeditionReports, {});
   assert.ok(hydrated.guixuNodes["guixu-threshold-gate"]);
   assert.ok(hydrated.factionWars["war-qingzhou-frontier"]);
   assert.ok(hydrated.itemDefinitions["legendary-artifact"]);

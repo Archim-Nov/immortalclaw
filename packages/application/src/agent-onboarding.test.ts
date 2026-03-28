@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSeedWorld } from "../../domain/src/runtime.js";
+import { createEmptyInventory } from "../../domain/src/seed.js";
 import type {
   AgentProfileRecord,
 } from "../../persistence/src/world-repository.js";
@@ -42,15 +43,9 @@ function createState(): CultivatorStateView {
     wilderness: null,
     guixu: null,
     inventory: {
+      ...createEmptyInventory(),
       "healing-pill": 1,
       "qi-pill": 1,
-      "ward-talisman": 0,
-      "spirit-ore": 0,
-      "ruin-fragment": 0,
-      "beast-core": 0,
-      "eight-wastes-pass": 0,
-      "ancient-artifact": 0,
-      "legendary-artifact": 0,
     },
     inventoryDetails: [],
     currentJob: null,
@@ -61,6 +56,12 @@ function createState(): CultivatorStateView {
     recentCombats: [],
     registration: null,
     registrationEffects: null,
+    breakthrough: null,
+    dungeon: null,
+    dungeonExpedition: {
+      active: null,
+      lastReport: null,
+    },
     derivedState: {
       readiness: "ready",
       recoveryState: "healthy",

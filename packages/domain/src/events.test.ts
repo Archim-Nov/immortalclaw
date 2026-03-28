@@ -175,6 +175,7 @@ test("drawEvent travel path can resolve from the current state's travel overlay"
     leizhou: [
       {
         id: "rz-tr-test",
+        minRealm: null,
         layer: "state-specific",
         source: "travel",
         semanticType: "human",
@@ -185,7 +186,6 @@ test("drawEvent travel path can resolve from the current state's travel overlay"
         baseWeight: 1,
         stateId: "leizhou",
         nodeType: null,
-        minRealm: null,
         effects: { statusEffects: [{ effectId: "warded", ticks: 2 }] },
       },
     ],
@@ -312,6 +312,7 @@ test("dungeon grade and rank context filters node-specific event draws", () => {
     "qingzhou:dungeon-a": [
       {
         id: "node-rank-gated",
+        minRealm: null,
         layer: "node-specific",
         source: "exploration",
         semanticType: "fortune",

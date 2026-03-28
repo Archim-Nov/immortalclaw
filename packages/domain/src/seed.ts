@@ -419,7 +419,7 @@ export function createSeedWorld(): WorldState {
   const neutralSects = buildNeutralSects();
   const locations = buildAllLocations(seededSects, neutralSects);
   const world: WorldState = {
-    version: 9,
+    version: 10,
     tick: 0,
     updatedAt: new Date().toISOString(),
     cultivators: structuredClone(cultivators),
@@ -436,6 +436,8 @@ export function createSeedWorld(): WorldState {
     sectReapplyCooldowns: {},
     wildernessLayers: structuredClone(WILDERNESS_LAYERS),
     wildernessProgress: {},
+    dungeonExpeditions: {},
+    dungeonExpeditionReports: {},
     guixuNodes: structuredClone(GUIXU_NODES),
     guixuProgress: createGuixuProgress(),
     factionWars: structuredClone(FACTION_WARS),

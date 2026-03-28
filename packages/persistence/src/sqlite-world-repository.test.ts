@@ -290,6 +290,8 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   delete (world as unknown as Record<string, unknown>).sects;
   delete (world as unknown as Record<string, unknown>).wildernessLayers;
   delete (world as unknown as Record<string, unknown>).wildernessProgress;
+  delete (world as unknown as Record<string, unknown>).dungeonExpeditions;
+  delete (world as unknown as Record<string, unknown>).dungeonExpeditionReports;
   delete (world as unknown as Record<string, unknown>).guixuNodes;
   delete (world as unknown as Record<string, unknown>).guixuProgress;
   delete (world as unknown as Record<string, unknown>).factionWars;
@@ -313,6 +315,8 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   assert.deepEqual(normalized.sects, {});
   assert.ok(normalized.wildernessLayers["eight-wastes-threshold"]);
   assert.deepEqual(normalized.wildernessProgress, {});
+  assert.deepEqual((normalized as typeof normalized & { dungeonExpeditions?: Record<string, unknown> }).dungeonExpeditions, {});
+  assert.deepEqual((normalized as typeof normalized & { dungeonExpeditionReports?: Record<string, unknown> }).dungeonExpeditionReports, {});
   assert.ok(normalized.guixuNodes["guixu-threshold-gate"]);
   assert.ok(normalized.guixuProgress);
   assert.ok(normalized.factionWars["war-qingzhou-frontier"]);

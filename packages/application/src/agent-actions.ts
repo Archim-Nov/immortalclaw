@@ -23,6 +23,17 @@ export async function buildAuthenticatedAgentActions(options: {
   const snapshot = await world.readWorld();
   const genericActions: AvailableAction[] = [];
   const cultivator = snapshot.cultivators[agent.selectedCultivatorId];
+  const activeDungeonExpedition =
+    (snapshot as WorldState & { dungeonExpeditions?: Record<string, unknown> }).dungeonExpeditions?.[agent.selectedCultivatorId]
+    ?? null;
+
+  if (cultivator?.activeJobId && activeDungeonExpedition) {
+    return {
+      agent: toAgentView(agent),
+      cultivatorId: agent.selectedCultivatorId,
+      actions: baseActions,
+    };
+  }
 
   if (cultivator && !cultivator.sectId && !cultivator.neutralSectId) {
     const recruitment = listRecruitablePlayerSects(snapshot, agent.selectedCultivatorId, { limit: 1 });

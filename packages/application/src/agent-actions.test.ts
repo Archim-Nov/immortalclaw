@@ -58,3 +58,85 @@ test("buildAuthenticatedAgentActions assembles agent view plus available actions
   assert.equal(payload.cultivatorId, "cultivator-9");
   assert.deepEqual(payload.actions, actions);
 });
+
+test("buildAuthenticatedAgentActions does not append generic inbox actions during an active dungeon expedition", async () => {
+  const world = createSeedWorld();
+  const seedCultivatorId = Object.keys(world.cultivators)[0];
+  if (!seedCultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  world.cultivators["cultivator-9"] = {
+    ...world.cultivators[seedCultivatorId]!,
+    id: "cultivator-9",
+    activeJobId: "job-expedition",
+    pendingMoralityChoiceId: "morality-choice-1",
+  };
+  (world as typeof world & {
+    dungeonExpeditions?: Record<string, unknown>;
+  }).dungeonExpeditions = {
+    "cultivator-9": {
+      cultivatorId: "cultivator-9",
+      jobId: "job-expedition",
+      locationId: "qingzhou:dungeon-c",
+      grade: "丙",
+      targetRank: 1,
+      policy: "balanced",
+      startedAtTick: 0,
+      stepIndex: 2,
+      maxSteps: 10,
+      nextResolutionTick: 9,
+      searchSteps: 1,
+      guardianSteps: 1,
+      primaryMaterialCount: 2,
+      secondaryDrops: {},
+      spiritStoneGain: 120,
+      realmProgressGain: 8,
+      unlockedNextRank: false,
+      lastResolvedAction: "search",
+    },
+  };
+  world.jobs["job-expedition"] = {
+    id: "job-expedition",
+    cultivatorId: "cultivator-9",
+    actionId: "start-dungeon-expedition:rank-1:balanced" as never,
+    label: "Dungeon expedition",
+    remainingTicks: 24,
+    totalTicks: 30,
+  };
+  world.pendingMoralityChoices["morality-choice-1"] = {
+    id: "morality-choice-1",
+    cultivatorId: "cultivator-9",
+    createdAtTick: 0,
+    expiresAtTick: 6,
+    title: "A crossroads",
+    prompt: "Choose a path.",
+    options: [
+      { id: "aid", label: "Aid", summary: "Help them.", moralityDelta: 1, effectBundle: {} },
+      { id: "ignore", label: "Ignore", summary: "Walk away.", moralityDelta: -1, effectBundle: {} },
+    ],
+  };
+
+  const payload = await buildAuthenticatedAgentActions({
+    world: {
+      async listAvailableActions() {
+        return [{
+          actionId: "abort-dungeon-expedition" as never,
+          label: "Abort dungeon expedition",
+          description: "Return to safety now.",
+          durationTicks: 0,
+          kind: "immediate",
+        }];
+      },
+      async readWorld() {
+        return world;
+      },
+    },
+    agent: createAgentProfile(),
+  });
+
+  assert.deepEqual(
+    payload.actions.map((action) => action.actionId),
+    ["abort-dungeon-expedition"],
+  );
+});

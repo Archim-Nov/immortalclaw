@@ -61,11 +61,16 @@ export function computeActivityContext(cultivator: Cultivator, world: WorldState
     return "recovering";
   }
 
-  if (job.actionId === "search-fortune") return "exploring";
+  if (
+    job.actionId.startsWith("search-fortune:rank-")
+    || job.actionId.startsWith("start-dungeon-expedition:rank-")
+  ) {
+    return "exploring";
+  }
   if (job.actionId === "take-sect-errand") return "sect-duty";
   if (
     job.actionId === "hunt-mine-beast"
-    || job.actionId === "challenge-guardian"
+    || job.actionId.startsWith("challenge-guardian:rank-")
     || job.actionId.startsWith("execute-quest:")
   ) {
     return "encounter-resolving";

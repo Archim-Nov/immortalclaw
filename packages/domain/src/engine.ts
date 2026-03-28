@@ -2,7 +2,7 @@ import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   BreakthroughCategory, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, DecisionPolicyView, DungeonGrade, DungeonRank, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
+  CreateCultivatorInput, DecisionPolicyView, DungeonExpeditionProgress, DungeonExpeditionReport, DungeonExpeditionStateView, DungeonGrade, DungeonRank, DungeonRankYieldHint, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
   MoralityAlignment, PendingMoralityChoiceResponse,
   FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
   ResolveMoralityChoiceResult,
@@ -99,6 +99,25 @@ import {
   resolveWildernessSurvey,
   withdrawFromWilderness,
 } from "./wilderness-service.js";
+import {
+  buildDungeonExpeditionStateView,
+  buildDungeonRankYieldHints,
+  chooseDungeonExpeditionStepKind,
+  createDungeonExpeditionProgress,
+  createDungeonExpeditionReport,
+  describeDungeonExpeditionAction,
+  DUNGEON_EXPEDITION_DURATION_TICKS,
+  DUNGEON_EXPEDITION_MAX_STEPS,
+  DUNGEON_EXPEDITION_POLICIES,
+  DUNGEON_EXPEDITION_STEP_TICKS,
+  getActiveDungeonExpedition,
+  isAbortDungeonExpeditionAction,
+  isDungeonExpeditionCatastrophic,
+  parseStartDungeonExpeditionActionId,
+  recordDungeonExpeditionStep,
+  shouldRetreatDungeonExpedition,
+  startDungeonExpeditionActionIdOf,
+} from "./dungeon-expedition-service.js";
 
 const TICKS_PER_YEAR = 4380;
 const TIMED_ACTION_IDS = new Set<string>(Object.keys(DEFAULT_ACTION_DURATIONS));
@@ -153,11 +172,11 @@ const DUNGEON_META_BY_NODE_TYPE: Record<DungeonNodeType, {
   "dungeon-b": { grade: "乙", minRealm: REALM_FOUNDATION, materialBand: "foundation-common" },
   "dungeon-a": { grade: "甲", minRealm: REALM_CORE, materialBand: "core-common" },
 };
-const REALM_ORDER: Record<Cultivator["realm"], number> = {
-  [REALM_QI]: 0,
-  [REALM_FOUNDATION]: 1,
-  [REALM_CORE]: 2,
-};
+const REALM_ORDER = {
+  炼气: 0,
+  筑基: 1,
+  金丹: 2,
+} satisfies Record<Cultivator["realm"], number>;
 const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
   "dungeon-c": {
     threatBase: 156,
@@ -242,6 +261,7 @@ const parseSearchFortuneRank = (actionId: ActionId) => parseDungeonRank(actionId
 const parseChallengeGuardianRank = (actionId: ActionId) => parseDungeonRank(actionId, "challenge-guardian:rank-");
 const searchFortuneActionIdOf = (rank: DungeonRank) => `search-fortune:rank-${rank}` as const;
 const challengeGuardianActionIdOf = (rank: DungeonRank) => `challenge-guardian:rank-${rank}` as const;
+const isDungeonExpeditionActionId = (actionId: ActionId) => parseStartDungeonExpeditionActionId(actionId) !== null;
 const parseJoinNeutralSectId = (actionId: ActionId) =>
   actionId.startsWith("join-neutral-sect:") ? actionId.slice("join-neutral-sect:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
@@ -1150,6 +1170,8 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
       ? "search-fortune"
       : parseChallengeGuardianRank(actionId) !== null
         ? "challenge-guardian"
+        : parseStartDungeonExpeditionActionId(actionId) !== null
+          ? "start-dungeon-expedition"
         : actionId;
   const duration = travelDestination
     ? getDistanceBetween(world, cultivator.locationId, travelDestination)
@@ -1677,6 +1699,7 @@ function dungeonViewForLocation(
     frontierRank: highestUnlockedRank,
     recommendedRank: recommendedDungeonRankOf(cultivator, metadata.grade),
     materialBand: metadata.materialBand,
+    rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand),
     lockReason: dungeonLockReasonOf(cultivator, location!),
   };
 }
@@ -1701,6 +1724,183 @@ function preferredDungeonGuardianAction(
     (candidate) => candidate.nodeType === nodeType,
   );
   return nearestDungeonId ? travelActionIdOf(nearestDungeonId) : null;
+}
+
+function trimPrependedEntries<T>(entries: T[], previousLength: number): void {
+  const added = entries.length - previousLength;
+  if (added > 0) {
+    entries.splice(0, added);
+  }
+}
+
+function positiveInventoryDelta(
+  before: Record<ItemId, number>,
+  after: Record<ItemId, number>,
+): Partial<Record<ItemId, number>> {
+  const delta: Partial<Record<ItemId, number>> = {};
+  for (const itemId of Object.keys(after) as ItemId[]) {
+    const change = (after[itemId] ?? 0) - (before[itemId] ?? 0);
+    if (change > 0) {
+      delta[itemId] = change;
+    }
+  }
+  return delta;
+}
+
+function safeExpeditionReturnLocationId(world: WorldState, fromLocationId: string): string {
+  return findNearestLocationId(world, fromLocationId, (candidate) => canHealAtLocation(candidate)) ?? fromLocationId;
+}
+
+function writeDungeonExpeditionSummaryEvent(
+  world: WorldState,
+  cultivatorId: string,
+  locationId: string,
+  report: DungeonExpeditionReport,
+): void {
+  addWorldEvent(world, {
+    cultivatorId,
+    locationId,
+    title: "Dungeon Expedition",
+    content: report.summary,
+    severity: report.outcome === "catastrophic" ? "high" : "medium",
+    tags: ["dungeon-expedition", report.outcome, `rank-${report.targetRank}`, report.policy],
+  });
+}
+
+function finalizeDungeonExpedition(
+  world: WorldState,
+  cultivator: Cultivator,
+  progress: DungeonExpeditionProgress,
+  outcome: DungeonExpeditionReport["outcome"],
+): DungeonExpeditionReport {
+  const metadata = dungeonMetadataOf(world.locations[progress.locationId]);
+  if (!metadata) {
+    throw new Error("Dungeon expedition progress requires dungeon metadata.");
+  }
+
+  const returnLocationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
+  cultivator.locationId = returnLocationId;
+
+  const report = createDungeonExpeditionReport({
+    progress,
+    outcome,
+    endedAtTick: world.tick,
+    returnLocationId,
+    primaryMaterial: metadata.materialBand,
+  });
+
+  world.dungeonExpeditionReports[cultivator.id] = report;
+  delete world.dungeonExpeditions[cultivator.id];
+  writeDungeonExpeditionSummaryEvent(world, cultivator.id, returnLocationId, report);
+  return report;
+}
+
+function resolveDungeonExpeditionStepIfDue(
+  world: WorldState,
+  job: ActionJob,
+  progress: DungeonExpeditionProgress,
+): void {
+  if (world.tick < progress.nextResolutionTick) {
+    return;
+  }
+
+  const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
+  const location = world.locations[cultivator.locationId];
+  const metadata = dungeonMetadataOf(location);
+  if (!metadata) {
+    throw new Error("Dungeon expedition requires the cultivator to remain in a dungeon.");
+  }
+
+  const beforeInventory = structuredClone(cultivator.inventory);
+  const beforeSpiritStones = cultivator.spiritStones;
+  const beforeRealmProgress = cultivator.realmProgress;
+  const beforeHighestClearedRank = highestClearedRankOf(cultivator, progress.grade);
+  const beforeEventCount = world.worldEvents.length;
+  const beforeCombatCount = world.combatLogs.length;
+  const beforePendingMoralityChoiceId = cultivator.pendingMoralityChoiceId;
+  const beforePendingChoiceIds = new Set(Object.keys(world.pendingMoralityChoices));
+
+  const actionKind = chooseDungeonExpeditionStepKind({
+    targetRank: progress.targetRank,
+    frontierRank: highestUnlockedRankOf(cultivator, progress.grade),
+    highestClearedRank: beforeHighestClearedRank,
+    policy: progress.policy,
+    jobId: job.id,
+    stepIndex: progress.stepIndex,
+    worldTick: world.tick,
+    cultivatorId: cultivator.id,
+  });
+  const actionId = actionKind === "guardian"
+    ? challengeGuardianActionIdOf(progress.targetRank)
+    : searchFortuneActionIdOf(progress.targetRank);
+
+  const outerJobId = cultivator.activeJobId;
+  const syntheticJob: ActionJob = {
+    id: `job-${world.nextJobSequence++}`,
+    cultivatorId: cultivator.id,
+    actionId,
+    label: `Dungeon expedition ${actionKind}`,
+    remainingTicks: DUNGEON_EXPEDITION_STEP_TICKS,
+    totalTicks: DUNGEON_EXPEDITION_STEP_TICKS,
+    meta: {
+      dungeonGrade: progress.grade,
+      dungeonRank: progress.targetRank,
+    },
+  };
+
+  resolveEnhancedJob(world, syntheticJob);
+  cultivator.activeJobId = outerJobId;
+
+  trimPrependedEntries(world.worldEvents, beforeEventCount);
+  trimPrependedEntries(world.combatLogs, beforeCombatCount);
+
+  for (const choiceId of Object.keys(world.pendingMoralityChoices)) {
+    if (!beforePendingChoiceIds.has(choiceId)) {
+      delete world.pendingMoralityChoices[choiceId];
+    }
+  }
+  cultivator.pendingMoralityChoiceId = beforePendingMoralityChoiceId;
+
+  const inventoryDelta = positiveInventoryDelta(beforeInventory, cultivator.inventory);
+  const primaryMaterialCount = inventoryDelta[metadata.materialBand] ?? 0;
+  delete inventoryDelta[metadata.materialBand];
+
+  const updatedProgress = recordDungeonExpeditionStep({
+    progress,
+    action: actionKind,
+    primaryMaterialCount,
+    secondaryDrops: inventoryDelta,
+    spiritStoneGain: cultivator.spiritStones - beforeSpiritStones,
+    realmProgressGain: cultivator.realmProgress - beforeRealmProgress,
+    unlockedNextRank: highestClearedRankOf(cultivator, progress.grade) > beforeHighestClearedRank,
+    resolvedAtTick: world.tick,
+  });
+
+  world.dungeonExpeditions[cultivator.id] = updatedProgress;
+  job.meta = {
+    ...job.meta,
+    dungeonExpeditionPolicy: updatedProgress.policy,
+    dungeonExpeditionTargetRank: updatedProgress.targetRank,
+    dungeonExpeditionStepIndex: updatedProgress.stepIndex,
+    dungeonExpeditionNextResolutionTick: updatedProgress.nextResolutionTick,
+  };
+
+  if (isDungeonExpeditionCatastrophic(cultivator)) {
+    finalizeDungeonExpedition(world, cultivator, updatedProgress, "catastrophic");
+    job.remainingTicks = 0;
+    return;
+  }
+
+  if (shouldRetreatDungeonExpedition(cultivator, updatedProgress.policy)) {
+    finalizeDungeonExpedition(world, cultivator, updatedProgress, "withdrew");
+    job.remainingTicks = 0;
+    return;
+  }
+
+  if (updatedProgress.stepIndex >= DUNGEON_EXPEDITION_MAX_STEPS) {
+    finalizeDungeonExpedition(world, cultivator, updatedProgress, "completed");
+    job.remainingTicks = 0;
+  }
 }
 
 function preferredCommonMaterialAction(
@@ -2397,6 +2597,11 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     registrationEffects: registrationEffectsViewOf(cultivator),
     breakthrough: breakthroughViewOf(world, cultivator),
     dungeon: dungeonViewForLocation(world, cultivator, location),
+    dungeonExpedition: buildDungeonExpeditionStateView(
+      world,
+      cultivator,
+      cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
+    ),
     wilderness: buildWildernessView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
     derivedState,
@@ -2459,7 +2664,19 @@ function ensureSafetyNetActions(
 }
 
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
-  const cultivator = getCultivatorOrThrow(world, cultivatorId); if (cultivator.activeJobId) return [];
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const activeDungeonExpedition = getActiveDungeonExpedition(world, cultivator.id);
+  if (cultivator.activeJobId) {
+    return activeDungeonExpedition
+      ? [{
+          actionId: "abort-dungeon-expedition",
+          label: "Abort dungeon expedition",
+          description: "Stop the managed run, return to the nearest safe location, and settle the report now.",
+          durationTicks: 0,
+          kind: "immediate",
+        }]
+      : [];
+  }
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
   const registration = registrationModifiersOf(cultivator);
@@ -2685,24 +2902,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
     if (dungeonView && !dungeonView.lockReason) {
       for (const rank of dungeonView.availableRanks) {
-        actions.push(
-          {
-            actionId: searchFortuneActionIdOf(rank),
-            label: `Search ruins (rank ${rank})`,
-            description: `Search ${location.name} at ${dungeonView.grade}${rank} tier for ${dungeonView.materialBand}.`,
-            durationTicks: DEFAULT_ACTION_DURATIONS["search-fortune"],
+        for (const policy of DUNGEON_EXPEDITION_POLICIES) {
+          actions.push({
+            actionId: startDungeonExpeditionActionIdOf(rank, policy),
+            label: `Dungeon expedition (${policy}, rank ${rank})`,
+            description: describeDungeonExpeditionAction({ dungeon: dungeonView, rank, policy }),
+            durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
-          },
-          {
-            actionId: challengeGuardianActionIdOf(rank),
-            label: `Challenge guardian (rank ${rank})`,
-            description: rank === dungeonView.frontierRank
-              ? `Challenge the frontier guardian to unlock rank ${Math.min(rank + 1, 9)}.`
-              : `Reclear ${location.name} at ${dungeonView.grade}${rank} tier for loot.`,
-            durationTicks: DEFAULT_ACTION_DURATIONS["challenge-guardian"],
-            kind: "timed",
-          },
-        );
+          });
+        }
       }
     }
   }
@@ -3351,6 +3559,14 @@ function resolveJob(world: WorldState, job: ActionJob): string {
 function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
   const registration = registrationModifiersOf(cultivator);
+  if (parseStartDungeonExpeditionActionId(job.actionId)) {
+    cultivator.activeJobId = null;
+    const report = world.dungeonExpeditionReports[cultivator.id];
+    if (!report) {
+      throw new Error("Dungeon expedition completed without a report.");
+    }
+    return report.summary;
+  }
   if (job.actionId === "heal") {
     const summary = resolveJob(world, job);
     cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "deviation");
@@ -3436,7 +3652,29 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
 }
 
 export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId): ActionExecutionResult {
-  const cultivator = getCultivatorOrThrow(world, cultivatorId); requireIdle(cultivator); requireSafeIfInjured(cultivator, actionId);
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  if (isAbortDungeonExpeditionAction(actionId)) {
+    const progress = getActiveDungeonExpedition(world, cultivator.id);
+    if (!progress) {
+      throw new Error("No active dungeon expedition to abort.");
+    }
+    const activeJobId = cultivator.activeJobId;
+    if (activeJobId) {
+      delete world.jobs[activeJobId];
+      cultivator.activeJobId = null;
+    }
+    const report = finalizeDungeonExpedition(world, cultivator, progress, "aborted");
+    addDaoLog(world, cultivator.id, "Dungeon Expedition", report.summary, ["dungeon-expedition", "aborted"]);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: report.summary,
+    };
+  }
+  requireIdle(cultivator);
+  requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
   const acceptQuestId = parseAcceptQuestId(actionId);
@@ -3551,9 +3789,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   const travelDestination = parseTravelDestination(actionId);
   const executeQuestId = parseExecuteQuestId(actionId);
   const exploreGuixuNodeId = parseExploreGuixuNode(actionId);
+  const startDungeonExpedition = parseStartDungeonExpeditionActionId(actionId);
   const searchFortuneRank = parseSearchFortuneRank(actionId);
   const challengeGuardianRank = parseChallengeGuardianRank(actionId);
-  if (travelDestination || executeQuestId || exploreGuixuNodeId || searchFortuneRank || challengeGuardianRank || TIMED_ACTION_IDS.has(actionId)) {
+  if (travelDestination || executeQuestId || exploreGuixuNodeId || startDungeonExpedition || searchFortuneRank || challengeGuardianRank || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -3606,6 +3845,47 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         guixuNodeId: node.nodeId,
         guixuEventId: eventId,
       });
+    }
+    if (startDungeonExpedition) {
+      const metadata = dungeonMetadataOf(location);
+      if (!metadata) {
+        throw new Error("Action only available in dungeons.");
+      }
+      if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
+        throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+      }
+      const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
+      if (startDungeonExpedition.rank > highestUnlockedRank) {
+        throw new Error(`Dungeon rank ${startDungeonExpedition.rank} is not unlocked.`);
+      }
+      const started = startJob(
+        world,
+        cultivator,
+        actionId as TimedActionId,
+        `Dungeon expedition rank ${startDungeonExpedition.rank}`,
+        {
+          dungeonGrade: metadata.grade,
+          dungeonRank: startDungeonExpedition.rank,
+          dungeonExpeditionPolicy: startDungeonExpedition.policy,
+          dungeonExpeditionTargetRank: startDungeonExpedition.rank,
+          dungeonExpeditionStepIndex: 0,
+          dungeonExpeditionNextResolutionTick: world.tick + DUNGEON_EXPEDITION_STEP_TICKS,
+        },
+        DUNGEON_EXPEDITION_DURATION_TICKS,
+      );
+      if (!started.job) {
+        throw new Error("Dungeon expedition job was not created.");
+      }
+      world.dungeonExpeditions[cultivator.id] = createDungeonExpeditionProgress({
+        cultivatorId: cultivator.id,
+        jobId: started.job.id,
+        locationId: cultivator.locationId,
+        grade: metadata.grade,
+        targetRank: startDungeonExpedition.rank,
+        policy: startDungeonExpedition.policy,
+        startedAtTick: world.tick,
+      });
+      return started;
     }
     if (searchFortuneRank || challengeGuardianRank) {
       const metadata = dungeonMetadataOf(location);
@@ -3696,6 +3976,11 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
             triggeredEvents.push(...events);
           }
         }
+      }
+
+      const activeDungeonExpedition = getActiveDungeonExpedition(world, job.cultivatorId);
+      if (activeDungeonExpedition && activeDungeonExpedition.jobId === job.id && isDungeonExpeditionActionId(job.actionId)) {
+        resolveDungeonExpeditionStepIfDue(world, job, activeDungeonExpedition);
       }
 
       if (job.remainingTicks > 0) {

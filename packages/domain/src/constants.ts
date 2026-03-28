@@ -249,6 +249,7 @@ export const DEFAULT_ACTION_DURATIONS: Record<string, number> = {
   "take-mortal-task": 2,
   "mine-spirit-stones": 3,
   "search-fortune": 3,
+  "start-dungeon-expedition": 30,
   "take-sect-errand": 2,
   "take-neutral-duty": 2,
   "hunt-mine-beast": 3,
