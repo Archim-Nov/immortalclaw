@@ -126,8 +126,6 @@ const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
   defeatQiVariance: number;
   defeatInjuryTicks: number;
   poisonTicks: number;
-  manualReward: ItemId | null;
-  manualDropModulo: number | null;
 }> = {
   "dungeon-c": {
     threatBase: 156,
@@ -142,8 +140,6 @@ const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
     defeatQiVariance: 6,
     defeatInjuryTicks: 4,
     poisonTicks: 0,
-    manualReward: null,
-    manualDropModulo: null,
   },
   "dungeon-b": {
     threatBase: 176,
@@ -158,8 +154,6 @@ const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
     defeatQiVariance: 8,
     defeatInjuryTicks: 6,
     poisonTicks: 2,
-    manualReward: "array-manual",
-    manualDropModulo: 5,
   },
   "dungeon-a": {
     threatBase: 198,
@@ -174,8 +168,6 @@ const DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, {
     defeatQiVariance: 10,
     defeatInjuryTicks: 8,
     poisonTicks: 4,
-    manualReward: "sword-manual",
-    manualDropModulo: 3,
   },
 };
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
@@ -194,14 +186,6 @@ const DECISION_POLICY_PRIORITY_ORDER: readonly DecisionPolicyView["priorityOrder
   "onboarding",
   "free-exploration",
 ];
-/* Legacy manual mapping replaced by item catalog metadata.
-const MANUAL_TECHNIQUES: Record<"study-sword-manual" | "study-alchemy-manual" | "study-array-manual", { itemId: ItemId; technique: string; summary: string; effect: StatusEffect }> = {
-  "study-sword-manual": { itemId: "sword-manual", technique: "青霄剑意", summary: "Learned a sword manual and sharpened combat instincts.", effect: { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "manual", remainingTicks: 5, intensity: 1 } },
-  "study-alchemy-manual": { itemId: "alchemy-manual", technique: "回元火候", summary: "Learned an alchemy manual and stabilized recovery.", effect: { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "manual", remainingTicks: 6, intensity: 1 } },
-  "study-array-manual": { itemId: "array-manual", technique: "护脉阵纹", summary: "Learned an array manual and improved protection.", effect: { id: "warded", name: "Warded", description: "Lower combat risk.", source: "manual", remainingTicks: 6, intensity: 1 } },
-};
-*/
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const hashString = (input: string) => Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 const travelActionIdOf = (locationId: string) => `travel-to:${locationId}` as const;
@@ -968,7 +952,7 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   if (coreTemperamentId === "shou_jie") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A rule-bound core steadies defense and recovery discipline.", { combatGuard: 3 });
   } else if (coreTemperamentId === "duan_feng") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A cutting core sharpens decisive combat and manual study.", { combatBonus: 4, studyBonus: 2 });
+      applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A cutting core sharpens decisive combat and focused dungeon pressure.", { combatBonus: 4, studyBonus: 2 });
   } else if (coreTemperamentId === "fu_sheng") {
     applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A nurturing core favors healing, low-risk errands, and team utility.", { healBonus: 4, taskBonus: 2 });
   } else if (coreTemperamentId === "xiang_rong") {
@@ -1009,7 +993,7 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   } else if (cultivationMotiveId === "prove-the-great-dao") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A path-seeking motive rewards sustained cultivation and hard breakthroughs.", { cultivateBonus: 4, combatBonus: 2 });
   } else if (cultivationMotiveId === "seek-truth") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Truth-seeking improves manual study, ruins scouting, and measured growth.", { studyBonus: 4, fortuneBonus: 3, cultivateBonus: 1 });
+      applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Truth-seeking improves ruins scouting and measured growth.", { studyBonus: 4, fortuneBonus: 3, cultivateBonus: 1 });
   } else if (cultivationMotiveId === "protect-the-beloved") {
     applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Protective intent favors healing and reliable problem-solving work.", { taskBonus: 3, healBonus: 2 });
   } else if (cultivationMotiveId === "serve-the-world") {
@@ -1462,7 +1446,6 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   if (hasEffect(cultivator, "deviation")) { warnings.push("Qi deviation is active."); priorities.push("Stabilize before cultivation."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
   if (cultivator.spiritStones < 120) { priorities.push("Earn more spirit stones."); suggestedActions.push(location?.kind === "safe" ? "take-mortal-task" : safeTravelAction); }
   if (cultivator.inventory["spirit-ore"] + cultivator.inventory["ruin-fragment"] + cultivator.inventory["beast-core"] > 0) priorities.push("You can sell materials in the market.");
-  if (cultivator.inventory["sword-manual"] + cultivator.inventory["alchemy-manual"] + cultivator.inventory["array-manual"] > 0) priorities.push("Study manuals before the next long action.");
   if (hasEffect(cultivator, "insight")) priorities.push("Insight is active. Use it on cultivation or a major encounter.");
   if (hasEffect(cultivator, "spirit-saturated")) priorities.push("Spirit saturation is active. Good time for cultivation.");
   if (registration && cultivator.injuryTicksRemaining <= 0) {
@@ -1493,9 +1476,6 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     if (registration.mineBonus >= 6) suggestedActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
     if (registration.cultivateBonus >= 8) suggestedActions.push("cultivate");
   }
-  if (cultivator.inventory["sword-manual"] > 0) suggestedActions.push("study-sword-manual");
-  if (cultivator.inventory["alchemy-manual"] > 0) suggestedActions.push("study-alchemy-manual");
-  if (cultivator.inventory["array-manual"] > 0) suggestedActions.push("study-array-manual");
   const hasLowRiskSuggestion = suggestedActions.some((actionId) => isLowRiskAction(actionId));
   if ((readiness === "poor" || recoveryState !== "healthy") && !hasLowRiskSuggestion) {
     if (isAtResidence(cultivator)) {
@@ -2094,7 +2074,7 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
 
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
-  const allowed = new Set<ActionId>(["meditate", "heal", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "study-sword-manual", "study-alchemy-manual", "study-array-manual", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness"]);
+  const allowed = new Set<ActionId>(["meditate", "heal", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness"]);
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (!allowed.has(actionId)) throw new Error("Cultivator is injured and can only do safe actions.");
@@ -2743,8 +2723,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   if (job.actionId === "take-sect-errand") {
     const summary = resolveJob(world, job);
     if (hashString(`${world.tick}:${job.id}:sect`) % 3 === 0) {
-      cultivator.inventory["array-manual"] += 1;
-      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Sect Bounty", content: "The sect added a manual copy to your reward for finishing the errand cleanly.", severity: "medium", tags: ["event", "sect", "bounty"] });
+      cultivator.inventory["ward-talisman"] += 1;
+      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Sect Bounty", content: "The sect added a protective talisman to your reward for finishing the errand cleanly.", severity: "medium", tags: ["event", "sect", "bounty"] });
     }
     return summary;
   }
@@ -2761,18 +2741,18 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     const progressBase = location.nodeType === "dungeon-a" ? 16 : location.nodeType === "dungeon-b" ? 12 : 8;
     if (roll % 4 === 0) {
       cultivator.inventory["ruin-fragment"] += fragmentBonus + (location.nodeType === "dungeon-c" ? 0 : 1);
-      if (location.nodeType === "dungeon-a" && roll % 8 === 0) cultivator.inventory["sword-manual"] += 1;
+      if (location.nodeType === "dungeon-a" && roll % 8 === 0) cultivator.inventory["ward-talisman"] += 1;
     } else if (roll % 4 === 1) {
       cultivator.realmProgress = clamp(cultivator.realmProgress + progressBase + (registration?.fortuneBonus ?? 0), 0, 200);
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
     } else if (roll % 4 === 2) {
       cultivator.spiritStones += spiritStoneBase + (roll % spiritStoneVariance) + ((registration?.fortuneBonus ?? 0) * 10);
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0) + (location.nodeType === "dungeon-a" ? 1 : 0);
-      if (location.nodeType === "dungeon-b" && roll % 6 === 0) cultivator.inventory["alchemy-manual"] += 1;
-      if (location.nodeType === "dungeon-a" && roll % 6 === 0) cultivator.inventory["array-manual"] += 1;
+      if (location.nodeType === "dungeon-b" && roll % 6 === 0) cultivator.inventory["healing-pill"] += 1;
+      if (location.nodeType === "dungeon-a" && roll % 6 === 0) cultivator.inventory["ward-talisman"] += 1;
     } else {
       upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "ruins", remainingTicks: location.nodeType === "dungeon-a" ? 6 : 5, intensity: 1 });
-      if (location.nodeType === "dungeon-b" && roll % 5 === 0) cultivator.inventory["array-manual"] += 1;
+      if (location.nodeType === "dungeon-b" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
       if (location.nodeType === "dungeon-a") cultivator.inventory["ward-talisman"] += 1;
     }
     triggerNodeSpecificEvent(
@@ -2784,19 +2764,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     );
     return `${cultivator.name} searched the ruins at ${location.name}.`;
   }
-  const summary = resolveJob(world, job);
-  if (job.actionId === "challenge-guardian" && summary.includes("defeated")) {
-    const location = world.locations[cultivator.locationId];
-    const tuning = location ? guardianTuningForLocation(location) : null;
-    if (
-      tuning?.manualReward
-      && tuning.manualDropModulo
-      && hashString(`${world.tick}:${job.id}:guardian:${location?.nodeType ?? "unknown"}`) % tuning.manualDropModulo === 0
-    ) {
-      cultivator.inventory[tuning.manualReward] += 1;
-    }
-  }
-  return summary;
+  return resolveJob(world, job);
 }
 
 export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId): ActionExecutionResult {

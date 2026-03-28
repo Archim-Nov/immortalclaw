@@ -341,10 +341,7 @@ export type ItemId =
   | "beast-core"
   | "eight-wastes-pass"
   | "ancient-artifact"
-  | "legendary-artifact"
-  | "sword-manual"
-  | "alchemy-manual"
-  | "array-manual";
+  | "legendary-artifact";
 
 export type ItemCategory = "consumable" | "talisman" | "material" | "manual";
 
@@ -530,9 +527,6 @@ export type ImmediateActionId =
   | "sell-spirit-ore"
   | "sell-ruin-fragment"
   | "sell-beast-core"
-  | "study-sword-manual"
-  | "study-alchemy-manual"
-  | "study-array-manual"
   | "join-sect"
   | "leave-neutral-sect"
   | "withdraw-from-wilderness";

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   Cultivator,
   FactionWar,
   GuixuNode,
@@ -28,95 +28,6 @@ import { createEventPools } from "./events.js";
 import { ITEM_CATALOG, ITEM_IDS } from "./items/catalog.js";
 import { seedQuestBoards } from "./quest.js";
 import { buildFullTopology, toLocationId, toSectOutpostLocationId } from "./topology.js";
-
-/* Legacy inline item table retained only for migration context.
-const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
-  "healing-pill": {
-    id: "healing-pill",
-    name: "疗伤丹",
-    category: "consumable",
-    description: "快速恢复气血，适合战后和采矿受伤时使用。",
-    baseValue: 100,
-  },
-  "qi-pill": {
-    id: "qi-pill",
-    name: "回气丹",
-    category: "consumable",
-    description: "补回灵力，适合闭关和战斗前后周转。",
-    baseValue: 60,
-  },
-  "ward-talisman": {
-    id: "ward-talisman",
-    name: "镇煞符",
-    category: "talisman",
-    description: "短时间降低战斗与天劫风险。",
-    baseValue: 180,
-  },
-  "spirit-ore": {
-    id: "spirit-ore",
-    name: "灵矿原石",
-    category: "material",
-    description: "矿洞常见材料，可在坊市出售。",
-    baseValue: 115,
-  },
-  "ruin-fragment": {
-    id: "ruin-fragment",
-    name: "残碑碎片",
-    category: "material",
-    description: "遗迹里掉落的碎片，可出售，也可能蕴含感悟。",
-    baseValue: 145,
-  },
-  "beast-core": {
-    id: "beast-core",
-    name: "妖核",
-    category: "material",
-    description: "战胜妖兽后掉落的核心材料。",
-    baseValue: 210,
-  },
-  "sword-manual": {
-    id: "sword-manual",
-    name: "剑诀手本",
-    category: "manual",
-    description: "记载基础剑诀，研读后可提升修炼与战斗表现。",
-    baseValue: 260,
-  },
-  "alchemy-manual": {
-    id: "alchemy-manual",
-    name: "丹道手本",
-    category: "manual",
-    description: "记载火候和灵草辨识，研读后偏向恢复与悟道。",
-    baseValue: 250,
-  },
-  "array-manual": {
-    id: "array-manual",
-    name: "阵纹手本",
-    category: "manual",
-    description: "记载基础阵纹和护体法门，研读后偏向防护。",
-    baseValue: 255,
-  },
-  "eight-wastes-pass": {
-    id: "eight-wastes-pass",
-    name: "Eight Wastes Pass",
-    category: "material",
-    description: "A pass that allows entry into the Eight Wastes threshold route.",
-    baseValue: 320,
-  },
-  "ancient-artifact": {
-    id: "ancient-artifact",
-    name: "Ancient Artifact",
-    category: "material",
-    description: "A rare relic recovered from ancient hazards and Guixu traces.",
-    baseValue: 480,
-  },
-  "legendary-artifact": {
-    id: "legendary-artifact",
-    name: "Legendary Artifact",
-    category: "material",
-    description: "A top-tier relic recovered from deep Guixu exploration.",
-    baseValue: 880,
-  },
-};
-*/
 
 const sects: Record<string, Sect> = {};
 
@@ -332,7 +243,6 @@ const cultivators: Record<string, Cultivator> = {
       "healing-pill": 1,
       "qi-pill": 1,
       "spirit-ore": 1,
-      "sword-manual": 1,
     },
     statusEffects: createStatusEffects(),
     activeJobId: null,

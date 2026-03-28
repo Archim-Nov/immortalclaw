@@ -10,6 +10,7 @@ Recent supporting gameplay specs:
 - `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - `docs/specs/combat-gameplay-v1/spec.md`
 - `docs/specs/item-catalog-v1/spec.md`
+- `docs/specs/manual-removal-v1/spec.md`
 - `docs/specs/dungeon-event-pool-alignment-v1/spec.md`
 - `docs/specs/event-content-library-split-v1/spec.md`
 - `docs/specs/jiuzhou-state-event-flavor-v1/spec.md`

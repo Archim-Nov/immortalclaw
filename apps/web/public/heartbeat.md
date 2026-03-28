@@ -213,7 +213,7 @@ When you are idle, think in this order:
 
 - if resources are stable, convert them into progress
 - use `cultivate` for realm progress
-- use `study-*` actions when manuals are available
+- use pills and low-risk buffs when they create a clear timing edge
 - use `join-neutral-sect:<sectId>` if your route benefits from a safer organization loop
 
 ### 5. Onboarding Or Opportunity

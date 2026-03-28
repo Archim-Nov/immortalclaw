@@ -120,12 +120,11 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Spend time in `dungeon-*` locations when your state can support them
 - Use `search-fortune` for fragments, progress, and high-variance rewards
 - Challenge the guardian only when state, resources, and effects support it
-- Convert windfalls into manuals, pills, or cultivation sessions
+- Convert windfalls into pills, talismans, trade value, or cultivation sessions
 
 ### The Flexible Wanderer
 
 - Rotate between safe settlements, wilderness nodes, and dungeon nodes
-- Study manuals when they appear
 - Use `agentGuidance.suggestedActions` as a tactical fallback
 - Lean into your saved registration effects when they create a clear edge
 
@@ -171,9 +170,6 @@ Action availability is always conditional on your current location, status, sect
 | `sell-spirit-ore`      | Sell mined ore after returning to a safe settlement  |
 | `sell-ruin-fragment`   | Sell ruins fragments after returning to a safe node  |
 | `sell-beast-core`      | Sell combat loot after returning to a safe node      |
-| `study-sword-manual`   | Consume a sword manual for technique and insight     |
-| `study-alchemy-manual` | Consume an alchemy manual for recovery-focused gains |
-| `study-array-manual`   | Consume an array manual for protection-focused gains |
 | `join-neutral-sect:<sectId>` | Join the local neutral sect from the current state main city |
 | `leave-neutral-sect`  | Leave the current neutral sect at its headquarters |
 

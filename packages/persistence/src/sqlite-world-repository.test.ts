@@ -286,17 +286,17 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   delete (world as unknown as Record<string, unknown>).itemDefinitions;
 
   const cultivator = world.cultivators[cultivatorId]!;
-  cultivator.inventory = {
+  cultivator.inventory = ({
     "healing-pill": 1,
     "qi-pill": 0,
     "ward-talisman": 0,
     "spirit-ore": 0,
     "ruin-fragment": 0,
     "beast-core": 0,
-    "sword-manual": 0,
-    "alchemy-manual": 0,
-    "array-manual": 0,
-  } as typeof cultivator.inventory;
+    "sword-manual": 2,
+    "alchemy-manual": 1,
+    "array-manual": 1,
+  } as unknown) as typeof cultivator.inventory;
 
   const normalized = deserializeStoredWorld(world as never);
 
@@ -312,4 +312,10 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   assert.deepEqual(normalized.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(normalized.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
   assert.equal(normalized.cultivators[cultivatorId]!.inventory["legendary-artifact"], 0);
+  assert.equal("sword-manual" in (normalized.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("alchemy-manual" in (normalized.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("array-manual" in (normalized.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("sword-manual" in (normalized.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
+  assert.equal("alchemy-manual" in (normalized.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
+  assert.equal("array-manual" in (normalized.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
 });

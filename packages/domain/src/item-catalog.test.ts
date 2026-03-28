@@ -26,4 +26,7 @@ test("item catalog covers all current items with agent-readable metadata", () =>
   assert.deepEqual(world.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(world.itemDefinitions["healing-pill"].trade.buyBasePrice, 100);
   assert.equal(world.itemDefinitions["spirit-ore"].trade.sellBasePrice, 115);
+  assert.equal("sword-manual" in (world.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("alchemy-manual" in (world.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("array-manual" in (world.itemDefinitions as Record<string, unknown>), false);
 });

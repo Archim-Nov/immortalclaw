@@ -156,17 +156,17 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   delete (world as unknown as Record<string, unknown>).factionWars;
   delete (world as unknown as Record<string, unknown>).itemDefinitions;
 
-  world.cultivators[cultivatorId]!.inventory = {
+  world.cultivators[cultivatorId]!.inventory = ({
     "healing-pill": 1,
     "qi-pill": 0,
     "ward-talisman": 0,
     "spirit-ore": 0,
     "ruin-fragment": 0,
     "beast-core": 0,
-    "sword-manual": 0,
-    "alchemy-manual": 0,
-    "array-manual": 0,
-  } as typeof world.cultivators[typeof cultivatorId]["inventory"];
+    "sword-manual": 2,
+    "alchemy-manual": 1,
+    "array-manual": 1,
+  } as unknown) as typeof world.cultivators[typeof cultivatorId]["inventory"];
 
   const repository = createInMemoryWorldRepository({ world });
   const hydrated = await repository.readWorld();
@@ -180,4 +180,10 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   assert.equal(hydrated.itemDefinitions["eight-wastes-pass"].use.kind, "ticket");
   assert.deepEqual(hydrated.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(hydrated.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
+  assert.equal("sword-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("alchemy-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("array-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("sword-manual" in (hydrated.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
+  assert.equal("alchemy-manual" in (hydrated.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
+  assert.equal("array-manual" in (hydrated.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
 });

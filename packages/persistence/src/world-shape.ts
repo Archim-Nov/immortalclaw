@@ -5,6 +5,8 @@ import { buildFullTopology } from "../../domain/src/topology.js";
 import type { Location } from "../../domain/src/model.js";
 import type { LocationId, StateId } from "../../domain/src/constants.js";
 
+const REMOVED_LEGACY_MANUAL_IDS = ["sword-manual", "alchemy-manual", "array-manual"] as const;
+
 function mergeRecordDefaults<T extends Record<string, unknown>>(
   defaults: T,
   existing: unknown,
@@ -128,6 +130,9 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
   };
   copy.factionWars = mergeRecordDefaults(seedWorld.factionWars, copy.factionWars);
   copy.itemDefinitions = mergeRecordDefaults(seedWorld.itemDefinitions, copy.itemDefinitions);
+  for (const itemId of REMOVED_LEGACY_MANUAL_IDS) {
+    delete (copy.itemDefinitions as Record<string, unknown>)[itemId];
+  }
   copy.pendingSectApplications =
     copy.pendingSectApplications && typeof copy.pendingSectApplications === "object"
       ? copy.pendingSectApplications
@@ -190,6 +195,9 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
       ...createEmptyInventory(),
       ...(cultivator.inventory ?? {}),
     };
+    for (const itemId of REMOVED_LEGACY_MANUAL_IDS) {
+      delete (cultivator.inventory as Record<string, unknown>)[itemId];
+    }
     cultivator.factionReputation = {
       ...createFactionReputation(),
       ...(cultivator.factionReputation ?? {}),

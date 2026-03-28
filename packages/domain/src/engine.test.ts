@@ -695,24 +695,21 @@ test("agent persona sync auto-provisions and reuses a single character", () => {
   assert.equal(state.cultivator.temperament, "calm");
 });
 
-test("studying a manual adds technique and strategy recommends safe progression", () => {
+test("manual items and study actions are removed from the live runtime surface", () => {
   const world = createSeedWorld();
-  const before = getCultivatorState(world, "yun-zhong-he");
-  const beforeManualCount = before.inventory["sword-manual"];
-  const beforeTechniqueCount = before.cultivation.techniques.length;
-
-  const act = performAction(world, "yun-zhong-he", "study-sword-manual");
-  assert.equal(act.accepted, true);
-
   const state = getCultivatorState(world, "yun-zhong-he");
-  assert.equal(beforeManualCount, 1);
-  assert.equal(state.inventory["sword-manual"], 0);
-  assert.ok(state.cultivation.techniques.length >= beforeTechniqueCount);
-  assert.ok(state.statusEffects.some((effect) => effect.id === "insight"));
-
+  const actions = listAvailableActions(world, "yun-zhong-he");
   const strategy = getStrategySnapshot(world, "yun-zhong-he");
-  assert.equal(strategy.cultivatorId, "yun-zhong-he");
-  assert.ok(strategy.recommendedSequence.length > 0);
+
+  assert.equal("sword-manual" in (state.inventory as Record<string, number>), false);
+  assert.equal("alchemy-manual" in (state.inventory as Record<string, number>), false);
+  assert.equal("array-manual" in (state.inventory as Record<string, number>), false);
+  assert.equal("sword-manual" in (world.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("alchemy-manual" in (world.itemDefinitions as Record<string, unknown>), false);
+  assert.equal("array-manual" in (world.itemDefinitions as Record<string, unknown>), false);
+  assert.equal(actions.some((action) => action.actionId.startsWith("study-")), false);
+  assert.equal(state.inventoryDetails.some((entry) => entry.category === "manual"), false);
+  assert.equal(strategy.recommendedSequence.some((actionId) => actionId.startsWith("study-")), false);
 });
 
 test("item-backed actions expose structured metadata and inventory actionability", () => {
@@ -722,10 +719,8 @@ test("item-backed actions expose structured metadata and inventory actionability
 
   const buyHealing = actions.find((action) => action.actionId === "buy-healing-pill");
   const useHealing = actions.find((action) => action.actionId === "use-healing-pill");
-  const studySword = actions.find((action) => action.actionId === "study-sword-manual");
   const sellOre = actions.find((action) => action.actionId === "sell-spirit-ore");
   const healingEntry = state.inventoryDetails.find((entry) => entry.id === "healing-pill");
-  const swordEntry = state.inventoryDetails.find((entry) => entry.id === "sword-manual");
   const oreEntry = state.inventoryDetails.find((entry) => entry.id === "spirit-ore");
 
   assert.deepEqual(buyHealing?.itemBinding, { itemId: "healing-pill", operation: "buy" });
@@ -735,10 +730,6 @@ test("item-backed actions expose structured metadata and inventory actionability
   assert.equal(useHealing?.costs?.itemConsumes?.[0]?.itemId, "healing-pill");
   assert.equal(useHealing?.effects?.qi, 35);
   assert.equal(useHealing?.effects?.injuryTicksDelta, -2);
-  assert.deepEqual(studySword?.itemBinding, { itemId: "sword-manual", operation: "study" });
-  assert.equal(studySword?.effects?.realmProgress, 8);
-  assert.deepEqual(studySword?.effects?.techniques, ["青霄剑意"]);
-  assert.deepEqual(studySword?.effects?.statusEffectIds, ["insight"]);
   assert.deepEqual(sellOre?.itemBinding, { itemId: "spirit-ore", operation: "sell" });
   assert.equal(sellOre?.costs?.itemConsumes?.[0]?.count, 1);
   assert.ok((sellOre?.effects?.spiritStones ?? 0) > 0);
@@ -746,10 +737,9 @@ test("item-backed actions expose structured metadata and inventory actionability
   assert.equal(healingEntry?.use.kind, "consume");
   assert.equal(healingEntry?.trade.buyBasePrice, 100);
   assert.ok(healingEntry?.availableActionIds.includes("use-healing-pill"));
-  assert.equal(swordEntry?.use.kind, "study");
-  assert.ok(swordEntry?.availableActionIds.includes("study-sword-manual"));
   assert.equal(oreEntry?.use.kind, "material");
   assert.ok(oreEntry?.availableActionIds.includes("sell-spirit-ore"));
+  assert.equal(actions.some((action) => action.actionId.startsWith("study-")), false);
 });
 
 test("catalog-driven immediate item actions preserve consumable behavior", () => {
@@ -776,30 +766,21 @@ test("catalog-driven immediate item actions preserve consumable behavior", () =>
   assert.ok(cultivator.statusEffects.some((effect) => effect.id === "warded"));
 });
 
-test("all manual study actions remain functional under the item catalog", () => {
-  const cases = [
-    { itemId: "sword-manual", actionId: "study-sword-manual", technique: "青霄剑意", status: "insight" },
-    { itemId: "alchemy-manual", actionId: "study-alchemy-manual", technique: "回元火候", status: "clear-mind" },
-    { itemId: "array-manual", actionId: "study-array-manual", technique: "护脉阵纹", status: "warded" },
-  ] as const;
+test("dungeon searches no longer mint removed manual items", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
 
-  for (const testCase of cases) {
-    const world = createSeedWorld();
-    const cultivator = world.cultivators["yun-zhong-he"];
-    cultivator.inventory["sword-manual"] = 0;
-    cultivator.inventory["alchemy-manual"] = 0;
-    cultivator.inventory["array-manual"] = 0;
-    cultivator.inventory[testCase.itemId] = 1;
-    const beforeProgress = cultivator.realmProgress;
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:dungeon-a");
+  runUntilIdle(world, "yun-zhong-he");
 
-    const result = performAction(world, "yun-zhong-he", testCase.actionId);
+  const beforeInventoryKeys = new Set(Object.keys(cultivator.inventory));
+  performAction(world, "yun-zhong-he", "search-fortune");
+  runUntilIdle(world, "yun-zhong-he");
 
-    assert.equal(result.accepted, true);
-    assert.equal(cultivator.inventory[testCase.itemId], 0);
-    assert.ok(cultivator.techniques.includes(testCase.technique));
-    assert.ok(cultivator.realmProgress > beforeProgress);
-    assert.ok(cultivator.statusEffects.some((effect) => effect.id === testCase.status));
-  }
+  assert.equal("sword-manual" in (cultivator.inventory as Record<string, number>), false);
+  assert.equal("alchemy-manual" in (cultivator.inventory as Record<string, number>), false);
+  assert.equal("array-manual" in (cultivator.inventory as Record<string, number>), false);
+  assert.equal(beforeInventoryKeys.has("sword-manual"), false);
 });
 
 test("state marks onboarding as optional and exposes the decision policy", () => {
