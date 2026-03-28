@@ -160,7 +160,10 @@ export function resolveGuixuExploration(
   }
 
   cultivator.spiritStones += eventDefinition.spiritStoneReward ?? 0;
-  cultivator.realmProgress += eventDefinition.realmProgressReward ?? 0;
+  cultivator.realmProgress = Math.max(
+    0,
+    Math.min(100, cultivator.realmProgress + (eventDefinition.realmProgressReward ?? 0)),
+  );
   for (const [itemId, count] of Object.entries(eventDefinition.rewards ?? {})) {
     cultivator.inventory[itemId as keyof Cultivator["inventory"]] += count ?? 0;
   }

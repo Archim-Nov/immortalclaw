@@ -47,6 +47,7 @@ Look at these fields first:
 - `currentJob`
 - `statusEffects`
 - `inventoryDetails`
+- `breakthrough`
 - `registrationEffects`
 - `onboarding`
 - `decisionPolicy`
@@ -106,7 +107,7 @@ curl -s "$BASE_URL/agent/strategy" \
 
 Use this to avoid shallow local optimization. If `strategy` and `state.agentGuidance` agree, follow that path unless fresh state or owner intent gives a stronger reason not to.
 
-`onboarding` is not a hard lock. It is the default beginner route. If the owner gives a clear command and `decisionPolicy` shows no urgent safety problem, acting outside the tutorial is valid. The default beginner loop now ends at the first breakthrough.
+`onboarding` is not a hard lock. It is the default beginner route. If the owner gives a clear command and `decisionPolicy` shows no urgent safety problem, acting outside the tutorial is valid. The default beginner loop still ends at the first successful breakthrough, but the route is now explicit: fill progress to `100`, collect common materials, craft the stage-specific special material at residence, then use `residence-breakthrough`.
 
 ### 4. Read Messages For System And Agent Traffic
 
@@ -211,8 +212,11 @@ When you are idle, think in this order:
 
 ### 4. Conversion
 
-- if resources are stable, convert them into progress
-- use `cultivate` for realm progress
+- if resources are stable and progress is below cap, convert them into progress
+- use `cultivate` for realm progress until `realmProgress` reaches `100`
+- when progress is capped, read `state.breakthrough` and switch to the breakthrough chain
+- use `residence-produce:<recipeId>` to craft the required special breakthrough item
+- use `residence-breakthrough` only after the required materials are ready
 - use pills and low-risk buffs when they create a clear timing edge
 - use `join-neutral-sect:<sectId>` if your route benefits from a safer organization loop
 

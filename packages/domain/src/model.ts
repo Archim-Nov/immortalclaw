@@ -339,6 +339,17 @@ export type ItemId =
   | "spirit-ore"
   | "ruin-fragment"
   | "beast-core"
+  | "qi-common"
+  | "foundation-common"
+  | "core-common"
+  | "qi-stage-1-special"
+  | "qi-stage-2-special"
+  | "qi-major-special"
+  | "foundation-stage-1-special"
+  | "foundation-stage-2-special"
+  | "foundation-major-special"
+  | "core-stage-1-special"
+  | "core-stage-2-special"
   | "eight-wastes-pass"
   | "ancient-artifact"
   | "legendary-artifact";
@@ -367,6 +378,7 @@ export type TimedActionId =
   | "heal"
   | "cultivate"
   | "residence-meditate"
+  | "residence-breakthrough"
   | "residence-heal"
   | "residence-recover-qi"
   | "residence-produce"
@@ -385,6 +397,7 @@ export type TimedActionId =
 
 export type ResidenceActionId =
   | "residence-meditate"
+  | "residence-breakthrough"
   | "residence-heal"
   | "residence-recover-qi"
   | "residence-produce"
@@ -614,6 +627,27 @@ export interface ItemDefinition {
   use: ItemUseDefinition;
 }
 
+export type BreakthroughCategory = "minor" | "major";
+export type BreakthroughOutcome = "success" | "failure";
+
+export interface BreakthroughRateModifier {
+  source: string;
+  delta: number;
+}
+
+export interface BreakthroughRecord {
+  tick: number;
+  fromRealm: RealmStage;
+  fromLevel: number;
+  toRealm: RealmStage;
+  toLevel: number;
+  category: BreakthroughCategory;
+  outcome: BreakthroughOutcome;
+  consumedItems: Array<{ itemId: ItemId; count: number }>;
+  successRate?: number;
+  rateBreakdown?: BreakthroughRateModifier[];
+}
+
 export interface StatusEffect {
   id: StatusEffectId;
   name: string;
@@ -659,6 +693,7 @@ export interface Cultivator {
   techniques: string[];
   inventory: Record<ItemId, number>;
   statusEffects: StatusEffect[];
+  breakthroughRecords: BreakthroughRecord[];
   activeJobId: string | null;
   injuryTicksRemaining: number;
   registrationRecord: CultivationRegistrationRecord | null;
@@ -794,6 +829,15 @@ export interface ActionJob {
     residenceMeditateFallback?: boolean;
     residenceHealUsePill?: boolean;
     residenceRecoverQiUsePill?: boolean;
+    breakthroughCategory?: BreakthroughCategory;
+    breakthroughTargetRealm?: RealmStage;
+    breakthroughTargetLevel?: number;
+    breakthroughCommonItemId?: ItemId;
+    breakthroughCommonCount?: number;
+    breakthroughSpecialItemId?: ItemId;
+    breakthroughSpecialCount?: number;
+    breakthroughSuccessRate?: number;
+    breakthroughRateBreakdown?: BreakthroughRateModifier[];
     activeQuestId?: string;
     wildernessLayerId?: string;
     wildernessEventId?: string;
@@ -965,6 +1009,34 @@ export interface StatusEffectView {
   description: string;
   remainingTicks: number;
   source: string;
+}
+
+export interface BreakthroughRequirementView {
+  itemId: ItemId;
+  count: number;
+  owned: number;
+}
+
+export interface BreakthroughMissingItemView {
+  itemId: ItemId;
+  required: number;
+  owned: number;
+  missing: number;
+}
+
+export interface BreakthroughStateView {
+  targetRealm: RealmStage;
+  targetLevel: number;
+  category: BreakthroughCategory;
+  readyByProgress: boolean;
+  readyByMaterials: boolean;
+  requiresResidence: boolean;
+  commonRequirement: BreakthroughRequirementView;
+  specialRequirement: BreakthroughRequirementView;
+  missingItems: BreakthroughMissingItemView[];
+  majorSuccessRate: number | null;
+  rateBreakdown: BreakthroughRateModifier[];
+  recommendedAction: ActionId | null;
 }
 
 export interface PlayerSectView {
@@ -1157,6 +1229,7 @@ export interface CultivatorStateView {
   recentCombats: CombatLogEntry[];
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
+  breakthrough: BreakthroughStateView | null;
   wilderness: {
     layerId: string;
     layerName: string;

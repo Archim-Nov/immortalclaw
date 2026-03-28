@@ -1,5 +1,6 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
+  BreakthroughCategory, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
   CreateCultivatorInput, DecisionPolicyView, EventEffect, FiveElementId, ItemId, Message, RegistrationAnswer,
   MoralityAlignment, PendingMoralityChoiceResponse,
@@ -108,6 +109,21 @@ const ELEMENT_LABELS: Record<FiveElementId, string> = {
   water: "Water",
   fire: "Fire",
   earth: "Earth",
+};
+const BREAKTHROUGH_PROGRESS_REQUIRED = 100;
+const BREAKTHROUGH_FAILURE_PROGRESS = 60;
+const BREAKTHROUGH_MIN_RATE = 20;
+const BREAKTHROUGH_MAX_RATE = 90;
+type BreakthroughDefinition = {
+  category: BreakthroughCategory;
+  targetRealm: Cultivator["realm"];
+  targetLevel: number;
+  commonItemId: ItemId;
+  commonCount: number;
+  specialItemId: ItemId;
+  specialCount: number;
+  durationTicks: number;
+  baseSuccessRate: number | null;
 };
 const REALM_QI = "炼气" as Cultivator["realm"];
 const REALM_FOUNDATION = "筑基" as Cultivator["realm"];
@@ -1173,7 +1189,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
   const agentId = normalizeAgentId(input.agentId); const starter = starterProfile();
   const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
   const starterLocationId = starterLocationIdFromRoll(Math.random());
-  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, moralityScore: 0, pendingSectApplicationId: null, pendingMoralityChoiceId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
+  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, moralityScore: 0, pendingSectApplicationId: null, pendingMoralityChoiceId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], breakthroughRecords: [], activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
   world.cultivators[cultivator.id] = cultivator;
   let selectedCultivatorId: string | null = null;
   if (agentId) { const binding = ensureAgentBinding(world, agentId); binding.cultivatorIds.push(cultivator.id); binding.selectedCultivatorId = cultivator.id; selectedCultivatorId = cultivator.id; }
@@ -1360,6 +1376,424 @@ function summarizeItemEffects(
   }
   return hasContent ? effects : undefined;
 }
+
+function realmOfLevel(level: number): Cultivator["realm"] {
+  return level <= 3 ? REALM_QI : level <= 6 ? REALM_FOUNDATION : REALM_CORE;
+}
+
+function addRealmProgress(cultivator: Cultivator, amount: number): void {
+  cultivator.realmProgress = clamp(cultivator.realmProgress + amount, 0, BREAKTHROUGH_PROGRESS_REQUIRED);
+}
+
+function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinition | null {
+  switch (cultivator.realmLevel) {
+    case 1:
+      return {
+        category: "minor",
+        targetRealm: REALM_QI,
+        targetLevel: 2,
+        commonItemId: "qi-common",
+        commonCount: 1,
+        specialItemId: "qi-stage-1-special",
+        specialCount: 1,
+        durationTicks: 4,
+        baseSuccessRate: null,
+      };
+    case 2:
+      return {
+        category: "minor",
+        targetRealm: REALM_QI,
+        targetLevel: 3,
+        commonItemId: "qi-common",
+        commonCount: 2,
+        specialItemId: "qi-stage-2-special",
+        specialCount: 1,
+        durationTicks: 4,
+        baseSuccessRate: null,
+      };
+    case 3:
+      return {
+        category: "major",
+        targetRealm: REALM_FOUNDATION,
+        targetLevel: 4,
+        commonItemId: "qi-common",
+        commonCount: 3,
+        specialItemId: "qi-major-special",
+        specialCount: 1,
+        durationTicks: 6,
+        baseSuccessRate: 70,
+      };
+    case 4:
+      return {
+        category: "minor",
+        targetRealm: REALM_FOUNDATION,
+        targetLevel: 5,
+        commonItemId: "foundation-common",
+        commonCount: 1,
+        specialItemId: "foundation-stage-1-special",
+        specialCount: 1,
+        durationTicks: 4,
+        baseSuccessRate: null,
+      };
+    case 5:
+      return {
+        category: "minor",
+        targetRealm: REALM_FOUNDATION,
+        targetLevel: 6,
+        commonItemId: "foundation-common",
+        commonCount: 2,
+        specialItemId: "foundation-stage-2-special",
+        specialCount: 1,
+        durationTicks: 4,
+        baseSuccessRate: null,
+      };
+    case 6:
+      return {
+        category: "major",
+        targetRealm: REALM_CORE,
+        targetLevel: 7,
+        commonItemId: "foundation-common",
+        commonCount: 3,
+        specialItemId: "foundation-major-special",
+        specialCount: 1,
+        durationTicks: 6,
+        baseSuccessRate: 55,
+      };
+    case 7:
+      return {
+        category: "minor",
+        targetRealm: REALM_CORE,
+        targetLevel: 8,
+        commonItemId: "core-common",
+        commonCount: 1,
+        specialItemId: "core-stage-1-special",
+        specialCount: 1,
+        durationTicks: 4,
+        baseSuccessRate: null,
+      };
+    case 8:
+      return {
+        category: "minor",
+        targetRealm: REALM_CORE,
+        targetLevel: 9,
+        commonItemId: "core-common",
+        commonCount: 2,
+        specialItemId: "core-stage-2-special",
+        specialCount: 1,
+        durationTicks: 4,
+        baseSuccessRate: null,
+      };
+    default:
+      return null;
+  }
+}
+
+function breakthroughConsumedItemsOf(
+  definition: BreakthroughDefinition,
+): Array<{ itemId: ItemId; count: number }> {
+  return [
+    { itemId: definition.commonItemId, count: definition.commonCount },
+    { itemId: definition.specialItemId, count: definition.specialCount },
+  ];
+}
+
+function breakthroughRecipeIdOf(definition: BreakthroughDefinition): string {
+  return `recipe-${definition.specialItemId}`;
+}
+
+function breakthroughRateBreakdownOf(
+  cultivator: Cultivator,
+  definition: BreakthroughDefinition,
+): { successRate: number | null; rateBreakdown: BreakthroughRateModifier[] } {
+  if (definition.baseSuccessRate === null) {
+    return { successRate: null, rateBreakdown: [] };
+  }
+
+  const rateBreakdown: BreakthroughRateModifier[] = [];
+  if (hasEffect(cultivator, "insight")) {
+    rateBreakdown.push({ source: "insight", delta: 10 });
+  }
+  if (hasEffect(cultivator, "clear-mind")) {
+    rateBreakdown.push({ source: "clear-mind", delta: 8 });
+  }
+  if (hasEffect(cultivator, "spirit-saturated")) {
+    rateBreakdown.push({ source: "spirit-saturated", delta: 5 });
+  }
+  if (hasEffect(cultivator, "deviation")) {
+    rateBreakdown.push({ source: "deviation", delta: -20 });
+  }
+  if (hasEffect(cultivator, "poisoned")) {
+    rateBreakdown.push({ source: "poisoned", delta: -10 });
+  }
+  if (cultivator.injuryTicksRemaining > 0) {
+    rateBreakdown.push({ source: "injury", delta: -15 });
+  }
+
+  const totalDelta = rateBreakdown.reduce((sum, modifier) => sum + modifier.delta, 0);
+  return {
+    successRate: clamp(
+      definition.baseSuccessRate + totalDelta,
+      BREAKTHROUGH_MIN_RATE,
+      BREAKTHROUGH_MAX_RATE,
+    ),
+    rateBreakdown,
+  };
+}
+
+function hasBreakthroughMaterials(cultivator: Cultivator, definition: BreakthroughDefinition): boolean {
+  return breakthroughConsumedItemsOf(definition).every(
+    (item) => cultivator.inventory[item.itemId] >= item.count,
+  );
+}
+
+function preferredCommonMaterialAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  definition: BreakthroughDefinition,
+): ActionId | null {
+  if (definition.commonItemId === "qi-common") {
+    if (world.locations[cultivator.locationId]?.kind === "safe") {
+      return "take-mortal-task";
+    }
+    const nearestSafeLocationId = findNearestLocationId(
+      world,
+      cultivator.locationId,
+      (candidate) => candidate.kind === "safe",
+    );
+    return nearestSafeLocationId ? travelActionIdOf(nearestSafeLocationId) : null;
+  }
+
+  if (definition.commonItemId === "foundation-common") {
+    if (world.locations[cultivator.locationId]?.nodeType === "wilderness") {
+      return "mine-spirit-stones";
+    }
+    const nearestWildernessId = findNearestLocationId(
+      world,
+      cultivator.locationId,
+      (candidate) => candidate.nodeType === "wilderness",
+    );
+    return nearestWildernessId ? travelActionIdOf(nearestWildernessId) : null;
+  }
+
+  if (world.locations[cultivator.locationId]?.nodeType === "dungeon-a") {
+    return "challenge-guardian";
+  }
+  const nearestHighRiskDungeonId = findNearestLocationId(
+    world,
+    cultivator.locationId,
+    (candidate) => candidate.nodeType === "dungeon-a",
+  );
+  return nearestHighRiskDungeonId ? travelActionIdOf(nearestHighRiskDungeonId) : null;
+}
+
+function breakthroughRecommendedActionOf(
+  world: WorldState,
+  cultivator: Cultivator,
+  definition: BreakthroughDefinition,
+): ActionId | null {
+  const readyByProgress = cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED;
+  const readyByMaterials = hasBreakthroughMaterials(cultivator, definition);
+
+  if (readyByProgress && readyByMaterials) {
+    return isAtResidence(cultivator)
+      ? "residence-breakthrough"
+      : (travelActionIdOf(cultivator.residence.locationId) as ActionId);
+  }
+
+  const recipe = getResidenceRecipeById(breakthroughRecipeIdOf(definition));
+  const canCraftSpecial = recipe ? canCraftResidenceRecipe(cultivator, recipe) : false;
+  const hasSpecial = cultivator.inventory[definition.specialItemId] >= definition.specialCount;
+
+  if (readyByProgress) {
+    if (!hasSpecial && canCraftSpecial) {
+      return isAtResidence(cultivator)
+        ? (`residence-produce:${recipe!.id}` as ActionId)
+        : (travelActionIdOf(cultivator.residence.locationId) as ActionId);
+    }
+    return preferredCommonMaterialAction(world, cultivator, definition);
+  }
+
+  if (cultivator.locationId === cultivator.residence.locationId) {
+    return "residence-meditate";
+  }
+  if (cultivator.spiritStones >= 80 && cultivator.spiritualPower >= 20) {
+    return "cultivate";
+  }
+  return preferredCommonMaterialAction(world, cultivator, definition);
+}
+
+function breakthroughViewOf(
+  world: WorldState,
+  cultivator: Cultivator,
+): BreakthroughStateView | null {
+  const definition = breakthroughDefinitionOf(cultivator);
+  if (!definition) {
+    return null;
+  }
+
+  const commonRequirement = {
+    itemId: definition.commonItemId,
+    count: definition.commonCount,
+    owned: cultivator.inventory[definition.commonItemId],
+  };
+  const specialRequirement = {
+    itemId: definition.specialItemId,
+    count: definition.specialCount,
+    owned: cultivator.inventory[definition.specialItemId],
+  };
+  const missingItems = breakthroughConsumedItemsOf(definition)
+    .map((item) => {
+      const owned = cultivator.inventory[item.itemId];
+      const missing = Math.max(0, item.count - owned);
+      return {
+        itemId: item.itemId,
+        required: item.count,
+        owned,
+        missing,
+      };
+    })
+    .filter((item) => item.missing > 0);
+  const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
+
+  return {
+    targetRealm: definition.targetRealm,
+    targetLevel: definition.targetLevel,
+    category: definition.category,
+    readyByProgress: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED,
+    readyByMaterials: missingItems.length === 0,
+    requiresResidence: true,
+    commonRequirement,
+    specialRequirement,
+    missingItems,
+    majorSuccessRate: rateInfo.successRate,
+    rateBreakdown: rateInfo.rateBreakdown,
+    recommendedAction: breakthroughRecommendedActionOf(world, cultivator, definition),
+  };
+}
+
+function buildBreakthroughAction(cultivator: Cultivator): AvailableAction | null {
+  const definition = breakthroughDefinitionOf(cultivator);
+  if (!definition) {
+    return null;
+  }
+  return {
+    actionId: "residence-breakthrough",
+    label: definition.category === "major" ? "Residence breakthrough (major)" : "Residence breakthrough",
+    description:
+      definition.category === "major"
+        ? `Attempt a major breakthrough to level ${definition.targetLevel} at residence.`
+        : `Break through to level ${definition.targetLevel} at residence.`,
+    durationTicks: definition.durationTicks,
+    kind: "timed",
+    costs: {
+      itemConsumes: breakthroughConsumedItemsOf(definition),
+    },
+  };
+}
+
+function recordBreakthrough(
+  cultivator: Cultivator,
+  record: BreakthroughRecord,
+): void {
+  cultivator.breakthroughRecords.push(record);
+}
+
+function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator, job: ActionJob): string {
+  const definition = breakthroughDefinitionOf(cultivator);
+  if (!definition) {
+    throw new Error("No breakthrough is available at the current realm level.");
+  }
+  if (cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED) {
+    throw new Error("Breakthrough requires full realm progress.");
+  }
+  if (!hasBreakthroughMaterials(cultivator, definition)) {
+    throw new Error("Breakthrough materials are missing.");
+  }
+
+  const fromRealm = cultivator.realm;
+  const fromLevel = cultivator.realmLevel;
+  const consumedItems = breakthroughConsumedItemsOf(definition);
+  for (const item of consumedItems) {
+    cultivator.inventory[item.itemId] -= item.count;
+  }
+
+  const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
+  const successRate = job.meta?.breakthroughSuccessRate ?? rateInfo.successRate;
+  const rateBreakdown = job.meta?.breakthroughRateBreakdown ?? rateInfo.rateBreakdown;
+  const success =
+    definition.category === "minor"
+      ? true
+      : (hashString(`${world.tick}:${job.id}:breakthrough`) % 100) < (successRate ?? definition.baseSuccessRate ?? 0);
+
+  if (!success) {
+    cultivator.realmProgress = BREAKTHROUGH_FAILURE_PROGRESS;
+    recordBreakthrough(cultivator, {
+      tick: world.tick,
+      fromRealm,
+      fromLevel,
+      toRealm: definition.targetRealm,
+      toLevel: definition.targetLevel,
+      category: definition.category,
+      outcome: "failure",
+      consumedItems,
+      successRate: successRate ?? undefined,
+      rateBreakdown,
+    });
+    addDaoLog(
+      world,
+      cultivator.id,
+      "Breakthrough Failed",
+      `${cultivator.name} failed the breakthrough to level ${definition.targetLevel} and fell back to 60 progress.`,
+      ["breakthrough", "failure", "residence-breakthrough", definition.category],
+    );
+    addWorldEvent(world, {
+      cultivatorId: cultivator.id,
+      locationId: cultivator.locationId,
+      title: "Breakthrough Failed",
+      content: `${cultivator.name} failed a ${definition.category} breakthrough attempt.`,
+      severity: "medium",
+      tags: ["breakthrough", "failure", definition.category],
+    });
+    return `${cultivator.name} failed the breakthrough to level ${definition.targetLevel}.`;
+  }
+
+  cultivator.realmLevel = definition.targetLevel;
+  cultivator.realm = realmOfLevel(definition.targetLevel);
+  cultivator.realmProgress = 0;
+  cultivator.maxQi += 12;
+  cultivator.maxSpiritualPower += 12;
+  cultivator.qi = cultivator.maxQi;
+  cultivator.spiritualPower = cultivator.maxSpiritualPower;
+  cultivator.lifespan += 12;
+  recordBreakthrough(cultivator, {
+    tick: world.tick,
+    fromRealm,
+    fromLevel,
+    toRealm: cultivator.realm,
+    toLevel: cultivator.realmLevel,
+    category: definition.category,
+    outcome: "success",
+    consumedItems,
+    successRate: successRate ?? undefined,
+    rateBreakdown,
+  });
+  addDaoLog(
+    world,
+    cultivator.id,
+    "Breakthrough Success",
+    `${cultivator.name} advanced to level ${cultivator.realmLevel}.`,
+    ["breakthrough", "success", "residence-breakthrough", definition.category, "action-complete"],
+  );
+  addWorldEvent(world, {
+    cultivatorId: cultivator.id,
+    locationId: cultivator.locationId,
+    title: "Breakthrough Success",
+    content: `${cultivator.name} completed a ${definition.category} breakthrough and reached level ${cultivator.realmLevel}.`,
+    severity: definition.category === "major" ? "high" : "medium",
+    tags: ["breakthrough", "success", definition.category],
+  });
+  return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
+}
 function buildItemAction(
   world: WorldState,
   cultivator: Cultivator,
@@ -1418,6 +1852,7 @@ function buildItemAction(
 }
 function guidance(world: WorldState, cultivator: Cultivator) {
   const registration = registrationModifiersOf(cultivator);
+  const breakthrough = breakthroughViewOf(world, cultivator);
   const location = world.locations[cultivator.locationId];
   const readiness = computeReadiness(cultivator);
   const recoveryState = computeRecoveryState(cultivator);
@@ -1448,6 +1883,15 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   if (cultivator.inventory["spirit-ore"] + cultivator.inventory["ruin-fragment"] + cultivator.inventory["beast-core"] > 0) priorities.push("You can sell materials in the market.");
   if (hasEffect(cultivator, "insight")) priorities.push("Insight is active. Use it on cultivation or a major encounter.");
   if (hasEffect(cultivator, "spirit-saturated")) priorities.push("Spirit saturation is active. Good time for cultivation.");
+  if (breakthrough?.readyByProgress) {
+    priorities.push("Realm progress is capped. Advance the breakthrough chain instead of grinding more progress.");
+    if (!breakthrough.readyByMaterials) {
+      priorities.push("Collect the missing breakthrough materials, then craft the special item at residence.");
+    }
+    if (breakthrough.recommendedAction) {
+      suggestedActions.unshift(breakthrough.recommendedAction);
+    }
+  }
   if (registration && cultivator.injuryTicksRemaining <= 0) {
     if (registration.cultivateBonus >= 8) priorities.push("Registration favors longer cultivation sessions.");
     if (registration.fortuneBonus >= 8) priorities.push("Registration favors scouting and flexible opportunity play.");
@@ -1547,7 +1991,7 @@ function onboardingHint(stage: OnboardingStage): string {
     return "Return to residence and complete residence meditation once.";
   }
   if (stage === "first-residence-cultivation") {
-    return "Keep cultivating safely until your first breakthrough.";
+    return "Reach full progress, gather breakthrough materials, craft the special item at residence, then break through.";
   }
   if (stage === "first-breakthrough" || stage === "completed") {
     return "Golden path completed. Continue with stable growth through quests, residence cultivation, and faction choices.";
@@ -1580,9 +2024,10 @@ function onboardingNextAction(world: WorldState, stage: OnboardingStage, cultiva
       : (`travel-to:${cultivator.residence.locationId}` as ActionId);
   }
   if (stage === "first-residence-cultivation") {
-    return cultivator.locationId === cultivator.residence.locationId
-      ? "residence-meditate"
-      : (`travel-to:${cultivator.residence.locationId}` as ActionId);
+    return breakthroughViewOf(world, cultivator)?.recommendedAction
+      ?? (cultivator.locationId === cultivator.residence.locationId
+        ? "residence-meditate"
+        : (`travel-to:${cultivator.residence.locationId}` as ActionId));
   }
   return null;
 }
@@ -1787,6 +2232,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     recentCombats: getCombatLogs(world, cultivatorId, 4),
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
+    breakthrough: breakthroughViewOf(world, cultivator),
     wilderness: buildWildernessView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
     derivedState,
@@ -1853,12 +2299,28 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
   const registration = registrationModifiersOf(cultivator);
+  const breakthrough = breakthroughViewOf(world, cultivator);
+  const breakthroughAction =
+    breakthrough?.readyByProgress && breakthrough.readyByMaterials
+      ? buildBreakthroughAction(cultivator)
+      : null;
   const localSect = getLocalSect(world, cultivator.locationId);
   const localNeutralSect = getLocalNeutralSect(world, cultivator.locationId);
   const joinedNeutralSect = getCultivatorNeutralSect(world, cultivator);
   const joinedSect = getCultivatorSect(world, cultivator);
   const activeWilderness = getActiveWildernessProgress(world, cultivator.id);
   const wildernessLayer = getWildernessLayerForLocation(world, cultivator.locationId);
+  const recipeActions = RESIDENCE_PRODUCTION_RECIPES.map((recipe) => ({
+    actionId: `residence-produce:${recipe.id}` as ActionId,
+    label: `Residence produce (${recipe.outputItemId})`,
+    description: `Craft ${recipe.outputItemId} at residence.`,
+    durationTicks: recipe.durationTicks,
+    kind: "timed" as const,
+    costs: {
+      spiritStones: recipe.spiritStoneCost,
+      itemConsumes: recipe.inputMaterials.map((material) => ({ itemId: material.itemId, count: material.count })),
+    },
+  }));
   const actions: AvailableAction[] = activeWilderness
     ? []
     : getNeighborLocations(world, cultivator.locationId)
@@ -1908,28 +2370,28 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           durationTicks: DEFAULT_ACTION_DURATIONS["residence-recover-qi"],
           kind: "timed",
         },
+        ...recipeActions,
       );
+      if (breakthroughAction) {
+        actions.push(breakthroughAction);
+      }
       return ensureSafetyNetActions(world, cultivator, location, actions);
     }
     if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
     return ensureSafetyNetActions(world, cultivator, location, actions);
   }
   if (isAtResidence(cultivator)) {
-    const recipeActions = RESIDENCE_PRODUCTION_RECIPES.map((recipe) => ({
-      actionId: `residence-produce:${recipe.id}` as ActionId,
-      label: `Residence produce (${recipe.outputItemId})`,
-      description: `Craft ${recipe.outputItemId} at residence.`,
-      durationTicks: DEFAULT_ACTION_DURATIONS["residence-produce"],
-      kind: "timed" as const,
-    }));
     actions.push(
-      {
-        actionId: "residence-meditate",
-        label: "Residence meditate",
-        description: "Closed-door cultivation at residence.",
-        durationTicks: DEFAULT_ACTION_DURATIONS["residence-meditate"],
-        kind: "timed",
-      },
+      ...(!breakthrough?.readyByProgress
+        ? [{
+            actionId: "residence-meditate" as const,
+            label: "Residence meditate",
+            description: "Closed-door cultivation at residence.",
+            durationTicks: DEFAULT_ACTION_DURATIONS["residence-meditate"],
+            kind: "timed" as const,
+          }]
+        : []),
+      ...(breakthroughAction ? [breakthroughAction] : []),
       {
         actionId: "residence-heal",
         label: "Residence heal",
@@ -1954,7 +2416,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       },
     );
   }
-  actions.push({ actionId: "cultivate", label: "Cultivate", description: "Spend spirit stones to gain progress.", durationTicks: DEFAULT_ACTION_DURATIONS.cultivate, kind: "timed" });
+  if (!breakthrough?.readyByProgress) {
+    actions.push({ actionId: "cultivate", label: "Cultivate", description: "Spend spirit stones to gain progress.", durationTicks: DEFAULT_ACTION_DURATIONS.cultivate, kind: "timed" });
+  }
   if (location.kind === "safe") actions.push({ actionId: "take-mortal-task", label: "Take town task", description: "Stable income.", durationTicks: DEFAULT_ACTION_DURATIONS["take-mortal-task"], kind: "timed" });
   if (canTradeAtLocation(location)) {
     for (const itemId of ["healing-pill", "qi-pill", "ward-talisman"] as const) {
@@ -2074,9 +2538,10 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
 
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
-  const allowed = new Set<ActionId>(["meditate", "heal", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness"]);
+  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness"]);
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
+  if (actionId.startsWith("residence-produce:")) return;
   if (!allowed.has(actionId)) throw new Error("Cultivator is injured and can only do safe actions.");
 }
 function startJob(
@@ -2085,8 +2550,13 @@ function startJob(
   actionId: TimedActionId,
   label: string,
   meta?: ActionJob["meta"],
+  durationTicks?: number,
 ): ActionExecutionResult {
   const job = createJob(world, cultivator.id, actionId, label);
+  if (typeof durationTicks === "number" && Number.isFinite(durationTicks) && durationTicks > 0) {
+    job.remainingTicks = durationTicks;
+    job.totalTicks = durationTicks;
+  }
   if (meta) {
     job.meta = meta;
   }
@@ -2337,28 +2807,15 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} recovered from injuries.`;
   }
   if (job.actionId === "cultivate") {
-    cultivator.realmProgress = clamp(
-      cultivator.realmProgress +
-        18 +
+    addRealmProgress(
+      cultivator,
+      18 +
         Math.floor(cultivator.realmLevel / 2) +
         (hasEffect(cultivator, "clear-mind") ? 8 : 0) +
         (hasEffect(cultivator, "qi-surge") ? 6 : 0) +
         (registration?.cultivateBonus ?? 0) -
         (hasEffect(cultivator, "poisoned") ? 8 : 0),
-      0,
-      200,
     );
-    if (cultivator.realmProgress >= 100 && cultivator.realmLevel < 9) {
-      cultivator.realmProgress -= 100;
-      cultivator.realmLevel += 1;
-      cultivator.realm = cultivator.realmLevel <= 3 ? REALM_QI : cultivator.realmLevel <= 6 ? REALM_FOUNDATION : REALM_CORE;
-      cultivator.maxQi += 12;
-      cultivator.maxSpiritualPower += 12;
-      cultivator.qi = cultivator.maxQi;
-      cultivator.spiritualPower = cultivator.maxSpiritualPower;
-      cultivator.lifespan += 12;
-      return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
-    }
     return `${cultivator.name} gained cultivation progress.`;
   }
   if (job.actionId === "residence-meditate") {
@@ -2371,7 +2828,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       (hashString(`${world.tick}:${job.id}:residence-meditate`) % (fallback ? 3 : 5)) +
       (hasEffect(cultivator, "clear-mind") ? 4 : 0) +
       (registration?.cultivateBonus ?? 0);
-    cultivator.realmProgress = clamp(cultivator.realmProgress + gain, 0, 200);
+    addRealmProgress(cultivator, gain);
     const roll = hashString(`${world.tick}:${job.id}:residence-meditate:roll`) % 100;
     if (roll < (fallback ? 5 : 15)) {
       upsertEffect(cultivator, {
@@ -2443,6 +2900,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     );
     return `${cultivator.name} recovered qi at residence.`;
   }
+  if (job.actionId === "residence-breakthrough") {
+    return resolveResidenceBreakthrough(world, cultivator, job);
+  }
   if (job.actionId === "residence-produce") {
     const recipe = job.meta?.residenceRecipeId ? getResidenceRecipeById(job.meta.residenceRecipeId) : null;
     if (!recipe) {
@@ -2474,6 +2934,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   }
   if (job.actionId === "take-mortal-task") {
     cultivator.spiritStones += 140 + ((registration?.taskBonus ?? 0) * 10);
+    cultivator.inventory["qi-common"] += 1;
     addCurrentStateReputation(cultivator, 8 + Math.floor((registration?.taskBonus ?? 0) / 2));
     return `${cultivator.name} finished a town task.`;
   }
@@ -2536,6 +2997,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     const roll = hashString(`${world.tick}:${job.id}`);
     cultivator.spiritStones += 110 + (roll % 80) + ((registration?.mineBonus ?? 0) * 8);
     cultivator.inventory["spirit-ore"] += 1 + (roll % 2) + ((registration?.mineBonus ?? 0) >= 8 ? 1 : 0);
+    cultivator.inventory["foundation-common"] += 1;
     cultivator.qi = clamp(cultivator.qi - Math.max(6, 14 - (registration?.combatGuard ?? 0)), 1, cultivator.maxQi);
     if (roll % 5 === 0) {
       cultivator.injuryTicksRemaining = Math.max(
@@ -2547,15 +3009,21 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} mined stones and ore.`;
   }
   if (job.actionId === "search-fortune") {
+    const location = world.locations[cultivator.locationId];
     const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}`);
     if (roll % 3 === 0) {
       cultivator.inventory["ruin-fragment"] += (hasEffect(cultivator, "fortune-marked") ? 2 : 1) + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
     } else if (roll % 3 === 1) {
-      cultivator.realmProgress = clamp(cultivator.realmProgress + 10 + (registration?.fortuneBonus ?? 0), 0, 200);
+      addRealmProgress(cultivator, 10 + (registration?.fortuneBonus ?? 0));
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
     } else {
       cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
+    }
+    if (location?.nodeType === "dungeon-a") {
+      cultivator.inventory["core-common"] += 1;
+    } else {
+      cultivator.inventory["foundation-common"] += 1;
     }
     return `${cultivator.name} searched the ruins.`;
   }
@@ -2575,6 +3043,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.spiritualPower = clamp(cultivator.spiritualPower - 16, 0, cultivator.maxSpiritualPower);
     if (power >= threat) {
       cultivator.inventory["spirit-ore"] += 2 + (roll % 2);
+      cultivator.inventory["foundation-common"] += 1;
       cultivator.spiritStones += 120 + (roll % 60);
       if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1;
       upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 });
@@ -2623,8 +3092,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (power >= threat) {
       cultivator.inventory["ruin-fragment"] += tuning.fragmentBase + (roll % tuning.fragmentVariance);
       cultivator.inventory["ward-talisman"] += tuning.wardReward;
+      cultivator.inventory[location.nodeType === "dungeon-a" ? "core-common" : "foundation-common"] += 1;
       cultivator.spiritStones += tuning.spiritStoneBase + (roll % tuning.spiritStoneVariance);
-      cultivator.realmProgress = clamp(cultivator.realmProgress + tuning.realmProgressReward, 0, 200);
+      addRealmProgress(cultivator, tuning.realmProgressReward);
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 });
       addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "victory", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} broke the guardian seal at ${location.name}.` });
       addWorldEvent(world, {
@@ -2698,7 +3168,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       (registration?.cultivateBonus ?? 0) -
       (hasEffect(cultivator, "poisoned") ? 8 : 0) -
       (hasEffect(cultivator, "deviation") ? 12 : 0);
-    cultivator.realmProgress = clamp(cultivator.realmProgress + gain, 0, 200);
+    addRealmProgress(cultivator, gain);
     if (cultivateRoll % 7 === 0) {
       upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "cultivation", remainingTicks: 4, intensity: 1 });
       addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Closed-Door Insight", content: "The retreat produced a sudden insight into the path ahead.", severity: "medium", tags: ["event", "retreat", "insight"] });
@@ -2706,17 +3176,6 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     if (cultivateRoll % 19 === 0 && !hasEffect(cultivator, "clear-mind")) {
       upsertEffect(cultivator, { id: "deviation", name: "Qi Deviation", description: "Cultivation becomes unstable and risky.", source: "cultivation", remainingTicks: 4, intensity: 1 });
       addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Qi Deviation", content: "A forced cycle disturbed the qi flow and left a deviation behind.", severity: "high", tags: ["event", "cultivation", "deviation"] });
-    }
-    if (cultivator.realmProgress >= 100 && cultivator.realmLevel < 9) {
-      cultivator.realmProgress -= 100;
-      cultivator.realmLevel += 1;
-      cultivator.realm = cultivator.realmLevel <= 3 ? REALM_QI : cultivator.realmLevel <= 6 ? REALM_FOUNDATION : REALM_CORE;
-      cultivator.maxQi += 12;
-      cultivator.maxSpiritualPower += 12;
-      cultivator.qi = cultivator.maxQi;
-      cultivator.spiritualPower = cultivator.maxSpiritualPower;
-      cultivator.lifespan += 12;
-      return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
     }
     return `${cultivator.name} gained cultivation progress.`;
   }
@@ -2743,7 +3202,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       cultivator.inventory["ruin-fragment"] += fragmentBonus + (location.nodeType === "dungeon-c" ? 0 : 1);
       if (location.nodeType === "dungeon-a" && roll % 8 === 0) cultivator.inventory["ward-talisman"] += 1;
     } else if (roll % 4 === 1) {
-      cultivator.realmProgress = clamp(cultivator.realmProgress + progressBase + (registration?.fortuneBonus ?? 0), 0, 200);
+      addRealmProgress(cultivator, progressBase + (registration?.fortuneBonus ?? 0));
       upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 });
     } else if (roll % 4 === 2) {
       cultivator.spiritStones += spiritStoneBase + (roll % spiritStoneVariance) + ((registration?.fortuneBonus ?? 0) * 10);
@@ -2755,6 +3214,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       if (location.nodeType === "dungeon-b" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
       if (location.nodeType === "dungeon-a") cultivator.inventory["ward-talisman"] += 1;
     }
+    cultivator.inventory[location.nodeType === "dungeon-a" ? "core-common" : "foundation-common"] += 1;
     triggerNodeSpecificEvent(
       world,
       cultivator,
@@ -2802,7 +3262,14 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!canCraftResidenceRecipe(cultivator, recipe)) {
         throw new Error("No craftable residence recipe with current materials.");
       }
-      return startJob(world, cultivator, normalizedActionId, normalizedActionId, { residenceRecipeId: recipe.id });
+      return startJob(
+        world,
+        cultivator,
+        normalizedActionId,
+        normalizedActionId,
+        { residenceRecipeId: recipe.id },
+        recipe.durationTicks,
+      );
     }
     if (normalizedActionId === "residence-heal") {
       const usePill = residenceHealOption === "use-pill";
@@ -2830,12 +3297,46 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!recipe) {
         throw new Error("No craftable residence recipe with current materials.");
       }
-      return startJob(world, cultivator, actionId, actionId, { residenceRecipeId: recipe.id });
+      return startJob(world, cultivator, actionId, actionId, { residenceRecipeId: recipe.id }, recipe.durationTicks);
     }
     if (actionId === "residence-meditate") {
+      if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED) {
+        throw new Error("Realm progress is capped. Complete a breakthrough before more residence meditation.");
+      }
       return startJob(world, cultivator, actionId, actionId, {
         residenceMeditateFallback: cultivator.spiritStones < 80,
       });
+    }
+    if (actionId === "residence-breakthrough") {
+      const definition = breakthroughDefinitionOf(cultivator);
+      if (!definition) {
+        throw new Error("No breakthrough is available at the current realm level.");
+      }
+      if (cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED) {
+        throw new Error("Breakthrough requires full realm progress.");
+      }
+      if (!hasBreakthroughMaterials(cultivator, definition)) {
+        throw new Error("Breakthrough materials are missing.");
+      }
+      const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
+      return startJob(
+        world,
+        cultivator,
+        actionId,
+        actionId,
+        {
+          breakthroughCategory: definition.category,
+          breakthroughTargetRealm: definition.targetRealm,
+          breakthroughTargetLevel: definition.targetLevel,
+          breakthroughCommonItemId: definition.commonItemId,
+          breakthroughCommonCount: definition.commonCount,
+          breakthroughSpecialItemId: definition.specialItemId,
+          breakthroughSpecialCount: definition.specialCount,
+          breakthroughSuccessRate: rateInfo.successRate ?? undefined,
+          breakthroughRateBreakdown: rateInfo.rateBreakdown,
+        },
+        definition.durationTicks,
+      );
     }
     return startJob(world, cultivator, actionId, actionId);
   }
@@ -2896,7 +3397,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         guixuEventId: eventId,
       });
     }
-    if (actionId === "cultivate") { if (cultivator.spiritStones < 80) throw new Error("Not enough spirit stones."); if (cultivator.spiritualPower < 20) throw new Error("Not enough spiritual power."); cultivator.spiritStones -= 80; cultivator.spiritualPower -= 20; }
+    if (actionId === "cultivate") { if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED) throw new Error("Realm progress is capped. Complete a breakthrough before more cultivation."); if (cultivator.spiritStones < 80) throw new Error("Not enough spirit stones."); if (cultivator.spiritualPower < 20) throw new Error("Not enough spiritual power."); cultivator.spiritStones -= 80; cultivator.spiritualPower -= 20; }
     if ((actionId === "mine-spirit-stones" || actionId === "hunt-mine-beast") && location.nodeType !== "wilderness") throw new Error("Action only available in wilderness.");
     if ((actionId === "search-fortune" || actionId === "challenge-guardian") && !isDungeonNode(location.nodeType)) throw new Error("Action only available in dungeons.");
     if (actionId === "take-mortal-task" && location.kind !== "safe") throw new Error("Action only available in safe settlements.");

@@ -16,6 +16,7 @@ Recent supporting gameplay specs:
 - `docs/specs/jiuzhou-state-event-flavor-v1/spec.md`
 - `docs/specs/travel-shared-overlay-v1/spec.md`
 - `docs/specs/regional-dungeon-travel-pool-expansion-v1/spec.md`
+- `docs/specs/breakthrough-materials-v1/spec.md`
 - `docs/specs/combat-gameplay-v1/registration-action-weight-table.md`
 - `docs/specs/neutral-sects-starter-overhaul/spec.md`
 - `docs/specs/personal-morality-and-binary-events-v1/spec.md`

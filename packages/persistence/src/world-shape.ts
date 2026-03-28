@@ -202,7 +202,14 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
       ...createFactionReputation(),
       ...(cultivator.factionReputation ?? {}),
     };
+    cultivator.breakthroughRecords = Array.isArray(cultivator.breakthroughRecords)
+      ? cultivator.breakthroughRecords
+      : [];
     cultivator.pendingSectApplicationId = cultivator.pendingSectApplicationId ?? null;
+    cultivator.realmProgress =
+      typeof cultivator.realmProgress === "number" && Number.isFinite(cultivator.realmProgress)
+        ? Math.max(0, Math.min(100, cultivator.realmProgress))
+        : 0;
   }
 
   return copy;

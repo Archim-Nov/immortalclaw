@@ -9,6 +9,16 @@ import type {
 type BuyActionId = "buy-healing-pill" | "buy-qi-pill" | "buy-ward-talisman";
 type SellActionId = "sell-spirit-ore" | "sell-ruin-fragment" | "sell-beast-core";
 
+const materialUse = {
+  kind: "material" as const,
+  actionId: null,
+  consumesOnUse: false,
+  effectSummary: null,
+  effectBundle: null,
+  grantsTechnique: null,
+  ticketTargets: null,
+};
+
 export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
   "healing-pill": {
     id: "healing-pill",
@@ -96,15 +106,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       sellBasePrice: 115,
       tradableAt: "settlement",
     },
-    use: {
-      kind: "material",
-      actionId: null,
-      consumesOnUse: false,
-      effectSummary: null,
-      effectBundle: null,
-      grantsTechnique: null,
-      ticketTargets: null,
-    },
+    use: materialUse,
   },
   "ruin-fragment": {
     id: "ruin-fragment",
@@ -118,15 +120,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       sellBasePrice: 145,
       tradableAt: "settlement",
     },
-    use: {
-      kind: "material",
-      actionId: null,
-      consumesOnUse: false,
-      effectSummary: null,
-      effectBundle: null,
-      grantsTechnique: null,
-      ticketTargets: null,
-    },
+    use: materialUse,
   },
   "beast-core": {
     id: "beast-core",
@@ -140,15 +134,161 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       sellBasePrice: 210,
       tradableAt: "settlement",
     },
-    use: {
-      kind: "material",
-      actionId: null,
-      consumesOnUse: false,
-      effectSummary: null,
-      effectBundle: null,
-      grantsTechnique: null,
-      ticketTargets: null,
+    use: materialUse,
+  },
+  "qi-common": {
+    id: "qi-common",
+    name: "聚气灵材",
+    category: "material",
+    description: "炼气期突破通用灵材，可用于炼制本境界突破专用物。",
+    baseValue: 90,
+    tags: ["material", "breakthrough", "qi", "common", "residence-input"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
     },
+    use: materialUse,
+  },
+  "foundation-common": {
+    id: "foundation-common",
+    name: "凝元灵材",
+    category: "material",
+    description: "筑基期突破通用灵材，通常来自中期外循环的稳定采获。",
+    baseValue: 180,
+    tags: ["material", "breakthrough", "foundation", "common", "residence-input"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "core-common": {
+    id: "core-common",
+    name: "养丹灵材",
+    category: "material",
+    description: "金丹期突破通用灵材，通常来自高风险遗迹与守关收获。",
+    baseValue: 320,
+    tags: ["material", "breakthrough", "core", "common", "residence-input"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "qi-stage-1-special": {
+    id: "qi-stage-1-special",
+    name: "聚气丹",
+    category: "material",
+    description: "炼气一层突破至二层的专用突破丹。",
+    baseValue: 180,
+    tags: ["material", "breakthrough", "qi", "special", "stage-1", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "qi-stage-2-special": {
+    id: "qi-stage-2-special",
+    name: "凝息丹",
+    category: "material",
+    description: "炼气二层突破至三层的专用突破丹。",
+    baseValue: 220,
+    tags: ["material", "breakthrough", "qi", "special", "stage-2", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "qi-major-special": {
+    id: "qi-major-special",
+    name: "筑基引脉丹",
+    category: "material",
+    description: "炼气圆满冲击筑基时使用的专用突破丹。",
+    baseValue: 320,
+    tags: ["material", "breakthrough", "qi", "major", "special", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "foundation-stage-1-special": {
+    id: "foundation-stage-1-special",
+    name: "凝元丹",
+    category: "material",
+    description: "筑基一层突破至二层的专用突破丹。",
+    baseValue: 360,
+    tags: ["material", "breakthrough", "foundation", "special", "stage-1", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "foundation-stage-2-special": {
+    id: "foundation-stage-2-special",
+    name: "归元丹",
+    category: "material",
+    description: "筑基二层突破至三层的专用突破丹。",
+    baseValue: 420,
+    tags: ["material", "breakthrough", "foundation", "special", "stage-2", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "foundation-major-special": {
+    id: "foundation-major-special",
+    name: "结丹宝器",
+    category: "material",
+    description: "筑基圆满冲击金丹时使用的专用突破法宝。",
+    baseValue: 620,
+    tags: ["material", "breakthrough", "foundation", "major", "special", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "core-stage-1-special": {
+    id: "core-stage-1-special",
+    name: "养丹露",
+    category: "material",
+    description: "金丹一层突破至二层的专用养丹灵液。",
+    baseValue: 760,
+    tags: ["material", "breakthrough", "core", "special", "stage-1", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
+  },
+  "core-stage-2-special": {
+    id: "core-stage-2-special",
+    name: "淬丹宝液",
+    category: "material",
+    description: "金丹二层突破至三层的专用淬炼宝液。",
+    baseValue: 920,
+    tags: ["material", "breakthrough", "core", "special", "stage-2", "crafted-only"],
+    trade: {
+      buyBasePrice: null,
+      sellBasePrice: null,
+      tradableAt: "none",
+    },
+    use: materialUse,
   },
   "eight-wastes-pass": {
     id: "eight-wastes-pass",
@@ -184,15 +324,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       sellBasePrice: null,
       tradableAt: "none",
     },
-    use: {
-      kind: "material",
-      actionId: null,
-      consumesOnUse: false,
-      effectSummary: null,
-      effectBundle: null,
-      grantsTechnique: null,
-      ticketTargets: null,
-    },
+    use: materialUse,
   },
   "legendary-artifact": {
     id: "legendary-artifact",
@@ -206,15 +338,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       sellBasePrice: null,
       tradableAt: "none",
     },
-    use: {
-      kind: "material",
-      actionId: null,
-      consumesOnUse: false,
-      effectSummary: null,
-      effectBundle: null,
-      grantsTechnique: null,
-      ticketTargets: null,
-    },
+    use: materialUse,
   },
 };
 
@@ -277,17 +401,13 @@ for (const itemId of ITEM_IDS) {
   };
 }
 
-export function getCatalogItem(itemId: ItemId): ItemDefinition {
-  return ITEM_CATALOG[itemId];
-}
-
-export function getItemActionBinding(actionId: ActionId): ActionItemBinding | null {
-  return ACTION_ITEM_BINDINGS[actionId] ?? null;
-}
-
 export function getItemOperationActionId(
   itemId: ItemId,
   operation: ItemActionOperation,
 ): ActionId | null {
   return ITEM_OPERATION_ACTION_IDS[itemId][operation] ?? null;
+}
+
+export function getItemActionBinding(actionId: ActionId): ActionItemBinding | null {
+  return ACTION_ITEM_BINDINGS[actionId] ?? null;
 }

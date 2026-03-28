@@ -202,6 +202,7 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
     ...cultivator,
     neutralSectId: undefined as never,
     neutralContribution: undefined as never,
+    breakthroughRecords: undefined as never,
     reputation: 34,
     karma: 12,
     stateReputation: undefined as never,
@@ -212,6 +213,7 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
       "qing-yun-sect": 9,
     },
     nextTribulationTick: 42,
+    realmProgress: 144,
   } as typeof cultivator & { nextTribulationTick: number };
   delete (world as unknown as Record<string, unknown>).neutralSects;
   world.worldEvents = [
@@ -253,6 +255,8 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
   assert.equal("reputation" in normalizedCultivator, false);
   assert.equal(normalizedCultivator.neutralSectId, null);
   assert.equal(normalizedCultivator.neutralContribution, 0);
+  assert.deepEqual(normalizedCultivator.breakthroughRecords, []);
+  assert.equal(normalizedCultivator.realmProgress, 100);
   assert.deepEqual(
     normalizedCultivator.stateReputation,
     Object.fromEntries(

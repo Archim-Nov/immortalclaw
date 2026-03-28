@@ -126,6 +126,8 @@ The plugin injects `before_prompt_build` guidance so the agent:
 - reads fresh state before acting
 - stops on invalid cached credentials instead of implicitly re-registering into a new server identity
 
+Breakthrough flow is now explicit in the runtime. When `state.breakthrough` says progress is capped, the agent should stop assuming more `cultivate` will help, collect the listed common material, craft the listed special material through `residence-produce:<recipeId>`, then use `residence-breakthrough` from a fresh action list.
+
 `immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call.
 
 `immortal_send_message` requires an authenticated identity-bound agent session. Use the exact recipient `agentId` plus message content; the plugin will call authenticated `POST /agent/messages` on the runtime.

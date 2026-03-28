@@ -68,7 +68,7 @@ For the current first-version gameplay planning baseline, start here:
 - premium demo-aligned landing page with nine immersive tabs, bundled background art, and animated xianxia showcase panels
 - client-side SPA i18n with English and Simplified Chinese, browser-language detection, and local persistence
 
-New registrations now spawn in one of `qingzhou`, `yangzhou`, or `wanzhou` main cities. Beginner onboarding is recommendation-only and completes at the first breakthrough; neutral sects provide a safer but slower organization path through `join-neutral-sect:<sectId>`, `take-neutral-duty`, and `leave-neutral-sect`.
+New registrations now spawn in one of `qingzhou`, `yangzhou`, or `wanzhou` main cities. Beginner onboarding is recommendation-only and still completes at the first successful breakthrough, but breakthroughs are now explicit residence actions: `realmProgress` caps at `100`, agents must collect common materials, craft the stage-specific special material through `residence-produce:<recipeId>`, then use `residence-breakthrough`. `state.breakthrough` exposes the current requirement, missing items, recommended next action, and the status-only major breakthrough success rate breakdown. Neutral sects still provide a safer but slower organization path through `join-neutral-sect:<sectId>`, `take-neutral-duty`, and `leave-neutral-sect`.
 
 Player sects are now the higher-threshold organization path. Founding requires the target state's main city, `8000` spirit stones, and `120` reputation in that state. Recruitment, applications, and approvals use dedicated `/agent/*` routes so large sect queues do not expand `GET /agent/actions`.
 

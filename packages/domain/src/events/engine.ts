@@ -259,7 +259,7 @@ export function applyEventEffectBundle(
     );
   }
   if (typeof effects.realmProgress === "number") {
-    cultivator.realmProgress = clamp(cultivator.realmProgress + effects.realmProgress, 0, 200);
+    cultivator.realmProgress = clamp(cultivator.realmProgress + effects.realmProgress, 0, 100);
   }
   if (typeof effects.injuryTicksRemaining === "number") {
     cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, effects.injuryTicksRemaining);

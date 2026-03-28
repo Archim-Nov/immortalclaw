@@ -547,6 +547,141 @@ test("residence production succeeds with recipe materials and rejects when mater
   );
 });
 
+test("cultivation caps progress at 100 instead of auto-breaking through", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  cultivator.realmLevel = 1;
+  cultivator.realm = world.cultivators["yun-zhong-he"].realm;
+  cultivator.realmProgress = 95;
+  cultivator.spiritStones = 400;
+  cultivator.spiritualPower = 100;
+
+  performAction(world, "yun-zhong-he", "cultivate");
+  runUntilIdle(world, "yun-zhong-he");
+
+  assert.equal(cultivator.realmLevel, 1);
+  assert.equal(cultivator.realmProgress, 100);
+  assert.equal(
+    listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "cultivate"),
+    false,
+  );
+});
+
+test("explicit residence breakthrough uses crafted materials and advances the realm", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Breakthrough Disciple" });
+  const cultivator = world.cultivators[created.id]!;
+
+  cultivator.realmProgress = 100;
+
+  let state = getCultivatorState(world, created.id);
+  assert.equal(state.breakthrough?.category, "minor");
+  assert.equal(state.breakthrough?.readyByProgress, true);
+  assert.equal(state.breakthrough?.readyByMaterials, false);
+  assert.equal(state.breakthrough?.recommendedAction, "take-mortal-task");
+  assert.equal(
+    listAvailableActions(world, created.id).some((action) => action.actionId === "residence-breakthrough"),
+    false,
+  );
+
+  cultivator.inventory["qi-common"] = 2;
+  state = getCultivatorState(world, created.id);
+  assert.equal(state.breakthrough?.recommendedAction, "residence-produce:recipe-qi-stage-1-special");
+
+  performAction(world, created.id, "residence-produce:recipe-qi-stage-1-special");
+  runUntilIdle(world, created.id);
+
+  const breakthroughAction = listAvailableActions(world, created.id).find(
+    (action) => action.actionId === "residence-breakthrough",
+  );
+  assert.ok(breakthroughAction);
+  assert.deepEqual(breakthroughAction.costs?.itemConsumes, [
+    { itemId: "qi-common", count: 1 },
+    { itemId: "qi-stage-1-special", count: 1 },
+  ]);
+
+  performAction(world, created.id, "residence-breakthrough");
+  runUntilIdle(world, created.id);
+
+  assert.equal(cultivator.realmLevel, 2);
+  assert.equal(cultivator.realmProgress, 0);
+  assert.equal(cultivator.inventory["qi-common"], 0);
+  assert.equal(cultivator.inventory["qi-stage-1-special"], 0);
+  assert.equal(cultivator.breakthroughRecords.length, 1);
+  assert.equal(cultivator.breakthroughRecords[0]?.outcome, "success");
+  assert.equal(getCultivatorState(world, created.id).onboarding.stage, "completed");
+});
+
+test("major breakthrough success rate only reflects current statuses", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Rate Probe" });
+  const cultivator = world.cultivators[created.id]!;
+
+  cultivator.realmLevel = 3;
+  cultivator.realm = world.cultivators["yun-zhong-he"].realm;
+  cultivator.realmProgress = 100;
+  cultivator.injuryTicksRemaining = 2;
+  cultivator.statusEffects = [
+    { id: "insight", name: "Insight", description: "", source: "test", remainingTicks: 3, intensity: 1 },
+    { id: "clear-mind", name: "Clear Mind", description: "", source: "test", remainingTicks: 3, intensity: 1 },
+    { id: "spirit-saturated", name: "Spirit Saturated", description: "", source: "test", remainingTicks: 3, intensity: 1 },
+    { id: "deviation", name: "Qi Deviation", description: "", source: "test", remainingTicks: 3, intensity: 1 },
+    { id: "poisoned", name: "Poisoned", description: "", source: "test", remainingTicks: 3, intensity: 1 },
+  ];
+
+  const beforeRegistration = getCultivatorState(world, created.id).breakthrough;
+  assert.equal(beforeRegistration?.majorSuccessRate, 48);
+  assert.deepEqual(
+    beforeRegistration?.rateBreakdown.map((entry) => entry.source),
+    ["insight", "clear-mind", "spirit-saturated", "deviation", "poisoned", "injury"],
+  );
+
+  saveCultivationRegistration(world, created.id, createCultivationFocusedRegistrationRecord(), "agent-rate");
+  const afterRegistration = getCultivatorState(world, created.id).breakthrough;
+
+  assert.equal(afterRegistration?.majorSuccessRate, 48);
+  assert.deepEqual(afterRegistration?.rateBreakdown, beforeRegistration?.rateBreakdown);
+});
+
+test("failed major breakthrough consumes materials and resets progress without adding debuffs", () => {
+  let failedWorld: ReturnType<typeof createSeedWorld> | null = null;
+  let failedCultivatorId: string | null = null;
+
+  for (let seed = 1; seed <= 200 && !failedWorld; seed += 1) {
+    const world = createSeedWorld();
+    const cultivator = world.cultivators["yun-zhong-he"];
+    cultivator.realmLevel = 3;
+    cultivator.realm = world.cultivators["yun-zhong-he"].realm;
+    cultivator.realmProgress = 100;
+    cultivator.inventory["qi-common"] = 3;
+    cultivator.inventory["qi-major-special"] = 1;
+    cultivator.statusEffects = [];
+    cultivator.injuryTicksRemaining = 0;
+    world.nextJobSequence = seed;
+
+    performAction(world, "yun-zhong-he", "residence-breakthrough");
+    runUntilIdle(world, "yun-zhong-he");
+
+    if (cultivator.breakthroughRecords.at(-1)?.outcome === "failure") {
+      failedWorld = world;
+      failedCultivatorId = "yun-zhong-he";
+    }
+  }
+
+  assert.ok(failedWorld);
+  const cultivator = failedWorld!.cultivators[failedCultivatorId!];
+
+  assert.equal(cultivator.realmLevel, 3);
+  assert.equal(cultivator.realmProgress, 60);
+  assert.equal(cultivator.inventory["qi-common"], 0);
+  assert.equal(cultivator.inventory["qi-major-special"], 0);
+  assert.equal(cultivator.breakthroughRecords.at(-1)?.outcome, "failure");
+  assert.equal(cultivator.breakthroughRecords.at(-1)?.successRate, 70);
+  assert.equal(cultivator.statusEffects.some((effect) => effect.id === "deviation"), false);
+  assert.equal(cultivator.statusEffects.some((effect) => effect.id === "poisoned"), false);
+});
+
 test("residence-meditate supports no-stone fallback and standard branch", () => {
   const fallbackWorld = createSeedWorld();
   const fallbackCultivator = fallbackWorld.cultivators["yun-zhong-he"];

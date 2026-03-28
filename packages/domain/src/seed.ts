@@ -245,6 +245,7 @@ const cultivators: Record<string, Cultivator> = {
       "spirit-ore": 1,
     },
     statusEffects: createStatusEffects(),
+    breakthroughRecords: [],
     activeJobId: null,
     injuryTicksRemaining: 0,
     registrationRecord: null,

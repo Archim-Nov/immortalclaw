@@ -155,6 +155,8 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   delete (world as unknown as Record<string, unknown>).guixuProgress;
   delete (world as unknown as Record<string, unknown>).factionWars;
   delete (world as unknown as Record<string, unknown>).itemDefinitions;
+  delete (world.cultivators[cultivatorId] as unknown as Record<string, unknown>).breakthroughRecords;
+  world.cultivators[cultivatorId]!.realmProgress = 145;
 
   world.cultivators[cultivatorId]!.inventory = ({
     "healing-pill": 1,
@@ -176,10 +178,14 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   assert.ok(hydrated.guixuNodes["guixu-threshold-gate"]);
   assert.ok(hydrated.factionWars["war-qingzhou-frontier"]);
   assert.ok(hydrated.itemDefinitions["legendary-artifact"]);
+  assert.ok(hydrated.itemDefinitions["qi-common"]);
+  assert.ok(hydrated.itemDefinitions["foundation-major-special"]);
   assert.ok(hydrated.itemDefinitions["healing-pill"].tags.includes("pill"));
   assert.equal(hydrated.itemDefinitions["eight-wastes-pass"].use.kind, "ticket");
   assert.deepEqual(hydrated.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
   assert.equal(hydrated.cultivators[cultivatorId]!.inventory["eight-wastes-pass"], 0);
+  assert.deepEqual(hydrated.cultivators[cultivatorId]!.breakthroughRecords, []);
+  assert.equal(hydrated.cultivators[cultivatorId]!.realmProgress, 100);
   assert.equal("sword-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
   assert.equal("alchemy-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
   assert.equal("array-manual" in (hydrated.itemDefinitions as Record<string, unknown>), false);
