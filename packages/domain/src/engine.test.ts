@@ -936,6 +936,10 @@ test("dungeon searches no longer mint removed manual items", () => {
 test("state.dungeon surfaces shared rank progression and realm-gated dungeon actions", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
+  const hasExpeditionActionForRank = (rank: number) =>
+    listAvailableActions(world, "yun-zhong-he").some(
+      (action) => String(action.actionId).startsWith(`start-dungeon-expedition:rank-${rank}:`),
+    );
 
   cultivator.locationId = "qingzhou:dungeon-c";
   let state = getCultivatorState(world, "yun-zhong-he");
@@ -946,8 +950,8 @@ test("state.dungeon surfaces shared rank progression and realm-gated dungeon act
   assert.equal(state.dungeon?.frontierRank, 1);
   assert.equal(state.dungeon?.materialBand, "qi-common");
   assert.equal(state.dungeon?.lockReason, null);
-  assert.ok(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "search-fortune:rank-1"));
-  assert.equal(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "search-fortune:rank-2"), false);
+  assert.ok(hasExpeditionActionForRank(1));
+  assert.equal(hasExpeditionActionForRank(2), false);
 
   cultivator.dungeonProgress["丙"].highestClearedRank = 3;
   cultivator.locationId = "yangzhou:dungeon-c";
@@ -955,13 +959,16 @@ test("state.dungeon surfaces shared rank progression and realm-gated dungeon act
   assert.equal(state.dungeon?.highestClearedRank, 3);
   assert.equal(state.dungeon?.highestUnlockedRank, 4);
   assert.deepEqual(state.dungeon?.availableRanks, [1, 2, 3, 4]);
-  assert.ok(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "challenge-guardian:rank-4"));
-  assert.equal(listAvailableActions(world, "yun-zhong-he").some((action) => action.actionId === "challenge-guardian:rank-5"), false);
+  assert.ok(hasExpeditionActionForRank(4));
+  assert.equal(hasExpeditionActionForRank(5), false);
 
   cultivator.locationId = "qingzhou:dungeon-b";
   state = getCultivatorState(world, "yun-zhong-he");
   assert.ok(state.dungeon?.lockReason);
-  assert.equal(listAvailableActions(world, "yun-zhong-he").some((action) => String(action.actionId).startsWith("search-fortune:rank-")), false);
+  assert.equal(
+    listAvailableActions(world, "yun-zhong-he").some((action) => String(action.actionId).startsWith("start-dungeon-expedition:rank-")),
+    false,
+  );
 });
 
 test("state marks onboarding as optional and exposes the decision policy", () => {
