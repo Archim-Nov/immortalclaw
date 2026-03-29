@@ -26,6 +26,10 @@ function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: s
   }
 }
 
+function expeditionActionId(rank: number, policy: "conservative" | "balanced" | "aggressive") {
+  return `start-dungeon-expedition:rank-${rank}:${policy}`;
+}
+
 function hashString(input: string) {
   return Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 }
@@ -916,7 +920,7 @@ test("catalog-driven immediate item actions preserve consumable behavior", () =>
   assert.ok(cultivator.statusEffects.some((effect) => effect.id === "warded"));
 });
 
-test("dungeon searches no longer mint removed manual items", () => {
+test("managed dungeon expeditions no longer mint removed manual items", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
 
@@ -924,7 +928,7 @@ test("dungeon searches no longer mint removed manual items", () => {
   runUntilIdle(world, "yun-zhong-he");
 
   const beforeInventoryKeys = new Set(Object.keys(cultivator.inventory));
-  performAction(world, "yun-zhong-he", "search-fortune:rank-1");
+  performAction(world, "yun-zhong-he", expeditionActionId(1, "balanced") as never);
   runUntilIdle(world, "yun-zhong-he");
 
   assert.equal("sword-manual" in (cultivator.inventory as Record<string, number>), false);
@@ -1402,7 +1406,7 @@ test("combat resolution ignores legacy numeric reputation", () => {
   assert.equal(highStandingCultivator.inventory["ward-talisman"], lowStandingCultivator.inventory["ward-talisman"]);
 });
 
-test("search-fortune emits a node-specific dungeon event", () => {
+test("legacy search-fortune compatibility emits a node-specific dungeon event", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
 
@@ -1434,7 +1438,7 @@ test("search-fortune emits a node-specific dungeon event", () => {
   );
 });
 
-test("guardian rewards scale up with dungeon tier", () => {
+test("legacy guardian compatibility rewards scale up with dungeon tier", () => {
   const lowTierWorld = createSeedWorld();
   const highTierWorld = createSeedWorld();
   const lowTierCultivator = lowTierWorld.cultivators["yun-zhong-he"];
@@ -1482,7 +1486,7 @@ test("managed dungeon expeditions do not emit routine step wakes before the fina
   cultivator.locationId = "qingzhou:dungeon-c";
   cultivator.dungeonProgress[firstGrade].highestClearedRank = 1;
 
-  performAction(world, "yun-zhong-he", "start-dungeon-expedition:rank-1:balanced");
+  performAction(world, "yun-zhong-he", expeditionActionId(1, "balanced") as never);
   const interim = advanceWorld(world, 3);
 
   assert.deepEqual(interim.completedJobs, []);
