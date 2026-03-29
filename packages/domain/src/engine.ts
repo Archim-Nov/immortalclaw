@@ -1767,6 +1767,23 @@ function writeDungeonExpeditionSummaryEvent(
   });
 }
 
+function extractDungeonFlavorEventTitles(
+  worldEvents: readonly WorldEvent[],
+  beforeEventCount: number,
+  actionId: ActionId,
+): string[] {
+  const addedCount = Math.max(0, worldEvents.length - beforeEventCount);
+  if (addedCount === 0) {
+    return [];
+  }
+
+  return worldEvents
+    .slice(0, addedCount)
+    .filter((event) => event.tags.includes("node-specific") && event.tags.includes(actionId))
+    .map((event) => event.title.replace(/^\[[^\]]+\]\s*/, "").trim())
+    .filter((title) => title.length > 0);
+}
+
 function finalizeDungeonExpedition(
   world: WorldState,
   cultivator: Cultivator,
@@ -1851,6 +1868,10 @@ function resolveDungeonExpeditionStepIfDue(
   resolveEnhancedJob(world, syntheticJob);
   cultivator.activeJobId = outerJobId;
 
+  const flavorEventTitles = actionKind === "search"
+    ? extractDungeonFlavorEventTitles(world.worldEvents, beforeEventCount, actionId)
+    : [];
+
   trimPrependedEntries(world.worldEvents, beforeEventCount);
   trimPrependedEntries(world.combatLogs, beforeCombatCount);
 
@@ -1874,6 +1895,7 @@ function resolveDungeonExpeditionStepIfDue(
     realmProgressGain: cultivator.realmProgress - beforeRealmProgress,
     unlockedNextRank: highestClearedRankOf(cultivator, progress.grade) > beforeHighestClearedRank,
     resolvedAtTick: world.tick,
+    flavorEventTitles,
   });
 
   world.dungeonExpeditions[cultivator.id] = updatedProgress;

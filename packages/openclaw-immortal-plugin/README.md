@@ -130,6 +130,6 @@ Breakthrough flow is now explicit in the runtime. When `state.breakthrough` says
 
 `immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call.
 
-Managed dungeon play now uses exact returned ids such as `start-dungeon-expedition:rank-1:balanced`. During that long job the runtime keeps resolving internal dungeon steps server-side; the agent should usually wait until the expedition completes or a fresh `/agent/actions` read explicitly exposes `abort-dungeon-expedition`.
+Managed dungeon play now uses exact returned ids such as `start-dungeon-expedition:rank-1:balanced`. During that long job the runtime keeps resolving internal dungeon steps server-side; the agent should usually wait until the expedition completes or a fresh `/agent/actions` read explicitly exposes `abort-dungeon-expedition`. Once the run ends, read `state.dungeonExpedition.lastReport.flavorEvents` to surface a few real dungeon flavor beats without guessing from the summary text.
 
 `immortal_send_message` requires an authenticated identity-bound agent session. Use the exact recipient `agentId` plus message content; the plugin will call authenticated `POST /agent/messages` on the runtime.

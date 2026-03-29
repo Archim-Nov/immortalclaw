@@ -203,3 +203,63 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   assert.equal("alchemy-manual" in (hydrated.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
   assert.equal("array-manual" in (hydrated.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
 });
+
+test("legacy dungeon expedition snapshots backfill flavor arrays", async () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  world.dungeonExpeditions = ({
+    [cultivatorId]: {
+      cultivatorId,
+      jobId: "legacy-expedition-job",
+      locationId: "qingzhou:dungeon-c",
+      grade: "丙",
+      targetRank: 1,
+      policy: "balanced",
+      startedAtTick: 12,
+      stepIndex: 1,
+      maxSteps: 10,
+      nextResolutionTick: 15,
+      searchSteps: 1,
+      guardianSteps: 0,
+      primaryMaterialCount: 2,
+      secondaryDrops: { "ruin-fragment": 1 },
+      spiritStoneGain: 18,
+      realmProgressGain: 4,
+      unlockedNextRank: false,
+      lastResolvedAction: "search",
+    },
+  } as unknown) as typeof world.dungeonExpeditions;
+  world.dungeonExpeditionReports = ({
+    [cultivatorId]: {
+      cultivatorId,
+      grade: "丙",
+      targetRank: 1,
+      policy: "balanced",
+      outcome: "completed",
+      startedAtTick: 12,
+      endedAtTick: 42,
+      stepsResolved: 10,
+      primaryMaterial: {
+        itemId: "qi-common",
+        count: 3,
+      },
+      secondaryDrops: { "ruin-fragment": 2 },
+      spiritStoneGain: 60,
+      realmProgressGain: 12,
+      unlockedNextRank: true,
+      returnLocationId: "qingzhou:main-city",
+      summary: "Legacy expedition summary.",
+    },
+  } as unknown) as typeof world.dungeonExpeditionReports;
+
+  const repository = createInMemoryWorldRepository({ world });
+  const hydrated = await repository.readWorld();
+
+  assert.deepEqual(hydrated.dungeonExpeditions[cultivatorId]?.flavorEventTitles, []);
+  assert.deepEqual(hydrated.dungeonExpeditionReports[cultivatorId]?.flavorEvents, []);
+});

@@ -16,6 +16,7 @@ Recent supporting gameplay specs:
 - `docs/specs/jiuzhou-state-event-flavor-v1/spec.md`
 - `docs/specs/travel-shared-overlay-v1/spec.md`
 - `docs/specs/regional-dungeon-travel-pool-expansion-v1/spec.md`
+- `docs/specs/dungeon-overlay-content-fill-v1/spec.md`
 - `docs/specs/breakthrough-materials-v1/spec.md`
 - `docs/specs/breakthrough-material-event-support-v1/spec.md`
 - `docs/specs/dungeon-rank-expansion-v1/spec.md`

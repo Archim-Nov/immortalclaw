@@ -503,6 +503,7 @@ export interface DungeonExpeditionProgress {
   realmProgressGain: number;
   unlockedNextRank: boolean;
   lastResolvedAction: "search" | "guardian" | null;
+  flavorEventTitles: string[];
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -526,6 +527,7 @@ export interface DungeonExpeditionReport {
   unlockedNextRank: boolean;
   returnLocationId: string;
   summary: string;
+  flavorEvents: string[];
 }
 
 export interface DungeonExpeditionStateView {

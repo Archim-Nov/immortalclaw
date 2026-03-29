@@ -73,10 +73,21 @@ test("managed expeditions create one 30-tick job and only expose abort while bus
 
   const state = getCultivatorState(world, CULTIVATOR_ID) as { dungeonExpedition?: {
     active: unknown;
-    lastReport?: { outcome?: string } | null;
+    lastReport?: { outcome?: string; flavorEvents?: string[] } | null;
   } | null };
   assert.equal(state.dungeonExpedition?.active ?? null, null);
   assert.equal(state.dungeonExpedition?.lastReport?.outcome, "completed");
+  assert.ok(Array.isArray(state.dungeonExpedition?.lastReport?.flavorEvents));
+  assert.ok((state.dungeonExpedition?.lastReport?.flavorEvents?.length ?? 0) > 0);
+  assert.ok((state.dungeonExpedition?.lastReport?.flavorEvents?.length ?? 0) <= 3);
+  assert.equal(
+    new Set(state.dungeonExpedition?.lastReport?.flavorEvents ?? []).size,
+    state.dungeonExpedition?.lastReport?.flavorEvents?.length ?? 0,
+  );
+  assert.equal(
+    (state.dungeonExpedition?.lastReport?.flavorEvents ?? []).every((title) => !title.startsWith("[")),
+    true,
+  );
   assert.equal(world.cultivators[CULTIVATOR_ID]?.locationId, "qingzhou:main-city");
 });
 
@@ -97,10 +108,11 @@ test("managed expeditions can be aborted while the cultivator is busy", () => {
 
   const state = getCultivatorState(world, CULTIVATOR_ID) as { dungeonExpedition?: {
     active: unknown;
-    lastReport?: { outcome?: string } | null;
+    lastReport?: { outcome?: string; flavorEvents?: string[] } | null;
   } | null };
   assert.equal(state.dungeonExpedition?.active ?? null, null);
   assert.equal(state.dungeonExpedition?.lastReport?.outcome, "aborted");
+  assert.deepEqual(state.dungeonExpedition?.lastReport?.flavorEvents, []);
 });
 
 test("managed expeditions catastrophically end early when danger thresholds are breached", () => {
@@ -120,9 +132,11 @@ test("managed expeditions catastrophically end early when danger thresholds are 
   assert.equal(firstThreeTicks.completedJobs[0]?.actionId, expeditionActionId(1, "aggressive"));
 
   const state = getCultivatorState(world, CULTIVATOR_ID) as { dungeonExpedition?: {
-    lastReport?: { outcome?: string } | null;
+    lastReport?: { outcome?: string; flavorEvents?: string[] } | null;
   } | null };
   assert.equal(state.dungeonExpedition?.lastReport?.outcome, "catastrophic");
+  assert.ok(Array.isArray(state.dungeonExpedition?.lastReport?.flavorEvents));
+  assert.ok((state.dungeonExpedition?.lastReport?.flavorEvents?.length ?? 0) <= 3);
   assert.equal(world.cultivators[CULTIVATOR_ID]?.activeJobId, null);
   assert.equal(world.cultivators[CULTIVATOR_ID]?.locationId, "qingzhou:main-city");
 });

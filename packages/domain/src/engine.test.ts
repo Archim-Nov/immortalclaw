@@ -1452,6 +1452,24 @@ test("guardian rewards scale up with dungeon tier", () => {
   );
 });
 
+test("managed dungeon expeditions do not emit routine step wakes before the final report", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const firstGrade = Object.keys(cultivator.dungeonProgress)[0] as keyof typeof cultivator.dungeonProgress;
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress[firstGrade].highestClearedRank = 1;
+
+  performAction(world, "yun-zhong-he", "start-dungeon-expedition:rank-1:balanced");
+  const interim = advanceWorld(world, 3);
+
+  assert.deepEqual(interim.completedJobs, []);
+  assert.deepEqual(interim.triggeredEvents, []);
+  assert.ok(world.dungeonExpeditions["yun-zhong-he"]);
+  assert.ok(world.dungeonExpeditions["yun-zhong-he"]!.stepIndex > 0);
+  assert.equal(world.dungeonExpeditionReports["yun-zhong-he"] ?? null, null);
+});
+
 test("seed world and runtime logs omit legacy zone compatibility fields", () => {
   const world = createSeedWorld();
 

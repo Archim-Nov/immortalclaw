@@ -37,14 +37,18 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(nodeSpecificCount, 1476);
+  assert.equal(nodeSpecificCount, 2448);
 
   for (const stateId of STATE_IDS) {
     assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 10);
     assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 2);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 54);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 54);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 54);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 90);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 90);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 90);
+    assert.equal(
+      (world.eventPools.nodeSpecific[`${stateId}:dungeon-c`] ?? []).filter((event) => event.id.includes("-band-")).length,
+      54,
+    );
   }
 });
 
@@ -156,6 +160,8 @@ test("dungeon node pools keep shared tier events and regional overlays together"
   assert.ok(qingzhouDungeonCIds.has("qingzhou:dungeon-c-rank-1-cache"));
   assert.ok(qingzhouDungeonCIds.has("qingzhou:dungeon-c-rank-9-cache"));
   assert.ok(qingzhouDungeonCIds.has("qingzhou:dungeon-c-herb-lockbox-band-1-3"));
+  assert.ok(qingzhouDungeonCIds.has("qingzhou:dungeon-c-pinework-coffer-band-1-3"));
+  assert.ok(qingzhouDungeonCIds.has("qingzhou:dungeon-c-valley-rumor-band-7-9"));
 
   const leizhouDungeonAIds = new Set(
     (world.eventPools.nodeSpecific["leizhou:dungeon-a"] ?? []).map((event) => event.id),
@@ -163,6 +169,8 @@ test("dungeon node pools keep shared tier events and regional overlays together"
   assert.ok(leizhouDungeonAIds.has("leizhou:dungeon-a-rank-1-cache"));
   assert.ok(leizhouDungeonAIds.has("leizhou:dungeon-a-rank-9-cache"));
   assert.ok(leizhouDungeonAIds.has("leizhou:dungeon-a-thunder-glass-band-1-3"));
+  assert.ok(leizhouDungeonAIds.has("leizhou:dungeon-a-storm-cradle-band-1-3"));
+  assert.ok(leizhouDungeonAIds.has("leizhou:dungeon-a-storm-whisper-band-7-9"));
 });
 
 test("drawEvent travel path can resolve from the current state's travel overlay", () => {

@@ -221,5 +221,17 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
         : 0;
   }
 
+  for (const progress of Object.values(copy.dungeonExpeditions)) {
+    progress.flavorEventTitles = Array.isArray(progress.flavorEventTitles)
+      ? progress.flavorEventTitles.filter((title): title is string => typeof title === "string")
+      : [];
+  }
+
+  for (const report of Object.values(copy.dungeonExpeditionReports)) {
+    report.flavorEvents = Array.isArray(report.flavorEvents)
+      ? report.flavorEvents.filter((title): title is string => typeof title === "string")
+      : [];
+  }
+
   return copy;
 }

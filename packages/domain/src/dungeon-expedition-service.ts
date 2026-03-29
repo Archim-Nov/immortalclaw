@@ -17,6 +17,7 @@ export const DUNGEON_EXPEDITION_DURATION_TICKS = 30;
 export const DUNGEON_EXPEDITION_STEP_TICKS = 3;
 export const DUNGEON_EXPEDITION_MAX_STEPS = DUNGEON_EXPEDITION_DURATION_TICKS / DUNGEON_EXPEDITION_STEP_TICKS;
 export const DUNGEON_EXPEDITION_POLICIES = ["conservative", "balanced", "aggressive"] as const satisfies readonly DungeonExpeditionPolicy[];
+const MAX_DUNGEON_FLAVOR_EVENTS = 3;
 
 const SECONDARY_DROPS_BY_BAND: Record<"1-3" | "4-6" | "7-9", ItemId[]> = {
   "1-3": ["ruin-fragment"],
@@ -170,6 +171,7 @@ export function createDungeonExpeditionProgress(input: {
     realmProgressGain: 0,
     unlockedNextRank: false,
     lastResolvedAction: null,
+    flavorEventTitles: [],
   };
 }
 
@@ -263,6 +265,24 @@ function mergeDropCounts(
   return merged;
 }
 
+function mergeFlavorEventTitles(
+  existing: readonly string[],
+  delta: readonly string[],
+): string[] {
+  const merged = [...existing];
+  for (const title of delta) {
+    if (!title || merged.includes(title)) {
+      continue;
+    }
+    merged.push(title);
+    if (merged.length >= MAX_DUNGEON_FLAVOR_EVENTS) {
+      return merged.slice(0, MAX_DUNGEON_FLAVOR_EVENTS);
+    }
+  }
+
+  return merged;
+}
+
 export function recordDungeonExpeditionStep(input: {
   progress: DungeonExpeditionProgress;
   action: "search" | "guardian";
@@ -272,6 +292,7 @@ export function recordDungeonExpeditionStep(input: {
   realmProgressGain: number;
   unlockedNextRank: boolean;
   resolvedAtTick: number;
+  flavorEventTitles: string[];
 }): DungeonExpeditionProgress {
   return {
     ...input.progress,
@@ -285,6 +306,7 @@ export function recordDungeonExpeditionStep(input: {
     realmProgressGain: input.progress.realmProgressGain + Math.max(0, input.realmProgressGain),
     unlockedNextRank: input.progress.unlockedNextRank || input.unlockedNextRank,
     lastResolvedAction: input.action,
+    flavorEventTitles: mergeFlavorEventTitles(input.progress.flavorEventTitles, input.flavorEventTitles),
   };
 }
 
@@ -339,5 +361,6 @@ export function createDungeonExpeditionReport(input: {
     unlockedNextRank: input.progress.unlockedNextRank,
     returnLocationId: input.returnLocationId,
     summary,
+    flavorEvents: [...input.progress.flavorEventTitles],
   };
 }

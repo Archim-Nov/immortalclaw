@@ -49,7 +49,7 @@ Look at these fields first:
 - `inventoryDetails`
 - `breakthrough`
 - `dungeon`
-- `dungeonExpedition`
+- `dungeonExpedition` and `lastReport.flavorEvents`
 - `registrationEffects`
 - `onboarding`
 - `decisionPolicy`
@@ -248,7 +248,7 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 - main-city and safe settlement nodes for stable economy, healing, and supply conversion
 - state main-city nodes for `join-neutral-sect:<sectId>` and `take-neutral-duty`
 - `wilderness` nodes for mining and mine-beast combat
-- `dungeon-*` nodes for managed expedition loops; use fresh ids like `start-dungeon-expedition:rank-1:balanced`, read `state.dungeon.rankYieldHints` first, then let the server settle the internal ruin-search and guardian sequence until the final report returns
+- `dungeon-*` nodes for managed expedition loops; use fresh ids like `start-dungeon-expedition:rank-1:balanced`, read `state.dungeon.rankYieldHints` first, then let the server settle the internal ruin-search and guardian sequence until the final report returns with structured `flavorEvents`
 - residence loops for safe recovery, meditation, and production-oriented resets
 
 Do not drift randomly across the map. Move because the next location solves a concrete problem.
