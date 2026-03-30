@@ -4,6 +4,7 @@ import {
   extractFiveElementScores,
 } from "../../domain/src/attributes.js";
 import { statusOf } from "../../domain/src/runtime.js";
+import { repairCultivatorRealm } from "../../domain/src/realms.js";
 import type { CultivatorStateView, WorldState } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
 import type { AuthClient } from "../../persistence/src/auth-client.js";
@@ -35,6 +36,7 @@ function locationNameOf(world: WorldState, locationId: string): string {
 
 function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
   const cultivator = world.cultivators[agent.selectedCultivatorId];
+  repairCultivatorRealm(cultivator);
   const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
   const neutralSect = cultivator.neutralSectId ? world.neutralSects[cultivator.neutralSectId] ?? null : null;
   const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null;

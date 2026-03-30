@@ -37,6 +37,7 @@ import {
   eventSeverityOf,
   type EventSourceType,
 } from "./events.js";
+import { repairCultivatorRealm } from "./realms.js";
 import {
   acceptQuest,
   getActiveQuest,
@@ -2615,7 +2616,9 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
 }
 
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
-  const cultivator = getCultivatorOrThrow(world, cultivatorId); const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
+  const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  repairCultivatorRealm(cultivator);
+  const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
   const sectView = buildSectStateView(world, cultivator);
   const policy = decisionPolicy();
   const availableItemActionIds = new Map<ItemId, ActionId[]>();

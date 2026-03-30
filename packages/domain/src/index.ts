@@ -67,6 +67,12 @@ export {
 } from "./engine.js";
 export { createSeedWorld } from "./seed.js";
 export {
+  realmLabelForLevel,
+  realmPhaseForLevel,
+  realmStageForLevel,
+  repairCultivatorRealm,
+} from "./realms.js";
+export {
   deriveRegistrationRecordFromAnswers,
   getRegistrationQuestionnaire,
   REGISTRATION_ANSWERS_SET,
