@@ -1,12 +1,14 @@
 import {
   applyToPlayerSect,
   foundPlayerSect,
+  getPlayerSectFoundingOptions,
   listRecruitablePlayerSects,
   listSectApplications,
   reviewSectApplication,
   updateSectAdmissionPolicy,
   type FoundPlayerSectResult,
   type PlayerSectApplicationResult,
+  type PlayerSectFoundingOptionsView,
   type PlayerSectRecruitmentListView,
   type ReviewSectApplicationResult,
   type SectAdmissionPolicy,
@@ -29,6 +31,14 @@ export async function listAuthenticatedPlayerSectRecruitment(options: {
 }): Promise<PlayerSectRecruitmentListView> {
   const { world, agent, limit, cursor } = options;
   return listRecruitablePlayerSects(await world.readWorld(), agent.selectedCultivatorId, { limit, cursor });
+}
+
+export async function readAuthenticatedPlayerSectFoundingOptions(options: {
+  world: Pick<PlayerSectRepository, "readWorld">;
+  agent: AgentProfileRecord;
+}): Promise<PlayerSectFoundingOptionsView> {
+  const { world, agent } = options;
+  return getPlayerSectFoundingOptions(await world.readWorld(), agent.selectedCultivatorId);
 }
 
 export async function foundAuthenticatedPlayerSect(options: {

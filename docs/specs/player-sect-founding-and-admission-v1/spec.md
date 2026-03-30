@@ -67,6 +67,10 @@ That leaves player sects as a partially modeled system rather than a playable pr
   - `name`
   - `admissionPolicy.minimumRealmLevel`
   - `admissionPolicy.allowedMotiveBuckets`
+- `GET /agent/sects/founding-options` exposes concise founding input guidance:
+  - `admissionPolicyInput.minimumRealmLevel.min`
+  - `admissionPolicyInput.minimumRealmLevel.suggested`
+  - `admissionPolicyInput.allowedMotiveBucketOptions[]` as `id + label`
 - the server derives:
   - `stateId` from the founder's current main-city state context
   - `alignment: 正道 | 魔道` from the founder's current morality alignment

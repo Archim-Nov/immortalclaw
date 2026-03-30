@@ -44,6 +44,31 @@ type FoundPlayerSectFn = (
   summary: string;
 };
 
+type GetPlayerSectFoundingOptionsFn = (
+  world: ReturnType<typeof createSeedWorld>,
+  cultivatorId: string,
+) => {
+  currentStateId: string | null;
+  canFound: boolean;
+  derivedFounding: {
+    alignment: string;
+    admissionPolicy: {
+      minimumRealmLevel: number;
+      allowedMotiveBuckets: string[];
+    };
+  };
+  admissionPolicyInput: {
+    minimumRealmLevel: {
+      min: number;
+      suggested: number;
+    };
+    allowedMotiveBucketOptions: Array<{
+      id: string;
+      label: string;
+    }>;
+  };
+};
+
 type ListRecruitablePlayerSectsFn = (
   world: ReturnType<typeof createSeedWorld>,
   cultivatorId: string,
@@ -175,6 +200,7 @@ function createRegistrationRecord(motiveId: string): CultivationRegistrationReco
 function playerSectRuntime() {
   const api = runtime as typeof runtime & {
     foundPlayerSect?: FoundPlayerSectFn;
+    getPlayerSectFoundingOptions?: GetPlayerSectFoundingOptionsFn;
     listRecruitablePlayerSects?: ListRecruitablePlayerSectsFn;
     applyToPlayerSect?: ApplyToPlayerSectFn;
     listSectApplications?: ListSectApplicationsFn;
@@ -183,6 +209,7 @@ function playerSectRuntime() {
   };
 
   assert.equal(typeof api.foundPlayerSect, "function");
+  assert.equal(typeof api.getPlayerSectFoundingOptions, "function");
   assert.equal(typeof api.listRecruitablePlayerSects, "function");
   assert.equal(typeof api.applyToPlayerSect, "function");
   assert.equal(typeof api.listSectApplications, "function");
@@ -191,6 +218,7 @@ function playerSectRuntime() {
 
   return {
     foundPlayerSect: api.foundPlayerSect as FoundPlayerSectFn,
+    getPlayerSectFoundingOptions: api.getPlayerSectFoundingOptions as GetPlayerSectFoundingOptionsFn,
     listRecruitablePlayerSects: api.listRecruitablePlayerSects as ListRecruitablePlayerSectsFn,
     applyToPlayerSect: api.applyToPlayerSect as ApplyToPlayerSectFn,
     listSectApplications: api.listSectApplications as ListSectApplicationsFn,
@@ -221,6 +249,26 @@ function foundTestSect(world: ReturnType<typeof createSeedWorld>, founderId = "y
     },
   });
 }
+
+test("getPlayerSectFoundingOptions exposes concise admission-policy guidance", () => {
+  const world = createSeedWorld();
+  const founder = prepareFounder(world);
+  const { getPlayerSectFoundingOptions } = playerSectRuntime();
+
+  const options = getPlayerSectFoundingOptions(world, founder.id);
+
+  assert.equal(options.currentStateId, "qingzhou");
+  assert.equal(options.canFound, true);
+  assert.equal(options.derivedFounding.alignment, "正道");
+  assert.equal(options.derivedFounding.admissionPolicy.minimumRealmLevel, 1);
+  assert.deepEqual(
+    options.admissionPolicyInput.allowedMotiveBucketOptions.map((entry) => entry.id),
+    ["longevity-order", "dao-truth", "guard-world", "strife-defiance", "freedom-wander"],
+  );
+  assert.equal(options.admissionPolicyInput.minimumRealmLevel.min, 1);
+  assert.equal(options.admissionPolicyInput.minimumRealmLevel.suggested, 1);
+  assert.ok(options.admissionPolicyInput.allowedMotiveBucketOptions.every((entry) => entry.label.length > 0));
+});
 
 test("foundPlayerSect rejects insufficient stones, reputation, wrong location, existing organization, and duplicate name", () => {
   const { foundPlayerSect } = playerSectRuntime();

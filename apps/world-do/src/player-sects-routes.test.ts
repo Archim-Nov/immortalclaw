@@ -143,6 +143,54 @@ function createAuthedApp(
   };
 }
 
+test("player-sect founding-options route exposes concise admission-policy guidance", async () => {
+  const world = createSeedWorld();
+  prepareFounder(world);
+  const runtime = createAuthedApp(world, "yun-zhong-he");
+
+  const response = await runtime.app.request("https://runtime.test/agent/sects/founding-options", {
+    headers: {
+      authorization: "Bearer test",
+    },
+  });
+  const payload = await response.json() as {
+    currentStateId?: string | null;
+    canFound?: boolean;
+    derivedFounding?: {
+      alignment?: string;
+      admissionPolicy?: {
+        minimumRealmLevel?: number;
+      };
+    };
+    admissionPolicyInput?: {
+      minimumRealmLevel?: {
+        min?: number;
+        suggested?: number;
+      };
+      allowedMotiveBucketOptions?: Array<{
+        id?: string;
+        label?: string;
+      }>;
+    };
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.currentStateId, "qingzhou");
+  assert.equal(payload.canFound, true);
+  assert.equal(payload.derivedFounding?.alignment, "\u6b63\u9053");
+  assert.equal(payload.derivedFounding?.admissionPolicy?.minimumRealmLevel, 1);
+  assert.equal(payload.admissionPolicyInput?.minimumRealmLevel?.min, 1);
+  assert.equal(payload.admissionPolicyInput?.minimumRealmLevel?.suggested, 1);
+  assert.deepEqual(
+    payload.admissionPolicyInput?.allowedMotiveBucketOptions?.map((entry) => entry.id),
+    ["longevity-order", "dao-truth", "guard-world", "strife-defiance", "freedom-wander"],
+  );
+  assert.equal(
+    payload.admissionPolicyInput?.allowedMotiveBucketOptions?.every((entry) => (entry.label?.length ?? 0) > 0),
+    true,
+  );
+});
+
 test("player-sect routes support founding, recruitment, application, review, and policy update", async () => {
   const founderWorld = createSeedWorld();
   prepareFounder(founderWorld);

@@ -375,6 +375,13 @@ export const PLAYER_SECT_MOTIVE_BUCKETS: Record<
   "strife-defiance": ["avenge-old-grudges", "compete-for-supremacy", "defy-fate"],
   "freedom-wander": ["seek-freedom"],
 };
+export const PLAYER_SECT_MOTIVE_BUCKET_LABELS: Record<SectMotiveBucketId, string> = {
+  "longevity-order": "longevity / clan",
+  "dao-truth": "dao / truth",
+  "guard-world": "protect / serve",
+  "strife-defiance": "vengeance / supremacy",
+  "freedom-wander": "freedom / wander",
+};
 
 export const QUEST_BOARD_SLOTS_BY_NODE_TYPE: Partial<Record<NodeType, number>> = {
   "main-city": 5,

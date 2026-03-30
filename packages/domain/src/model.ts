@@ -1241,6 +1241,11 @@ export interface PlayerSectRecruitmentListView {
   nextCursor: string | null;
 }
 
+export interface SectMotiveBucketOptionView {
+  id: SectMotiveBucketId;
+  label: string;
+}
+
 export type PlayerSectFoundingBlockerCode =
   | "not-in-main-city"
   | "already-in-organization"
@@ -1270,6 +1275,13 @@ export interface PlayerSectFoundingOptionsView {
   derivedFounding: {
     alignment: SectAlignment;
     admissionPolicy: SectAdmissionPolicy;
+  };
+  admissionPolicyInput: {
+    minimumRealmLevel: {
+      min: number;
+      suggested: number;
+    };
+    allowedMotiveBucketOptions: SectMotiveBucketOptionView[];
   };
   nameRules: {
     minLength: number;

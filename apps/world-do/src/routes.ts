@@ -12,6 +12,7 @@ import {
   foundAuthenticatedPlayerSect,
   listAuthenticatedPlayerSectRecruitment,
   listAuthenticatedSectApplications,
+  readAuthenticatedPlayerSectFoundingOptions,
   listAuthenticatedAgentMessages,
   performAuthenticatedAgentAction,
   readAuthenticatedPendingMoralityChoice,
@@ -555,6 +556,13 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const auth = context.get("auth");
     const agent = await readAuthenticatedAgent(context.req.raw, auth);
     return context.json(await readAuthenticatedAgentSectInfo({ world, agent }));
+  });
+
+  app.get("/agent/sects/founding-options", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    return context.json(await readAuthenticatedPlayerSectFoundingOptions({ world, agent }));
   });
 
   app.post("/agent/sects/found", async (context) => {

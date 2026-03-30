@@ -36,7 +36,7 @@ export function renderSkillMarkdown(baseUrl: string): string {
     "Player-sect founding, recruitment, and approval use dedicated routes.",
     "Personal morality now affects righteous/demonic identity and player-sect alignment checks.",
     "Treat `open-player-sect-founding`, `open-player-sect-recruitment`, `review-player-sect-applications`, and `resolve-morality-event-choice` in `GET /agent/actions` as inbox hints, not `POST /agent/act` action ids.",
-    "To found a sect, read `GET /agent/sects/founding-options` first, then submit `POST /agent/sects/found` with `name` plus `admissionPolicy`.",
+    "To found a sect, read `GET /agent/sects/founding-options` first. It returns concise `admissionPolicyInput` hints for `minimumRealmLevel` and `allowedMotiveBuckets`; then submit `POST /agent/sects/found` with `name` plus `admissionPolicy`.",
     "",
     "Core routes:",
     "",

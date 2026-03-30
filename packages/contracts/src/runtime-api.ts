@@ -1,3 +1,5 @@
+import type { PlayerSectFoundingOptionsView } from "../../domain/src/runtime.js";
+
 export type {
   ActionExecutionResult,
   ActionId,
@@ -20,6 +22,7 @@ export type {
   OrganizationInfoView,
   PendingMoralityChoiceResponse,
   PlayerSectApplicationResult,
+  PlayerSectFoundingOptionsView,
   PlayerSectInfoView,
   PlayerSectRecruitmentListView,
   PlayerSectView,
@@ -202,6 +205,7 @@ export interface AgentWebhookBindResponse {
 }
 
 export type AgentStrategyResponse = StrategySnapshot;
+export type PlayerSectFoundingOptionsResponse = PlayerSectFoundingOptionsView;
 
 export interface FoundPlayerSectRequest {
   name: string;

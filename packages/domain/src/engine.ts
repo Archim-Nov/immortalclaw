@@ -17,6 +17,7 @@ import {
   PLAYER_SECT_APPLICATION_TTL,
   PLAYER_SECT_FOUNDING_REPUTATION_COST,
   PLAYER_SECT_FOUNDING_STONE_COST,
+  PLAYER_SECT_MOTIVE_BUCKET_LABELS,
   PLAYER_SECT_PAGE_LIMIT,
   PLAYER_SECT_MOTIVE_BUCKETS,
   PLAYER_SECT_NAME_MAX_LENGTH,
@@ -4189,6 +4190,7 @@ export function getPlayerSectFoundingOptions(
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const { currentStateId, currentMainCityLocationId, blockers } = getPlayerSectFoundingBlockers(world, cultivator);
   const currentStateReputation = currentStateId ? reputationForState(cultivator, currentStateId) : 0;
+  const defaultAdmissionPolicy = defaultPlayerSectAdmissionPolicy();
 
   return {
     tick: world.tick,
@@ -4212,7 +4214,17 @@ export function getPlayerSectFoundingOptions(
     },
     derivedFounding: {
       alignment: moralityAlignmentOfCultivator(cultivator),
-      admissionPolicy: defaultPlayerSectAdmissionPolicy(),
+      admissionPolicy: defaultAdmissionPolicy,
+    },
+    admissionPolicyInput: {
+      minimumRealmLevel: {
+        min: 1,
+        suggested: defaultAdmissionPolicy.minimumRealmLevel,
+      },
+      allowedMotiveBucketOptions: PLAYER_SECT_MOTIVE_BUCKET_IDS.map((id) => ({
+        id,
+        label: PLAYER_SECT_MOTIVE_BUCKET_LABELS[id],
+      })),
     },
     nameRules: {
       minLength: PLAYER_SECT_NAME_MIN_LENGTH,

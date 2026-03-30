@@ -59,6 +59,7 @@ export {
   applyAuthenticatedPlayerSectApplication,
   foundAuthenticatedPlayerSect,
   listAuthenticatedPlayerSectRecruitment,
+  readAuthenticatedPlayerSectFoundingOptions,
   listAuthenticatedSectApplications,
   reviewAuthenticatedSectApplication,
   updateAuthenticatedSectAdmissionPolicy,
