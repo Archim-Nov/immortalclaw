@@ -60,8 +60,14 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   checkpoints.push(readStage());
   assert.equal(readStage(), "first-residence-cultivation");
 
-  world.cultivators[cultivatorId]!.realmProgress = 95;
-  performAction(world, cultivatorId, "cultivate");
+  world.cultivators[cultivatorId]!.realmProgress = 100;
+  world.cultivators[cultivatorId]!.inventory["qi-common"] = 2;
+  performAction(world, cultivatorId, "residence-produce:recipe-qi-stage-1-special");
+  runUntilIdle(world, cultivatorId);
+  checkpoints.push(readStage());
+  assert.equal(readStage(), "first-residence-cultivation");
+
+  performAction(world, cultivatorId, "residence-breakthrough");
   runUntilIdle(world, cultivatorId);
   checkpoints.push(readStage());
   assert.equal(readStage(), "completed");
@@ -81,7 +87,7 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   assert.equal(finalState.onboarding.stage, "completed");
   assert.equal(finalState.sect, null);
   assert.ok(world.cultivators[cultivatorId]!.realmLevel >= 2);
-  assert.ok(checkpoints.length >= 6);
+  assert.ok(checkpoints.length >= 7);
 });
 
 test("onboarding nextAction gives actionable fallback choices", () => {

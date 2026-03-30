@@ -15,8 +15,6 @@ type FoundPlayerSectFn = (
   cultivatorId: string,
   input: {
     name: string;
-    stateId: string;
-    alignment: "\u6b63\u9053" | "\u9b54\u9053";
     admissionPolicy: {
       minimumRealmLevel: number;
       allowedMotiveBuckets: string[];
@@ -186,46 +184,42 @@ test("player-sect founding and application enforce morality alignment", () => {
   const founder = prepareFounder(world);
 
   founder.moralityScore = -4;
-  assert.throws(
-    () =>
-      foundPlayerSect(world, founder.id, {
-        name: "Azure Peak Sect",
-        stateId: "qingzhou",
-        alignment: "\u6b63\u9053",
-        admissionPolicy: {
-          minimumRealmLevel: 1,
-          allowedMotiveBuckets: ["dao-truth"],
-        },
-      }),
-    /morality|alignment|\u6b63\u9053|\u9b54\u9053/i,
-  );
-
-  founder.moralityScore = 6;
-  const founded = foundPlayerSect(world, founder.id, {
+  const demonicFounded = foundPlayerSect(world, founder.id, {
     name: "Azure Peak Sect",
-    stateId: "qingzhou",
-    alignment: "\u6b63\u9053",
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+  });
+  assert.equal(world.sects[demonicFounded.sectId]?.alignment, "\u9b54\u9053");
+
+  const righteousWorld = createSeedWorld();
+  const righteousFounder = prepareFounder(righteousWorld);
+  righteousFounder.moralityScore = 6;
+  const founded = foundPlayerSect(righteousWorld, righteousFounder.id, {
+    name: "Misty River Sect",
     admissionPolicy: {
       minimumRealmLevel: 1,
       allowedMotiveBuckets: ["dao-truth"],
     },
   });
   assert.ok(founded.sectId);
+  assert.equal(righteousWorld.sects[founded.sectId]?.alignment, "\u6b63\u9053");
 
-  const applicantSummary = syncCultivatorFromPersona(world, {
+  const applicantSummary = syncCultivatorFromPersona(righteousWorld, {
     agentId: "agent-moral-applicant",
     name: "Moral Applicant",
   });
-  const applicant = world.cultivators[applicantSummary.selectedCultivatorId] as typeof world.cultivators[string] & {
+  const applicant = righteousWorld.cultivators[applicantSummary.selectedCultivatorId] as typeof righteousWorld.cultivators[string] & {
     moralityScore?: number;
   };
   applicant.locationId = "qingzhou:main-city";
   applicant.realmLevel = 3;
   applicant.moralityScore = -3;
-  saveCultivationRegistration(world, applicant.id, createRegistrationRecord("seek-truth"), "agent-moral-applicant");
+  saveCultivationRegistration(righteousWorld, applicant.id, createRegistrationRecord("seek-truth"), "agent-moral-applicant");
 
   assert.throws(
-    () => applyToPlayerSect(world, applicant.id, { sectId: founded.sectId }),
+    () => applyToPlayerSect(righteousWorld, applicant.id, { sectId: founded.sectId }),
     /morality|alignment|\u6b63\u9053|\u9b54\u9053/i,
   );
 });
@@ -238,8 +232,6 @@ test("approved aligned sect joins and sect errands update morality, and state ex
 
   const founded = foundPlayerSect(world, founder.id, {
     name: "Misty River Sect",
-    stateId: "qingzhou",
-    alignment: "\u6b63\u9053",
     admissionPolicy: {
       minimumRealmLevel: 1,
       allowedMotiveBuckets: ["dao-truth"],

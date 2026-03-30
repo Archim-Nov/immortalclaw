@@ -94,6 +94,7 @@ test("buildAuthenticatedAgentActions does not append generic inbox actions durin
       realmProgressGain: 8,
       unlockedNextRank: false,
       lastResolvedAction: "search",
+      flavorEventTitles: [],
     },
   };
   world.jobs["job-expedition"] = {

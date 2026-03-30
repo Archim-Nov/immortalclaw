@@ -196,34 +196,6 @@ function readSectAdmissionPolicy(value: unknown): UpdateSectAdmissionPolicyReque
   };
 }
 
-const PLAYER_SECT_STATE_IDS: readonly FoundPlayerSectRequest["stateId"][] = [
-  "qingzhou",
-  "yangzhou",
-  "zhongzhou",
-  "shuzhou",
-  "youzhou",
-  "liangzhou",
-  "leizhou",
-  "cangzhou",
-  "wanzhou",
-];
-
-function readPlayerSectStateId(value: unknown): FoundPlayerSectRequest["stateId"] {
-  const stateId = readRequiredBodyString(value, "Body must include stateId.");
-  if (!PLAYER_SECT_STATE_IDS.includes(stateId as FoundPlayerSectRequest["stateId"])) {
-    throw createStatusError(400, "stateId is invalid.");
-  }
-  return stateId as FoundPlayerSectRequest["stateId"];
-}
-
-function readPlayerSectAlignment(value: unknown): FoundPlayerSectRequest["alignment"] {
-  const alignment = readRequiredBodyString(value, "Body must include alignment.");
-  if (alignment !== "\u6b63\u9053" && alignment !== "\u9b54\u9053") {
-    throw createStatusError(400, "alignment must be \u6b63\u9053 or \u9b54\u9053.");
-  }
-  return alignment;
-}
-
 function readReviewDecision(value: unknown): ReviewSectApplicationRequest["decision"] {
   const decision = readRequiredBodyString(value, "Body must include decision.");
   if (decision !== "approve" && decision !== "reject") {
@@ -596,8 +568,6 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
         agent,
         input: {
           name: readRequiredBodyString(body.name, "Body must include name."),
-          stateId: readPlayerSectStateId(body.stateId),
-          alignment: readPlayerSectAlignment(body.alignment),
           admissionPolicy: readSectAdmissionPolicy(body.admissionPolicy),
         },
       }),

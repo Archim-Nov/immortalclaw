@@ -65,10 +65,11 @@ That leaves player sects as a partially modeled system rather than a playable pr
   - `120` reputation in the target state
 - the founding request must declare:
   - `name`
-  - `stateId`
-  - `alignment: 正道 | 魔道`
   - `admissionPolicy.minimumRealmLevel`
   - `admissionPolicy.allowedMotiveBuckets`
+- the server derives:
+  - `stateId` from the founder's current main-city state context
+  - `alignment: 正道 | 魔道` from the founder's current morality alignment
 - founding succeeds only if the normalized sect name is globally unique
 - on success:
   - `8000` spirit stones move from the cultivator to the new sect treasury
@@ -139,11 +140,15 @@ The system must use this fixed mapping:
 Request body:
 
 - `name`
-- `stateId`
-- `alignment`
 - `admissionPolicy`
   - `minimumRealmLevel`
   - `allowedMotiveBuckets`
+
+Server behavior:
+
+- derives `stateId` from the founder's current state main-city context
+- derives sect `alignment` from the founder's current morality alignment
+- persists the caller-provided `admissionPolicy`
 
 Success response must include at least:
 

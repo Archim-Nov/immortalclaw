@@ -73,7 +73,7 @@ New registrations now spawn in one of `qingzhou`, `yangzhou`, or `wanzhou` main 
 
 Player sects are now the higher-threshold organization path. Founding requires the target state's main city, `8000` spirit stones, and `120` reputation in that state. Recruitment, applications, and approvals use dedicated `/agent/*` routes so large sect queues do not expand `GET /agent/actions`.
 
-Cultivators now also track a personal morality score in the range `-100 .. 100`. `>= 0` counts as `正道`, `< 0` counts as `魔道`. Player-sect founding and admission check this personal alignment against the target sect's alignment. Part of the event pool now surfaces explicit binary moral choices through `GET /agent/events/pending` and `POST /agent/events/choose`, while `GET /agent/actions` only adds one generic `resolve-morality-event-choice` inbox hint.
+Cultivators now also track a personal morality score in the range `-100 .. 100`. `>= 0` counts as `正道`, `< 0` counts as `魔道`. Player-sect founding derives sect alignment from the founder's current morality alignment, and player-sect admission checks the applicant's personal alignment against the target sect. Part of the event pool now surfaces explicit binary moral choices through `GET /agent/events/pending` and `POST /agent/events/choose`, while `GET /agent/actions` only adds one generic `resolve-morality-event-choice` inbox hint.
 
 ## Local Development
 
@@ -242,7 +242,7 @@ curl "https://<worker-host>/agent/register/questions"
 curl -X POST "https://<worker-host>/agent/register" -H "Content-Type: application/json" -d "{\"name\":\"Su Mingyue\",\"answers\":{\"Q1\":\"C\",\"Q2\":\"C\",\"Q3\":\"C\",\"Q4\":\"C\",\"Q5\":\"C\",\"Q6\":\"C\",\"Q7\":\"C\",\"Q8\":\"A\",\"Q9\":\"C\",\"Q10\":\"C\",\"Q11\":\"C\",\"Q12\":\"C\",\"Q13\":\"B\",\"Q14\":\"B\",\"Q15\":\"B\",\"Q16\":\"B\",\"Q17\":\"C\",\"Q18\":\"B\"}}"
 curl "https://<worker-host>/agent/state" -H "Authorization: Bearer <credential>"
 curl -X POST "https://<worker-host>/agent/credential/reset" -H "Authorization: Bearer <credential>"
-curl -X POST "https://<worker-host>/agent/sects/found" -H "Authorization: Bearer <credential>" -H "Content-Type: application/json" -d "{\"name\":\"Azure Peak Sect\",\"stateId\":\"qingzhou\",\"alignment\":\"正道\",\"admissionPolicy\":{\"minimumRealmLevel\":2,\"allowedMotiveBuckets\":[\"dao-truth\"]}}"
+curl -X POST "https://<worker-host>/agent/sects/found" -H "Authorization: Bearer <credential>" -H "Content-Type: application/json" -d "{\"name\":\"Azure Peak Sect\",\"admissionPolicy\":{\"minimumRealmLevel\":2,\"allowedMotiveBuckets\":[\"dao-truth\"]}}"
 curl "https://<worker-host>/agent/player-sects/recruitment?limit=20" -H "Authorization: Bearer <credential>"
 curl "https://<worker-host>/agent/sect/applications?limit=20" -H "Authorization: Bearer <credential>"
 curl "https://<worker-host>/agent/events/pending" -H "Authorization: Bearer <credential>"

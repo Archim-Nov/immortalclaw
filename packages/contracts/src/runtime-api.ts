@@ -205,17 +205,6 @@ export type AgentStrategyResponse = StrategySnapshot;
 
 export interface FoundPlayerSectRequest {
   name: string;
-  stateId:
-    | "qingzhou"
-    | "yangzhou"
-    | "zhongzhou"
-    | "shuzhou"
-    | "youzhou"
-    | "liangzhou"
-    | "leizhou"
-    | "cangzhou"
-    | "wanzhou";
-  alignment: "\u6b63\u9053" | "\u9b54\u9053";
   admissionPolicy: SectAdmissionPolicy;
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as runtime from "./index.js";
-import { STATE_IDS } from "./constants.js";
+import { PLAYER_SECT_POLICY_UPDATE_COOLDOWN, STATE_IDS } from "./constants.js";
 import {
   advanceWorld,
   createSeedWorld,
@@ -31,8 +31,6 @@ type FoundPlayerSectFn = (
   cultivatorId: string,
   input: {
     name: string;
-    stateId: string;
-    alignment: "正道" | "魔道";
     admissionPolicy: {
       minimumRealmLevel: number;
       allowedMotiveBuckets: string[];
@@ -217,8 +215,6 @@ function foundTestSect(world: ReturnType<typeof createSeedWorld>, founderId = "y
   prepareFounder(world, founderId);
   return api.foundPlayerSect(world, founderId, {
     name: "青岳宗",
-    stateId: "qingzhou",
-    alignment: "正道",
     admissionPolicy: {
       minimumRealmLevel: 2,
       allowedMotiveBuckets: ["dao-truth"],
@@ -267,8 +263,6 @@ test("foundPlayerSect rejects insufficient stones, reputation, wrong location, e
         prepareFounder(world);
         const result = foundPlayerSect(world, "yun-zhong-he", {
           name: "青岳宗",
-          stateId: "qingzhou",
-          alignment: "正道",
           admissionPolicy: {
             minimumRealmLevel: 1,
             allowedMotiveBuckets: ["dao-truth"],
@@ -298,8 +292,6 @@ test("foundPlayerSect rejects insufficient stones, reputation, wrong location, e
       () =>
         foundPlayerSect(world, founderId, {
           name: "青岳宗",
-          stateId: "qingzhou",
-          alignment: "正道",
           admissionPolicy: {
             minimumRealmLevel: 1,
             allowedMotiveBuckets: ["dao-truth"],
@@ -318,8 +310,6 @@ test("foundPlayerSect creates a state-bound sect, transfers treasury, and marks 
 
   const result = foundPlayerSect(world, founder.id, {
     name: "青岳宗",
-    stateId: "qingzhou",
-    alignment: "正道",
     admissionPolicy: {
       minimumRealmLevel: 2,
       allowedMotiveBuckets: ["dao-truth", "guard-world"],
@@ -356,7 +346,7 @@ test("foundPlayerSect creates a state-bound sect, transfers treasury, and marks 
     minimumRealmLevel: 2,
     allowedMotiveBuckets: ["dao-truth", "guard-world"],
   });
-  assert.equal(sectInfo?.admissionPolicyUpdatedAtTick, world.tick);
+  assert.equal(sectInfo?.admissionPolicyUpdatedAtTick, world.tick - PLAYER_SECT_POLICY_UPDATE_COOLDOWN);
 });
 
 test("player-sect application enforces location, registration, and single pending rules while recruitment lists paginate", () => {

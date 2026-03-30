@@ -156,8 +156,6 @@ test("player-sect routes support founding, recruitment, application, review, and
     },
     body: JSON.stringify({
       name: "Azure Peak Sect",
-      stateId: "qingzhou",
-      alignment: "\u6b63\u9053",
       admissionPolicy: {
         minimumRealmLevel: 2,
         allowedMotiveBuckets: ["dao-truth"],

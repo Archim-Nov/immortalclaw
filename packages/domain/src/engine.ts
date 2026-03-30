@@ -4227,6 +4227,7 @@ export function foundPlayerSect(
   cultivatorId: string,
   input: {
     name: string;
+    admissionPolicy: SectAdmissionPolicy;
   },
 ): FoundPlayerSectResult {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -4256,7 +4257,7 @@ export function foundPlayerSect(
 
   const stateId = founding.currentStateId;
   const alignment = founding.derivedFounding.alignment;
-  const admissionPolicy = normalizeSectAdmissionPolicy(founding.derivedFounding.admissionPolicy);
+  const admissionPolicy = normalizeSectAdmissionPolicy(input.admissionPolicy);
 
   const sectId = normalizedName;
   const sect: Sect = {
