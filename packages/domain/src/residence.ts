@@ -10,7 +10,7 @@ export function requireResidenceActionAllowed(
   actionId: ResidenceActionId,
 ): void {
   if (!isAtResidence(cultivator)) {
-    throw new Error("Residence actions require being at your residence.");
+    throw new Error(`Residence actions require being at your residence. Your residence "${cultivator.residence.name}" is located at ${cultivator.residence.locationId}. You are currently at ${cultivator.locationId}.`);
   }
   if (actionId === "residence-meditate" && cultivator.injuryTicksRemaining > 0) {
     throw new Error("Injured cultivators cannot residence-meditate.");
