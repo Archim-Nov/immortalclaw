@@ -3,6 +3,7 @@ import type {
   ActionId,
   AvailableAction,
   CultivatorStateView,
+  PersistedWorldState,
   TickSummary,
   WorldState,
 } from "../../domain/src/runtime.js";
@@ -64,6 +65,7 @@ export interface AgentCredentialResetResult {
 }
 
 export interface WorldRepository {
+  // Implementations persist canonical persisted state but expose hydrated runtime worlds to callers.
   readWorld(): Promise<WorldState>;
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
   getWorldMetadata(): Promise<{ tick: number; updatedAt: string }>;
@@ -74,3 +76,5 @@ export interface WorldRepository {
   getLatestTickRun(): Promise<TickRunRecord | null>;
   getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null>;
 }
+
+export type PersistedWorldSnapshot = PersistedWorldState;

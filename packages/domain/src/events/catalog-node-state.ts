@@ -1,4 +1,3 @@
-import type { StateId } from "../constants.js";
 import type { EventTemplate } from "../events.js";
 import type { Location } from "../model.js";
 
@@ -12,7 +11,7 @@ import { buildYangzhouDungeonEventPack } from "./content/nodes/states/yangzhou.j
 import { buildYouzhouDungeonEventPack } from "./content/nodes/states/youzhou.js";
 import { buildZhongzhouDungeonEventPack } from "./content/nodes/states/zhongzhou.js";
 
-const STATE_DUNGEON_PACK_BUILDERS: Record<StateId, (location: Location) => EventTemplate[]> = {
+const STATE_DUNGEON_PACK_BUILDERS: Record<string, (location: Location) => EventTemplate[]> = {
   qingzhou: buildQingzhouDungeonEventPack,
   yangzhou: buildYangzhouDungeonEventPack,
   zhongzhou: buildZhongzhouDungeonEventPack,
@@ -25,5 +24,5 @@ const STATE_DUNGEON_PACK_BUILDERS: Record<StateId, (location: Location) => Event
 };
 
 export function buildDungeonStateOverlayEvents(location: Location): EventTemplate[] {
-  return STATE_DUNGEON_PACK_BUILDERS[location.stateId](location);
+  return STATE_DUNGEON_PACK_BUILDERS[location.stateId]?.(location) ?? [];
 }

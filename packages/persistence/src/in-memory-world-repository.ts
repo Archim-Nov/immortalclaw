@@ -3,12 +3,15 @@ import {
   createSeedWorld,
   getCultivationRegistration,
   getCultivatorState,
+  hydrateWorldState,
   listAvailableActions,
   performAction,
+  toPersistedWorldState,
 } from "../../domain/src/runtime.js";
 import type {
   ActionId,
   CultivationRegistrationRecord,
+  PersistedWorldState,
   TickSummary,
   WorldState,
 } from "../../domain/src/runtime.js";
@@ -23,7 +26,7 @@ import type { AuthClient } from "./auth-client.js";
 import { hydrateMigratedP3WorldState } from "./world-shape.js";
 
 export interface InMemoryWorldRepositoryOptions {
-  world?: WorldState;
+  world?: WorldState | PersistedWorldState;
   now?: () => string;
 }
 
@@ -52,7 +55,7 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
   private readonly agentCredentials = new Map<string, { agentId: string; lastSeenAt: string }>();
 
   constructor(options: InMemoryWorldRepositoryOptions = {}) {
-    this.world = hydrateMigratedP3WorldState(options.world ?? createSeedWorld());
+    this.world = hydrateWorldState(hydrateMigratedP3WorldState(options.world ?? createSeedWorld()));
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
@@ -63,7 +66,7 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
   async transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult> {
     const draftWorld = structuredClone(this.world);
     const result = mutator(draftWorld);
-    this.world = draftWorld;
+    this.world = hydrateWorldState(toPersistedWorldState(draftWorld));
     return structuredClone(result);
   }
 
@@ -83,11 +86,16 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
   }
 
   async performAction(cultivatorId: string, actionId: ActionId) {
-    return performAction(this.world, cultivatorId, actionId);
+    const draftWorld = structuredClone(this.world);
+    const result = performAction(draftWorld, cultivatorId, actionId);
+    this.world = hydrateWorldState(toPersistedWorldState(draftWorld));
+    return structuredClone(result);
   }
 
   async advanceWorld(steps: number, trigger: TickRunRecord["trigger"] = "manual"): Promise<TickSummary> {
-    const summary = advanceWorld(this.world, steps);
+    const draftWorld = structuredClone(this.world);
+    const summary = advanceWorld(draftWorld, steps);
+    this.world = hydrateWorldState(toPersistedWorldState(draftWorld));
     this.latestTickRun = {
       tick: summary.tick,
       advancedTicks: summary.advancedTicks,

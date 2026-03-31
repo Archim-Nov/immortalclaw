@@ -1,10 +1,12 @@
 import {
   advanceWorld as advanceWorldState,
-  createSeedWorld,
   getCultivationRegistration,
   getCultivatorState as readCultivatorState,
+  createSeedPersistedWorld,
+  hydrateWorldState,
   listAvailableActions as readAvailableActions,
   performAction as performWorldAction,
+  toPersistedWorldState,
 } from "../../domain/src/runtime.js";
 import type {
   ActionExecutionResult,
@@ -12,12 +14,13 @@ import type {
   AvailableAction,
   CultivationRegistrationRecord,
   CultivatorStateView,
+  PersistedWorldState,
+  ProjectedPersistedWorldState,
   TickSummary,
   WorldState,
 } from "../../domain/src/runtime.js";
 import type { WorldEvent } from "../../domain/src/model.js";
 import { STATE_IDS } from "../../domain/src/constants.js";
-import { buildFullTopology } from "../../domain/src/topology.js";
 import type { SqliteDatabaseLike } from "./sqlite-schema.js";
 import { hydrateMigratedP3WorldState } from "./world-shape.js";
 import type { TickRunRecord, WorldRepository } from "./world-repository.js";
@@ -62,6 +65,10 @@ export interface CreateSqliteWorldRepositoryOptions {
   database?: SqliteDatabaseLike;
   now?: () => string;
   worldKey?: string;
+}
+
+interface DeserializeStoredWorldOptions {
+  geographyRegistry?: import("../../domain/src/geography-registry.js").GeographyRegistryOverrides;
 }
 
 function createSqlStorageCursor<T>(
@@ -114,11 +121,8 @@ function deserializeFiniteNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value);
 }
 
-function serializeWorldForStorage(world: WorldState): WorldState {
+function serializeWorldForStorage(world: ProjectedPersistedWorldState): PersistedWorldState {
   const copy = structuredClone(world);
-  copy.topology.distanceMatrix = Object.fromEntries(
-    Array.from(world.topology.distanceMatrix.entries()).map(([key, value]) => [key, serializeFiniteNumber(value)]),
-  ) as unknown as WorldState["topology"]["distanceMatrix"];
 
   for (const sect of Object.values(copy.sects)) {
     sect.titleSlots = sect.titleSlots.map((slot) => ({
@@ -213,19 +217,11 @@ function normalizeStoredWorldShape(world: WorldState): WorldState {
   return copy;
 }
 
-function deserializeStoredWorld(world: WorldState): WorldState {
-  const legacyDistanceMatrix = world.topology?.distanceMatrix as unknown;
-  const copy = normalizeStoredWorldShape(world);
-  const rawDistanceMatrix = legacyDistanceMatrix ?? (copy.topology?.distanceMatrix as unknown);
-  const distanceMatrixEntries = rawDistanceMatrix instanceof Map
-    ? Array.from(rawDistanceMatrix.entries()).map(([key, value]) => [key, deserializeFiniteNumber(value)] as const)
-    : Object.entries((rawDistanceMatrix as Record<string, unknown>) ?? {})
-        .map(([key, value]) => [key, deserializeFiniteNumber(value)] as const);
-  const rebuiltTopology = buildFullTopology(copy.locations) as WorldState["topology"];
-  for (const [key, value] of distanceMatrixEntries) {
-    rebuiltTopology.distanceMatrix.set(key, value);
-  }
-  copy.topology = rebuiltTopology;
+function deserializeStoredWorld(
+  world: PersistedWorldState | WorldState,
+  options: DeserializeStoredWorldOptions = {},
+): WorldState {
+  const copy = normalizeStoredWorldShape(world as WorldState);
 
   for (const sect of Object.values(copy.sects)) {
     sect.titleSlots = sect.titleSlots.map((slot) => ({
@@ -235,12 +231,13 @@ function deserializeStoredWorld(world: WorldState): WorldState {
     }));
   }
 
-  return copy;
+  return hydrateMigratedP3WorldState(copy, options);
 }
 
 export class SqliteWorldRepository implements WorldRepository {
   private readonly now: () => string;
   private readonly worldKey: string;
+  private cachedSnapshot: { world: WorldState; revision: number } | null = null;
 
   constructor(private readonly sql: SqlStorage, options: Omit<SqliteWorldRepositoryOptions, "sql"> = {}) {
     this.now = options.now ?? (() => new Date().toISOString());
@@ -248,19 +245,32 @@ export class SqliteWorldRepository implements WorldRepository {
   }
 
   async readWorld(): Promise<WorldState> {
-    const snapshot = this.readSnapshot();
+    const snapshot = this.getSnapshot();
     return structuredClone(snapshot.world);
   }
 
   async transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult> {
-    const snapshot = this.readSnapshot();
+    const snapshot = this.getSnapshot();
     const draftWorld = structuredClone(snapshot.world);
     const result = mutator(draftWorld);
-    this.persistWorld(draftWorld, snapshot.revision);
-    return structuredClone(result);
+
+    try {
+      this.commitWorld(draftWorld, snapshot.revision);
+      return structuredClone(result);
+    } catch (error) {
+      this.cachedSnapshot = null;
+      throw error;
+    }
   }
 
   async getWorldMetadata(): Promise<{ tick: number; updatedAt: string }> {
+    if (this.cachedSnapshot) {
+      return {
+        tick: this.cachedSnapshot.world.tick,
+        updatedAt: this.cachedSnapshot.world.updatedAt,
+      };
+    }
+
     const row = this.readWorldRow();
     if (row) {
       return {
@@ -285,23 +295,37 @@ export class SqliteWorldRepository implements WorldRepository {
   }
 
   async performAction(cultivatorId: string, actionId: ActionId): Promise<ActionExecutionResult> {
-    const snapshot = this.readSnapshot();
-    const result = performWorldAction(snapshot.world, cultivatorId, actionId);
-    this.persistWorld(snapshot.world, snapshot.revision);
-    this.insertWorldAction(result);
-    return structuredClone(result);
+    const snapshot = this.getSnapshot();
+    const draftWorld = structuredClone(snapshot.world);
+
+    try {
+      const result = performWorldAction(draftWorld, cultivatorId, actionId);
+      this.commitWorld(draftWorld, snapshot.revision);
+      this.insertWorldAction(result);
+      return structuredClone(result);
+    } catch (error) {
+      this.cachedSnapshot = null;
+      throw error;
+    }
   }
 
   async advanceWorld(steps: number, trigger: TickRunRecord["trigger"] = "manual"): Promise<TickSummary> {
-    const snapshot = this.readSnapshot();
-    const summary = advanceWorldState(snapshot.world, steps);
-    const recordedAt = this.now();
+    const snapshot = this.getSnapshot();
+    const draftWorld = structuredClone(snapshot.world);
 
-    this.persistWorld(snapshot.world, snapshot.revision);
-    this.insertTickRun(summary, trigger, recordedAt);
-    this.insertWorldEvents(summary.triggeredEvents, recordedAt);
+    try {
+      const summary = advanceWorldState(draftWorld, steps);
+      const recordedAt = this.now();
 
-    return structuredClone(summary);
+      this.commitWorld(draftWorld, snapshot.revision);
+      this.insertTickRun(summary, trigger, recordedAt);
+      this.insertWorldEvents(summary.triggeredEvents, recordedAt);
+
+      return structuredClone(summary);
+    } catch (error) {
+      this.cachedSnapshot = null;
+      throw error;
+    }
   }
 
   async getLatestTickRun(): Promise<TickRunRecord | null> {
@@ -328,22 +352,41 @@ export class SqliteWorldRepository implements WorldRepository {
     return getCultivationRegistration(await this.readWorld(), cultivatorId);
   }
 
-  private readSnapshot(): { world: WorldState; revision: number } {
+  async resetWorldStorage(): Promise<void> {
+    this.sql.exec("DELETE FROM tick_runs");
+    this.sql.exec("DELETE FROM world_events");
+    this.sql.exec("DELETE FROM world_actions");
+    this.sql.exec("DELETE FROM cultivator_records");
+    this.sql.exec("DELETE FROM world_state");
+    this.cachedSnapshot = null;
+  }
+
+  private getSnapshot(): { world: WorldState; revision: number } {
+    if (this.cachedSnapshot) {
+      return this.cachedSnapshot;
+    }
+
+    const snapshot = this.readSnapshotFromStorage();
+    this.cachedSnapshot = snapshot;
+    return snapshot;
+  }
+
+  private readSnapshotFromStorage(): { world: WorldState; revision: number } {
     const row = this.readWorldRow();
     if (row) {
       return {
-        world: deserializeStoredWorld(JSON.parse(row.payload) as WorldState),
+        world: deserializeStoredWorld(JSON.parse(row.payload) as PersistedWorldState),
         revision: row.version,
       };
     }
 
-    const seedWorld = createSeedWorld();
+    const seedWorld = createSeedPersistedWorld();
     const seededAt = this.now();
     this.insertInitialSnapshot(seedWorld, seededAt);
     const seededWorld = structuredClone(seedWorld);
     seededWorld.updatedAt = seededAt;
     return {
-      world: deserializeStoredWorld(serializeWorldForStorage(seededWorld)),
+      world: hydrateWorldState(seededWorld),
       revision: 1,
     };
   }
@@ -358,7 +401,7 @@ export class SqliteWorldRepository implements WorldRepository {
     ).toArray()[0];
   }
 
-  private insertInitialSnapshot(world: WorldState, updatedAt = this.now()): void {
+  private insertInitialSnapshot(world: ProjectedPersistedWorldState, updatedAt = this.now()): void {
     const persistedWorld = structuredClone(world);
     persistedWorld.updatedAt = updatedAt;
 
@@ -374,18 +417,17 @@ export class SqliteWorldRepository implements WorldRepository {
     this.upsertCultivatorRecords(persistedWorld);
   }
 
-  private persistWorld(world: WorldState, expectedRevision: number): void {
-    const persistedWorld = structuredClone(world);
-    persistedWorld.updatedAt = this.now();
+  private persistWorld(world: ProjectedPersistedWorldState, expectedRevision: number): number {
+    world.updatedAt = this.now();
 
     const result = this.sql.exec(
       `UPDATE world_state
        SET version = ?, tick = ?, updated_at = ?, payload = ?
        WHERE world_key = ? AND version = ?`,
       expectedRevision + 1,
-      persistedWorld.tick,
-      persistedWorld.updatedAt,
-      JSON.stringify(serializeWorldForStorage(persistedWorld)),
+      world.tick,
+      world.updatedAt,
+      JSON.stringify(serializeWorldForStorage(world)),
       this.worldKey,
       expectedRevision,
     );
@@ -396,10 +438,20 @@ export class SqliteWorldRepository implements WorldRepository {
       });
     }
 
-    this.upsertCultivatorRecords(persistedWorld);
+    this.upsertCultivatorRecords(world);
+    return expectedRevision + 1;
   }
 
-  private upsertCultivatorRecords(world: WorldState): void {
+  private commitWorld(world: WorldState, expectedRevision: number): void {
+    const persistedWorld = toPersistedWorldState(world);
+    const revision = this.persistWorld(persistedWorld, expectedRevision);
+    this.cachedSnapshot = {
+      world: hydrateWorldState(persistedWorld),
+      revision,
+    };
+  }
+
+  private upsertCultivatorRecords(world: ProjectedPersistedWorldState): void {
     for (const cultivator of Object.values(world.cultivators)) {
       this.sql.exec(
         `INSERT INTO cultivator_records (cultivator_id, tick, updated_at, snapshot)

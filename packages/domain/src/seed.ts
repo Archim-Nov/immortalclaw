@@ -6,6 +6,9 @@
   ItemId,
   Location,
   NeutralSect,
+  ProjectedPersistedWorldState,
+  PersistedStateDefinition,
+  PersistedWorldState,
   Sect,
   StateDefinition,
   StatusEffect,
@@ -13,29 +16,34 @@
   WorldState,
 } from "./model.js";
 import {
-  BASE_NODE_TYPES,
-  NEUTRAL_SECTS_BY_STATE,
   NODE_META,
-  SETTLEMENT_DISPLAY_NAMES,
   STATE_IDS,
-  STATE_META,
   type LocationId,
   type BaseNodeType,
-  type NamedSettlementNodeType,
   type StateId,
 } from "./constants.js";
 import { createEventPools } from "./events.js";
+import {
+  getGeographyStateIds,
+  getNeutralSectsByState,
+  getStateMetaMap,
+  resolveGeographyRegistry,
+  type GeographyRegistryDefinition,
+  type GeographyRegistryOverrides,
+  validateGeographyRegistry,
+} from "./geography-registry.js";
 import { ITEM_CATALOG, ITEM_IDS } from "./items/catalog.js";
 import { seedQuestBoards } from "./quest.js";
 import { buildFullTopology, toLocationId, toSectOutpostLocationId } from "./topology.js";
 
 const sects: Record<string, Sect> = {};
 
-function buildNeutralSects(): Record<string, NeutralSect> {
+function buildNeutralSects(geographyRegistry: GeographyRegistryDefinition): Record<string, NeutralSect> {
   const neutralSects: Record<string, NeutralSect> = {};
+  const neutralSectsByState = getNeutralSectsByState(geographyRegistry);
 
-  for (const stateId of STATE_IDS) {
-    const definition = NEUTRAL_SECTS_BY_STATE[stateId];
+  for (const stateId of getGeographyStateIds(geographyRegistry)) {
+    const definition = neutralSectsByState[stateId];
     if (!definition) {
       continue;
     }
@@ -43,8 +51,8 @@ function buildNeutralSects(): Record<string, NeutralSect> {
       id: definition.id,
       name: definition.name,
       alignment: "中立",
-      stateId,
-      headquarters: toSectOutpostLocationId(stateId, definition.id),
+      stateId: stateId as NeutralSect["stateId"],
+      headquarters: toSectOutpostLocationId(stateId as StateId, definition.id),
       description: definition.description,
       rewardMultiplier: definition.rewardMultiplier,
       joinable: true,
@@ -56,9 +64,11 @@ function buildNeutralSects(): Record<string, NeutralSect> {
   return neutralSects;
 }
 
-function buildLocationDescription(stateId: StateId, nodeType: BaseNodeType): string {
-  const stateName = STATE_META[stateId].name;
-  const risk = STATE_META[stateId].risk;
+function buildLocationDescription(
+  stateName: string,
+  risk: string,
+  nodeType: BaseNodeType,
+): string {
 
   switch (nodeType) {
     case "main-city":
@@ -83,21 +93,23 @@ function buildLocationDescription(stateId: StateId, nodeType: BaseNodeType): str
 }
 
 function buildOrganizationOutpostLocation(
-  stateId: StateId,
+  stateId: string,
   organizationId: string,
   organizationName: string,
   organizationType: "player-sect" | "neutral-sect",
+  geographyRegistry: GeographyRegistryDefinition,
 ): Location {
-  const id = toSectOutpostLocationId(stateId, organizationId);
+  const stateMeta = getStateMetaMap(geographyRegistry);
+  const id = toSectOutpostLocationId(stateId as StateId, organizationId);
 
   return {
     id,
-    stateId,
+    stateId: stateId as Location["stateId"],
     nodeType: "sect-outpost",
     name: `${organizationName}据点`,
     kind: "safe",
-    risk: STATE_META[stateId].risk,
-    description: `Dedicated outpost for ${organizationName} in ${STATE_META[stateId].name}.`,
+    risk: stateMeta[stateId]!.risk,
+    description: `Dedicated outpost for ${organizationName} in ${stateMeta[stateId]!.name}.`,
     organizationId,
     organizationType,
   };
@@ -140,23 +152,23 @@ function dungeonMetadataForNodeType(nodeType: BaseNodeType): Location["dungeon"]
 function buildAllLocations(
   playerSects: Record<string, Sect>,
   neutralSects: Record<string, NeutralSect>,
+  geographyRegistry: GeographyRegistryDefinition,
 ): Record<string, Location> {
   const locations: Record<string, Location> = {};
+  const stateMeta = getStateMetaMap(geographyRegistry);
 
-  for (const stateId of STATE_IDS) {
-    for (const nodeType of BASE_NODE_TYPES) {
-      const id: LocationId = toLocationId(stateId, nodeType);
-      const settlementName = SETTLEMENT_DISPLAY_NAMES[stateId][
-        nodeType as NamedSettlementNodeType
-      ];
+  for (const [stateId, definition] of Object.entries(geographyRegistry)) {
+    for (const locationDefinition of definition.locations) {
+      const nodeType = locationDefinition.nodeType;
+      const id: LocationId = toLocationId(stateId as StateId, nodeType);
       locations[id] = {
         id,
-        stateId,
+        stateId: stateId as Location["stateId"],
         nodeType,
-        name: settlementName ?? `${STATE_META[stateId].name}${NODE_META[nodeType].suffix}`,
+        name: locationDefinition.name ?? `${stateMeta[stateId]!.name}${NODE_META[nodeType].suffix}`,
         kind: NODE_META[nodeType].kind,
-        risk: STATE_META[stateId].risk,
-        description: buildLocationDescription(stateId, nodeType),
+        risk: stateMeta[stateId]!.risk,
+        description: buildLocationDescription(stateMeta[stateId]!.name, stateMeta[stateId]!.risk, nodeType),
         dungeon: dungeonMetadataForNodeType(nodeType),
       };
     }
@@ -168,6 +180,7 @@ function buildAllLocations(
       sect.id,
       sect.name,
       "player-sect",
+      geographyRegistry,
     );
     locations[outpost.id] = outpost;
   }
@@ -178,6 +191,7 @@ function buildAllLocations(
       neutralSect.id,
       neutralSect.name,
       "neutral-sect",
+      geographyRegistry,
     );
     locations[outpost.id] = outpost;
   }
@@ -185,14 +199,18 @@ function buildAllLocations(
   return locations;
 }
 
-function buildAllStates(locations: Record<string, Location>): Record<string, StateDefinition> {
+function buildAllStates(
+  locations: Record<string, Location>,
+  geographyRegistry: GeographyRegistryDefinition,
+): Record<string, StateDefinition> {
   const states: Record<string, StateDefinition> = {};
+  const stateMeta = getStateMetaMap(geographyRegistry);
 
-  for (const stateId of STATE_IDS) {
+  for (const stateId of getGeographyStateIds(geographyRegistry)) {
     states[stateId] = {
       id: stateId,
-      name: STATE_META[stateId].name,
-      risk: STATE_META[stateId].risk,
+      name: stateMeta[stateId]!.name,
+      risk: stateMeta[stateId]!.risk,
       locationIds: Object.values(locations)
         .filter((location) => location.stateId === stateId)
         .map((location) => location.id),
@@ -200,6 +218,23 @@ function buildAllStates(locations: Record<string, Location>): Record<string, Sta
   }
 
   return states;
+}
+
+function buildPersistedStates(
+  geographyRegistry: GeographyRegistryDefinition,
+): Record<string, PersistedStateDefinition> {
+  const stateMeta = getStateMetaMap(geographyRegistry);
+
+  return Object.fromEntries(
+    getGeographyStateIds(geographyRegistry).map((stateId) => [
+      stateId,
+      {
+        id: stateId,
+        name: stateMeta[stateId]!.name,
+        risk: stateMeta[stateId]!.risk,
+      },
+    ]),
+  );
 }
 
 export function createEmptyInventory(): Record<ItemId, number> {
@@ -414,10 +449,16 @@ function createGuixuProgress(): GuixuProgress {
   };
 }
 
-export function createSeedWorld(): WorldState {
+interface CreateSeedWorldOptions {
+  geographyRegistry?: GeographyRegistryOverrides;
+}
+
+export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldState {
+  const geographyRegistry = resolveGeographyRegistry(options.geographyRegistry);
+  validateGeographyRegistry(geographyRegistry);
   const seededSects = structuredClone(sects);
-  const neutralSects = buildNeutralSects();
-  const locations = buildAllLocations(seededSects, neutralSects);
+  const neutralSects = buildNeutralSects(geographyRegistry);
+  const locations = buildAllLocations(seededSects, neutralSects, geographyRegistry);
   const world: WorldState = {
     version: 10,
     tick: 0,
@@ -427,9 +468,9 @@ export function createSeedWorld(): WorldState {
     sects: seededSects,
     neutralSects,
     locations,
-    states: buildAllStates(locations),
-    topology: buildFullTopology(locations),
-    eventPools: createEventPools(locations),
+    states: buildAllStates(locations, geographyRegistry),
+    topology: buildFullTopology(locations, { geographyRegistry }),
+    eventPools: createEventPools(locations, { geographyRegistry }),
     questBoards: {},
     pendingSectApplications: {},
     pendingMoralityChoices: {},
@@ -477,4 +518,50 @@ export function createSeedWorld(): WorldState {
   };
   seedQuestBoards(world);
   return world;
+}
+
+export function toPersistedWorldState(world: WorldState): ProjectedPersistedWorldState {
+  const persisted = structuredClone(world) as PersistedWorldState & {
+    topology?: unknown;
+    eventPools?: unknown;
+  };
+
+  delete persisted.topology;
+  delete persisted.eventPools;
+  persisted.states = Object.fromEntries(
+    Object.entries(world.states).map(([stateId, state]) => [
+      stateId,
+      {
+        id: state.id,
+        name: state.name,
+        risk: state.risk,
+      },
+    ]),
+  );
+
+  return persisted as ProjectedPersistedWorldState;
+}
+
+export function hydrateWorldState(
+  world: PersistedWorldState | WorldState,
+  options: CreateSeedWorldOptions = {},
+): WorldState {
+  const geographyRegistry = resolveGeographyRegistry(options.geographyRegistry);
+  validateGeographyRegistry(geographyRegistry);
+
+  const hydrated = structuredClone(world) as WorldState;
+  hydrated.states = buildAllStates(hydrated.locations, geographyRegistry);
+  hydrated.topology = buildFullTopology(hydrated.locations, { geographyRegistry });
+  hydrated.eventPools = createEventPools(hydrated.locations, { geographyRegistry });
+
+  return hydrated;
+}
+
+export function createSeedPersistedWorld(options: CreateSeedWorldOptions = {}): ProjectedPersistedWorldState {
+  const geographyRegistry = resolveGeographyRegistry(options.geographyRegistry);
+  validateGeographyRegistry(geographyRegistry);
+
+  const persisted = toPersistedWorldState(createSeedWorld(options));
+  persisted.states = buildPersistedStates(geographyRegistry);
+  return persisted;
 }

@@ -10,6 +10,7 @@ export interface WorldDOEnv {
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
   WORLD_TICK_STEPS?: string;
+  WORLD_RESET_TOKEN?: string;
 }
 
 export interface WorldDOHonoEnv {

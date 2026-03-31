@@ -4,7 +4,32 @@ import test from "node:test";
 import { STATE_IDS } from "./constants.js";
 import type { EventTemplate } from "./events.js";
 import { drawEvent, drawNodeSpecificEvent } from "./events.js";
-import { advanceWorld, createSeedWorld, performAction } from "./index.js";
+import { advanceWorld, createSeedWorld, hydrateWorldState, performAction, toPersistedWorldState } from "./index.js";
+
+function createSyntheticStateDefinition() {
+  return {
+    name: "海州",
+    risk: "medium",
+    starter: false,
+    neutralSect: {
+      id: "hai-men-ge",
+      name: "海门阁",
+      description: "海州沿岸的中立门派，维系港口与海路秩序。",
+      rewardMultiplier: 0.7,
+    },
+    locations: [
+      { nodeType: "main-city", name: "海晖城" },
+      { nodeType: "sub-town-east", name: "潮生镇" },
+      { nodeType: "sub-town-west", name: "渔火镇" },
+      { nodeType: "sub-town-south", name: "归帆镇" },
+      { nodeType: "wilderness" },
+      { nodeType: "dungeon-c" },
+      { nodeType: "dungeon-b" },
+      { nodeType: "dungeon-a" },
+    ],
+    crossStateConnections: [{ to: "qingzhou", ticks: 7 }],
+  } as const;
+}
 
 test("event pool shape satisfies Phase 2 minimum structure", () => {
   const world = createSeedWorld();
@@ -50,6 +75,32 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
       54,
     );
   }
+});
+
+test("extended geography registry adds seeded event-pool entries without editing hardcoded state lists", () => {
+  const world = createSeedWorld({
+    geographyRegistry: {
+      haizhou: createSyntheticStateDefinition(),
+    },
+  } as never);
+
+  assert.ok(world.locations["haizhou:main-city"]);
+  assert.ok(Object.hasOwn(world.eventPools.nodeSpecific, "haizhou:wilderness"));
+  assert.ok(
+    Array.isArray(
+      (world.eventPools.travelStateSpecific as Record<string, readonly EventTemplate[]>)["haizhou"],
+    ),
+  );
+});
+
+test("hydrateWorldState rebuilds event pools from persisted world state", () => {
+  const world = createSeedWorld();
+  const persisted = toPersistedWorldState(world);
+
+  const hydrated = hydrateWorldState(persisted);
+
+  assert.ok(hydrated.eventPools.travelStateSpecific.qingzhou);
+  assert.equal(hydrated.eventPools.travelPool.length, 11);
 });
 
 test("drawEvent exploration path returns a merged event candidate", () => {

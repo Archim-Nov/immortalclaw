@@ -105,10 +105,13 @@ export interface Location {
   organizationType?: "player-sect" | "neutral-sect" | null;
 }
 
-export interface StateDefinition {
+export interface PersistedStateDefinition {
   id: string;
   name: string;
   risk: string;
+}
+
+export interface StateDefinition extends PersistedStateDefinition {
   locationIds: string[];
 }
 
@@ -1477,3 +1480,13 @@ export interface WorldState {
   nextMoralityChoiceSequence: number;
   nextSectCooldownSequence: number;
 }
+
+export interface PersistedWorldState extends Omit<WorldState, "states" | "topology" | "eventPools"> {
+  states: Record<string, PersistedStateDefinition>;
+}
+
+declare const projectedPersistedWorldStateBrand: unique symbol;
+
+export type ProjectedPersistedWorldState = PersistedWorldState & {
+  readonly [projectedPersistedWorldStateBrand]: true;
+};

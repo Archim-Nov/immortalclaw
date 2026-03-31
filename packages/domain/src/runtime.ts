@@ -23,6 +23,7 @@ export type {
   NeutralSectView,
   OrganizationInfoView,
   PendingMoralityChoiceResponse,
+  ProjectedPersistedWorldState,
   PlayerSectApplicationResult,
   PlayerSectFoundingOptionsView,
   PlayerSectInfoView,
@@ -42,6 +43,7 @@ export type {
   StrategySnapshot,
   TickSummary,
   UpdateSectAdmissionPolicyResult,
+  PersistedWorldState,
   WorldEvent,
   WorldState,
 } from "./model.js";
@@ -72,5 +74,5 @@ export {
   syncCultivatorFromPersona,
   updateSectAdmissionPolicy,
 } from "./engine.js";
-export { createSeedWorld } from "./seed.js";
+export { createSeedPersistedWorld, createSeedWorld, hydrateWorldState, toPersistedWorldState } from "./seed.js";
 export type { MainAttributeId, DetailedAttributeId } from "./attributes.js";
