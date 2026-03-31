@@ -23,7 +23,7 @@ export interface PublicAgentStateWorldRepository {
 
 export interface PublicAgentStateAuthClient extends Pick<AuthClient, "getAgentProfile"> {}
 
-const REALM_PHASES = ["\u524d\u671f", "\u4e2d\u671f", "\u540e\u671f"] as const;
+const REALM_PHASES = ["前期", "中期", "后期"] as const;
 
 function realmPhaseOfLevel(realmLevel: number) {
   const normalizedLevel = Math.max(1, Math.floor(realmLevel));

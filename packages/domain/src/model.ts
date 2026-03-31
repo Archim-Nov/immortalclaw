@@ -1,5 +1,5 @@
 export type RealmStage = "炼气" | "筑基" | "金丹";
-export type RealmPhase = "\u524d\u671f" | "\u4e2d\u671f" | "\u540e\u671f";
+export type RealmPhase = "前期" | "中期" | "后期";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
 export type RegistrationQuestionId =

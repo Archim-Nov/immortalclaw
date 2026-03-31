@@ -223,7 +223,7 @@ const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
     poisonTicks: 4,
   },
 };
-const REALM_PHASES: readonly RealmPhase[] = ["\u524d\u671f", "\u4e2d\u671f", "\u540e\u671f"];
+const REALM_PHASES: readonly RealmPhase[] = ["前期", "中期", "后期"];
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
   "registered",
   "first-action",
