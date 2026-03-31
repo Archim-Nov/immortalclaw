@@ -14,6 +14,8 @@ import {
   saveCultivationRegistration,
   sendDirectMessage,
   syncCultivatorFromPersona,
+  hydrateWorldState,
+  toPersistedWorldState,
 } from "./index.js";
 import type { CultivationRegistrationRecord } from "./index.js";
 import { STATE_IDS } from "./constants.js";
@@ -356,6 +358,18 @@ test("quest boards exist and refresh on 12-tick cadence", () => {
   const afterIds = afterBoard.quests.map((quest) => quest.id);
   assert.equal(afterBoard.lastRefreshedTick, 12);
   assert.notDeepEqual(afterIds, beforeIds);
+});
+
+test("hydrateWorldState rebuilds topology while preserving canonical quest boards", () => {
+  const world = createSeedWorld();
+  const persisted = toPersistedWorldState(world);
+  const originalBoard = persisted.questBoards["qingzhou:main-city"];
+
+  const hydrated = hydrateWorldState(persisted);
+
+  assert.ok(hydrated.topology.distanceMatrix.size > 0);
+  assert.deepEqual(hydrated.questBoards["qingzhou:main-city"], originalBoard);
+  assert.ok(hydrated.states.qingzhou?.locationIds.includes("qingzhou:main-city"));
 });
 
 test("accepting and resolving a base quest updates local state reputation", () => {

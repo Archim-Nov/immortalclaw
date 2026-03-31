@@ -1,6 +1,5 @@
 import {
   BASE_NODE_TYPES,
-  CROSS_STATE_EDGES,
   INTRA_STATE_TRAVEL,
   type BaseLocationId,
   type BaseNodeType,
@@ -8,6 +7,13 @@ import {
   type SectOutpostLocationId,
   type StateId,
 } from "./constants.js";
+import {
+  getCrossStateEdges,
+  getGeographyStateIds,
+  resolveGeographyRegistry,
+  type GeographyRegistryOverrides,
+  validateGeographyRegistry,
+} from "./geography-registry.js";
 import type { Location } from "./model.js";
 
 export interface TopologyEdge {
@@ -22,6 +28,10 @@ export interface TopologyGraph {
 }
 
 type MinimalLocation = Pick<Location, "id" | "stateId" | "nodeType">;
+
+interface TopologyOptions {
+  geographyRegistry?: GeographyRegistryOverrides;
+}
 
 export function toLocationId(stateId: StateId, nodeType: BaseNodeType): BaseLocationId {
   return `${stateId}:${nodeType}` as BaseLocationId;
@@ -51,12 +61,15 @@ export function buildIntraStateEdges(stateId: StateId): TopologyEdge[] {
 
 export function buildCrossStateEdges(
   locations: Record<string, MinimalLocation>,
+  options: TopologyOptions = {},
 ): TopologyEdge[] {
+  const geographyRegistry = resolveGeographyRegistry(options.geographyRegistry);
+  validateGeographyRegistry(geographyRegistry);
   const edges: TopologyEdge[] = [];
 
-  for (const [stateA, stateB, ticks] of CROSS_STATE_EDGES) {
-    const from = toLocationId(stateA, "main-city");
-    const to = toLocationId(stateB, "main-city");
+  for (const [stateA, stateB, ticks] of getCrossStateEdges(geographyRegistry)) {
+    const from = toLocationId(stateA as StateId, "main-city");
+    const to = toLocationId(stateB as StateId, "main-city");
 
     if (!locations[from] || !locations[to]) {
       continue;
@@ -95,14 +108,13 @@ function matrixKey(from: LocationId, to: LocationId): string {
 
 function allSeedBaseLocations(
   locations: Record<string, MinimalLocation>,
+  options: TopologyOptions = {},
 ): LocationId[] {
+  const geographyRegistry = resolveGeographyRegistry(options.geographyRegistry);
   const knownLocationIds = new Set(Object.keys(locations) as LocationId[]);
   const ordered: LocationId[] = [];
 
-  for (const stateId of Object.keys(Object.values(locations).reduce<Record<string, true>>((acc, location) => {
-    acc[location.stateId] = true;
-    return acc;
-  }, {})) as StateId[]) {
+  for (const stateId of getGeographyStateIds(geographyRegistry) as StateId[]) {
     for (const nodeType of BASE_NODE_TYPES) {
       const locationId = toLocationId(stateId, nodeType);
       if (knownLocationIds.has(locationId)) {
@@ -122,7 +134,11 @@ function allSeedBaseLocations(
 
 export function buildFullTopology(
   locations: Record<string, MinimalLocation>,
+  options: TopologyOptions = {},
 ): TopologyGraph {
+  const geographyRegistry = resolveGeographyRegistry(options.geographyRegistry);
+  validateGeographyRegistry(geographyRegistry);
+
   const edges: TopologyEdge[] = [
     ...Object.values(
       Object.values(locations).reduce<Record<StateId, StateId>>((acc, location) => {
@@ -130,11 +146,11 @@ export function buildFullTopology(
         return acc;
       }, {} as Record<StateId, StateId>),
     ).flatMap((stateId) => buildIntraStateEdges(stateId)),
-    ...buildCrossStateEdges(locations),
+    ...buildCrossStateEdges(locations, { geographyRegistry }),
     ...buildOutpostEdges(locations),
   ];
 
-  const locationIds = allSeedBaseLocations(locations);
+  const locationIds = allSeedBaseLocations(locations, { geographyRegistry });
   const distanceMatrix = new Map<string, number>();
 
   for (const from of locationIds) {

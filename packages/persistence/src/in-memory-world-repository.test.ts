@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeedWorld, saveCultivationRegistration, type CultivationRegistrationRecord } from "../../domain/src/runtime.js";
+import {
+  createSeedWorld,
+  saveCultivationRegistration,
+  toPersistedWorldState,
+  type CultivationRegistrationRecord,
+} from "../../domain/src/runtime.js";
 import { createInMemoryWorldRepository } from "./in-memory-world-repository.js";
 
 function createRegistrationRecord(): CultivationRegistrationRecord {
@@ -80,6 +85,18 @@ test("transactWorld persists world mutations while returning a cloned result", a
   const refreshedWorld = await repository.readWorld();
   assert.equal(refreshedWorld.cultivators[cultivatorId].spiritStones, world.cultivators[cultivatorId].spiritStones + 42);
   assert.notEqual(refreshedWorld.cultivators[cultivatorId].spiritStones, mutatedCultivator.spiritStones);
+});
+
+test("in-memory repository hydrates runtime state from persisted input", async () => {
+  const world = createSeedWorld();
+  const repository = createInMemoryWorldRepository({
+    world: toPersistedWorldState(world),
+  });
+
+  const hydrated = await repository.readWorld();
+
+  assert.ok(hydrated.eventPools.travelStateSpecific.qingzhou);
+  assert.ok(hydrated.topology.distanceMatrix.size > 0);
 });
 
 test("auth methods persist profiles and credentials", async () => {

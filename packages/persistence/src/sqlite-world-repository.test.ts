@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { STATE_IDS } from "../../domain/src/constants.js";
+import { createGeographyRegistryForTest } from "../../domain/src/geography-registry.js";
 import {
   createSeedWorld,
   saveCultivationRegistration,
+  toPersistedWorldState,
   type CultivationRegistrationRecord,
 } from "../../domain/src/runtime.js";
 import { createSchema } from "./sqlite-schema.js";
@@ -66,6 +68,109 @@ function createRepository(now = () => "2026-03-10T00:00:00.000Z") {
   const database = new DatabaseSync(":memory:");
   createSchema(database);
   return createSqliteWorldRepository({ database, now });
+}
+
+function createSyntheticStateDefinition() {
+  return {
+    name: "海州",
+    risk: "medium",
+    starter: false,
+    neutralSect: {
+      id: "hai-men-ge",
+      name: "海门阁",
+      description: "海州沿岸的中立门派，维系港口与海路秩序。",
+      rewardMultiplier: 0.7,
+    },
+    locations: [
+      { nodeType: "main-city", name: "海晖城" },
+      { nodeType: "sub-town-east", name: "潮生镇" },
+      { nodeType: "sub-town-west", name: "渔火镇" },
+      { nodeType: "sub-town-south", name: "归帆镇" },
+      { nodeType: "wilderness" },
+      { nodeType: "dungeon-c" },
+      { nodeType: "dungeon-b" },
+      { nodeType: "dungeon-a" },
+    ],
+    crossStateConnections: [{ to: "qingzhou", ticks: 7 }],
+  } as const;
+}
+
+function createInstrumentedSqlStorage(options: { failWorldUpdateOnce?: boolean } = {}) {
+  const database = new DatabaseSync(":memory:");
+  createSchema(database);
+  let worldStateSelects = 0;
+  let worldStateUpdates = 0;
+  let shouldFailNextWorldUpdate = options.failWorldUpdateOnce ?? false;
+
+  const sql = {
+    exec<T = Record<string, unknown>>(query: string, ...bindings: unknown[]) {
+      const normalizedQuery = query.trimStart().toUpperCase();
+      if (normalizedQuery.startsWith("SELECT") && query.includes("FROM world_state")) {
+        worldStateSelects += 1;
+      }
+      if (normalizedQuery.startsWith("UPDATE WORLD_STATE")) {
+        worldStateUpdates += 1;
+        if (shouldFailNextWorldUpdate) {
+          shouldFailNextWorldUpdate = false;
+          throw new Error("Simulated sqlite persist failure");
+        }
+      }
+
+      const isSelect = normalizedQuery.startsWith("SELECT");
+      if (bindings.length === 0 && !isSelect) {
+        database.exec(query);
+        return {
+          toArray() {
+            return [] as T[];
+          },
+          one() {
+            return undefined as T | undefined;
+          },
+          rowsRead: 0,
+          rowsWritten: 0,
+        };
+      }
+
+      const statement = database.prepare(query);
+      if (isSelect) {
+        const rows = bindings.length > 0 ? statement.all(...bindings) : statement.all();
+        return {
+          toArray() {
+            return rows as T[];
+          },
+          one() {
+            return (rows as T[])[0];
+          },
+          rowsRead: rows.length,
+          rowsWritten: 0,
+        };
+      }
+
+      const result = bindings.length > 0 ? statement.run(...bindings) : statement.run();
+      return {
+        toArray() {
+          return [] as T[];
+        },
+        one() {
+          return undefined as T | undefined;
+        },
+        rowsRead: 0,
+        rowsWritten: Number(result.changes),
+      };
+    },
+  };
+
+  return {
+    repository: createSqliteWorldRepository({ sql }),
+    counters: {
+      get worldStateSelects() {
+        return worldStateSelects;
+      },
+      get worldStateUpdates() {
+        return worldStateUpdates;
+      },
+    },
+  };
 }
 
 test("SqliteWorldRepository constructor does not create schema", () => {
@@ -275,8 +380,9 @@ test("deserializeStoredWorld normalizes legacy stored snapshot fields", () => {
   assert.equal(normalizedEvent.locationId, legacyEventLocationId);
   assert.equal("zoneId" in normalizedCombat, false);
   assert.equal(normalizedCombat.locationId, legacyEventLocationId);
-  assert.equal(normalized.topology.distanceMatrix.get("legacy-edge"), Infinity);
-  assert.equal(normalized.topology.distanceMatrix.get("finite-edge"), 12);
+  assert.equal(normalized.topology.distanceMatrix.get("legacy-edge"), undefined);
+  assert.equal(normalized.topology.distanceMatrix.get("finite-edge"), undefined);
+  assert.ok((normalized.topology.distanceMatrix.get("qingzhou:main-city|qingzhou:main-city") ?? 0) === 0);
 });
 
 test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapshots", () => {
@@ -391,4 +497,65 @@ test("deserializeStoredWorld backfills dungeon expedition flavor arrays in legac
 
   assert.deepEqual(normalized.dungeonExpeditions[cultivatorId]?.flavorEventTitles, []);
   assert.deepEqual(normalized.dungeonExpeditionReports[cultivatorId]?.flavorEvents, []);
+});
+
+test("deserializeStoredWorld merges newly registered geography while preserving cultivator positions", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const persisted = toPersistedWorldState(world) as typeof toPersistedWorldState extends (...args: never[]) => infer T ? T : never;
+  const registry = createGeographyRegistryForTest({
+    haizhou: createSyntheticStateDefinition(),
+  });
+
+  (persisted as Record<string, unknown>).eventPools = {
+    globalCommon: [],
+    stateSpecific: {},
+    travelStateSpecific: {},
+    nodeSpecific: {},
+    travelPool: [],
+  };
+
+  const hydrated = deserializeStoredWorld(persisted as never, {
+    geographyRegistry: registry,
+  } as never);
+
+  assert.equal(hydrated.cultivators[cultivatorId]?.locationId, world.cultivators[cultivatorId]?.locationId);
+  assert.ok(hydrated.states.haizhou);
+  assert.ok(hydrated.locations["haizhou:main-city"]);
+  assert.ok(hydrated.questBoards["haizhou:main-city"]);
+  assert.ok((hydrated.eventPools.travelStateSpecific as Record<string, unknown>).qingzhou);
+});
+
+test("repository reuses a hydrated in-memory cache across repeated reads", async () => {
+  const { repository, counters } = createInstrumentedSqlStorage();
+
+  const first = await repository.readWorld();
+  const second = await repository.readWorld();
+
+  assert.equal(counters.worldStateSelects, 1);
+  assert.deepEqual(second, first);
+});
+
+test("repository discards dirty cache after persist failure", async () => {
+  const { repository, counters } = createInstrumentedSqlStorage({ failWorldUpdateOnce: true });
+  const world = await repository.readWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  await assert.rejects(
+    () =>
+      repository.transactWorld((draftWorld) => {
+        draftWorld.cultivators[cultivatorId]!.spiritStones += 99;
+        return null;
+      }),
+    /Simulated sqlite persist failure/,
+  );
+
+  const hydrated = await repository.readWorld();
+
+  assert.equal(hydrated.cultivators[cultivatorId]!.spiritStones, world.cultivators[cultivatorId]!.spiritStones);
+  assert.equal(counters.worldStateSelects, 2);
 });

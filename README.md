@@ -22,6 +22,12 @@ This is the only path we should extend for product architecture work.
 
 The older `apps/world-api` and `apps/world-worker` are deleted legacy apps, not part of the product architecture.
 
+## World Runtime Model
+
+- geography content is authored in `packages/domain/src/geography-registry.ts`
+- SQLite stores canonical `PersistedWorldState`, not derived runtime fields like topology or event pools
+- the Durable Object keeps a warm hydrated `WorldState` in memory, rebuilds derived structures on hydrate, and merges newly added repo-authored geography into existing worlds automatically
+
 ## Packages and Apps
 
 - `apps/web`: Vite web surface for Cloudflare Pages
@@ -104,6 +110,7 @@ Useful verification commands:
 
 ```text
 npm test
+npm run test:do --workspace @immortal-claw/runtime-worker
 npm run smoke:onboarding
 npm run smoke:questionnaire-to-register
 npm run build
@@ -127,6 +134,9 @@ Worker app:
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 - `WORLD_TICK_STEPS`
+- `WORLD_RESET_TOKEN`: optional guarded reset token for `POST /internal/reset-storage` and `node scripts/reset-world-do-storage.mjs`
+
+To add new world geography after this migration, update `packages/domain/src/geography-registry.ts` and the matching state/travel/node event content packs. Existing post-migration worlds absorb newly added repo-authored states and locations on hydrate without requiring a manual snapshot reset.
 
 Apply the agent onboarding migration before sending hosted traffic to the worker:
 

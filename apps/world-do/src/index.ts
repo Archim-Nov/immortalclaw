@@ -72,6 +72,21 @@ export class WorldDurableObject extends DurableObject<WorldDOEnv> {
       await next();
     });
 
+    this.app.post("/internal/reset-storage", async (context) => {
+      const configuredToken = env.WORLD_RESET_TOKEN?.trim();
+      if (!configuredToken) {
+        return context.json({ ok: false, error: "WORLD_RESET_TOKEN is not configured." }, 503);
+      }
+
+      const providedToken = context.req.header("x-world-reset-token")?.trim();
+      if (!providedToken || providedToken !== configuredToken) {
+        return context.json({ ok: false, error: "Forbidden" }, 403);
+      }
+
+      await this.runtime.resetForRollout();
+      return context.json({ ok: true, reset: true });
+    });
+
     registerMiddleware(this.app, env);
     registerRoutes(this.app);
 

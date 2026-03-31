@@ -1,4 +1,3 @@
-import type { StateId } from "../constants.js";
 import type { EventTemplate } from "../events.js";
 
 import { buildCangzhouEventPack } from "./content/states/cangzhou.js";
@@ -11,7 +10,7 @@ import { buildYangzhouEventPack } from "./content/states/yangzhou.js";
 import { buildYouzhouEventPack } from "./content/states/youzhou.js";
 import { buildZhongzhouEventPack } from "./content/states/zhongzhou.js";
 
-const STATE_PACK_BUILDERS: Record<StateId, () => EventTemplate[]> = {
+const STATE_PACK_BUILDERS: Record<string, () => EventTemplate[]> = {
   qingzhou: buildQingzhouEventPack,
   yangzhou: buildYangzhouEventPack,
   zhongzhou: buildZhongzhouEventPack,
@@ -23,6 +22,6 @@ const STATE_PACK_BUILDERS: Record<StateId, () => EventTemplate[]> = {
   wanzhou: buildWanzhouEventPack,
 };
 
-export function buildStateSpecificEvents(stateId: StateId): EventTemplate[] {
-  return STATE_PACK_BUILDERS[stateId]();
+export function buildStateSpecificEvents(stateId: string): EventTemplate[] {
+  return STATE_PACK_BUILDERS[stateId]?.() ?? [];
 }

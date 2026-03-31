@@ -51,6 +51,9 @@ The Durable Object hosts:
 - the Hono runtime API routes
 - the alarm-driven world tick loop
 - the SQLite world-state store
+- a warm in-memory hydrated world cache rebuilt from canonical SQLite state on load
+
+The runtime now treats SQLite as the canonical `PersistedWorldState` store. Derived runtime structures such as topology, event pools, and state location indexes are rebuilt on hydrate, and newly added repo-authored geography is merged into existing worlds during that hydrate path.
 
 The migration currently defined in `apps/runtime-worker/wrangler.jsonc` is:
 
@@ -112,6 +115,7 @@ The deployed Worker needs:
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 - `WORLD_TICK_STEPS`
+- optional `WORLD_RESET_TOKEN`
 
 ### `FRONTEND_ORIGIN`
 
@@ -239,6 +243,20 @@ Use the returned bearer credential on:
 - `GET /agent/state`
 - `POST /agent/credential/reset`
 
+## 4.5 Rollout Reset For Legacy World Storage
+
+The first deployment of the registry-backed cached-world architecture may need a one-time Durable Object reset so incompatible legacy snapshots are discarded before reseeding.
+
+Set `WORLD_RESET_TOKEN` on the Worker, then run:
+
+```text
+WORLD_DO_URL="https://<worker-host>" WORLD_RESET_TOKEN="<token>" node scripts/reset-world-do-storage.mjs
+```
+
+That guarded endpoint clears the known SQLite world tables and deletes the DO alarm before the next load reseeds the world under the new architecture.
+
+Do not expose the reset token to normal clients, and do not use this reset path for routine geography additions after the migration. Post-migration geography changes should merge automatically on hydrate.
+
 ## 5. Verify Pages
 
 After the Pages deployment completes, check:
@@ -326,6 +344,7 @@ If `/health` works but `/world/status` does not advance:
 - the Durable Object is not behaving correctly yet
 - do not run the Supabase cleanup migration
 - inspect logs with Wrangler and confirm alarm behavior before continuing
+- if this is the first rollout of the cached-world migration and the stored snapshot is incompatible, use the guarded reset flow once and then re-check `/world/status`
 
 ## If Pages Succeeds But Runtime Validation Fails
 

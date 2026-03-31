@@ -7,6 +7,7 @@ export type {
   BreakthroughRecord,
   BreakthroughStateView,
   PendingMoralityChoiceResponse,
+  ProjectedPersistedWorldState,
   FoundPlayerSectResult,
   CultivationRegistrationRecord,
   CultivationRegistrationView,
@@ -37,6 +38,7 @@ export type {
   StrategySnapshot,
   TickSummary,
   UpdateSectAdmissionPolicyResult,
+  PersistedWorldState,
   WorldState,
 } from "./model.js";
 export {
@@ -65,7 +67,7 @@ export {
   syncCultivatorFromPersona,
   updateSectAdmissionPolicy,
 } from "./engine.js";
-export { createSeedWorld } from "./seed.js";
+export { createSeedPersistedWorld, createSeedWorld, hydrateWorldState, toPersistedWorldState } from "./seed.js";
 export {
   realmLabelForLevel,
   realmPhaseForLevel,

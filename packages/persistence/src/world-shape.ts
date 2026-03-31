@@ -1,7 +1,11 @@
-import { createSeedWorld } from "../../domain/src/runtime.js";
-import type { WorldState } from "../../domain/src/runtime.js";
+import {
+  createSeedPersistedWorld,
+  hydrateWorldState,
+  toPersistedWorldState,
+} from "../../domain/src/runtime.js";
+import type { PersistedWorldState, WorldState } from "../../domain/src/runtime.js";
 import { createDungeonProgress, createEmptyInventory, createFactionReputation } from "../../domain/src/seed.js";
-import { buildFullTopology } from "../../domain/src/topology.js";
+import type { GeographyRegistryOverrides } from "../../domain/src/geography-registry.js";
 import type { Location } from "../../domain/src/model.js";
 import type { LocationId, StateId } from "../../domain/src/constants.js";
 
@@ -39,9 +43,17 @@ function mergeRecordDefaults<T extends Record<string, unknown>>(
   return merged;
 }
 
+function normalizePersistedWorldInput(world: PersistedWorldState | WorldState): PersistedWorldState {
+  if ("topology" in world || "eventPools" in world) {
+    return toPersistedWorldState(world as WorldState);
+  }
+
+  return structuredClone(world as PersistedWorldState);
+}
+
 function ensureOrganizationOutpost(
-  world: WorldState,
-  seedWorld: WorldState,
+  world: PersistedWorldState,
+  seedWorld: PersistedWorldState,
   input: {
     organizationId: string;
     organizationName: string;
@@ -72,39 +84,22 @@ function ensureOrganizationOutpost(
   return expectedHeadquarters;
 }
 
-function normalizeStateLocationIds(world: WorldState, seedWorld: WorldState): void {
-  const locationIdsByState = new Map<StateId, string[]>();
-
-  for (const stateId of Object.keys(seedWorld.states) as StateId[]) {
-    locationIdsByState.set(stateId, []);
-  }
-
-  for (const location of Object.values(world.locations)) {
-    const bucket = locationIdsByState.get(location.stateId as StateId);
-    if (!bucket) {
-      continue;
-    }
-    bucket.push(location.id);
-  }
-
-  for (const stateId of Object.keys(seedWorld.states) as StateId[]) {
-    const existingState = world.states[stateId] ?? seedWorld.states[stateId];
-    world.states[stateId] = {
-      ...seedWorld.states[stateId],
-      ...existingState,
-      locationIds: locationIdsByState.get(stateId) ?? [],
-    };
-  }
+interface HydrateMigratedP3WorldOptions {
+  geographyRegistry?: GeographyRegistryOverrides;
 }
 
-export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
-  const copy = structuredClone(world);
-  const seedWorld = createSeedWorld();
+export function hydrateMigratedP3WorldState(
+  world: PersistedWorldState | WorldState,
+  options: HydrateMigratedP3WorldOptions = {},
+): WorldState {
+  const copy = normalizePersistedWorldInput(world);
+  const seedWorld = createSeedPersistedWorld(options);
 
   copy.sects = mergeRecordDefaults(seedWorld.sects, copy.sects);
   copy.neutralSects = mergeRecordDefaults(seedWorld.neutralSects, copy.neutralSects);
   copy.locations = mergeRecordDefaults(seedWorld.locations, copy.locations);
   copy.states = mergeRecordDefaults(seedWorld.states, copy.states);
+  copy.questBoards = mergeRecordDefaults(seedWorld.questBoards, copy.questBoards);
   copy.wildernessLayers = mergeRecordDefaults(seedWorld.wildernessLayers, copy.wildernessLayers);
   copy.wildernessProgress =
     copy.wildernessProgress && typeof copy.wildernessProgress === "object"
@@ -195,9 +190,6 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
     });
   }
 
-  normalizeStateLocationIds(copy, seedWorld);
-  copy.topology = buildFullTopology(copy.locations) as WorldState["topology"];
-
   for (const cultivator of Object.values(copy.cultivators)) {
     cultivator.inventory = {
       ...createEmptyInventory(),
@@ -233,5 +225,5 @@ export function hydrateMigratedP3WorldState(world: WorldState): WorldState {
       : [];
   }
 
-  return copy;
+  return hydrateWorldState(copy, options);
 }
