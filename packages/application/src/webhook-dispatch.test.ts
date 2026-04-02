@@ -143,7 +143,7 @@ test("signPayload produces different signatures for different secrets", async ()
   assert.notEqual(sig1, sig2);
 });
 
-test("dispatchWebhooks posts signed payloads and ignores delivery failures", async () => {
+test("dispatchWebhooks posts signed utf-8 payloads and ignores delivery failures", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     calls.push({ url: String(input), init });
@@ -187,7 +187,7 @@ test("dispatchWebhooks posts signed payloads and ignores delivery failures", asy
   assert.equal(successfulCall.init?.method, "POST");
   assert.equal(
     (successfulCall.init?.headers as Record<string, string>)["Content-Type"],
-    "application/json",
+    "application/json; charset=utf-8",
   );
   assert.match(
     (successfulCall.init?.headers as Record<string, string>)["X-Immortal-Signature"],
@@ -201,6 +201,39 @@ test("dispatchWebhooks posts signed payloads and ignores delivery failures", asy
       reason: "Your meditation completed.",
     }),
   );
+});
+
+test("dispatchWebhooks preserves Chinese wake reasons in the serialized JSON body", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const payload = {
+    event: "message" as const,
+    tick: 88,
+    reason: "你收到一封来自青州驿报的消息：灵舟已抵达。",
+  };
+
+  const fetchImpl: typeof fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    return new Response(null, { status: 202 });
+  };
+
+  await dispatchWebhooks(
+    [
+      {
+        agentId: "agent-zh",
+        webhookUrl: "https://example.com/hooks/immortal-realm",
+        webhookSecret: "whsec_测试_secret",
+        payload,
+      },
+    ],
+    fetchImpl,
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(
+    (calls[0]?.init?.headers as Record<string, string>)["Content-Type"],
+    "application/json; charset=utf-8",
+  );
+  assert.equal(calls[0]?.init?.body, JSON.stringify(payload));
 });
 
 test("dispatchWebhooks logs delivery failures at debug level", async () => {

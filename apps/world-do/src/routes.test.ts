@@ -107,6 +107,63 @@ test("registration returns a credential and state route accepts it", async () =>
   assert.equal(statePayload.agent.agentId, registerPayload.agentId);
 });
 
+test("Chinese-bearing JSON routes declare utf-8 explicitly", async () => {
+  const app = createTestApp();
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "苏明月" })),
+  });
+  const registerPayload = await registerResponse.json() as RegistrationResponse;
+
+  const secondRegisterResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "李傲天" })),
+  });
+  const secondRegisterPayload = await secondRegisterResponse.json() as RegistrationResponse;
+
+  const sendResponse = await app.request("https://runtime.test/agent/messages", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      toAgentId: secondRegisterPayload.agentId,
+      subject: "问道来信",
+      content: "青州主城灵气渐盛，今夜子时来苍木谷相见。",
+    }),
+  });
+
+  assert.equal(sendResponse.status, 200);
+
+  const checks = [
+    await app.request("https://runtime.test/cultivator/messages?cultivatorId=yun-zhong-he"),
+    await app.request("https://runtime.test/cultivator/dao-heart?cultivatorId=yun-zhong-he"),
+    await app.request("https://runtime.test/agent/messages", {
+      headers: {
+        authorization: `Bearer ${secondRegisterPayload.credential}`,
+      },
+    }),
+    await app.request("https://runtime.test/agent/state", {
+      headers: {
+        authorization: `Bearer ${registerPayload.credential}`,
+      },
+    }),
+    await app.request("https://runtime.test/world/agents"),
+  ];
+
+  for (const response of checks) {
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+  }
+});
+
 test("world status exposes tick metadata", async () => {
   const app = createTestApp({
     world: {

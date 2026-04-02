@@ -138,7 +138,9 @@ export async function dispatchWebhooks(
         await fetchImpl(target.webhookUrl, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            // JSON defaults to UTF-8, but some downstream consumers still mis-handle
+            // bodies unless the charset is explicit.
+            "Content-Type": "application/json; charset=utf-8",
             "X-Immortal-Signature": signature,
           },
           body,

@@ -21,6 +21,19 @@ function readMessage(error: unknown) {
   return "Unexpected server error.";
 }
 
+function normalizeJsonContentType(contentType: string | null): string | null {
+  if (!contentType) {
+    return null;
+  }
+  if (!/^application\/json\b/i.test(contentType)) {
+    return null;
+  }
+  if (/;\s*charset=/i.test(contentType)) {
+    return contentType;
+  }
+  return `${contentType}; charset=utf-8`;
+}
+
 export function registerMiddleware(app: Hono<WorldDOHonoEnv>, env: WorldDOEnv) {
   app.use(
     "*",
@@ -34,6 +47,14 @@ export function registerMiddleware(app: Hono<WorldDOHonoEnv>, env: WorldDOEnv) {
       },
     }),
   );
+
+  app.use("*", async (context, next) => {
+    await next();
+    const normalizedContentType = normalizeJsonContentType(context.res.headers.get("content-type"));
+    if (normalizedContentType) {
+      context.res.headers.set("content-type", normalizedContentType);
+    }
+  });
 
   app.onError((error, context) => {
     const status = readStatus(error) as 400 | 401 | 409 | 500;
