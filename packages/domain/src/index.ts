@@ -13,6 +13,8 @@ export type {
   CultivationRegistrationView,
   CultivatorStateView,
   DungeonExpeditionPolicy,
+  BahuangExpeditionProgress,
+  BahuangExpeditionStateView,
   DungeonExpeditionReport,
   DungeonExpeditionStateView,
   DungeonRankYieldHint,
@@ -29,6 +31,7 @@ export type {
   PlayerSectView,
   RegistrationAnswer,
   RegistrationQuestionId,
+  RunStrategy,
   ResolveMoralityChoiceResult,
   ReviewSectApplicationResult,
   SectAdmissionPolicy,
@@ -38,6 +41,8 @@ export type {
   StrategySnapshot,
   TickSummary,
   UpdateSectAdmissionPolicyResult,
+  WakeNode,
+  WakeNodeOption,
   PersistedWorldState,
   WorldState,
 } from "./model.js";
@@ -67,7 +72,15 @@ export {
   syncCultivatorFromPersona,
   updateSectAdmissionPolicy,
 } from "./engine.js";
-export { createSeedPersistedWorld, createSeedWorld, hydrateWorldState, toPersistedWorldState } from "./seed.js";
+import {
+  createSeedPersistedWorld,
+  createSeedWorld,
+  hydrateWorldState,
+  toPersistedWorldState,
+} from "./seed.js";
+
+export { createSeedWorld };
+export { createSeedPersistedWorld, hydrateWorldState, toPersistedWorldState };
 export {
   realmLabelForLevel,
   realmPhaseForLevel,

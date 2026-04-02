@@ -419,7 +419,7 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   const normalized = deserializeStoredWorld(world as never);
 
   assert.deepEqual(normalized.sects, {});
-  assert.ok(normalized.wildernessLayers["eight-wastes-threshold"]);
+  assert.deepEqual(normalized.wildernessLayers, {});
   assert.deepEqual(normalized.wildernessProgress, {});
   assert.deepEqual((normalized as typeof normalized & { dungeonExpeditions?: Record<string, unknown> }).dungeonExpeditions, {});
   assert.deepEqual((normalized as typeof normalized & { dungeonExpeditionReports?: Record<string, unknown> }).dungeonExpeditionReports, {});

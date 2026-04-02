@@ -82,6 +82,25 @@ export type MoralityAlignment = SectAlignment;
 export type DungeonGrade = "丙" | "乙" | "甲";
 export type DungeonRank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export type DungeonExpeditionPolicy = "conservative" | "balanced" | "aggressive";
+export type RunStrategy = {
+  posture: "conservative" | "balanced" | "aggressive";
+  bias: "reward-first" | "survival-first";
+  pushPreference: "push" | "retreat" | "neutral";
+};
+
+export interface WakeNodeOption {
+  optionId: string;
+  label: string;
+  description: string;
+}
+
+export interface WakeNode {
+  nodeId: string;
+  context: string;
+  options: WakeNodeOption[];
+  defaultOptionId: string;
+  timeoutTicks: number;
+}
 
 export interface DungeonLocationMetadata {
   grade: DungeonGrade;
@@ -395,6 +414,8 @@ export type TimedActionId =
   | `travel-to:${string}`
   | `execute-quest:${string}`
   | `explore-guixu:${string}`
+  | `enter-bahuang:${string}`
+  | `enter-dungeon:rank-${DungeonRank}:${RunStrategy["posture"]}`
   | `start-dungeon-expedition:rank-${DungeonRank}:${DungeonExpeditionPolicy}`
   | "meditate"
   | "heal"
@@ -495,6 +516,7 @@ export interface DungeonExpeditionProgress {
   grade: DungeonGrade;
   targetRank: DungeonRank;
   policy: DungeonExpeditionPolicy;
+  strategy: RunStrategy;
   startedAtTick: number;
   stepIndex: number;
   maxSteps: number;
@@ -508,6 +530,11 @@ export interface DungeonExpeditionProgress {
   unlockedNextRank: boolean;
   lastResolvedAction: "search" | "guardian" | null;
   flavorEventTitles: string[];
+  wakeNodesEncountered: number;
+  maxWakeNodes: number;
+  pendingWakeNode: WakeNode | null;
+  pendingWakeNodeDeadlineTick: number | null;
+  resolvedWakeNodeCount: number;
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -539,6 +566,7 @@ export interface DungeonExpeditionStateView {
     grade: DungeonGrade;
     targetRank: DungeonRank;
     policy: DungeonExpeditionPolicy;
+    strategy: RunStrategy;
     startedAtTick: number;
     stepsResolved: number;
     maxSteps: number;
@@ -546,6 +574,43 @@ export interface DungeonExpeditionStateView {
     remainingTicks: number;
   } | null;
   lastReport: DungeonExpeditionReport | null;
+  wakeNodeHint?: {
+    nodeId: string;
+    context: string;
+    defaultOptionId: string;
+    timeoutTicks: number;
+  } | null;
+}
+
+export interface BahuangExpeditionProgress {
+  cultivatorId: string;
+  status: "active" | "retreated" | "completed" | "failed";
+  depth: number;
+  supplies: {
+    rations: number;
+    talismans: number;
+  };
+  pressure: number;
+  strategy: RunStrategy;
+  encounteredWakeNodes: WakeNode[];
+  pendingWakeNodeIndex: number | null;
+  pendingWakeNodeDeadlineTick: number | null;
+  resolvedWakeNodeCount: number;
+  rewards: {
+    spiritStones: number;
+    items: Partial<Record<ItemId, number>>;
+    realmProgress: number;
+  };
+}
+
+export interface BahuangExpeditionStateView {
+  status: BahuangExpeditionProgress["status"];
+  depth: number;
+  supplies: BahuangExpeditionProgress["supplies"];
+  pressure: number;
+  strategy: RunStrategy;
+  pendingWakeNode: WakeNode | null;
+  rewards: BahuangExpeditionProgress["rewards"];
 }
 
 export type GuixuTier = "entry" | "mid" | "deep" | "core";
@@ -623,6 +688,7 @@ export type ImmediateActionId =
   | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
   | "abort-dungeon-expedition"
+  | "retreat-from-bahuang"
   | "open-player-sect-founding"
   | "open-player-sect-recruitment"
   | "review-player-sect-applications"
@@ -1407,6 +1473,7 @@ export interface CultivatorStateView {
   breakthrough: BreakthroughStateView | null;
   dungeon: DungeonStateView | null;
   dungeonExpedition: DungeonExpeditionStateView;
+  bahuang: BahuangExpeditionStateView | null;
   wilderness: {
     layerId: string;
     layerName: string;
@@ -1461,6 +1528,7 @@ export interface WorldState {
   wildernessProgress: Record<string, WildernessProgress>;
   dungeonExpeditions: Record<string, DungeonExpeditionProgress>;
   dungeonExpeditionReports: Record<string, DungeonExpeditionReport>;
+  bahuangProgress: Record<string, BahuangExpeditionProgress>;
   guixuNodes: Record<string, GuixuNode>;
   guixuProgress: GuixuProgress;
   factionWars: Record<string, FactionWar>;

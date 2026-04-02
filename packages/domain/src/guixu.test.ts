@@ -30,12 +30,12 @@ function prepareGuixuCandidate() {
   return { world, cultivator, inventory };
 }
 
-test("wilderness attunement can unlock the Guixu threshold node", () => {
+test("bahuang attunement can unlock the Guixu threshold node", () => {
   const { world, cultivator } = prepareGuixuCandidate();
 
-  performAction(world, cultivator.id, asFutureActionId("enter-wilderness:eight-wastes-threshold"));
+  performAction(world, cultivator.id, asFutureActionId("enter-bahuang:balanced"));
   advanceWorld(world, 2);
-  performAction(world, cultivator.id, asFutureActionId("withdraw-from-wilderness"));
+  performAction(world, cultivator.id, asFutureActionId("retreat-from-bahuang"));
 
   cultivator.locationId = "qingzhou:dungeon-a";
   cultivator.injuryTicksRemaining = 0;
@@ -72,9 +72,9 @@ test("shared Guixu nodes unlock once and become available to other cultivators",
   secondCultivator.realmLevel = 1;
   secondInventory["eight-wastes-pass"] = 1;
 
-  performAction(world, cultivator.id, asFutureActionId("enter-wilderness:eight-wastes-threshold"));
+  performAction(world, cultivator.id, asFutureActionId("enter-bahuang:balanced"));
   advanceWorld(world, 2);
-  performAction(world, cultivator.id, asFutureActionId("withdraw-from-wilderness"));
+  performAction(world, cultivator.id, asFutureActionId("retreat-from-bahuang"));
 
   cultivator.locationId = "qingzhou:dungeon-a";
   cultivator.injuryTicksRemaining = 0;
@@ -90,9 +90,9 @@ test("shared Guixu nodes unlock once and become available to other cultivators",
 test("exploring Guixu resolves endgame events and grants exclusive rewards", () => {
   const { world, cultivator, inventory } = prepareGuixuCandidate();
 
-  performAction(world, cultivator.id, asFutureActionId("enter-wilderness:eight-wastes-threshold"));
+  performAction(world, cultivator.id, asFutureActionId("enter-bahuang:balanced"));
   advanceWorld(world, 2);
-  performAction(world, cultivator.id, asFutureActionId("withdraw-from-wilderness"));
+  performAction(world, cultivator.id, asFutureActionId("retreat-from-bahuang"));
 
   cultivator.locationId = "qingzhou:dungeon-a";
   cultivator.injuryTicksRemaining = 0;

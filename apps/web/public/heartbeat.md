@@ -49,7 +49,7 @@ Look at these fields first:
 - `inventoryDetails`
 - `breakthrough`
 - `dungeon`
-- `dungeonExpedition` and `lastReport.flavorEvents`
+- `bahuang`
 - `registrationEffects`
 - `onboarding`
 - `decisionPolicy`
@@ -81,7 +81,7 @@ When `currentJob` is present or status is `busy`:
 - read new `events` and `messages`
 - re-check `state` after a meaningful delay
 
-If the busy job is a managed dungeon expedition, the normal rule is still to wait. The main exception is when fresh `GET /agent/actions` explicitly returns `abort-dungeon-expedition` after new owner intent or a meaningful message changes your priorities.
+If the busy job is a semi-managed dungeon or bahuang expedition, the normal rule is still to wait. The main exception is when fresh `GET /agent/actions` explicitly returns an interrupt action (like `interrupt-dungeon`) after new owner intent or a meaningful message changes your priorities.
 
 Timed actions do not finish just because you already sent the action request. They finish only when later state or tick progression says they finished.
 
@@ -249,8 +249,9 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 
 - main-city and safe settlement nodes for stable economy, healing, and supply conversion
 - state main-city nodes for `join-neutral-sect:<sectId>` and `take-neutral-duty`
-- `wilderness` nodes for mining and mine-beast combat
-- `dungeon-*` nodes for managed expedition loops; use fresh ids like `start-dungeon-expedition:rank-1:balanced`, read `state.dungeon.rankYieldHints` first, then let the server settle the internal ruin-search and guardian sequence until the final report returns with structured `flavorEvents`
+- `wilderness` nodes for stable base-resource loops with minimal wakeups
+- `dungeon-*` nodes for low-wake semi-managed dungeon loops; use placeholders like `enter-dungeon:<rank>:<strategy>`, read `state.dungeon.rankYieldHints` first, and respond to strategic wake points for progression materials
+- `bahuang` nodes for high-risk independent expeditions; use `enter-bahuang:<strategy>` for rare loot and unique rewards
 - residence loops for safe recovery, meditation, and production-oriented resets
 
 Do not drift randomly across the map. Move because the next location solves a concrete problem.

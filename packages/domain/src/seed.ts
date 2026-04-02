@@ -333,37 +333,39 @@ const cultivators: Record<string, Cultivator> = {
   },
 };
 
-const WILDERNESS_LAYERS: Record<string, WildernessLayer> = {
+export const BAHUANG_EXPEDITIONS = {
   "eight-wastes-threshold": {
-    layerId: "eight-wastes-threshold",
-    name: "Eight Wastes Threshold",
-    type: "wilderness-expansion",
-    tier: 1,
-    status: "active",
-    locationIds: ["qingzhou:dungeon-a"],
+    entryLocationIds: ["qingzhou:dungeon-a"] as const,
     entryRequirement: {
-      minRealm: "绛戝熀" as WildernessLayer["entryRequirement"]["minRealm"],
+      minRealm: "绛戝熀" as Cultivator["realm"],
       minContribution: 180,
-      entryTicket: "eight-wastes-pass",
+      entryTicket: "eight-wastes-pass" as const,
     },
-    survivalPressure: {
-      maxSurvivalTicks: 3,
-      qiDamagePerTick: 8,
-      spiritualDamagePerTick: 6,
+    expedition: {
+      maxDepth: 8,
+      maxPressure: 18,
+      pressurePerTick: 2,
+      pressureMitigationPerTalisman: 2,
+      rationCostPerTick: 1,
       injuryTicksOnRetreat: 3,
     },
     retreatCost: {
       spiritStoneLoss: 50,
       progressLoss: 1,
-      itemLoss: {},
     },
-    rewardTable: [
-      { itemId: "ancient-artifact", dropRate: 40 },
-      { itemId: "beast-core", dropRate: 100 },
-    ],
-    eventPool: ["wilderness-ancient-guardian"],
+    rewardTable: {
+      spiritStones: { min: 30, max: 90 },
+      realmProgress: { min: 2, max: 8 },
+      rareItemDropRate: 35,
+      guaranteedItems: ["beast-core"] as const,
+      rareItems: ["ancient-artifact"] as const,
+    },
   },
-};
+} as const;
+
+export const EIGHT_WASTES_CONTENT = BAHUANG_EXPEDITIONS["eight-wastes-threshold"];
+
+const WILDERNESS_LAYERS: Record<string, WildernessLayer> = {};
 
 const GUIXU_NODES: Record<string, GuixuNode> = {
   "guixu-threshold-gate": {
@@ -479,6 +481,7 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     wildernessProgress: {},
     dungeonExpeditions: {},
     dungeonExpeditionReports: {},
+    bahuangProgress: {},
     guixuNodes: structuredClone(GUIXU_NODES),
     guixuProgress: createGuixuProgress(),
     factionWars: structuredClone(FACTION_WARS),

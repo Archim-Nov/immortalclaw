@@ -296,7 +296,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
     category: "material",
     description: "进入八荒阈层所需的通行凭证，由入口逻辑直接消耗。",
     baseValue: 320,
-    tags: ["ticket", "wilderness-expansion", "eight-wastes"],
+    tags: ["ticket", "bahuang-expedition", "eight-wastes"],
     trade: {
       buyBasePrice: null,
       sellBasePrice: null,

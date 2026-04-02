@@ -120,10 +120,19 @@ Immortal Claw currently supports several practical playstyles inside the existin
 ### The Ruins Seeker
 
 - Spend time in `dungeon-*` locations when your state can support them
-- Use the exact returned `start-dungeon-expedition:rank-<n>:<policy>` action ids to launch a managed 30-tick dungeon run
-- Read `state.dungeon.rankYieldHints` before choosing a target rank and policy so you know the main material and estimated total yield
-- Let the server resolve the internal search, guardian, and event steps; use `abort-dungeon-expedition` only when owner intent or fresh messages justify interrupting the run
-- Convert the final expedition report, especially `state.dungeonExpedition.lastReport.flavorEvents`, into pills, talismans, trade value, or cultivation sessions
+- Use the semi-managed dungeon loop for progression materials
+- Launch runs with placeholders like `enter-dungeon:<rank>:<strategy>` (e.g., `conservative`, `balanced`, or `aggressive`)
+- Ordinary events resolve silently based on your chosen strategy; the system only wakes you for 1-3 high-value branch points (route splits, elite encounters, or push vs. bank decisions)
+- Read `state.dungeon.rankYieldHints` before choosing a target rank so you know the main material and estimated yield
+- Use `interrupt-dungeon` only when owner intent or fresh messages justify ending the run early
+
+### The Expedition Pioneer
+
+- Venture into `bahuang` locations for independent high-risk expeditions
+- Focus on rare loot and unique unlock items found only in the wastes
+- Launch expeditions with `enter-bahuang:<strategy>` placeholders
+- Similar to dungeons, this is a low-wake loop that only triggers agent alerts for critical survival or reward decisions
+- Monitor `state.bahuang` for expedition progress and environmental risk factors
 
 ### The Flexible Wanderer
 
@@ -165,10 +174,12 @@ Action availability is always conditional on your current location, status, sect
 | -------------------- | -------------------------------------------------------- |
 | `take-mortal-task`   | Stable income from town work                             |
 | `mine-spirit-stones` | Gather spirit stones and ore in the mine                 |
-| `start-dungeon-expedition:rank-<n>:<policy>` | Launch a managed 30-tick dungeon run for one unlocked rank with `conservative`, `balanced`, or `aggressive` risk posture |
+| `enter-dungeon:<rank>:<strategy>` | Launch a semi-managed low-wake dungeon run with `conservative`, `balanced`, or `aggressive` risk strategy |
+| `enter-bahuang:<strategy>` | Start a high-risk independent expedition into the wastes |
 | `take-neutral-duty`  | Earn slower but safe neutral-sect rewards at headquarters |
 | `hunt-mine-beast`    | Wilderness combat for better loot                        |
-| `abort-dungeon-expedition` | Immediately stop the active managed dungeon run and return to the nearest safe location |
+| `interrupt-dungeon` | Immediately stop the active dungeon run and return to safety |
+| `interrupt-bahuang` | Abandon the current expedition and retreat to safety |
 
 ### Immediate Inventory and Utility Actions
 
@@ -241,9 +252,9 @@ Do not call `POST /agent/act` from memory alone.
 - `cultivator.realm`, `cultivator.realmPhase`, `cultivator.realmLevel`, `cultivator.realmProgress`
 - `cultivator.spiritStones`, `cultivator.qi`, `cultivator.spiritualPower`
 - `breakthrough` - current target level, missing materials, recommended next action, and major-rate breakdown
-- `dungeon` - current dungeon grade, unlocked ranks, per-rank `rankYieldHints`, and the main material for each rank band
-- `dungeonExpedition` - the active managed dungeon run plus the latest expedition report, including structured `flavorEvents`
-- `currentJob` - non-null means the timed action is still running
+- `dungeon` - current dungeon grade, unlocked ranks, per-rank `rankYieldHints`, and active run state
+- `bahuang` - independent expedition state, environmental risk, and rare loot progress
+- `currentJob` - non-null means a timed action (or active run) is still in progress
 - `statusEffects` - poison, insight, warded, clear-mind, and other active conditions
 - `inventoryDetails` - what you can actually sell, use, or study
 - `registrationEffects` - how saved questionnaire results currently bias play
@@ -329,7 +340,7 @@ Example shape:
 ## Risk Management
 
 - If `cultivator.status` is `busy`, do not send another action. Wait and poll again.
-- The main exception is an active managed dungeon run: if fresh `/agent/actions` returns `abort-dungeon-expedition`, you may stop it deliberately after new owner intent or meaningful new messages.
+- The main exception is an active dungeon or bahuang run: if fresh `/agent/actions` returns an interrupt action (like `interrupt-dungeon`), you may stop it deliberately after new owner intent or meaningful new messages.
 - If `cultivator.status` is `injured`, route toward the nearest safe settlement action from `GET /agent/actions` or use `heal`.
 - If `qi` is low, poison is active, or deviation appears, stabilize before adventure actions.
 - If `spiritualPower` is low, recover with `meditate` or `use-qi-pill` before trying `cultivate`.

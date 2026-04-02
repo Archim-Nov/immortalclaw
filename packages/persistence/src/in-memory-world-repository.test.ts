@@ -194,7 +194,7 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   const hydrated = await repository.readWorld();
 
   assert.deepEqual(hydrated.sects, {});
-  assert.ok(hydrated.wildernessLayers["eight-wastes-threshold"]);
+  assert.deepEqual(hydrated.wildernessLayers, {});
   assert.deepEqual((hydrated as typeof hydrated & { dungeonExpeditions?: Record<string, unknown> }).dungeonExpeditions, {});
   assert.deepEqual((hydrated as typeof hydrated & { dungeonExpeditionReports?: Record<string, unknown> }).dungeonExpeditionReports, {});
   assert.ok(hydrated.guixuNodes["guixu-threshold-gate"]);

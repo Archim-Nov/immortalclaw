@@ -156,3 +156,151 @@ test("legacy dungeon micro-actions remain executable for compatibility", () => {
   assert.equal(resolved.completedJobs[0]?.actionId, "search-fortune:rank-1");
   assert.ok(cultivator.inventory["ruin-fragment"] >= beforeFragments);
 });
+
+test("dungeon expeditions generate at most three wake nodes per run", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+
+  performAction(world, CULTIVATOR_ID, expeditionActionId(1, "balanced") as never);
+
+  let observedWakeNodes = 0;
+  while (cultivator.activeJobId) {
+    advanceWorld(world, 1);
+    const progress = world.dungeonExpeditions[CULTIVATOR_ID];
+    if (progress) {
+      observedWakeNodes = Math.max(observedWakeNodes, progress.wakeNodesEncountered);
+    }
+  }
+
+  assert.ok(observedWakeNodes >= 0);
+  assert.ok(observedWakeNodes <= 3);
+});
+
+test("state view shows wakeNodeHint while a dungeon wake node is pending", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+
+  performAction(world, CULTIVATOR_ID, expeditionActionId(1, "aggressive") as never);
+  let attempts = 0;
+  while (!getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.wakeNodeHint && cultivator.activeJobId && attempts < 30) {
+    advanceWorld(world, 1);
+    attempts += 1;
+  }
+
+  const state = getCultivatorState(world, CULTIVATOR_ID);
+  assert.ok(state.dungeonExpedition.wakeNodeHint);
+});
+
+test("pending dungeon wake nodes auto-resolve after timeout ticks", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+
+  performAction(world, CULTIVATOR_ID, expeditionActionId(1, "aggressive") as never);
+  let attempts = 0;
+  while (!getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.wakeNodeHint && cultivator.activeJobId && attempts < 30) {
+    advanceWorld(world, 1);
+    attempts += 1;
+  }
+  const pendingState = getCultivatorState(world, CULTIVATOR_ID);
+  assert.ok(pendingState.dungeonExpedition.wakeNodeHint);
+
+  const timeoutTicks = pendingState.dungeonExpedition.wakeNodeHint?.timeoutTicks ?? 3;
+  advanceWorld(world, timeoutTicks);
+  const resolvedState = getCultivatorState(world, CULTIVATOR_ID);
+  assert.equal(resolvedState.dungeonExpedition.wakeNodeHint ?? null, null);
+});
+
+test("wakeNodeHint remains null when no wake node is pending", () => {
+  const world = createSeedWorld();
+  const state = getCultivatorState(world, CULTIVATOR_ID);
+
+  assert.equal(state.dungeonExpedition.wakeNodeHint ?? null, null);
+});
+
+test("start-dungeon-expedition:rank-1:balanced starts an expedition with strategy posture", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+
+  const actions = listAvailableActions(world, CULTIVATOR_ID);
+  assert.ok(actions.some((action) => action.actionId === "start-dungeon-expedition:rank-1:balanced"));
+
+  const started = performAction(world, CULTIVATOR_ID, "start-dungeon-expedition:rank-1:balanced" as never);
+  assert.equal(started.accepted, true);
+  assert.equal(started.job?.totalTicks, 30);
+  assert.equal(world.dungeonExpeditions[CULTIVATOR_ID]?.policy, "balanced");
+});
+
+test("dungeon wake nodes expose context/options/defaults and remain capped by wake budget", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  performAction(world, CULTIVATOR_ID, "start-dungeon-expedition:rank-1:aggressive" as never);
+
+  while (cultivator.activeJobId) {
+    advanceWorld(world, 1);
+    const progress = world.dungeonExpeditions[CULTIVATOR_ID];
+    if (!progress) {
+      continue;
+    }
+
+    const pendingWakeNode = progress.pendingWakeNode;
+    if (pendingWakeNode) {
+      assert.ok(pendingWakeNode.context.length > 0);
+      assert.ok(pendingWakeNode.options.length >= 2);
+      assert.ok(pendingWakeNode.options.length <= 3);
+      assert.ok(
+        pendingWakeNode.options.some(
+          (option: { optionId: string }) => option.optionId === pendingWakeNode.defaultOptionId,
+        ),
+      );
+      const state = getCultivatorState(world, CULTIVATOR_ID);
+      assert.equal(state.dungeonExpedition.wakeNodeHint?.nodeId, pendingWakeNode.nodeId);
+    }
+
+    assert.ok(progress.wakeNodesEncountered <= progress.maxWakeNodes);
+    assert.equal(progress.maxWakeNodes, 3);
+  }
+});
+
+test("wake node timeout auto-resolution follows run strategy", () => {
+  const conservative = createSeedWorld();
+  const conservativeCultivator = conservative.cultivators[CULTIVATOR_ID];
+  conservativeCultivator.locationId = "qingzhou:dungeon-c";
+  conservativeCultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  performAction(conservative, CULTIVATOR_ID, "start-dungeon-expedition:rank-1:conservative" as never);
+
+  const aggressive = createSeedWorld();
+  const aggressiveCultivator = aggressive.cultivators[CULTIVATOR_ID];
+  aggressiveCultivator.locationId = "qingzhou:dungeon-c";
+  aggressiveCultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  performAction(aggressive, CULTIVATOR_ID, "start-dungeon-expedition:rank-1:aggressive" as never);
+
+  for (let tick = 0; tick < 80; tick += 1) {
+    advanceWorld(conservative, 1);
+    advanceWorld(aggressive, 1);
+    if (!conservativeCultivator.activeJobId && !aggressiveCultivator.activeJobId) {
+      break;
+    }
+  }
+
+  const conservativeReport = getCultivatorState(conservative, CULTIVATOR_ID).dungeonExpedition.lastReport;
+  const aggressiveReport = getCultivatorState(aggressive, CULTIVATOR_ID).dungeonExpedition.lastReport;
+
+  assert.ok(conservativeReport);
+  assert.ok(aggressiveReport);
+  assert.ok((aggressiveReport?.spiritStoneGain ?? 0) >= (conservativeReport?.spiritStoneGain ?? 0));
+});

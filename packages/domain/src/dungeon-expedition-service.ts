@@ -10,6 +10,8 @@ import type {
   DungeonRankYieldHint,
   DungeonStateView,
   ItemId,
+  RunStrategy,
+  WakeNode,
   WorldState,
 } from "./model.js";
 
@@ -18,6 +20,10 @@ export const DUNGEON_EXPEDITION_STEP_TICKS = 3;
 export const DUNGEON_EXPEDITION_MAX_STEPS = DUNGEON_EXPEDITION_DURATION_TICKS / DUNGEON_EXPEDITION_STEP_TICKS;
 export const DUNGEON_EXPEDITION_POLICIES = ["conservative", "balanced", "aggressive"] as const satisfies readonly DungeonExpeditionPolicy[];
 const MAX_DUNGEON_FLAVOR_EVENTS = 3;
+const MAX_DUNGEON_WAKE_NODES = 3;
+const DUNGEON_WAKE_TIMEOUT_TICKS = 3;
+const DUNGEON_ROUTE_SPLIT_STEPS = new Set([3, 6, 8]);
+const DUNGEON_STRATEGY_POSTURES = ["conservative", "balanced", "aggressive"] as const satisfies readonly RunStrategy["posture"][];
 
 const SECONDARY_DROPS_BY_BAND: Record<"1-3" | "4-6" | "7-9", ItemId[]> = {
   "1-3": ["ruin-fragment"],
@@ -52,12 +58,30 @@ const POLICY_GUARDIAN_WEIGHT: Record<DungeonExpeditionPolicy, number> = {
   aggressive: 80,
 };
 
+function strategyFromPosture(posture: RunStrategy["posture"]): RunStrategy {
+  if (posture === "conservative") {
+    return { posture, bias: "survival-first", pushPreference: "retreat" };
+  }
+  if (posture === "aggressive") {
+    return { posture, bias: "reward-first", pushPreference: "push" };
+  }
+  return { posture, bias: "survival-first", pushPreference: "neutral" };
+}
+
+export function strategyFromPolicy(policy: DungeonExpeditionPolicy): RunStrategy {
+  return strategyFromPosture(policy);
+}
+
 function hashString(input: string): number {
   return Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 }
 
 export function startDungeonExpeditionActionIdOf(rank: DungeonRank, policy: DungeonExpeditionPolicy) {
   return `start-dungeon-expedition:rank-${rank}:${policy}` as const;
+}
+
+export function enterDungeonActionIdOf(rank: DungeonRank, posture: RunStrategy["posture"]) {
+  return `enter-dungeon:rank-${rank}:${posture}` as const;
 }
 
 export function parseStartDungeonExpeditionActionId(
@@ -150,8 +174,10 @@ export function createDungeonExpeditionProgress(input: {
   grade: DungeonGrade;
   targetRank: DungeonRank;
   policy: DungeonExpeditionPolicy;
+  strategy?: RunStrategy;
   startedAtTick: number;
 }): DungeonExpeditionProgress {
+  const strategy = input.strategy ?? strategyFromPolicy(input.policy);
   return {
     cultivatorId: input.cultivatorId,
     jobId: input.jobId,
@@ -159,6 +185,7 @@ export function createDungeonExpeditionProgress(input: {
     grade: input.grade,
     targetRank: input.targetRank,
     policy: input.policy,
+    strategy,
     startedAtTick: input.startedAtTick,
     stepIndex: 0,
     maxSteps: DUNGEON_EXPEDITION_MAX_STEPS,
@@ -172,6 +199,34 @@ export function createDungeonExpeditionProgress(input: {
     unlockedNextRank: false,
     lastResolvedAction: null,
     flavorEventTitles: [],
+    wakeNodesEncountered: 0,
+    maxWakeNodes: MAX_DUNGEON_WAKE_NODES,
+    pendingWakeNode: null,
+    pendingWakeNodeDeadlineTick: null,
+    resolvedWakeNodeCount: 0,
+  };
+}
+
+export function parseEnterDungeonActionId(
+  actionId: string,
+): { rank: DungeonRank; posture: RunStrategy["posture"] } | null {
+  const prefix = "enter-dungeon:rank-";
+  if (!actionId.startsWith(prefix)) {
+    return null;
+  }
+
+  const [rankPart, posturePart] = actionId.slice(prefix.length).split(":");
+  const rank = Number.parseInt(rankPart ?? "", 10);
+  if (!Number.isInteger(rank) || rank < 1 || rank > 9) {
+    return null;
+  }
+  if (!DUNGEON_STRATEGY_POSTURES.includes(posturePart as RunStrategy["posture"])) {
+    return null;
+  }
+
+  return {
+    rank: rank as DungeonRank,
+    posture: posturePart as RunStrategy["posture"],
   };
 }
 
@@ -189,6 +244,7 @@ export function buildDungeonExpeditionStateView(
 ): DungeonExpeditionStateView {
   const active = getActiveDungeonExpedition(world, cultivator.id);
   const lastReport = world.dungeonExpeditionReports[cultivator.id] ?? null;
+  const pendingWakeNode = active?.pendingWakeNode ?? null;
 
   return {
     active: active
@@ -196,6 +252,7 @@ export function buildDungeonExpeditionStateView(
           grade: active.grade,
           targetRank: active.targetRank,
           policy: active.policy,
+          strategy: active.strategy,
           startedAtTick: active.startedAtTick,
           stepsResolved: active.stepIndex,
           maxSteps: active.maxSteps,
@@ -204,7 +261,131 @@ export function buildDungeonExpeditionStateView(
         }
       : null,
     lastReport,
+    wakeNodeHint: pendingWakeNode
+      ? {
+          nodeId: pendingWakeNode.nodeId,
+          context: pendingWakeNode.context,
+          defaultOptionId: pendingWakeNode.defaultOptionId,
+          timeoutTicks: pendingWakeNode.timeoutTicks,
+        }
+      : null,
   };
+}
+
+export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgress): DungeonExpeditionProgress {
+  if (!progress.pendingWakeNode) {
+    return progress;
+  }
+
+  const safeOption = progress.pendingWakeNode.options.find((option) =>
+    option.optionId.includes("safe")
+    || option.optionId.includes("stable")
+    || option.optionId.includes("avoid")
+    || option.optionId.includes("bank")
+    || option.optionId.includes("retreat"),
+  );
+  const riskyOption = progress.pendingWakeNode.options.find((option) => !safeOption || option.optionId !== safeOption.optionId);
+
+  let chosenOptionId = progress.pendingWakeNode.defaultOptionId;
+  if (progress.strategy.posture === "conservative" && progress.strategy.bias === "survival-first") {
+    chosenOptionId = safeOption?.optionId ?? progress.pendingWakeNode.defaultOptionId;
+  } else if (progress.strategy.posture === "aggressive" && progress.strategy.bias === "reward-first") {
+    chosenOptionId = riskyOption?.optionId ?? progress.pendingWakeNode.defaultOptionId;
+  }
+  const risky = riskyOption?.optionId === chosenOptionId;
+
+  return {
+    ...progress,
+    spiritStoneGain: progress.spiritStoneGain + (risky ? 18 : 0),
+    realmProgressGain: progress.realmProgressGain + (risky ? 2 : 0),
+    pendingWakeNode: null,
+    pendingWakeNodeDeadlineTick: null,
+    resolvedWakeNodeCount: progress.resolvedWakeNodeCount + 1,
+  };
+}
+
+export function maybeCreateDungeonWakeNode(input: {
+  progress: DungeonExpeditionProgress;
+  cultivator: Cultivator;
+  actionKind: "search" | "guardian";
+  worldTick: number;
+}): WakeNode | null {
+  const { progress, cultivator, actionKind } = input;
+  if (progress.wakeNodesEncountered >= progress.maxWakeNodes || progress.pendingWakeNode) {
+    return null;
+  }
+
+  const nodeId = `dungeon-wake-${progress.jobId}-${progress.stepIndex}-${progress.wakeNodesEncountered + 1}`;
+  if (DUNGEON_ROUTE_SPLIT_STEPS.has(progress.stepIndex)) {
+    return {
+      nodeId,
+      context: "A route split appears: one stable corridor, one volatile shortcut.",
+      options: [
+        {
+          optionId: "stable-route",
+          label: "Stable Route",
+          description: "Maintain lower risk and slower progress.",
+        },
+        {
+          optionId: "volatile-route",
+          label: "Take Shortcut",
+          description: "Accept higher pressure for stronger rewards.",
+        },
+      ],
+      defaultOptionId: progress.strategy.posture === "aggressive" ? "volatile-route" : "stable-route",
+      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
+    };
+  }
+
+  const qiRatio = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
+  const spiritualRatio = cultivator.maxSpiritualPower > 0
+    ? cultivator.spiritualPower / cultivator.maxSpiritualPower
+    : 0;
+  if (actionKind === "guardian" && (qiRatio < 0.55 || spiritualRatio < 0.55 || cultivator.injuryTicksRemaining > 0)) {
+    return {
+      nodeId,
+      context: "An elite encounter is tracking your expedition path.",
+      options: [
+        {
+          optionId: "engage-elite",
+          label: "Engage Elite",
+          description: "Attempt a harder fight for progression rewards.",
+        },
+        {
+          optionId: "avoid-elite",
+          label: "Avoid Elite",
+          description: "Preserve safety and continue with regular clears.",
+        },
+      ],
+      defaultOptionId: progress.strategy.posture === "conservative" ? "avoid-elite" : "engage-elite",
+      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
+    };
+  }
+
+  const rewardsSignificant = progress.spiritStoneGain >= 180 || progress.primaryMaterialCount >= 4;
+  const pressureHigh = qiRatio < 0.5 || spiritualRatio < 0.5 || cultivator.injuryTicksRemaining >= 3;
+  if (rewardsSignificant && pressureHigh) {
+    return {
+      nodeId,
+      context: "Current gains can be banked now or pushed one more segment.",
+      options: [
+        {
+          optionId: "bank-progress",
+          label: "Bank Progress",
+          description: "Lock current gains and reduce pressure growth.",
+        },
+        {
+          optionId: "push-deeper",
+          label: "Push Deeper",
+          description: "Continue deeper for a stronger step payout.",
+        },
+      ],
+      defaultOptionId: progress.strategy.posture === "conservative" ? "bank-progress" : "push-deeper",
+      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
+    };
+  }
+
+  return null;
 }
 
 export function chooseDungeonExpeditionStepKind(input: {

@@ -81,7 +81,13 @@ import {
   resolveTemperamentId,
 } from "./registration-taxonomy.js";
 import { getItemActionBinding, getItemOperationActionId } from "./items/catalog.js";
-import { createDungeonProgress, createEmptyInventory, createFactionReputation, createStateReputation } from "./seed.js";
+import {
+  createDungeonProgress,
+  createEmptyInventory,
+  createFactionReputation,
+  createStateReputation,
+  EIGHT_WASTES_CONTENT,
+} from "./seed.js";
 import { buildSectLevel, sectBonusValue } from "./sect-level.js";
 import {
   buildFullTopology,
@@ -108,6 +114,7 @@ import {
   createDungeonExpeditionProgress,
   createDungeonExpeditionReport,
   describeDungeonExpeditionAction,
+  enterDungeonActionIdOf,
   DUNGEON_EXPEDITION_DURATION_TICKS,
   DUNGEON_EXPEDITION_MAX_STEPS,
   DUNGEON_EXPEDITION_POLICIES,
@@ -115,11 +122,22 @@ import {
   getActiveDungeonExpedition,
   isAbortDungeonExpeditionAction,
   isDungeonExpeditionCatastrophic,
+  maybeCreateDungeonWakeNode,
+  parseEnterDungeonActionId,
   parseStartDungeonExpeditionActionId,
   recordDungeonExpeditionStep,
+  resolveDungeonWakeNodeByDefault,
   shouldRetreatDungeonExpedition,
+  strategyFromPolicy,
   startDungeonExpeditionActionIdOf,
 } from "./dungeon-expedition-service.js";
+import {
+  advanceBahuangExpedition,
+  buildBahuangStateView,
+  canEnterBahuang,
+  enterBahuangExpedition,
+  retreatFromBahuang,
+} from "./bahuang-service.js";
 
 const TICKS_PER_YEAR = 4380;
 const TIMED_ACTION_IDS = new Set<string>(Object.keys(DEFAULT_ACTION_DURATIONS));
@@ -249,6 +267,17 @@ const realmPhaseOfLevel = (realmLevel: number): RealmPhase => {
 const travelActionIdOf = (locationId: string) => `travel-to:${locationId}` as const;
 const parseTravelDestination = (actionId: ActionId) => actionId.startsWith("travel-to:") ? actionId.slice("travel-to:".length) : null;
 const parseEnterWildernessLayer = (actionId: ActionId) => actionId.startsWith("enter-wilderness:") ? actionId.slice("enter-wilderness:".length) : null;
+const parseEnterBahuangStrategy = (
+  actionId: ActionId,
+): "conservative" | "balanced" | "aggressive" | null => {
+  if (!actionId.startsWith("enter-bahuang:")) {
+    return null;
+  }
+  const posture = actionId.slice("enter-bahuang:".length);
+  return posture === "conservative" || posture === "balanced" || posture === "aggressive"
+    ? posture
+    : null;
+};
 const parseUnlockGuixuNode = (actionId: ActionId) => actionId.startsWith("unlock-guixu:") ? actionId.slice("unlock-guixu:".length) : null;
 const parseAcceptQuestId = (actionId: ActionId) => actionId.startsWith("accept-quest:") ? actionId.slice("accept-quest:".length) : null;
 const parseExecuteQuestId = (actionId: ActionId) => actionId.startsWith("execute-quest:") ? actionId.slice("execute-quest:".length) : null;
@@ -268,7 +297,8 @@ const parseSearchFortuneRank = (actionId: ActionId) => parseDungeonRank(actionId
 const parseChallengeGuardianRank = (actionId: ActionId) => parseDungeonRank(actionId, "challenge-guardian:rank-");
 const searchFortuneActionIdOf = (rank: DungeonRank) => `search-fortune:rank-${rank}` as const;
 const challengeGuardianActionIdOf = (rank: DungeonRank) => `challenge-guardian:rank-${rank}` as const;
-const isDungeonExpeditionActionId = (actionId: ActionId) => parseStartDungeonExpeditionActionId(actionId) !== null;
+const isDungeonExpeditionActionId = (actionId: ActionId) =>
+  parseStartDungeonExpeditionActionId(actionId) !== null || parseEnterDungeonActionId(actionId) !== null;
 const parseJoinNeutralSectId = (actionId: ActionId) =>
   actionId.startsWith("join-neutral-sect:") ? actionId.slice("join-neutral-sect:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
@@ -364,6 +394,7 @@ const isLowRiskAction = (actionId: ActionId) =>
   || actionId === "residence-recover-qi"
   || actionId === "residence-heal"
   || actionId === "withdraw-from-wilderness"
+  || actionId === "retreat-from-bahuang"
   || actionId === "take-neutral-duty"
   || actionId === "take-mortal-task"
   || actionId.startsWith("travel-to:");
@@ -1226,7 +1257,7 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
       ? "search-fortune"
       : parseChallengeGuardianRank(actionId) !== null
         ? "challenge-guardian"
-        : parseStartDungeonExpeditionActionId(actionId) !== null
+        : parseStartDungeonExpeditionActionId(actionId) !== null || parseEnterDungeonActionId(actionId) !== null
           ? "start-dungeon-expedition"
         : actionId;
   const duration = travelDestination
@@ -1873,11 +1904,26 @@ function resolveDungeonExpeditionStepIfDue(
   job: ActionJob,
   progress: DungeonExpeditionProgress,
 ): void {
-  if (world.tick < progress.nextResolutionTick) {
+  const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
+  let effectiveProgress = progress;
+
+  if (effectiveProgress.pendingWakeNode) {
+    if (
+      effectiveProgress.pendingWakeNodeDeadlineTick !== null
+      && world.tick >= effectiveProgress.pendingWakeNodeDeadlineTick
+    ) {
+      effectiveProgress = resolveDungeonWakeNodeByDefault(effectiveProgress);
+      world.dungeonExpeditions[cultivator.id] = effectiveProgress;
+    } else {
+      job.remainingTicks += 1;
+      return;
+    }
+  }
+
+  if (world.tick < effectiveProgress.nextResolutionTick) {
     return;
   }
 
-  const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
   const location = world.locations[cultivator.locationId];
   const metadata = dungeonMetadataOf(location);
   if (!metadata) {
@@ -1887,25 +1933,25 @@ function resolveDungeonExpeditionStepIfDue(
   const beforeInventory = structuredClone(cultivator.inventory);
   const beforeSpiritStones = cultivator.spiritStones;
   const beforeRealmProgress = cultivator.realmProgress;
-  const beforeHighestClearedRank = highestClearedRankOf(cultivator, progress.grade);
+  const beforeHighestClearedRank = highestClearedRankOf(cultivator, effectiveProgress.grade);
   const beforeEventCount = world.worldEvents.length;
   const beforeCombatCount = world.combatLogs.length;
   const beforePendingMoralityChoiceId = cultivator.pendingMoralityChoiceId;
   const beforePendingChoiceIds = new Set(Object.keys(world.pendingMoralityChoices));
 
   const actionKind = chooseDungeonExpeditionStepKind({
-    targetRank: progress.targetRank,
-    frontierRank: highestUnlockedRankOf(cultivator, progress.grade),
+    targetRank: effectiveProgress.targetRank,
+    frontierRank: highestUnlockedRankOf(cultivator, effectiveProgress.grade),
     highestClearedRank: beforeHighestClearedRank,
-    policy: progress.policy,
+    policy: effectiveProgress.policy,
     jobId: job.id,
-    stepIndex: progress.stepIndex,
+    stepIndex: effectiveProgress.stepIndex,
     worldTick: world.tick,
     cultivatorId: cultivator.id,
   });
   const actionId = actionKind === "guardian"
-    ? challengeGuardianActionIdOf(progress.targetRank)
-    : searchFortuneActionIdOf(progress.targetRank);
+    ? challengeGuardianActionIdOf(effectiveProgress.targetRank)
+    : searchFortuneActionIdOf(effectiveProgress.targetRank);
 
   const outerJobId = cultivator.activeJobId;
   const syntheticJob: ActionJob = {
@@ -1916,8 +1962,8 @@ function resolveDungeonExpeditionStepIfDue(
     remainingTicks: DUNGEON_EXPEDITION_STEP_TICKS,
     totalTicks: DUNGEON_EXPEDITION_STEP_TICKS,
     meta: {
-      dungeonGrade: progress.grade,
-      dungeonRank: progress.targetRank,
+      dungeonGrade: effectiveProgress.grade,
+      dungeonRank: effectiveProgress.targetRank,
     },
   };
 
@@ -1943,25 +1989,16 @@ function resolveDungeonExpeditionStepIfDue(
   delete inventoryDelta[metadata.materialBand];
 
   const updatedProgress = recordDungeonExpeditionStep({
-    progress,
+    progress: effectiveProgress,
     action: actionKind,
     primaryMaterialCount,
     secondaryDrops: inventoryDelta,
     spiritStoneGain: cultivator.spiritStones - beforeSpiritStones,
     realmProgressGain: cultivator.realmProgress - beforeRealmProgress,
-    unlockedNextRank: highestClearedRankOf(cultivator, progress.grade) > beforeHighestClearedRank,
+    unlockedNextRank: highestClearedRankOf(cultivator, effectiveProgress.grade) > beforeHighestClearedRank,
     resolvedAtTick: world.tick,
     flavorEventTitles,
   });
-
-  world.dungeonExpeditions[cultivator.id] = updatedProgress;
-  job.meta = {
-    ...job.meta,
-    dungeonExpeditionPolicy: updatedProgress.policy,
-    dungeonExpeditionTargetRank: updatedProgress.targetRank,
-    dungeonExpeditionStepIndex: updatedProgress.stepIndex,
-    dungeonExpeditionNextResolutionTick: updatedProgress.nextResolutionTick,
-  };
 
   if (isDungeonExpeditionCatastrophic(cultivator)) {
     finalizeDungeonExpedition(world, cultivator, updatedProgress, "catastrophic");
@@ -1978,7 +2015,32 @@ function resolveDungeonExpeditionStepIfDue(
   if (updatedProgress.stepIndex >= DUNGEON_EXPEDITION_MAX_STEPS) {
     finalizeDungeonExpedition(world, cultivator, updatedProgress, "completed");
     job.remainingTicks = 0;
+    return;
   }
+
+  const wakeNode = maybeCreateDungeonWakeNode({
+    progress: updatedProgress,
+    cultivator,
+    actionKind,
+    worldTick: world.tick,
+  });
+  const progressedWithWake = wakeNode
+    ? {
+        ...updatedProgress,
+        wakeNodesEncountered: updatedProgress.wakeNodesEncountered + 1,
+        pendingWakeNode: wakeNode,
+        pendingWakeNodeDeadlineTick: world.tick + wakeNode.timeoutTicks,
+      }
+    : updatedProgress;
+
+  world.dungeonExpeditions[cultivator.id] = progressedWithWake;
+  job.meta = {
+    ...job.meta,
+    dungeonExpeditionPolicy: progressedWithWake.policy,
+    dungeonExpeditionTargetRank: progressedWithWake.targetRank,
+    dungeonExpeditionStepIndex: progressedWithWake.stepIndex,
+    dungeonExpeditionNextResolutionTick: progressedWithWake.nextResolutionTick,
+  };
 }
 
 function preferredCommonMaterialAction(
@@ -2299,6 +2361,12 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   const dungeonTravelAction = nearestDungeonId ? travelActionIdOf(nearestDungeonId) : "meditate";
   const nearestWildernessId = findNearestLocationId(world, cultivator.locationId, (candidate) => candidate.nodeType === "wilderness");
   const wildernessTravelAction = nearestWildernessId ? travelActionIdOf(nearestWildernessId) : "meditate";
+  const nearestBahuangEntryId = findNearestLocationId(
+    world,
+    cultivator.locationId,
+    (candidate) => EIGHT_WASTES_CONTENT.entryLocationIds.includes(candidate.id as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number]),
+  );
+  const bahuangTravelAction = nearestBahuangEntryId ? travelActionIdOf(nearestBahuangEntryId) : "meditate";
   const warnings: string[] = []; const priorities: string[] = []; const suggestedActions: ActionId[] = [];
   if (readiness === "poor") {
     warnings.push("Readiness is poor.");
@@ -2313,7 +2381,14 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   if (cultivator.injuryTicksRemaining > 0) { warnings.push("Character is injured."); priorities.push("Recover before risky actions."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
   if (hasEffect(cultivator, "poisoned")) warnings.push("Poison drains HP each tick.");
   if (hasEffect(cultivator, "deviation")) { warnings.push("Qi deviation is active."); priorities.push("Stabilize before cultivation."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
-  if (cultivator.spiritStones < 120) { priorities.push("Earn more spirit stones."); suggestedActions.push(location?.kind === "safe" ? "take-mortal-task" : safeTravelAction); }
+  if (cultivator.spiritStones < 120) {
+    priorities.push("Need base materials: farm wilderness.");
+    if (location?.nodeType === "wilderness") {
+      suggestedActions.push("mine-spirit-stones", "hunt-mine-beast");
+    } else {
+      suggestedActions.push(wildernessTravelAction);
+    }
+  }
   if (cultivator.inventory["spirit-ore"] + cultivator.inventory["ruin-fragment"] + cultivator.inventory["beast-core"] > 0) priorities.push("You can sell materials in the market.");
   if (hasEffect(cultivator, "insight")) priorities.push("Insight is active. Use it on cultivation or a major encounter.");
   if (hasEffect(cultivator, "spirit-saturated")) priorities.push("Spirit saturation is active. Good time for cultivation.");
@@ -2325,6 +2400,26 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     if (breakthrough.recommendedAction) {
       suggestedActions.unshift(breakthrough.recommendedAction);
     }
+  }
+  const needsProgressionMaterials = !!breakthrough
+    && !breakthrough.readyByMaterials
+    && breakthrough.missingItems.some((item) => item.itemId === "foundation-common" || item.itemId === "core-common");
+  if (needsProgressionMaterials) {
+    priorities.push("Need progression materials: clear dungeon.");
+    const dungeonView = dungeonViewForLocation(world, cultivator, location);
+    suggestedActions.push(
+      dungeonView && !dungeonView.lockReason
+        ? startDungeonExpeditionActionIdOf(dungeonView.recommendedRank, "balanced")
+        : dungeonTravelAction,
+    );
+  }
+
+  const needsRareExpeditionRewards = meetsRealmRequirement(cultivator, REALM_CORE)
+    && cultivator.inventory["ancient-artifact"] <= 0;
+  if (needsRareExpeditionRewards) {
+    priorities.push("Need rare rewards: run bahuang.");
+    const canRunBahuangHere = canEnterBahuang(cultivator, cultivator.locationId).allowed;
+    suggestedActions.push(canRunBahuangHere ? "enter-bahuang:balanced" : bahuangTravelAction);
   }
   if (registration && cultivator.injuryTicksRemaining <= 0) {
     if (registration.cultivateBonus >= 8) priorities.push("Registration favors longer cultivation sessions.");
@@ -2677,11 +2772,14 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     registrationEffects: registrationEffectsViewOf(cultivator),
     breakthrough: breakthroughViewOf(world, cultivator),
     dungeon: dungeonViewForLocation(world, cultivator, location),
-    dungeonExpedition: buildDungeonExpeditionStateView(
-      world,
-      cultivator,
-      cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
-    ),
+    dungeonExpedition: {
+      ...buildDungeonExpeditionStateView(
+        world,
+        cultivator,
+        cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
+      ),
+    },
+    bahuang: buildBahuangStateView(world, cultivator),
     wilderness: buildWildernessView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
     derivedState,
@@ -2746,6 +2844,9 @@ function ensureSafetyNetActions(
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const activeDungeonExpedition = getActiveDungeonExpedition(world, cultivator.id);
+  const activeBahuang = world.bahuangProgress[cultivator.id]?.status === "active"
+    ? world.bahuangProgress[cultivator.id]
+    : null;
   if (cultivator.activeJobId) {
     return activeDungeonExpedition
       ? [{
@@ -2782,7 +2883,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       itemConsumes: recipe.inputMaterials.map((material) => ({ itemId: material.itemId, count: material.count })),
     },
   }));
-  const actions: AvailableAction[] = activeWilderness
+  const actions: AvailableAction[] = activeWilderness || activeBahuang
     ? []
     : getNeighborLocations(world, cultivator.locationId)
       .map(({ locationId: neighborId, ticks }) => ({
@@ -2949,8 +3050,31 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         kind: "immediate",
       },
     );
+  } else if (activeBahuang) {
+    actions.push({
+      actionId: "retreat-from-bahuang",
+      label: "Retreat from bahuang",
+      description: "Abort the 八荒 expedition before pressure collapses the run.",
+      durationTicks: 0,
+      kind: "immediate",
+    });
+    return actions;
   } else if (wildernessLayer) {
     actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
+  }
+  if (!activeWilderness && !activeBahuang && EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
+    const gate = canEnterBahuang(cultivator, cultivator.locationId);
+    if (gate.allowed) {
+      for (const posture of ["conservative", "balanced", "aggressive"] as const) {
+        actions.push({
+          actionId: `enter-bahuang:${posture}` as ActionId,
+          label: `Enter Bahuang (${posture})`,
+          description: `Start an independent 八荒 run with ${posture} posture and strategy-backed timeout handling.`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    }
   }
   if (!activeWilderness) {
     for (const node of listGuixuNodesForLocation(world, cultivator.locationId)) {
@@ -2982,6 +3106,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
     if (dungeonView && !dungeonView.lockReason) {
       for (const rank of dungeonView.availableRanks) {
+        for (const posture of ["conservative", "balanced", "aggressive"] as const) {
+          actions.push({
+            actionId: enterDungeonActionIdOf(rank, posture),
+            label: `Enter dungeon (${posture}, rank ${rank})`,
+            description: `Preferred low-wake entry. Uses ${posture} posture strategy with timeout defaults.`,
+            durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
+            kind: "timed",
+          });
+        }
         for (const policy of DUNGEON_EXPEDITION_POLICIES) {
           actions.push({
             actionId: startDungeonExpeditionActionIdOf(rank, policy),
@@ -3014,7 +3147,7 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
 
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
-  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness"]);
+  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
@@ -3114,6 +3247,7 @@ function executeItemImmediateAction(
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
   const wildernessLayerId = parseEnterWildernessLayer(actionId);
+  const bahuangStrategy = parseEnterBahuangStrategy(actionId);
   if (wildernessLayerId) {
     enterWildernessExpedition(world, cultivator, wildernessLayerId);
     return {
@@ -3122,6 +3256,16 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       actionId,
       accepted: true,
       summary: `${cultivator.name} entered ${getWildernessLayerById(world, wildernessLayerId)?.name ?? wildernessLayerId}.`,
+    };
+  }
+  if (bahuangStrategy) {
+    enterBahuangExpedition(world, cultivator, bahuangStrategy);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} entered 八荒 with ${bahuangStrategy} posture.`,
     };
   }
   const guixuNodeId = parseUnlockGuixuNode(actionId);
@@ -3205,6 +3349,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const summary = withdrawFromWilderness(world, cultivator, "manual-withdraw");
     if (!summary) {
       throw new Error("No active wilderness expedition to withdraw from.");
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
+  }
+  if (actionId === "retreat-from-bahuang") {
+    const summary = retreatFromBahuang(world, cultivator, "manual-retreat");
+    if (!summary) {
+      throw new Error("No active bahuang expedition to retreat from.");
     }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
@@ -3871,9 +4022,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   const executeQuestId = parseExecuteQuestId(actionId);
   const exploreGuixuNodeId = parseExploreGuixuNode(actionId);
   const startDungeonExpedition = parseStartDungeonExpeditionActionId(actionId);
+  const enterDungeon = parseEnterDungeonActionId(actionId);
   const searchFortuneRank = parseSearchFortuneRank(actionId);
   const challengeGuardianRank = parseChallengeGuardianRank(actionId);
-  if (travelDestination || executeQuestId || exploreGuixuNodeId || startDungeonExpedition || searchFortuneRank || challengeGuardianRank || TIMED_ACTION_IDS.has(actionId)) {
+  if (travelDestination || executeQuestId || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -3927,7 +4079,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         guixuEventId: eventId,
       });
     }
-    if (startDungeonExpedition) {
+    if (startDungeonExpedition || enterDungeon) {
       const metadata = dungeonMetadataOf(location);
       if (!metadata) {
         throw new Error("Action only available in dungeons.");
@@ -3935,20 +4087,31 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
         throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
       }
+      const parsedExpedition = startDungeonExpedition
+        ? {
+            rank: startDungeonExpedition.rank,
+            policy: startDungeonExpedition.policy,
+            strategy: strategyFromPolicy(startDungeonExpedition.policy),
+          }
+        : {
+            rank: enterDungeon!.rank,
+            policy: enterDungeon!.posture,
+            strategy: strategyFromPolicy(enterDungeon!.posture),
+          };
       const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
-      if (startDungeonExpedition.rank > highestUnlockedRank) {
-        throw new Error(`Dungeon rank ${startDungeonExpedition.rank} is not unlocked.`);
+      if (parsedExpedition.rank > highestUnlockedRank) {
+        throw new Error(`Dungeon rank ${parsedExpedition.rank} is not unlocked.`);
       }
       const started = startJob(
         world,
         cultivator,
         actionId as TimedActionId,
-        `Dungeon expedition rank ${startDungeonExpedition.rank}`,
+        `Dungeon expedition rank ${parsedExpedition.rank}`,
         {
           dungeonGrade: metadata.grade,
-          dungeonRank: startDungeonExpedition.rank,
-          dungeonExpeditionPolicy: startDungeonExpedition.policy,
-          dungeonExpeditionTargetRank: startDungeonExpedition.rank,
+          dungeonRank: parsedExpedition.rank,
+          dungeonExpeditionPolicy: parsedExpedition.policy,
+          dungeonExpeditionTargetRank: parsedExpedition.rank,
           dungeonExpeditionStepIndex: 0,
           dungeonExpeditionNextResolutionTick: world.tick + DUNGEON_EXPEDITION_STEP_TICKS,
         },
@@ -3962,8 +4125,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         jobId: started.job.id,
         locationId: cultivator.locationId,
         grade: metadata.grade,
-        targetRank: startDungeonExpedition.rank,
-        policy: startDungeonExpedition.policy,
+        targetRank: parsedExpedition.rank,
+        policy: parsedExpedition.policy,
+        strategy: parsedExpedition.strategy,
         startedAtTick: world.tick,
       });
       return started;
@@ -4038,6 +4202,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       });
       syncWounded(cultivator);
       applyWildernessPressure(world, cultivator);
+      advanceBahuangExpedition(world, cultivator);
     }
     for (const job of Object.values(world.jobs)) {
       job.remainingTicks -= 1;
