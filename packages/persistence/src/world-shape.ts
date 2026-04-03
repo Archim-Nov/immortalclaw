@@ -105,6 +105,10 @@ export function hydrateMigratedP3WorldState(
     copy.wildernessProgress && typeof copy.wildernessProgress === "object"
       ? copy.wildernessProgress
       : {};
+  copy.bahuangProgress =
+    copy.bahuangProgress && typeof copy.bahuangProgress === "object"
+      ? copy.bahuangProgress
+      : {};
   copy.dungeonExpeditions =
     copy.dungeonExpeditions && typeof copy.dungeonExpeditions === "object"
       ? copy.dungeonExpeditions

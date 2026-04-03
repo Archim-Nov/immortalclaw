@@ -2668,16 +2668,63 @@ function buildWildernessView(world: WorldState, cultivator: Cultivator): Cultiva
   };
 }
 
+function ensureOptionalProgressMaps(world: WorldState): void {
+  const runtimeWorld = world as WorldState & {
+    dungeonExpeditions?: Record<string, unknown>;
+    dungeonExpeditionReports?: Record<string, unknown>;
+    wildernessProgress?: Record<string, unknown>;
+    bahuangProgress?: Record<string, unknown>;
+    guixuProgress?: {
+      wildernessAttunement?: Record<string, number>;
+      personalUnlockedNodeIds?: Record<string, string[]>;
+      sharedUnlockedNodeIds?: string[];
+      lastResolvedEventIds?: Record<string, string>;
+    };
+  };
+
+  if (!runtimeWorld.dungeonExpeditions || typeof runtimeWorld.dungeonExpeditions !== "object") {
+    runtimeWorld.dungeonExpeditions = {};
+  }
+  if (!runtimeWorld.dungeonExpeditionReports || typeof runtimeWorld.dungeonExpeditionReports !== "object") {
+    runtimeWorld.dungeonExpeditionReports = {};
+  }
+  if (!runtimeWorld.wildernessProgress || typeof runtimeWorld.wildernessProgress !== "object") {
+    runtimeWorld.wildernessProgress = {};
+  }
+  if (!runtimeWorld.bahuangProgress || typeof runtimeWorld.bahuangProgress !== "object") {
+    runtimeWorld.bahuangProgress = {};
+  }
+  if (!runtimeWorld.guixuProgress || typeof runtimeWorld.guixuProgress !== "object") {
+    runtimeWorld.guixuProgress = {};
+  }
+  if (!runtimeWorld.guixuProgress.wildernessAttunement || typeof runtimeWorld.guixuProgress.wildernessAttunement !== "object") {
+    runtimeWorld.guixuProgress.wildernessAttunement = {};
+  }
+  if (!runtimeWorld.guixuProgress.personalUnlockedNodeIds || typeof runtimeWorld.guixuProgress.personalUnlockedNodeIds !== "object") {
+    runtimeWorld.guixuProgress.personalUnlockedNodeIds = {};
+  }
+  if (!Array.isArray(runtimeWorld.guixuProgress.sharedUnlockedNodeIds)) {
+    runtimeWorld.guixuProgress.sharedUnlockedNodeIds = [];
+  }
+  if (!runtimeWorld.guixuProgress.lastResolvedEventIds || typeof runtimeWorld.guixuProgress.lastResolvedEventIds !== "object") {
+    runtimeWorld.guixuProgress.lastResolvedEventIds = {};
+  }
+}
+
 function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorStateView["guixu"] {
   const unlockedNodeIds = getCultivatorUnlockedGuixuNodeIds(world, cultivator.id);
   const availableNodeIds = listGuixuNodesForLocation(world, cultivator.locationId)
     .filter((node) => canUnlockGuixuNode(world, cultivator, node).allowed || unlockedNodeIds.includes(node.nodeId))
     .map((node) => node.nodeId);
+  const wildernessAttunement = world.guixuProgress?.wildernessAttunement?.[cultivator.id] ?? 0;
+  const sharedUnlockedNodeIds = Array.isArray(world.guixuProgress?.sharedUnlockedNodeIds)
+    ? [...world.guixuProgress.sharedUnlockedNodeIds]
+    : [];
 
   return {
-    wildernessAttunement: world.guixuProgress.wildernessAttunement[cultivator.id] ?? 0,
+    wildernessAttunement,
     unlockedNodeIds,
-    sharedUnlockedNodeIds: [...world.guixuProgress.sharedUnlockedNodeIds],
+    sharedUnlockedNodeIds,
     availableNodeIds,
   };
 }
@@ -2711,6 +2758,7 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
 }
 
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
+  ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   repairCultivatorRealm(cultivator);
   const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -2842,6 +2890,7 @@ function ensureSafetyNetActions(
 }
 
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
+  ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const activeDungeonExpedition = getActiveDungeonExpedition(world, cultivator.id);
   const activeBahuang = world.bahuangProgress[cultivator.id]?.status === "active"
@@ -3884,6 +3933,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
 }
 
 export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId): ActionExecutionResult {
+  ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   if (isAbortDungeonExpeditionAction(actionId)) {
     const progress = getActiveDungeonExpedition(world, cultivator.id);
@@ -4178,6 +4228,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
 }
 
 export function advanceWorld(world: WorldState, steps: number): TickSummary {
+  ensureOptionalProgressMaps(world);
   const safeSteps = clamp(Math.floor(steps), 1, 200); const completedJobs: TickSummary["completedJobs"] = []; const triggeredEvents: WorldEvent[] = [];
   for (let i = 0; i < safeSteps; i += 1) {
     world.tick += 1;

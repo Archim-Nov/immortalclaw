@@ -324,6 +324,25 @@ test("cultivator state exposes the current in-realm phase instead of forcing cli
   assert.equal(getCultivatorState(world, "yun-zhong-he").cultivator.realmPhase, "后期");
 });
 
+test("cultivator state tolerates legacy worlds that are missing per-cultivator progress maps", () => {
+  const world = createSeedWorld() as any;
+
+  delete world.dungeonExpeditions;
+  delete world.dungeonExpeditionReports;
+  delete world.wildernessProgress;
+  delete world.bahuangProgress;
+  world.guixuProgress = {};
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+
+  assert.equal(state.cultivator.id, "yun-zhong-he");
+  assert.equal(state.dungeonExpedition.active, null);
+  assert.equal(state.dungeonExpedition.lastReport, null);
+  assert.equal(state.wilderness, null);
+  assert.equal(state.guixu?.wildernessAttunement, 0);
+  assert.deepEqual(state.guixu?.unlockedNodeIds, []);
+});
+
 test("joining the sect updates sect state immediately", () => {
   const world = createSeedWorld();
   seedLegacyPlayerSect(world);

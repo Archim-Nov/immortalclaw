@@ -1,5 +1,4 @@
-import { createApp } from "../apps/runtime-worker/src/app.js";
-import { createInMemoryWorldRepository } from "../packages/persistence/src/index.js";
+import { createTestApp } from "../apps/world-do/src/test-helpers.js";
 import {
   assertQuestionnaireFixture,
   buildQuestionnaireDrivenAgentPayload,
@@ -20,8 +19,7 @@ async function main() {
 
   const seed = requestedSeed();
   const { answers, record, payload, answerSummary } = buildQuestionnaireDrivenAgentPayload(seed);
-  const repository = createInMemoryWorldRepository();
-  const app = createApp({ repository });
+  const app = createTestApp();
 
   const questionsResponse = await app.request("https://runtime.smoke/agent/register/questions");
   const questionsResult = await readJson(questionsResponse);
