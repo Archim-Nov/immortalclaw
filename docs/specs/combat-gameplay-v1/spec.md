@@ -320,7 +320,7 @@
   - 用于表达角色主力发力手段
   - 当前动作倍率固定为 `1.6`
   - 仅当 `currentSpirit >= coreSkillSpiritCost` 时可选
-  - 当前资源成本冻结为：`coreSkillSpiritCost = max(1, round(maxSpirit * 0.10))`
+  - 当前资源成本冻结为：固定 `coreSkillSpiritCost`，由装备的具体装配配置表提供（参见 `docs/plans/2026-04-05-combat-gameplay-v2.md`，V2 装配层规则）
   - 灵力消耗在动作真正结算时扣除：命中与否都扣；若角色在出手前已死亡，则不扣
 - `逃跑`
   - 当前 V1 的正式战斗动作，非未来扩展
