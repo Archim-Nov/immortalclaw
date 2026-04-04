@@ -10,11 +10,15 @@
 
 - `docs/specs/combat-gameplay-v1/spec.md`
 - `docs/plans/2026-04-04-combat-gameplay-v1-light-complete-implementation.md`
+- `docs/plans/2026-04-04-combat-gameplay-v1-action-layer-completion.md`
 
 ## 1. 文档定位
 
-当前三路线评分器明确遵循：
+本文是路线评分器专用的权重文档。它明确遵循：
 
+- **窄作用域 (Narrow Scope)**: 本文件只负责 `brute / finesse / tactic` 的路线权重评分逻辑
+- **非动作层文件**: 本文件不治理动作层选择（`basic_attack / core_skill / escape`）
+- 动作层选择逻辑、评分公式与详细设计，详见 `docs/specs/combat-gameplay-v1/spec.md` 与其伴生文档 `docs/specs/combat-gameplay-v1/registration-action-layer-weight-table.md`
 - 不额外发明独立人格系统
 - 直接复用注册层已有 taxonomy
 - 当前 V1 只硬接 `core_temperament` 与 `behavior_aspect`
@@ -25,7 +29,15 @@
 - 命中 / 闪避判定
 - 会心 / 暴伤判定
 
-路线权重表本身仍保持不变，但注册标签现在驱动的战斗行为选择会在上述新增结算规则中被激活。冻结的兵器家族路线加成持续保持为：
+路线权重表本身仍保持不变，但注册标签现在驱动的战斗行为选择会在上述新增结算规则中被激活。
+
+注意：
+
+- 本文只负责 `brute / finesse / tactic` 的路线权重
+- 当前 V1 的动作层 `basic_attack / core_skill / escape` 也会吃注册性格偏好
+- 但动作层必须使用独立的动作权重表，不能直接复用本文
+
+冻结的兵器家族路线加成持续保持为：
 - `蛮力（brute）` +8% 最终伤害
 - `巧劲（finesse）` +8 先手 +5 闪避
 - `战术（tactic）` +5 命中 +4% 会心几率

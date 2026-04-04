@@ -8,6 +8,8 @@
 
 **Tech Stack:** TypeScript, `packages/domain`, Node test runner via `node --import tsx --test`, existing deterministic `hashString`-based rolls.
 
+**Plan Relationship:** This file remains the base `2026-04-04` combat V1 plan. The action-layer supplement in `docs/plans/2026-04-04-combat-gameplay-v1-action-layer-completion.md` must be read together with it. The supplement adds the missing action-layer design and tasks; it does not replace this file. Note: This file remains the primary implementation baseline, while the supplement provides specific action-layer rules and weight tables.
+
 ---
 
 ## Summary
@@ -54,19 +56,22 @@ The implementation should preserve current action ids and the general shape of `
 
 ### Round order
 
-Each round must resolve in this exact order:
+This base plan only freezes the route-layer combat order. The missing action-layer order is defined in the supplement `2026-04-04-combat-gameplay-v1-action-layer-completion.md`, and both must be read together.
 
-1. Choose player route
-2. Choose enemy route
-3. Compute both initiative values
-4. Initiative winner attacks first
-5. Resolve hit / dodge
-6. If hit, resolve crit / crit damage
-7. Apply damage
-8. If target dies, target loses this round’s action
-9. If target survives, target acts
-10. Write round log
-11. Check battle end
+Current combined round order is:
+
+1. Choose player action
+2. Choose enemy action
+3. If action is a damage action, bind a route
+4. Compute both initiative values
+5. Initiative winner acts first
+6. Resolve hit / dodge
+7. If hit, resolve crit / crit damage
+8. Apply damage or resolve escape
+9. If target dies, target loses this round’s action
+10. If target survives, target acts
+11. Write round log
+12. Check battle end
 
 ### Initiative formula
 
@@ -547,4 +552,3 @@ Run:
 - Do not add unrelated content scope while refactoring the combat engine.
 - If any existing tests encode the old one-shot combat semantics, replace them with the new round-based expectations instead of layering legacy compatibility behavior.
 - If the current log shape is consumed elsewhere, preserve top-level summary compatibility while adding `rounds` as the detailed extension.
-

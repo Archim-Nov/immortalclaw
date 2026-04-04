@@ -1078,6 +1078,7 @@ export interface PendingMoralityChoiceView {
 export type CombatStyle = "brute" | "finesse" | "tactic";
 export type AttackChannel = "weapon" | "spell";
 export type AttackResult = "hit" | "miss" | "crit";
+export type CombatActionType = "basic_attack" | "core_skill" | "escape";
 
 export interface CombatDamageBreakdown {
   baseDamage: number;
@@ -1085,15 +1086,35 @@ export interface CombatDamageBreakdown {
   triangleMultiplier: number;
   routeDamageMultiplier: number;
   critMultiplier: number;
+  actionMultiplier: number;
   finalDamage: number;
+}
+
+export interface CombatActionChoice {
+  actionType: CombatActionType;
+  boundStyle: CombatStyle | null;
+  spiritCost: number;
+  preferredStyle: CombatStyle | null;
+}
+
+export interface EscapeResolution {
+  attempted: boolean;
+  success: boolean;
+  chance: number;
+}
+
+export interface CoreSkillProfile {
+  spiritCost: number;
+  preferredStyle: CombatStyle | null;
+  actionMultiplier: number;
 }
 
 export interface CombatRoundLog {
   round: number;
   playerInitiative: number;
   enemyInitiative: number;
-  playerRoute: CombatStyle;
-  enemyRoute: CombatStyle;
+  playerRoute?: CombatStyle;
+  enemyRoute?: CombatStyle;
   firstActor: "player" | "enemy";
   playerAttack: {
     result: AttackResult;
@@ -1107,6 +1128,16 @@ export interface CombatRoundLog {
   enemyHpAfter: number;
   playerDied: boolean;
   enemyDied: boolean;
+  playerAction?: CombatActionType;
+  enemyAction?: CombatActionType;
+  playerBoundRoute?: CombatStyle | null;
+  enemyBoundRoute?: CombatStyle | null;
+  playerSpiritSpent?: number;
+  enemySpiritSpent?: number;
+  playerEscape?: EscapeResolution | null;
+  enemyEscape?: EscapeResolution | null;
+  playerActionSkipped?: boolean;
+  enemyActionSkipped?: boolean;
 }
 
 export interface CombatSnapshot {
@@ -1120,6 +1151,11 @@ export interface CombatSnapshot {
   crit: number;
   critDamage: number;
   guardHeart: number;
+  spirit?: number;
+  maxSpirit?: number;
+  coreSkillSpiritCost?: number;
+  coreSkillPreferredRoute?: CombatStyle | null;
+  escapeAllowed?: boolean;
 }
 
 export interface CombatJobState {
@@ -1133,6 +1169,9 @@ export interface CombatJobState {
   rounds: CombatRoundLog[];
   resolved: boolean;
   outcome: "victory" | "defeat" | null;
+  playerSpirit?: number;
+  playerMaxSpirit?: number;
+  retreated?: boolean;
 }
 
 export interface EncounterTemplate {
@@ -1149,6 +1188,7 @@ export interface EncounterTemplate {
   crit: number;
   critDamage: number;
   guardHeart: number;
+  escapeAllowed?: boolean;
 }
 
 export interface CombatLogEntry {
@@ -1168,6 +1208,7 @@ export interface CombatLogEntry {
   rounds?: CombatRoundLog[];
   playerSnapshot?: CombatSnapshot;
   enemySnapshot?: CombatSnapshot;
+  retreated?: boolean;
 }
 
 export interface AgentBinding {

@@ -18,6 +18,7 @@ import {
   toPersistedWorldState,
 } from "./index.js";
 import type { CultivationRegistrationRecord } from "./index.js";
+import type { CombatJobState } from "./model.js";
 import { STATE_IDS } from "./constants.js";
 import {
   deriveDetailedAttributes,
@@ -27,7 +28,14 @@ import {
   spellDefense,
   weaponAttack,
 } from "./attributes.js";
-import { createCultivator, starterStateFromRoll } from "./engine.js";
+import {
+  computeEscapeChance,
+  createCultivator,
+  getAvailableActions,
+  selectCombatAction,
+  selectCombatRoute,
+  starterStateFromRoll,
+} from "./engine.js";
 import { buildFullTopology } from "./topology.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
@@ -42,6 +50,70 @@ function expeditionActionId(rank: number, policy: "conservative" | "balanced" | 
 
 function hashString(input: string) {
   return Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
+}
+
+function startMineBeastCombat() {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  const started = performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  assert.equal(started.accepted, true);
+  const jobId = world.cultivators["yun-zhong-he"]?.activeJobId;
+  assert.ok(jobId);
+  const job = world.jobs[jobId];
+  assert.ok(job);
+  const combatState = (job.meta as { combatState?: CombatJobState } | undefined)?.combatState;
+  assert.ok(combatState);
+  return {
+    world,
+    job,
+    combatState,
+    cultivator: world.cultivators["yun-zhong-he"],
+  };
+}
+
+function firstRoundHitRoll(world: ReturnType<typeof createSeedWorld>, jobId: string, encounterTemplateId: string) {
+  const seedBase = `${world.tick + 1}:${jobId}:${encounterTemplateId}:round-1`;
+  return hashString(`${seedBase}:hit-first`) % 100;
+}
+
+function firstRoundEscapeRoll(world: ReturnType<typeof createSeedWorld>, jobId: string, encounterTemplateId: string) {
+  const seedBase = `${world.tick + 1}:${jobId}:${encounterTemplateId}:round-1`;
+  return hashString(`${seedBase}:escape-roll`) % 100;
+}
+
+function firstRoundPlayerAction(context: ReturnType<typeof startMineBeastCombat>) {
+  const seedBase = `${context.world.tick + 1}:${context.job.id}:${context.combatState.encounterTemplateId}:round-1`;
+  return selectCombatAction(
+    context.cultivator,
+    context.combatState.playerSnapshot,
+    context.combatState.enemySnapshot,
+    true,
+    context.combatState.playerSnapshot.escapeAllowed !== false,
+    context.combatState.playerSpirit ?? context.combatState.playerSnapshot.spirit ?? 0,
+    context.combatState.playerMaxSpirit ?? context.combatState.playerSnapshot.maxSpirit ?? 0,
+    context.combatState.playerSnapshot.coreSkillSpiritCost ?? 0,
+    `${seedBase}:player-action`,
+  );
+}
+
+function findCombatContextByAction(
+  expectedAction: "basic_attack" | "core_skill" | "escape",
+  configure: (context: ReturnType<typeof startMineBeastCombat>) => void,
+  postFilter?: (context: ReturnType<typeof startMineBeastCombat>) => boolean,
+) {
+  for (let i = 0; i < 500; i += 1) {
+    const candidate = startMineBeastCombat();
+    // Vary the world tick so each iteration produces a different deterministic seed
+    candidate.world.tick += i;
+    configure(candidate);
+    if (firstRoundPlayerAction(candidate) === expectedAction) {
+      if (!postFilter || postFilter(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
 }
 
 type StateReputationOverrides = Partial<Record<(typeof STATE_IDS)[number], number>>;
@@ -1543,8 +1615,8 @@ test("round logs contain initiative, hit/crit/miss results, and damage breakdown
     assert.equal(typeof round.round, "number");
     assert.equal(typeof round.playerInitiative, "number");
     assert.equal(typeof round.enemyInitiative, "number");
-    assert.ok(["brute", "finesse", "tactic"].includes(round.playerRoute));
-    assert.ok(["brute", "finesse", "tactic"].includes(round.enemyRoute));
+    assert.ok(["brute", "finesse", "tactic"].includes(round.playerRoute!));
+    assert.ok(["brute", "finesse", "tactic"].includes(round.enemyRoute!));
     assert.ok(round.firstActor === "player" || round.firstActor === "enemy");
     if (round.playerAttack) {
       assert.ok(["hit", "miss", "crit"].includes(round.playerAttack.result));
@@ -1800,7 +1872,7 @@ test("combat route selection favors registration-weighted styles over uniform ra
   assert.ok(log && log.rounds);
   const routeCounts: Record<string, number> = { brute: 0, finesse: 0, tactic: 0 };
   for (const round of log.rounds!) {
-    routeCounts[round.playerRoute] = (routeCounts[round.playerRoute] ?? 0) + 1;
+    routeCounts[round.playerRoute!] = (routeCounts[round.playerRoute!] ?? 0) + 1;
   }
   assert.equal(routeCounts["brute"], 0,
     "shou_jie + water bias heavily toward tactic; brute should never be selected (it is the lowest-scored route and excluded by Top 2 sampling)");
@@ -1941,4 +2013,559 @@ test("safety-net keeps at least one low-risk action when injured away from resid
       || actionIds.has("residence-recover-qi")
       || Array.from(actionIds).some((actionId) => actionId.startsWith("travel-to:")),
   );
+});
+
+test("core_skill unavailable when spirit is insufficient", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const selfSnapshot = {
+    hp: 100,
+    maxHp: 100,
+    attack: 50,
+    defense: 30,
+    speed: 20,
+    hit: 80,
+    dodge: 20,
+    crit: 10,
+    critDamage: 150,
+    guardHeart: 10,
+  };
+  const enemySnapshot = {
+    ...selfSnapshot,
+  };
+
+  for (let i = 0; i < 20; i += 1) {
+    const action = selectCombatAction(
+      cultivator,
+      selfSnapshot,
+      enemySnapshot,
+      true,
+      true,
+      0,
+      100,
+      10,
+      `insufficient-spirit-${i}`,
+    );
+    assert.notEqual(action, "core_skill");
+  }
+});
+
+test("low HP makes escape more likely", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const selfSnapshot = {
+    hp: 20,
+    maxHp: 100,
+    attack: 50,
+    defense: 30,
+    speed: 20,
+    hit: 80,
+    dodge: 20,
+    crit: 10,
+    critDamage: 150,
+    guardHeart: 10,
+  };
+  const enemySnapshot = {
+    ...selfSnapshot,
+    hp: 80,
+  };
+
+  const action = selectCombatAction(
+    cultivator,
+    selfSnapshot,
+    enemySnapshot,
+    true,
+    true,
+    0,
+    100,
+    10,
+    "low-hp-escape",
+  );
+  assert.equal(action, "escape");
+});
+
+test("enemy near death makes core_skill more likely", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const selfSnapshot = {
+    hp: 100,
+    maxHp: 100,
+    attack: 50,
+    defense: 30,
+    speed: 20,
+    hit: 80,
+    dodge: 20,
+    crit: 10,
+    critDamage: 150,
+    guardHeart: 10,
+  };
+  const enemySnapshot = {
+    ...selfSnapshot,
+    hp: 20,
+  };
+
+  const action = selectCombatAction(
+    cultivator,
+    selfSnapshot,
+    enemySnapshot,
+    true,
+    false,
+    80,
+    100,
+    10,
+    "enemy-near-0",
+  );
+  assert.equal(action, "core_skill");
+});
+
+test("action selection is deterministic for a fixed world state", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const selfSnapshot = {
+    hp: 65,
+    maxHp: 100,
+    attack: 50,
+    defense: 30,
+    speed: 20,
+    hit: 80,
+    dodge: 20,
+    crit: 10,
+    critDamage: 150,
+    guardHeart: 10,
+  };
+  const enemySnapshot = {
+    ...selfSnapshot,
+    hp: 55,
+  };
+  const seed = "deterministic-action-selection";
+
+  const first = selectCombatAction(
+    cultivator,
+    selfSnapshot,
+    enemySnapshot,
+    true,
+    true,
+    60,
+    100,
+    10,
+    seed,
+  );
+  const second = selectCombatAction(
+    cultivator,
+    selfSnapshot,
+    enemySnapshot,
+    true,
+    true,
+    60,
+    100,
+    10,
+    seed,
+  );
+
+  assert.equal(first, second);
+});
+
+test("enemy never selects escape in V1 PVE", () => {
+  const enemyActions = getAvailableActions(false, 100, 10, true);
+  assert.equal(enemyActions.includes("escape"), false);
+});
+
+test("escape action does not bind a player route", () => {
+  const context = findCombatContextByAction("escape", ({ combatState }) => {
+    combatState.maxRounds = 1;
+    combatState.playerSnapshot.escapeAllowed = true;
+    combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    combatState.playerSpirit = 0;
+    combatState.playerSnapshot.spirit = 0;
+    combatState.playerSnapshot.hp = 10;
+    combatState.playerSnapshot.maxHp = 100;
+    combatState.playerSnapshot.speed = 300;
+    combatState.enemySnapshot.speed = 1;
+  });
+  assert.ok(context);
+
+  const { world, combatState } = context;
+  combatState.maxRounds = 1;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "escape");
+  assert.equal(round.playerBoundRoute, undefined);
+});
+
+test("core_skill action binds a route", () => {
+  const { world, combatState } = startMineBeastCombat();
+  combatState.maxRounds = 1;
+  combatState.playerSnapshot.escapeAllowed = false;
+  combatState.playerSnapshot.coreSkillSpiritCost = 10;
+  combatState.playerSpirit = 100;
+  combatState.playerSnapshot.spirit = 100;
+  combatState.enemySnapshot.hp = 10;
+  combatState.playerSnapshot.speed = 300;
+  combatState.enemySnapshot.speed = 1;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "core_skill");
+  assert.ok(round.playerBoundRoute === "brute" || round.playerBoundRoute === "finesse" || round.playerBoundRoute === "tactic");
+});
+
+test("core_skill preferred route adds affinity bonus in route selection", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  let found = false;
+
+  for (let i = 0; i < 1200; i += 1) {
+    const seed = `route-affinity-${i}`;
+    const withoutAffinity = selectCombatRoute(cultivator, seed);
+    const withAffinity = selectCombatRoute(cultivator, seed, "tactic");
+    if (withoutAffinity !== "tactic" && withAffinity === "tactic") {
+      found = true;
+      break;
+    }
+  }
+
+  assert.equal(found, true);
+});
+
+test("core_skill spends spirit on hit", () => {
+  let context: ReturnType<typeof startMineBeastCombat> | null = null;
+  for (let i = 0; i < 40; i += 1) {
+    const candidate = startMineBeastCombat();
+    const roll = firstRoundHitRoll(candidate.world, candidate.job.id, candidate.combatState.encounterTemplateId);
+    if (roll < 97) {
+      context = candidate;
+      break;
+    }
+  }
+  assert.ok(context);
+
+  context.combatState.maxRounds = 1;
+  context.combatState.playerSnapshot.escapeAllowed = false;
+  context.combatState.playerSnapshot.coreSkillSpiritCost = 12;
+  context.combatState.playerSpirit = 90;
+  context.combatState.playerSnapshot.spirit = 90;
+  context.combatState.playerSnapshot.speed = 300;
+  context.combatState.enemySnapshot.speed = 1;
+  context.combatState.playerSnapshot.hit = 999;
+  context.combatState.enemySnapshot.dodge = 0;
+  context.combatState.enemySnapshot.hp = 10;
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const round = context.world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "core_skill");
+  assert.notEqual(round.playerAttack?.result, "miss");
+  assert.equal(round.playerSpiritSpent, 12);
+});
+
+test("core_skill spends spirit on miss", () => {
+  let context: ReturnType<typeof startMineBeastCombat> | null = null;
+  for (let i = 0; i < 40; i += 1) {
+    const candidate = startMineBeastCombat();
+    const roll = firstRoundHitRoll(candidate.world, candidate.job.id, candidate.combatState.encounterTemplateId);
+    if (roll >= 35) {
+      context = candidate;
+      break;
+    }
+  }
+  assert.ok(context);
+
+  context.combatState.maxRounds = 1;
+  context.combatState.playerSnapshot.escapeAllowed = false;
+  context.combatState.playerSnapshot.coreSkillSpiritCost = 11;
+  context.combatState.playerSpirit = 90;
+  context.combatState.playerSnapshot.spirit = 90;
+  context.combatState.playerSnapshot.speed = 300;
+  context.combatState.enemySnapshot.speed = 1;
+  context.combatState.playerSnapshot.hit = 0;
+  context.combatState.enemySnapshot.dodge = 999;
+  context.combatState.enemySnapshot.hp = 10;
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const round = context.world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "core_skill");
+  assert.equal(round.playerAttack?.result, "miss");
+  assert.equal(round.playerSpiritSpent, 11);
+});
+
+test("core_skill does not spend spirit if actor dies before acting", () => {
+  const { world, combatState } = startMineBeastCombat();
+  combatState.maxRounds = 1;
+  combatState.playerSnapshot.escapeAllowed = false;
+  combatState.playerSnapshot.coreSkillSpiritCost = 15;
+  combatState.playerSpirit = 90;
+  combatState.playerSnapshot.spirit = 90;
+  combatState.enemySnapshot.hp = 200;
+  combatState.playerSnapshot.speed = 1;
+  combatState.enemySnapshot.speed = 300;
+  combatState.playerSnapshot.hp = 1;
+  combatState.enemySnapshot.attack = 999;
+  combatState.enemySnapshot.hit = 999;
+  combatState.playerSnapshot.defense = 0;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "core_skill");
+  assert.equal(round.playerActionSkipped, true);
+  assert.equal(round.playerSpiritSpent, 0);
+});
+
+test("core_skill damage uses 1.6x action multiplier", () => {
+  let context: ReturnType<typeof startMineBeastCombat> | null = null;
+  for (let i = 0; i < 40; i += 1) {
+    const candidate = startMineBeastCombat();
+    const roll = firstRoundHitRoll(candidate.world, candidate.job.id, candidate.combatState.encounterTemplateId);
+    if (roll < 97) {
+      context = candidate;
+      break;
+    }
+  }
+  assert.ok(context);
+
+  context.combatState.maxRounds = 1;
+  context.combatState.playerSnapshot.escapeAllowed = false;
+  context.combatState.playerSnapshot.coreSkillSpiritCost = 10;
+  context.combatState.playerSpirit = 100;
+  context.combatState.playerSnapshot.spirit = 100;
+  context.combatState.playerSnapshot.speed = 300;
+  context.combatState.enemySnapshot.speed = 1;
+  context.combatState.playerSnapshot.hit = 999;
+  context.combatState.enemySnapshot.dodge = 0;
+  context.combatState.playerSnapshot.crit = 0;
+  context.combatState.enemySnapshot.guardHeart = 999;
+  context.combatState.enemySnapshot.hp = 200;
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const damage = context.world.combatLogs[0]?.rounds?.[0]?.playerAttack?.damage;
+  assert.ok(damage);
+  const noActionMultiplierDamage = Math.max(
+    1,
+    Math.round(
+      damage.baseDamage
+      * damage.styleMultiplier
+      * damage.triangleMultiplier
+      * damage.routeDamageMultiplier
+      * damage.critMultiplier,
+    ),
+  );
+  assert.equal(damage.actionMultiplier, 1.6);
+  assert.ok(damage.finalDamage > noActionMultiplierDamage);
+});
+
+test("computeEscapeChance follows frozen formula and clamps", () => {
+  const high = computeEscapeChance(300, 10, 0.1, "advantaged");
+  const low = computeEscapeChance(1, 300, 1, "poor");
+  const mid = computeEscapeChance(100, 100, 0.5, "stable");
+  assert.equal(high, 85);
+  assert.equal(low, 10);
+  assert.equal(mid, 35);
+});
+
+test("successful escape ends battle immediately", () => {
+  const configureFn = (candidate: ReturnType<typeof startMineBeastCombat>) => {
+    candidate.combatState.maxRounds = 5;
+    candidate.combatState.playerSnapshot.escapeAllowed = true;
+    candidate.combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    candidate.combatState.playerSpirit = 0;
+    candidate.combatState.playerSnapshot.spirit = 0;
+    candidate.combatState.playerSnapshot.hp = 10;
+    candidate.combatState.playerSnapshot.maxHp = 100;
+    candidate.combatState.playerSnapshot.speed = 300;
+    candidate.combatState.enemySnapshot.speed = 1;
+  };
+  const escapeSucceeds = (ctx: ReturnType<typeof startMineBeastCombat>) => {
+    const chance = computeEscapeChance(300, 1, 0.1, "stable");
+    const roll = firstRoundEscapeRoll(ctx.world, ctx.job.id, ctx.combatState.encounterTemplateId);
+    return roll < chance;
+  };
+  const context = findCombatContextByAction("escape", configureFn, escapeSucceeds);
+  assert.ok(context);
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const log = context.world.combatLogs[0];
+  assert.ok(log);
+  assert.equal(log.outcome, "defeat");
+  assert.equal(log.retreated, true);
+  assert.equal(log.totalRounds, 1);
+  assert.equal(log.rounds?.[0]?.playerEscape?.attempted, true);
+  assert.equal(log.rounds?.[0]?.playerEscape?.success, true);
+  assert.equal(log.rounds?.[0]?.enemyAttack, null);
+});
+
+test("failed escape consumes round action and combat continues", () => {
+  const context = findCombatContextByAction("escape", (candidate) => {
+    candidate.combatState.maxRounds = 1;
+    candidate.combatState.playerSnapshot.escapeAllowed = true;
+    candidate.combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    candidate.combatState.playerSpirit = 0;
+    candidate.combatState.playerSnapshot.spirit = 0;
+    candidate.combatState.playerSnapshot.speed = 1;
+    candidate.combatState.enemySnapshot.speed = 300;
+    candidate.combatState.playerSnapshot.hp = 100;
+    candidate.combatState.playerSnapshot.maxHp = 100;
+    candidate.combatState.enemySnapshot.hp = 300;
+  });
+  assert.ok(context);
+
+  const chance = computeEscapeChance(1, 300, 1, "stable");
+  const roll = firstRoundEscapeRoll(context.world, context.job.id, context.combatState.encounterTemplateId);
+  assert.ok(roll >= chance);
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const round = context.world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "escape");
+  assert.equal(round.playerAttack, null);
+  assert.equal(round.playerEscape?.attempted, true);
+  assert.equal(round.playerEscape?.success, false);
+  assert.notEqual(round.enemyAttack, null);
+});
+
+test("enemy action stays basic_attack even if enemy escapeAllowed is toggled", () => {
+  const { world, combatState } = startMineBeastCombat();
+  combatState.maxRounds = 1;
+  combatState.enemySnapshot.escapeAllowed = true;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.enemyAction, "basic_attack");
+  assert.equal(round.enemyEscape, undefined);
+});
+
+test("retreat grants no victory reward and preserves qi", () => {
+  const configureFn = (candidate: ReturnType<typeof startMineBeastCombat>) => {
+    candidate.combatState.maxRounds = 5;
+    candidate.combatState.playerSnapshot.escapeAllowed = true;
+    candidate.combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    candidate.combatState.playerSpirit = 0;
+    candidate.combatState.playerSnapshot.spirit = 0;
+    candidate.combatState.playerSnapshot.hp = 10;
+    candidate.combatState.playerSnapshot.maxHp = 100;
+    candidate.combatState.playerSnapshot.speed = 300;
+    candidate.combatState.enemySnapshot.speed = 1;
+  };
+  const escapeSucceeds = (ctx: ReturnType<typeof startMineBeastCombat>) => {
+    const chance = computeEscapeChance(300, 1, 0.1, "stable");
+    const roll = firstRoundEscapeRoll(ctx.world, ctx.job.id, ctx.combatState.encounterTemplateId);
+    return roll < chance;
+  };
+  const context = findCombatContextByAction("escape", configureFn, escapeSucceeds);
+  assert.ok(context);
+
+  const beforeQi = context.cultivator.qi;
+  const beforeStones = context.cultivator.spiritStones;
+  const beforeOre = context.cultivator.inventory["spirit-ore"];
+  const beforeFoundation = context.cultivator.inventory["foundation-common"];
+  const beforeBeastCore = context.cultivator.inventory["beast-core"];
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const log = context.world.combatLogs[0];
+  assert.ok(log);
+  assert.equal(log.retreated, true);
+  assert.equal(context.cultivator.qi, beforeQi);
+  assert.equal(context.cultivator.spiritStones, beforeStones);
+  assert.equal(context.cultivator.inventory["spirit-ore"], beforeOre);
+  assert.equal(context.cultivator.inventory["foundation-common"], beforeFoundation);
+  assert.equal(context.cultivator.inventory["beast-core"], beforeBeastCore);
+});
+
+test("player killed before escape turn does not attempt escape", () => {
+  const context = findCombatContextByAction("escape", ({ combatState }) => {
+    combatState.maxRounds = 1;
+    combatState.playerSnapshot.escapeAllowed = true;
+    combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    combatState.playerSpirit = 0;
+    combatState.playerSnapshot.spirit = 0;
+    combatState.playerSnapshot.hp = 1;
+    combatState.playerSnapshot.maxHp = 100;
+    combatState.playerSnapshot.speed = 1;
+    combatState.enemySnapshot.speed = 300;
+    combatState.enemySnapshot.attack = 999;
+    combatState.enemySnapshot.hit = 999;
+    combatState.playerSnapshot.defense = 0;
+  });
+  assert.ok(context);
+
+  const { world, combatState } = context;
+  combatState.maxRounds = 1;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "escape");
+  assert.equal(round.playerActionSkipped, true);
+  assert.equal(round.playerEscape?.attempted, false);
+});
+
+test("core_skill rounds include action fields and spirit spending", () => {
+  const { world, combatState } = startMineBeastCombat();
+  combatState.maxRounds = 1;
+  combatState.playerSnapshot.escapeAllowed = false;
+  combatState.playerSnapshot.coreSkillSpiritCost = 13;
+  combatState.playerSpirit = 90;
+  combatState.playerSnapshot.spirit = 90;
+  combatState.enemySnapshot.hp = 10;
+  combatState.playerSnapshot.speed = 300;
+  combatState.enemySnapshot.speed = 1;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerAction, "core_skill");
+  assert.equal(round.enemyAction, "basic_attack");
+  assert.equal(round.playerSpiritSpent, 13);
+  assert.equal(round.enemySpiritSpent, 0);
+});
+
+test("escape rounds include attempted/success/chance fields", () => {
+  const context = findCombatContextByAction("escape", ({ combatState }) => {
+    combatState.maxRounds = 1;
+    combatState.playerSnapshot.escapeAllowed = true;
+    combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    combatState.playerSpirit = 0;
+    combatState.playerSnapshot.spirit = 0;
+    combatState.playerSnapshot.speed = 300;
+    combatState.enemySnapshot.speed = 1;
+    combatState.playerSnapshot.hp = 60;
+    combatState.playerSnapshot.maxHp = 100;
+  });
+  assert.ok(context);
+
+  const { world, combatState } = context;
+  combatState.maxRounds = 1;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const escape = world.combatLogs[0]?.rounds?.[0]?.playerEscape;
+  assert.ok(escape);
+  assert.equal(typeof escape.attempted, "boolean");
+  assert.equal(typeof escape.success, "boolean");
+  assert.equal(typeof escape.chance, "number");
+});
+
+test("round logs keep backward-compatible playerRoute/enemyRoute fields", () => {
+  const context = findCombatContextByAction("escape", ({ combatState }) => {
+    combatState.maxRounds = 1;
+    combatState.playerSnapshot.escapeAllowed = true;
+    combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    combatState.playerSpirit = 0;
+    combatState.playerSnapshot.spirit = 0;
+  });
+  assert.ok(context);
+
+  const { world, combatState } = context;
+  combatState.maxRounds = 1;
+
+  runUntilIdle(world, "yun-zhong-he");
+  const round = world.combatLogs[0]?.rounds?.[0];
+  assert.ok(round);
+  assert.equal(round.playerBoundRoute, undefined);
+  assert.ok(round.enemyBoundRoute === "brute" || round.enemyBoundRoute === "finesse" || round.enemyBoundRoute === "tactic");
+  assert.equal(round.playerRoute, round.enemyBoundRoute);
+  assert.equal(round.enemyRoute, round.enemyBoundRoute);
 });

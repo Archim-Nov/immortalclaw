@@ -11,7 +11,7 @@ import type {
   SectApplicationView, SectMotiveBucketId, SectReapplyCooldown, SectTitle, StatusEffect, TimedActionId,
   StrategySnapshot, TickSummary, UpdateSectAdmissionPolicyResult, WorldEvent, WorldState, OnboardingProgress,
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
-  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult,
+  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution,
 } from "./model.js";
 import {
   deriveMainAttributes,
@@ -365,7 +365,40 @@ const BEHAVIOR_ASPECT_STYLE_WEIGHTS: Record<string, { brute: number; finesse: nu
   "water-earth": { brute: -1, finesse: -1, tactic:  2 },
   "fire-earth":  { brute:  1, finesse:  0, tactic:  1 },
 };
-function selectCombatRoute(cultivator: Cultivator, seed: string): CombatStyle {
+const CORE_TEMPERAMENT_ACTION_WEIGHTS: Record<string, { basic_attack: number; core_skill: number; escape: number }> = {
+  shou_jie:    { basic_attack: 0, core_skill: -1, escape: +1 },
+  duan_feng:   { basic_attack: 0, core_skill: +2, escape: -2 },
+  fu_sheng:    { basic_attack: 0, core_skill: -1, escape: +1 },
+  xiang_rong:  { basic_attack: 0, core_skill:  0, escape:  0 },
+  qian_yuan:   { basic_attack: 0, core_skill: +1, escape:  0 },
+  guan_lan:    { basic_attack: 0, core_skill: -1, escape: +1 },
+  chi_xin:     { basic_attack: 0, core_skill: +1, escape: -1 },
+  zheng_sheng: { basic_attack: 0, core_skill: +2, escape: -2 },
+  zhen_yue:    { basic_attack: 0, core_skill:  0, escape:  0 },
+  shou_cheng:  { basic_attack: 0, core_skill: -1, escape: +1 },
+};
+const BEHAVIOR_ASPECT_ACTION_WEIGHTS: Record<string, { basic_attack: number; core_skill: number; escape: number }> = {
+  metal:         { basic_attack: 0, core_skill: +1, escape:  0 },
+  wood:          { basic_attack: 0, core_skill:  0, escape:  0 },
+  water:         { basic_attack: 0, core_skill: -1, escape: +1 },
+  fire:          { basic_attack: 0, core_skill: +1, escape: -1 },
+  earth:         { basic_attack: 0, core_skill: -1, escape: +1 },
+  "metal-wood":  { basic_attack: 0, core_skill:  0, escape:  0 },
+  "metal-water": { basic_attack: 0, core_skill: -1, escape: +1 },
+  "metal-fire":  { basic_attack: 0, core_skill: +1, escape: -1 },
+  "metal-earth": { basic_attack: 0, core_skill:  0, escape:  0 },
+  "wood-water":  { basic_attack: 0, core_skill: -1, escape: +1 },
+  "wood-fire":   { basic_attack: 0, core_skill: +1, escape: -1 },
+  "wood-earth":  { basic_attack: 0, core_skill:  0, escape:  0 },
+  "water-fire":  { basic_attack: 0, core_skill: +1, escape:  0 },
+  "water-earth": { basic_attack: 0, core_skill: -1, escape: +1 },
+  "fire-earth":  { basic_attack: 0, core_skill: +1, escape:  0 },
+};
+export function selectCombatRoute(
+  cultivator: Cultivator,
+  seed: string,
+  affinityRoute: CombatStyle | null = null,
+): CombatStyle {
   const regResult = cultivator.registrationRecord?.result;
   const temperamentId = regResult?.core_temperament_id
     ?? (regResult?.core_temperament ? resolveTemperamentId(regResult.core_temperament) : null);
@@ -391,9 +424,18 @@ function selectCombatRoute(cultivator: Cultivator, seed: string): CombatStyle {
     tactic:  (hashString(`${seed}:route-rand:tactic`) % 100) / 100,
   };
   const styles: { style: CombatStyle; score: number }[] = [
-    { style: "brute", score: registrationBias.brute + attributeStyleBias.brute + smallRandom.brute },
-    { style: "finesse", score: registrationBias.finesse + attributeStyleBias.finesse + smallRandom.finesse },
-    { style: "tactic", score: registrationBias.tactic + attributeStyleBias.tactic + smallRandom.tactic },
+    {
+      style: "brute",
+      score: registrationBias.brute + attributeStyleBias.brute + smallRandom.brute + (affinityRoute === "brute" ? 1 : 0),
+    },
+    {
+      style: "finesse",
+      score: registrationBias.finesse + attributeStyleBias.finesse + smallRandom.finesse + (affinityRoute === "finesse" ? 1 : 0),
+    },
+    {
+      style: "tactic",
+      score: registrationBias.tactic + attributeStyleBias.tactic + smallRandom.tactic + (affinityRoute === "tactic" ? 1 : 0),
+    },
   ];
   styles.sort((a, b) => b.score - a.score);
   const top2 = styles.slice(0, 2);
@@ -403,12 +445,123 @@ function selectCombatRoute(cultivator: Cultivator, seed: string): CombatStyle {
   const roll = (hashString(`${seed}:route-sample`) % 10000) / 10000;
   return roll < (weights[0]!.weight / totalWeight) ? weights[0]!.style : weights[1]!.style;
 }
+export function getAvailableActions(
+  isPlayer: boolean,
+  currentSpirit: number,
+  coreSkillSpiritCost: number,
+  escapeAllowed: boolean,
+): CombatActionType[] {
+  const actions: CombatActionType[] = ["basic_attack"];
+  if (currentSpirit >= coreSkillSpiritCost) {
+    actions.push("core_skill");
+  }
+  if (isPlayer && escapeAllowed) {
+    actions.push("escape");
+  }
+  return actions;
+}
+export function selectCombatAction(
+  cultivator: Cultivator,
+  selfSnapshot: CombatSnapshot,
+  enemySnapshot: CombatSnapshot,
+  isPlayer: boolean,
+  escapeAllowed: boolean,
+  currentSpirit: number,
+  maxSpirit: number,
+  coreSkillSpiritCost: number,
+  seed: string,
+): CombatActionType {
+  const availableActions = getAvailableActions(isPlayer, currentSpirit, coreSkillSpiritCost, escapeAllowed);
+  if (availableActions.length === 1) {
+    return availableActions[0]!;
+  }
+
+  const regResult = cultivator.registrationRecord?.result;
+  const temperamentId = regResult?.core_temperament_id
+    ?? (regResult?.core_temperament ? resolveTemperamentId(regResult.core_temperament) : null);
+  const aspectId = regResult?.behavior_aspect_id
+    ?? (regResult?.behavior_aspect ? resolveBehaviorAspectId(regResult.behavior_aspect) : null);
+  const temperamentWeights = temperamentId ? CORE_TEMPERAMENT_ACTION_WEIGHTS[temperamentId] : undefined;
+  const aspectWeights = aspectId ? BEHAVIOR_ASPECT_ACTION_WEIGHTS[aspectId] : undefined;
+
+  const actionBaseWeights: Record<CombatActionType, number> = {
+    basic_attack: 0,
+    core_skill: 1,
+    escape: -4,
+  };
+  const registrationActionBias: Record<CombatActionType, number> = {
+    basic_attack: (temperamentWeights?.basic_attack ?? 0) + (aspectWeights?.basic_attack ?? 0),
+    core_skill: (temperamentWeights?.core_skill ?? 0) + (aspectWeights?.core_skill ?? 0),
+    escape: (temperamentWeights?.escape ?? 0) + (aspectWeights?.escape ?? 0),
+  };
+
+  const selfHpRatio = selfSnapshot.maxHp > 0 ? selfSnapshot.hp / selfSnapshot.maxHp : 0;
+  const enemyHpRatio = enemySnapshot.maxHp > 0 ? enemySnapshot.hp / enemySnapshot.maxHp : 0;
+  const battleReadiness = isPlayer ? computeReadiness(cultivator) : "stable";
+  const battleStateBias: Record<CombatActionType, number> = {
+    basic_attack: 0,
+    core_skill: 0,
+    escape: 0,
+  };
+  if (selfHpRatio <= 0.35) {
+    battleStateBias.core_skill += -1;
+    battleStateBias.escape += +4;
+  }
+  if (enemyHpRatio <= 0.25) {
+    battleStateBias.basic_attack += +1;
+    battleStateBias.core_skill += +2;
+    battleStateBias.escape += -3;
+  }
+  if (battleReadiness === "poor") {
+    battleStateBias.escape += +2;
+  }
+  if (battleReadiness === "advantaged") {
+    battleStateBias.core_skill += +1;
+    battleStateBias.escape += -1;
+  }
+
+  const spiritRatio = maxSpirit > 0 ? currentSpirit / maxSpirit : 0;
+  const resourceBias: Record<CombatActionType, number> = {
+    basic_attack: 0,
+    core_skill: 0,
+    escape: 0,
+  };
+  if (spiritRatio >= 0.5) {
+    resourceBias.core_skill += +1;
+  }
+  if (spiritRatio <= 0.2) {
+    resourceBias.core_skill += -1;
+  }
+
+  const actionScores = availableActions.map((actionType) => {
+    const smallRandom = (hashString(`${seed}:action-rand:${actionType}`) % 100) / 100;
+    const score =
+      actionBaseWeights[actionType]
+      + registrationActionBias[actionType]
+      + battleStateBias[actionType]
+      + resourceBias[actionType]
+      + smallRandom;
+    return { actionType, score };
+  });
+
+  actionScores.sort((a, b) => b.score - a.score);
+  const top2 = actionScores.slice(0, 2);
+  const minScore = Math.min(top2[0]!.score, top2[1]!.score);
+  const weightedTop2 = top2.map((entry) => ({
+    actionType: entry.actionType,
+    weight: entry.score - minScore + 1,
+  }));
+  const totalWeight = weightedTop2[0]!.weight + weightedTop2[1]!.weight;
+  const roll = (hashString(`${seed}:action-sample`) % 10000) / 10000;
+  return roll < (weightedTop2[0]!.weight / totalWeight) ? weightedTop2[0]!.actionType : weightedTop2[1]!.actionType;
+}
 const missDamageBreakdown = (): CombatDamageBreakdown => ({
   baseDamage: 0,
   styleMultiplier: 1,
   triangleMultiplier: 1,
   routeDamageMultiplier: 1,
   critMultiplier: 1,
+  actionMultiplier: 1,
   finalDamage: 0,
 });
 const computeDamage = (
@@ -420,6 +573,7 @@ const computeDamage = (
   routeDmgMult: number,
   isCrit: boolean,
   critDamagePercent: number,
+  actionMultiplier = 1,
 ): CombatDamageBreakdown => {
   const baseDamage = Math.max(1, attack - (defense * 0.5));
   let styleMultiplier = 1;
@@ -433,15 +587,26 @@ const computeDamage = (
     styleMultiplier = 1 + clamp((axisAttr - axisAvg) * 0.01, -0.15, 0.15);
   }
   const critMultiplier = isCrit ? (critDamagePercent / 100) : 1;
-  const finalDamage = Math.max(1, Math.round(baseDamage * styleMultiplier * triangleMult * routeDmgMult * critMultiplier));
+  const finalDamage = Math.max(1, Math.round(baseDamage * styleMultiplier * triangleMult * routeDmgMult * critMultiplier * actionMultiplier));
   return {
     baseDamage,
     styleMultiplier,
     triangleMultiplier: triangleMult,
     routeDamageMultiplier: routeDmgMult,
     critMultiplier,
+    actionMultiplier,
     finalDamage,
   };
+};
+export const computeEscapeChance = (
+  escaperSpeed: number,
+  pursuerSpeed: number,
+  selfHpRatio: number,
+  readiness: ReturnType<typeof computeReadiness>,
+): number => {
+  const speedDiff = escaperSpeed - pursuerSpeed;
+  const disadvantageBonus = selfHpRatio <= 0.20 ? 20 : selfHpRatio <= 0.35 ? 10 : 0;
+  return clamp(35 + (speedDiff * 0.2) + disadvantageBonus + readinessModifier(readiness), 10, 85);
 };
 const guardianCombatScale = (grade: DungeonGrade, rank: DungeonRank): number => {
   const tuning = guardianTuningForDungeon(grade, rank);
@@ -456,6 +621,8 @@ const initializeCombatJobState = (
   const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
   const playerMaxHp = Math.max(60, Math.round(80 + (mainAttrs.gengu * 2) + (mainAttrs.tipu * 0.5)));
+  const playerSpirit = cultivator.spiritualPower;
+  const playerMaxSpirit = cultivator.maxSpiritualPower;
   const playerSnapshot: CombatSnapshot = {
     hp: playerMaxHp,
     maxHp: playerMaxHp,
@@ -467,6 +634,10 @@ const initializeCombatJobState = (
     crit: Math.round(detailedAttrs.huixin),
     critDamage: Math.round(detailedAttrs.baoshang),
     guardHeart: Math.round(detailedAttrs.huxin),
+    spirit: playerSpirit,
+    maxSpirit: playerMaxSpirit,
+    coreSkillSpiritCost: Math.max(1, Math.round(playerMaxSpirit * 0.10)),
+    escapeAllowed: template.escapeAllowed !== false,
   };
   const enemyMaxHp = Math.max(1, Math.round(template.baseHp * enemyScale));
   const enemySnapshot: CombatSnapshot = {
@@ -480,6 +651,10 @@ const initializeCombatJobState = (
     crit: Math.max(0, Math.round(template.crit)),
     critDamage: Math.max(0, Math.round(template.critDamage)),
     guardHeart: Math.max(0, Math.round(template.guardHeart)),
+    spirit: 0,
+    maxSpirit: 0,
+    coreSkillSpiritCost: 0,
+    escapeAllowed: false,
   };
   return {
     encounterTemplateId: template.id,
@@ -492,6 +667,9 @@ const initializeCombatJobState = (
     rounds: [],
     resolved: false,
     outcome: null,
+    playerSpirit,
+    playerMaxSpirit,
+    retreated: false,
   };
 };
 const finalizeCombat = (
@@ -500,6 +678,11 @@ const finalizeCombat = (
   _job: ActionJob,
   state: CombatJobState,
 ): "victory" | "defeat" => {
+  if (state.retreated) {
+    state.resolved = true;
+    state.outcome = "defeat";
+    return "defeat";
+  }
   if (state.playerSnapshot.hp <= 0) {
     state.resolved = true;
     state.outcome = "defeat";
@@ -529,16 +712,36 @@ const resolveOneRound = (
   state.currentRound += 1;
   const round = state.currentRound;
   const seedBase = `${world.tick}:${job.id}:${state.encounterTemplateId}:round-${round}`;
-  const enemyRoute = state.enemyStylePreference[hashString(`${seedBase}:sample`) % state.enemyStylePreference.length] ?? "brute";
-  const playerRoute = selectCombatRoute(cultivator, `${seedBase}:player-route`);
+  const playerAction = selectCombatAction(
+    cultivator,
+    state.playerSnapshot,
+    state.enemySnapshot,
+    true,
+    state.playerSnapshot.escapeAllowed !== false,
+    state.playerSpirit ?? state.playerSnapshot.spirit ?? 0,
+    state.playerMaxSpirit ?? state.playerSnapshot.maxSpirit ?? 0,
+    state.playerSnapshot.coreSkillSpiritCost ?? 0,
+    `${seedBase}:player-action`,
+  );
+  const enemyAction: CombatActionType = "basic_attack";
+
+  const playerBoundRoute = playerAction === "escape"
+    ? null
+    : selectCombatRoute(
+      cultivator,
+      `${seedBase}:player-route`,
+      playerAction === "core_skill" ? (state.playerSnapshot.coreSkillPreferredRoute ?? null) : null,
+    );
+  const enemyBoundRoute = state.enemyStylePreference[hashString(`${seedBase}:enemy-route`) % state.enemyStylePreference.length] ?? "brute";
+
   const playerInitiative =
     state.playerSnapshot.speed
     + readinessModifier(computeReadiness(cultivator))
-    + routeInitiativeBonus(playerRoute)
+    + (playerBoundRoute ? routeInitiativeBonus(playerBoundRoute) : 0)
     + (hashString(`${seedBase}:initiative`) % 11);
   const enemyInitiative =
     state.enemySnapshot.speed
-    + routeInitiativeBonus(enemyRoute)
+    + (enemyBoundRoute ? routeInitiativeBonus(enemyBoundRoute) : 0)
     + (hashString(`${seedBase}:initiative-enemy`) % 11);
   const playerFirst = playerInitiative === enemyInitiative
     ? (hashString(`${seedBase}:initiative-tiebreak`) % 2) === 0
@@ -552,6 +755,7 @@ const resolveOneRound = (
     defenderStyle: CombatStyle,
     attackerIsPlayer: boolean,
     phaseSuffix: "first" | "second",
+    actionMultiplier: number,
   ): { result: AttackResult; damage: CombatDamageBreakdown } => {
     const hitChance = computeHitChance(
       attacker.hit + routeHitBonus(attackerStyle),
@@ -575,6 +779,7 @@ const resolveOneRound = (
       routeDamageMultiplier(attackerStyle),
       isCrit,
       attacker.critDamage,
+      actionMultiplier,
     );
     defender.hp = Math.max(0, defender.hp - damage.finalDamage);
     return {
@@ -585,53 +790,97 @@ const resolveOneRound = (
 
   let playerAttack: CombatRoundLog["playerAttack"] = null;
   let enemyAttack: CombatRoundLog["enemyAttack"] = null;
+  let playerSpiritSpent = 0;
+  let enemySpiritSpent = 0;
+  let playerEscape: EscapeResolution | null | undefined;
+  const enemyEscape: EscapeResolution | null | undefined = undefined;
+  let playerActionSkipped = false;
+  let enemyActionSkipped = false;
+  let battleEndedByRetreat = false;
+
   const firstActor: CombatRoundLog["firstActor"] = playerFirst ? "player" : "enemy";
-  if (playerFirst) {
+  const resolvePlayerAction = (phaseSuffix: "first" | "second") => {
+    if (state.playerSnapshot.hp <= 0) {
+      playerActionSkipped = true;
+      if (playerAction === "escape") {
+        playerEscape = { attempted: false, success: false, chance: 0 };
+      }
+      return;
+    }
+    if (playerAction === "escape") {
+      const selfHpRatio = state.playerSnapshot.maxHp > 0 ? state.playerSnapshot.hp / state.playerSnapshot.maxHp : 0;
+      const chance = computeEscapeChance(
+        state.playerSnapshot.speed,
+        state.enemySnapshot.speed,
+        selfHpRatio,
+        computeReadiness(cultivator),
+      );
+      const success = (hashString(`${seedBase}:escape-roll`) % 100) < chance;
+      playerEscape = { attempted: true, success, chance };
+      if (success) {
+        state.retreated = true;
+        state.resolved = true;
+        state.outcome = "defeat";
+        battleEndedByRetreat = true;
+      }
+      return;
+    }
     playerAttack = resolveAttack(
       state.playerSnapshot,
       state.enemySnapshot,
-      playerRoute,
-      enemyRoute,
+      playerBoundRoute ?? "brute",
+      enemyBoundRoute ?? "brute",
       true,
-      "first",
+      phaseSuffix,
+      playerAction === "core_skill" ? 1.6 : 1,
     );
-    if (state.enemySnapshot.hp > 0) {
-      enemyAttack = resolveAttack(
-        state.enemySnapshot,
-        state.playerSnapshot,
-        enemyRoute,
-        playerRoute,
-        false,
-        "second",
-      );
+    if (playerAction === "core_skill") {
+      const spiritCost = state.playerSnapshot.coreSkillSpiritCost ?? 0;
+      const nextSpirit = Math.max(0, (state.playerSpirit ?? state.playerSnapshot.spirit ?? 0) - spiritCost);
+      state.playerSpirit = nextSpirit;
+      state.playerSnapshot.spirit = nextSpirit;
+      playerSpiritSpent = spiritCost;
     }
-  } else {
+  };
+  const resolveEnemyAction = (phaseSuffix: "first" | "second") => {
+    if (state.enemySnapshot.hp <= 0) {
+      enemyActionSkipped = true;
+      return;
+    }
     enemyAttack = resolveAttack(
       state.enemySnapshot,
       state.playerSnapshot,
-      enemyRoute,
-      playerRoute,
+      enemyBoundRoute ?? "brute",
+      playerBoundRoute ?? "brute",
       false,
-      "first",
+      phaseSuffix,
+      1,
     );
-    if (state.playerSnapshot.hp > 0) {
-      playerAttack = resolveAttack(
-        state.playerSnapshot,
-        state.enemySnapshot,
-        playerRoute,
-        enemyRoute,
-        true,
-        "second",
-      );
+    enemySpiritSpent = 0;
+  };
+
+  if (playerFirst) {
+    resolvePlayerAction("first");
+    if (!battleEndedByRetreat) {
+      resolveEnemyAction("second");
     }
+  } else {
+    resolveEnemyAction("first");
+    if (!battleEndedByRetreat) {
+      resolvePlayerAction("second");
+    }
+  }
+
+  if (playerAction === "escape" && !playerEscape) {
+    playerEscape = { attempted: false, success: false, chance: 0 };
   }
 
   const roundLog: CombatRoundLog = {
     round,
     playerInitiative,
     enemyInitiative,
-    playerRoute,
-    enemyRoute,
+    playerRoute: playerBoundRoute ?? enemyBoundRoute ?? undefined,
+    enemyRoute: enemyBoundRoute ?? playerBoundRoute ?? undefined,
     firstActor,
     playerAttack,
     enemyAttack,
@@ -639,10 +888,20 @@ const resolveOneRound = (
     enemyHpAfter: state.enemySnapshot.hp,
     playerDied: state.playerSnapshot.hp <= 0,
     enemyDied: state.enemySnapshot.hp <= 0,
+    playerAction,
+    enemyAction,
+    playerBoundRoute: playerBoundRoute ?? undefined,
+    enemyBoundRoute: enemyBoundRoute ?? undefined,
+    playerSpiritSpent,
+    enemySpiritSpent,
+    playerEscape: playerEscape ?? undefined,
+    enemyEscape: enemyEscape ?? undefined,
+    playerActionSkipped,
+    enemyActionSkipped,
   };
   state.rounds.push(roundLog);
 
-  if (state.playerSnapshot.hp <= 0 || state.enemySnapshot.hp <= 0 || state.currentRound >= state.maxRounds) {
+  if (state.resolved || state.playerSnapshot.hp <= 0 || state.enemySnapshot.hp <= 0 || state.currentRound >= state.maxRounds) {
     finalizeCombat(world, cultivator, job, state);
   }
 };
@@ -4165,9 +4424,30 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       (sum, round) => sum + (round.enemyAttack?.damage.finalDamage ?? 0),
       0,
     );
+    const retreated = combatState.retreated === true;
 
     if (job.actionId === "hunt-mine-beast") {
       const baseSeed = `${world.tick}:${job.id}:mine-beast`;
+      if (retreated) {
+        addCombatLog(world, {
+          cultivatorId: cultivator.id,
+          locationId: cultivator.locationId,
+          encounterId: "mine-beast",
+          enemyName: MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName,
+          outcome: "defeat",
+          damageTaken,
+          spiritualPowerSpent: 16,
+          loot: {},
+          summary: `${cultivator.name} retreated from ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName} after ${totalRounds} rounds.`,
+          encounterTemplateId: MINE_BEAST_ENCOUNTER_TEMPLATE.id,
+          totalRounds,
+          rounds: combatState.rounds,
+          playerSnapshot: combatState.playerSnapshot,
+          enemySnapshot: combatState.enemySnapshot,
+          retreated: true,
+        });
+        return `${cultivator.name} retreated from ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName}.`;
+      }
       if (outcome === "victory") {
         const spiritOre = 1 + (hashString(`${baseSeed}:loot-spirit-ore`) % 3);
         const spiritStones = 8 + (hashString(`${baseSeed}:loot-spirit-stones`) % 8);
@@ -4247,6 +4527,26 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       }
       const tuning = guardianTuningForDungeon(metadata.grade, challengeGuardianRank);
       const baseSeed = `${world.tick}:${job.id}:ruins-guardian:${metadata.grade}:${challengeGuardianRank}`;
+      if (retreated) {
+        addCombatLog(world, {
+          cultivatorId: cultivator.id,
+          locationId: cultivator.locationId,
+          encounterId: "ruins-guardian",
+          enemyName: `${location.name} Guardian`,
+          outcome: "defeat",
+          damageTaken,
+          spiritualPowerSpent: 24,
+          loot: {},
+          summary: `${cultivator.name} retreated from the guardian of ${location.name}.`,
+          encounterTemplateId: GUARDIAN_ENCOUNTER_TEMPLATE.id,
+          totalRounds,
+          rounds: combatState.rounds,
+          playerSnapshot: combatState.playerSnapshot,
+          enemySnapshot: combatState.enemySnapshot,
+          retreated: true,
+        });
+        return `${cultivator.name} retreated from the rank ${challengeGuardianRank} guardian of ${location.name}.`;
+      }
       if (outcome === "victory") {
         const fragment = tuning.fragmentBase + (hashString(`${baseSeed}:loot-fragment`) % Math.max(1, tuning.fragmentVariance));
         const ward = tuning.wardReward > 0 && (hashString(`${baseSeed}:loot-ward`) % 100) < 60 ? 1 : 0;
