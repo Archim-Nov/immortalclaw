@@ -118,6 +118,9 @@ test("bahuang expedition type contracts stay available from domain index", () =>
       pushPreference: "retreat",
     },
     encounteredWakeNodes: [],
+    pendingWakeNodeIndex: null,
+    pendingWakeNodeDeadlineTick: null,
+    resolvedWakeNodeCount: 0,
     rewards: { spiritStones: 0, items: {}, realmProgress: 0 },
   };
   const stateView: import("./index.js").BahuangExpeditionStateView = {

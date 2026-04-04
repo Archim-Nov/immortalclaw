@@ -133,7 +133,7 @@ function createInstrumentedSqlStorage(options: { failWorldUpdateOnce?: boolean }
 
       const statement = database.prepare(query);
       if (isSelect) {
-        const rows = bindings.length > 0 ? statement.all(...bindings) : statement.all();
+        const rows = bindings.length > 0 ? statement.all(...(bindings as any[])) : statement.all();
         return {
           toArray() {
             return rows as T[];
@@ -146,7 +146,7 @@ function createInstrumentedSqlStorage(options: { failWorldUpdateOnce?: boolean }
         };
       }
 
-      const result = bindings.length > 0 ? statement.run(...bindings) : statement.run();
+      const result = bindings.length > 0 ? statement.run(...(bindings as any[])) : statement.run();
       return {
         toArray() {
           return [] as T[];
@@ -507,7 +507,7 @@ test("deserializeStoredWorld merges newly registered geography while preserving 
     haizhou: createSyntheticStateDefinition(),
   });
 
-  (persisted as Record<string, unknown>).eventPools = {
+  (persisted as unknown as Record<string, unknown>).eventPools = {
     globalCommon: [],
     stateSpecific: {},
     travelStateSpecific: {},

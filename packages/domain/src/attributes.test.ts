@@ -4,6 +4,10 @@ import {
   deriveDetailedAttributes,
   deriveMainAttributes,
   extractFiveElementScores,
+  physicalDefense,
+  spellAttack,
+  spellDefense,
+  weaponAttack,
 } from "./attributes.js";
 import type { CultivationRegistrationRecord } from "./model.js";
 
@@ -101,6 +105,44 @@ test("registered profiles change detailed attributes toward their style", () => 
   assert.ok(registeredDetailed.kongzhi_qiangdu > baselineDetailed.kongzhi_qiangdu);
   assert.ok(registeredDetailed.huxin > baselineDetailed.huxin);
   assert.ok(registeredDetailed.waigong_shanghai_beilv < baselineDetailed.waigong_shanghai_beilv);
+});
+
+test("combat helper functions return frozen integer values from main attributes", () => {
+  const mainAttributes = {
+    gengu: 80,
+    tipu: 100,
+    lingyuan: 95,
+    shenshi: 77,
+    wuxing: 50,
+    daoxin: 50,
+    shenfa: 50,
+    bingpo: 50,
+  };
+
+  assert.equal(weaponAttack(mainAttributes), 80);
+  assert.equal(spellAttack(mainAttributes), 77);
+  assert.equal(physicalDefense(mainAttributes), 44);
+  assert.equal(spellDefense(mainAttributes), 42);
+});
+
+test("combat-relevant detailed stats keep expected frozen values", () => {
+  const detailed = deriveDetailedAttributes({
+    gengu: 60,
+    tipu: 55,
+    lingyuan: 70,
+    shenshi: 68,
+    wuxing: 65,
+    daoxin: 62,
+    shenfa: 72,
+    bingpo: 58,
+  });
+
+  assert.equal(detailed.sudu, 156.8);
+  assert.equal(detailed.mingzhong, 91.4);
+  assert.equal(detailed.shanbi, 19.2);
+  assert.equal(detailed.huixin, 10.14);
+  assert.equal(detailed.baoshang, 184.4);
+  assert.equal(detailed.huxin, 7.12);
 });
 
 test("extractFiveElementScores returns scores from registration record", () => {

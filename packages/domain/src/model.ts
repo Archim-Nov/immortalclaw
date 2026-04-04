@@ -1075,6 +1075,82 @@ export interface PendingMoralityChoiceView {
   }>;
 }
 
+export type CombatStyle = "brute" | "finesse" | "tactic";
+export type AttackChannel = "weapon" | "spell";
+export type AttackResult = "hit" | "miss" | "crit";
+
+export interface CombatDamageBreakdown {
+  baseDamage: number;
+  styleMultiplier: number;
+  triangleMultiplier: number;
+  routeDamageMultiplier: number;
+  critMultiplier: number;
+  finalDamage: number;
+}
+
+export interface CombatRoundLog {
+  round: number;
+  playerInitiative: number;
+  enemyInitiative: number;
+  playerRoute: CombatStyle;
+  enemyRoute: CombatStyle;
+  firstActor: "player" | "enemy";
+  playerAttack: {
+    result: AttackResult;
+    damage: CombatDamageBreakdown;
+  } | null;
+  enemyAttack: {
+    result: AttackResult;
+    damage: CombatDamageBreakdown;
+  } | null;
+  playerHpAfter: number;
+  enemyHpAfter: number;
+  playerDied: boolean;
+  enemyDied: boolean;
+}
+
+export interface CombatSnapshot {
+  hp: number;
+  maxHp: number;
+  attack: number;
+  defense: number;
+  speed: number;
+  hit: number;
+  dodge: number;
+  crit: number;
+  critDamage: number;
+  guardHeart: number;
+}
+
+export interface CombatJobState {
+  encounterTemplateId: string;
+  maxRounds: number;
+  currentRound: number;
+  playerSnapshot: CombatSnapshot;
+  enemySnapshot: CombatSnapshot;
+  playerStyle: CombatStyle;
+  enemyStylePreference: CombatStyle[];
+  rounds: CombatRoundLog[];
+  resolved: boolean;
+  outcome: "victory" | "defeat" | null;
+}
+
+export interface EncounterTemplate {
+  id: string;
+  enemyName: string;
+  maxRounds: number;
+  stylePreference: CombatStyle[];
+  baseHp: number;
+  attack: number;
+  defense: number;
+  speed: number;
+  hit: number;
+  dodge: number;
+  crit: number;
+  critDamage: number;
+  guardHeart: number;
+}
+
 export interface CombatLogEntry {
   id: string;
   tick: number;
@@ -1087,6 +1163,11 @@ export interface CombatLogEntry {
   spiritualPowerSpent: number;
   loot: Partial<Record<ItemId, number>>;
   summary: string;
+  encounterTemplateId?: string;
+  totalRounds?: number;
+  rounds?: CombatRoundLog[];
+  playerSnapshot?: CombatSnapshot;
+  enemySnapshot?: CombatSnapshot;
 }
 
 export interface AgentBinding {
@@ -1457,6 +1538,23 @@ export interface CultivatorStateView {
   cultivation: {
     mainTechnique: string;
     techniques: string[];
+  };
+  combatProfile: {
+    battleReadiness: string;
+    attackChannel: AttackChannel;
+    coreCombatStats: {
+      weaponAttack: number;
+      spellAttack: number;
+      physicalDefense: number;
+      spellDefense: number;
+      speed: number;
+      hit: number;
+      dodge: number;
+      crit: number;
+      critDamage: number;
+      guardHeart: number;
+    };
+    combatTraits: CombatStyle[];
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;

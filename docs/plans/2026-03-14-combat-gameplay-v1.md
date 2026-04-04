@@ -1,5 +1,8 @@
 # 首版可落地战斗玩法实施计划
 
+> 当前实现请以 `docs/plans/2026-04-04-combat-gameplay-v1-light-complete-implementation.md` 为准。
+> 本文代表较早阶段的完整战斗路线，保留作历史设计记录，不再作为当前施工文档。
+
 ## Linked Spec
 
 - `docs/specs/combat-gameplay-v1/spec.md`

@@ -11,7 +11,16 @@ import type {
   SectApplicationView, SectMotiveBucketId, SectReapplyCooldown, SectTitle, StatusEffect, TimedActionId,
   StrategySnapshot, TickSummary, UpdateSectAdmissionPolicyResult, WorldEvent, WorldState, OnboardingProgress,
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
+  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult,
 } from "./model.js";
+import {
+  deriveMainAttributes,
+  deriveDetailedAttributes,
+  weaponAttack,
+  physicalDefense,
+  spellAttack,
+  spellDefense,
+} from "./attributes.js";
 import {
   DEFAULT_ACTION_DURATIONS,
   PLAYER_SECT_APPLICATION_TTL,
@@ -241,6 +250,36 @@ const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
     poisonTicks: 4,
   },
 };
+const MINE_BEAST_ENCOUNTER_TEMPLATE: EncounterTemplate = {
+  id: "mine-beast",
+  enemyName: "Vein Beast",
+  maxRounds: 5,
+  stylePreference: ["brute", "finesse", "tactic"],
+  baseHp: 120,
+  attack: 35,
+  defense: 18,
+  speed: 22,
+  hit: 30,
+  dodge: 15,
+  crit: 8,
+  critDamage: 40,
+  guardHeart: 5,
+};
+const GUARDIAN_ENCOUNTER_TEMPLATE: EncounterTemplate = {
+  id: "ruins-guardian",
+  enemyName: "Ruins Guardian",
+  maxRounds: 7,
+  stylePreference: ["tactic", "brute", "finesse"],
+  baseHp: 200,
+  attack: 50,
+  defense: 30,
+  speed: 18,
+  hit: 35,
+  dodge: 10,
+  crit: 12,
+  critDamage: 50,
+  guardHeart: 10,
+};
 const REALM_PHASES: readonly RealmPhase[] = ["前期", "中期", "后期"];
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
   "registered",
@@ -260,6 +299,353 @@ const DECISION_POLICY_PRIORITY_ORDER: readonly DecisionPolicyView["priorityOrder
 ];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const hashString = (input: string) => Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
+type JobMetaWithCombat = NonNullable<ActionJob["meta"]> & {
+  combatState?: CombatJobState;
+};
+const getCombatJobState = (job: ActionJob): CombatJobState | null =>
+  ((job.meta as JobMetaWithCombat | undefined)?.combatState ?? null);
+const setCombatJobState = (job: ActionJob, combatState: CombatJobState): void => {
+  const meta = (job.meta ??= {});
+  (meta as JobMetaWithCombat).combatState = combatState;
+};
+const readinessModifier = (readiness: ReturnType<typeof computeReadiness>): number => {
+  if (readiness === "poor") return -20;
+  if (readiness === "ready") return 10;
+  if (readiness === "advantaged") return 20;
+  return 0;
+};
+const routeInitiativeBonus = (route: CombatStyle): number => (route === "finesse" ? 8 : 0);
+const routeDodgeBonus = (route: CombatStyle): number => (route === "finesse" ? 5 : 0);
+const routeHitBonus = (route: CombatStyle): number => (route === "tactic" ? 5 : 0);
+const routeCritBonus = (route: CombatStyle): number => (route === "tactic" ? 4 : 0);
+const routeDamageMultiplier = (route: CombatStyle): number => (route === "brute" ? 1.08 : 1);
+const triangleMultiplier = (attacker: CombatStyle, defender: CombatStyle): number => {
+  if (attacker === defender) {
+    return 1;
+  }
+  if (
+    (attacker === "tactic" && defender === "brute")
+    || (attacker === "brute" && defender === "finesse")
+    || (attacker === "finesse" && defender === "tactic")
+  ) {
+    return 1.15;
+  }
+  return 0.9;
+};
+const computeHitChance = (attackerHit: number, defenderDodge: number): number =>
+  clamp(75 + ((attackerHit - defenderDodge) * 0.2), 35, 97);
+const computeCritChance = (attackerCrit: number, defenderGuardHeart: number): number =>
+  clamp(attackerCrit - (defenderGuardHeart * 0.7), 0, 55);
+const CORE_TEMPERAMENT_STYLE_WEIGHTS: Record<string, { brute: number; finesse: number; tactic: number }> = {
+  shou_jie:    { brute: -1, finesse: -1, tactic:  2 },
+  duan_feng:   { brute:  2, finesse:  0, tactic: -1 },
+  fu_sheng:    { brute: -2, finesse:  0, tactic:  2 },
+  xiang_rong:  { brute:  0, finesse:  1, tactic:  1 },
+  qian_yuan:   { brute: -1, finesse:  0, tactic:  2 },
+  guan_lan:    { brute: -1, finesse:  0, tactic:  2 },
+  chi_xin:     { brute:  1, finesse:  1, tactic:  0 },
+  zheng_sheng: { brute:  2, finesse:  1, tactic: -2 },
+  zhen_yue:    { brute:  1, finesse: -2, tactic:  2 },
+  shou_cheng:  { brute: -1, finesse:  0, tactic:  2 },
+};
+const BEHAVIOR_ASPECT_STYLE_WEIGHTS: Record<string, { brute: number; finesse: number; tactic: number }> = {
+  metal:         { brute:  1, finesse:  0, tactic:  0 },
+  wood:          { brute:  0, finesse:  1, tactic:  0 },
+  water:         { brute: -1, finesse:  0, tactic:  1 },
+  fire:          { brute:  1, finesse:  1, tactic: -1 },
+  earth:         { brute:  0, finesse: -1, tactic:  1 },
+  "metal-wood":  { brute:  0, finesse:  1, tactic:  0 },
+  "metal-water": { brute: -1, finesse:  0, tactic:  1 },
+  "metal-fire":  { brute:  1, finesse:  1, tactic: -1 },
+  "metal-earth": { brute:  0, finesse: -1, tactic:  1 },
+  "wood-water":  { brute: -1, finesse:  1, tactic:  1 },
+  "wood-fire":   { brute:  1, finesse:  1, tactic:  0 },
+  "wood-earth":  { brute: -1, finesse:  0, tactic:  1 },
+  "water-fire":  { brute:  1, finesse:  0, tactic:  0 },
+  "water-earth": { brute: -1, finesse: -1, tactic:  2 },
+  "fire-earth":  { brute:  1, finesse:  0, tactic:  1 },
+};
+function selectCombatRoute(cultivator: Cultivator, seed: string): CombatStyle {
+  const regResult = cultivator.registrationRecord?.result;
+  const temperamentId = regResult?.core_temperament_id
+    ?? (regResult?.core_temperament ? resolveTemperamentId(regResult.core_temperament) : null);
+  const aspectId = regResult?.behavior_aspect_id
+    ?? (regResult?.behavior_aspect ? resolveBehaviorAspectId(regResult.behavior_aspect) : null);
+  const tempWeights = temperamentId ? CORE_TEMPERAMENT_STYLE_WEIGHTS[temperamentId] : undefined;
+  const aspectWeights = aspectId ? BEHAVIOR_ASPECT_STYLE_WEIGHTS[aspectId] : undefined;
+  const registrationBias = {
+    brute:   (tempWeights?.brute ?? 0) + (aspectWeights?.brute ?? 0),
+    finesse: (tempWeights?.finesse ?? 0) + (aspectWeights?.finesse ?? 0),
+    tactic:  (tempWeights?.tactic ?? 0) + (aspectWeights?.tactic ?? 0),
+  };
+  const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const axisAvg = (mainAttrs.bingpo + mainAttrs.shenfa + mainAttrs.daoxin) / 3;
+  const attributeStyleBias = {
+    brute:   clamp((mainAttrs.bingpo - axisAvg) * 0.01, -0.15, 0.15),
+    finesse: clamp((mainAttrs.shenfa - axisAvg) * 0.01, -0.15, 0.15),
+    tactic:  clamp((mainAttrs.daoxin - axisAvg) * 0.01, -0.15, 0.15),
+  };
+  const smallRandom = {
+    brute:   (hashString(`${seed}:route-rand:brute`) % 100) / 100,
+    finesse: (hashString(`${seed}:route-rand:finesse`) % 100) / 100,
+    tactic:  (hashString(`${seed}:route-rand:tactic`) % 100) / 100,
+  };
+  const styles: { style: CombatStyle; score: number }[] = [
+    { style: "brute", score: registrationBias.brute + attributeStyleBias.brute + smallRandom.brute },
+    { style: "finesse", score: registrationBias.finesse + attributeStyleBias.finesse + smallRandom.finesse },
+    { style: "tactic", score: registrationBias.tactic + attributeStyleBias.tactic + smallRandom.tactic },
+  ];
+  styles.sort((a, b) => b.score - a.score);
+  const top2 = styles.slice(0, 2);
+  const minScore = top2[1]!.score;
+  const weights = top2.map(s => ({ style: s.style, weight: s.score - minScore + 1 }));
+  const totalWeight = weights[0]!.weight + weights[1]!.weight;
+  const roll = (hashString(`${seed}:route-sample`) % 10000) / 10000;
+  return roll < (weights[0]!.weight / totalWeight) ? weights[0]!.style : weights[1]!.style;
+}
+const missDamageBreakdown = (): CombatDamageBreakdown => ({
+  baseDamage: 0,
+  styleMultiplier: 1,
+  triangleMultiplier: 1,
+  routeDamageMultiplier: 1,
+  critMultiplier: 1,
+  finalDamage: 0,
+});
+const computeDamage = (
+  attack: number,
+  defense: number,
+  style: CombatStyle,
+  playerMainAttrs: ReturnType<typeof deriveMainAttributes> | null,
+  triangleMult: number,
+  routeDmgMult: number,
+  isCrit: boolean,
+  critDamagePercent: number,
+): CombatDamageBreakdown => {
+  const baseDamage = Math.max(1, attack - (defense * 0.5));
+  let styleMultiplier = 1;
+  if (playerMainAttrs) {
+    const axisAvg = (playerMainAttrs.bingpo + playerMainAttrs.shenfa + playerMainAttrs.daoxin) / 3;
+    const axisAttr = style === "brute"
+      ? playerMainAttrs.bingpo
+      : style === "finesse"
+        ? playerMainAttrs.shenfa
+        : playerMainAttrs.daoxin;
+    styleMultiplier = 1 + clamp((axisAttr - axisAvg) * 0.01, -0.15, 0.15);
+  }
+  const critMultiplier = isCrit ? (critDamagePercent / 100) : 1;
+  const finalDamage = Math.max(1, Math.round(baseDamage * styleMultiplier * triangleMult * routeDmgMult * critMultiplier));
+  return {
+    baseDamage,
+    styleMultiplier,
+    triangleMultiplier: triangleMult,
+    routeDamageMultiplier: routeDmgMult,
+    critMultiplier,
+    finalDamage,
+  };
+};
+const guardianCombatScale = (grade: DungeonGrade, rank: DungeonRank): number => {
+  const tuning = guardianTuningForDungeon(grade, rank);
+  return tuning.threatBase / 136;
+};
+const initializeCombatJobState = (
+  world: WorldState,
+  cultivator: Cultivator,
+  template: EncounterTemplate,
+  enemyScale = 1,
+): CombatJobState => {
+  const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const detailedAttrs = deriveDetailedAttributes(mainAttrs);
+  const playerMaxHp = Math.max(60, Math.round(80 + (mainAttrs.gengu * 2) + (mainAttrs.tipu * 0.5)));
+  const playerSnapshot: CombatSnapshot = {
+    hp: playerMaxHp,
+    maxHp: playerMaxHp,
+    attack: weaponAttack(mainAttrs),
+    defense: physicalDefense(mainAttrs),
+    speed: Math.round(detailedAttrs.sudu),
+    hit: Math.round(detailedAttrs.mingzhong),
+    dodge: Math.round(detailedAttrs.shanbi),
+    crit: Math.round(detailedAttrs.huixin),
+    critDamage: Math.round(detailedAttrs.baoshang),
+    guardHeart: Math.round(detailedAttrs.huxin),
+  };
+  const enemyMaxHp = Math.max(1, Math.round(template.baseHp * enemyScale));
+  const enemySnapshot: CombatSnapshot = {
+    hp: enemyMaxHp,
+    maxHp: enemyMaxHp,
+    attack: Math.max(1, Math.round(template.attack * enemyScale)),
+    defense: Math.max(1, Math.round(template.defense * enemyScale)),
+    speed: Math.max(1, Math.round(template.speed * enemyScale)),
+    hit: Math.max(1, Math.round(template.hit)),
+    dodge: Math.max(0, Math.round(template.dodge)),
+    crit: Math.max(0, Math.round(template.crit)),
+    critDamage: Math.max(0, Math.round(template.critDamage)),
+    guardHeart: Math.max(0, Math.round(template.guardHeart)),
+  };
+  return {
+    encounterTemplateId: template.id,
+    maxRounds: template.maxRounds,
+    currentRound: 0,
+    playerSnapshot,
+    enemySnapshot,
+    playerStyle: selectCombatRoute(cultivator, `${world.tick}:${cultivator.id}:init-route`),
+    enemyStylePreference: [...template.stylePreference],
+    rounds: [],
+    resolved: false,
+    outcome: null,
+  };
+};
+const finalizeCombat = (
+  _world: WorldState,
+  _cultivator: Cultivator,
+  _job: ActionJob,
+  state: CombatJobState,
+): "victory" | "defeat" => {
+  if (state.playerSnapshot.hp <= 0) {
+    state.resolved = true;
+    state.outcome = "defeat";
+    return "defeat";
+  }
+  if (state.enemySnapshot.hp <= 0) {
+    state.resolved = true;
+    state.outcome = "victory";
+    return "victory";
+  }
+  const playerRatio = state.playerSnapshot.maxHp > 0 ? state.playerSnapshot.hp / state.playerSnapshot.maxHp : 0;
+  const enemyRatio = state.enemySnapshot.maxHp > 0 ? state.enemySnapshot.hp / state.enemySnapshot.maxHp : 0;
+  const outcome: "victory" | "defeat" = playerRatio > enemyRatio ? "victory" : "defeat";
+  state.resolved = true;
+  state.outcome = outcome;
+  return outcome;
+};
+const resolveOneRound = (
+  state: CombatJobState,
+  world: WorldState,
+  job: ActionJob,
+  cultivator: Cultivator,
+): void => {
+  if (state.resolved) {
+    return;
+  }
+  state.currentRound += 1;
+  const round = state.currentRound;
+  const seedBase = `${world.tick}:${job.id}:${state.encounterTemplateId}:round-${round}`;
+  const enemyRoute = state.enemyStylePreference[hashString(`${seedBase}:sample`) % state.enemyStylePreference.length] ?? "brute";
+  const playerRoute = selectCombatRoute(cultivator, `${seedBase}:player-route`);
+  const playerInitiative =
+    state.playerSnapshot.speed
+    + readinessModifier(computeReadiness(cultivator))
+    + routeInitiativeBonus(playerRoute)
+    + (hashString(`${seedBase}:initiative`) % 11);
+  const enemyInitiative =
+    state.enemySnapshot.speed
+    + routeInitiativeBonus(enemyRoute)
+    + (hashString(`${seedBase}:initiative-enemy`) % 11);
+  const playerFirst = playerInitiative === enemyInitiative
+    ? (hashString(`${seedBase}:initiative-tiebreak`) % 2) === 0
+    : playerInitiative > enemyInitiative;
+
+  const playerMainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const resolveAttack = (
+    attacker: CombatSnapshot,
+    defender: CombatSnapshot,
+    attackerStyle: CombatStyle,
+    defenderStyle: CombatStyle,
+    attackerIsPlayer: boolean,
+    phaseSuffix: "first" | "second",
+  ): { result: AttackResult; damage: CombatDamageBreakdown } => {
+    const hitChance = computeHitChance(
+      attacker.hit + routeHitBonus(attackerStyle),
+      defender.dodge + routeDodgeBonus(defenderStyle),
+    );
+    const hit = (hashString(`${seedBase}:hit-${phaseSuffix}`) % 100) < hitChance;
+    if (!hit) {
+      return { result: "miss", damage: missDamageBreakdown() };
+    }
+    const critChance = computeCritChance(
+      attacker.crit + routeCritBonus(attackerStyle),
+      defender.guardHeart,
+    );
+    const isCrit = (hashString(`${seedBase}:crit-${phaseSuffix}`) % 100) < critChance;
+    const damage = computeDamage(
+      attacker.attack,
+      defender.defense,
+      attackerStyle,
+      attackerIsPlayer ? playerMainAttrs : null,
+      triangleMultiplier(attackerStyle, defenderStyle),
+      routeDamageMultiplier(attackerStyle),
+      isCrit,
+      attacker.critDamage,
+    );
+    defender.hp = Math.max(0, defender.hp - damage.finalDamage);
+    return {
+      result: isCrit ? "crit" : "hit",
+      damage,
+    };
+  };
+
+  let playerAttack: CombatRoundLog["playerAttack"] = null;
+  let enemyAttack: CombatRoundLog["enemyAttack"] = null;
+  const firstActor: CombatRoundLog["firstActor"] = playerFirst ? "player" : "enemy";
+  if (playerFirst) {
+    playerAttack = resolveAttack(
+      state.playerSnapshot,
+      state.enemySnapshot,
+      playerRoute,
+      enemyRoute,
+      true,
+      "first",
+    );
+    if (state.enemySnapshot.hp > 0) {
+      enemyAttack = resolveAttack(
+        state.enemySnapshot,
+        state.playerSnapshot,
+        enemyRoute,
+        playerRoute,
+        false,
+        "second",
+      );
+    }
+  } else {
+    enemyAttack = resolveAttack(
+      state.enemySnapshot,
+      state.playerSnapshot,
+      enemyRoute,
+      playerRoute,
+      false,
+      "first",
+    );
+    if (state.playerSnapshot.hp > 0) {
+      playerAttack = resolveAttack(
+        state.playerSnapshot,
+        state.enemySnapshot,
+        playerRoute,
+        enemyRoute,
+        true,
+        "second",
+      );
+    }
+  }
+
+  const roundLog: CombatRoundLog = {
+    round,
+    playerInitiative,
+    enemyInitiative,
+    playerRoute,
+    enemyRoute,
+    firstActor,
+    playerAttack,
+    enemyAttack,
+    playerHpAfter: state.playerSnapshot.hp,
+    enemyHpAfter: state.enemySnapshot.hp,
+    playerDied: state.playerSnapshot.hp <= 0,
+    enemyDied: state.enemySnapshot.hp <= 0,
+  };
+  state.rounds.push(roundLog);
+
+  if (state.playerSnapshot.hp <= 0 || state.enemySnapshot.hp <= 0 || state.currentRound >= state.maxRounds) {
+    finalizeCombat(world, cultivator, job, state);
+  }
+};
 const realmPhaseOfLevel = (realmLevel: number): RealmPhase => {
   const normalizedLevel = Math.max(1, Math.floor(realmLevel));
   return REALM_PHASES[(normalizedLevel - 1) % REALM_PHASES.length]!;
@@ -1966,6 +2352,19 @@ function resolveDungeonExpeditionStepIfDue(
       dungeonRank: effectiveProgress.targetRank,
     },
   };
+  if (actionKind === "guardian") {
+    const combatState = initializeCombatJobState(
+      world,
+      cultivator,
+      GUARDIAN_ENCOUNTER_TEMPLATE,
+      guardianCombatScale(effectiveProgress.grade, effectiveProgress.targetRank),
+    );
+    setCombatJobState(syntheticJob, combatState);
+    while (!combatState.resolved && combatState.currentRound < combatState.maxRounds) {
+      resolveOneRound(combatState, world, syntheticJob, cultivator);
+    }
+    setCombatJobState(syntheticJob, combatState);
+  }
 
   resolveEnhancedJob(world, syntheticJob);
   cultivator.activeJobId = outerJobId;
@@ -2695,7 +3094,12 @@ function ensureOptionalProgressMaps(world: WorldState): void {
     runtimeWorld.bahuangProgress = {};
   }
   if (!runtimeWorld.guixuProgress || typeof runtimeWorld.guixuProgress !== "object") {
-    runtimeWorld.guixuProgress = {};
+    runtimeWorld.guixuProgress = {
+      wildernessAttunement: {},
+      personalUnlockedNodeIds: {},
+      sharedUnlockedNodeIds: [],
+      lastResolvedEventIds: {},
+    };
   }
   if (!runtimeWorld.guixuProgress.wildernessAttunement || typeof runtimeWorld.guixuProgress.wildernessAttunement !== "object") {
     runtimeWorld.guixuProgress.wildernessAttunement = {};
@@ -2780,10 +3184,30 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     activityContext: computeActivityContext(cultivator, world),
     daoPotential: computeDaoPotential(cultivator),
   };
+  const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const detailedAttrs = deriveDetailedAttributes(mainAttrs);
+  const combatProfile: CultivatorStateView["combatProfile"] = {
+    battleReadiness: computeReadiness(cultivator),
+    attackChannel: "weapon",
+    coreCombatStats: {
+      weaponAttack: weaponAttack(mainAttrs),
+      spellAttack: spellAttack(mainAttrs),
+      physicalDefense: physicalDefense(mainAttrs),
+      spellDefense: spellDefense(mainAttrs),
+      speed: detailedAttrs.sudu,
+      hit: detailedAttrs.mingzhong,
+      dodge: detailedAttrs.shanbi,
+      crit: detailedAttrs.huixin,
+      critDamage: detailedAttrs.baoshang,
+      guardHeart: detailedAttrs.huxin,
+    },
+    combatTraits: [],
+  };
   return {
     tick: world.tick,
     cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmPhase: realmPhaseOfLevel(cultivator.realmLevel), realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
     cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
+    combatProfile,
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
     sect: sectView,
     inventory: cultivator.inventory,
@@ -3705,122 +4129,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.inventory[metadata.materialBand] += 1;
     return `${cultivator.name} searched the ruins.`;
   }
-  if (job.actionId === "hunt-mine-beast") {
-    const encounterId = "mine-beast";
-    const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
-    const power =
-      cultivator.qi +
-      Math.floor(cultivator.spiritualPower * 0.6) +
-      cultivator.realmLevel * 10 +
-      (hasEffect(cultivator, "qi-surge") ? 18 : 0) +
-      (hasEffect(cultivator, "warded") ? 14 : 0) +
-      (registration?.combatBonus ?? 0) -
-      (hasEffect(cultivator, "poisoned") ? 12 : 0) +
-      (roll % 22);
-    const threat = 145 + (roll % 20);
-    cultivator.spiritualPower = clamp(cultivator.spiritualPower - 16, 0, cultivator.maxSpiritualPower);
-    if (power >= threat) {
-      cultivator.inventory["spirit-ore"] += 2 + (roll % 2);
-      cultivator.inventory["foundation-common"] += 1;
-      cultivator.spiritStones += 120 + (roll % 60);
-      if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1;
-      upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 });
-      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: "Mine Beast", outcome: "victory", damageTaken: 0, spiritualPowerSpent: 16, loot: {}, summary: `${cultivator.name} won the encounter.` });
-      return `${cultivator.name} won a combat encounter.`;
-    }
-    cultivator.qi = clamp(
-      cultivator.qi - Math.max(8, 24 + (roll % 10) - ((registration?.combatGuard ?? 0) * 2)),
-      1,
-      cultivator.maxQi,
-    );
-    cultivator.injuryTicksRemaining = Math.max(
-      cultivator.injuryTicksRemaining,
-      Math.max(2, 5 - (registration?.combatGuard ?? 0)),
-    );
-    syncWounded(cultivator);
-    addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: "Mine Beast", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: 16, loot: {}, summary: `${cultivator.name} lost the encounter.` });
-    return `${cultivator.name} lost a combat encounter.`;
-  }
-  const challengeGuardianRank = parseChallengeGuardianRank(job.actionId);
-  if (challengeGuardianRank !== null) {
-    const location = world.locations[cultivator.locationId];
-    if (!location || !isDungeonNode(location.nodeType)) {
-      throw new Error("Challenge guardian requires a dungeon node.");
-    }
-    const metadata = dungeonMetadataOf(location);
-    if (!metadata) {
-      throw new Error("Challenge guardian requires dungeon metadata.");
-    }
-    if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
-      throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
-    }
-    const tuning = guardianTuningForDungeon(metadata.grade, challengeGuardianRank);
-    const encounterId = "ruins-guardian" as const;
-    const roll = hashString(`${world.tick}:${job.id}:${encounterId}`);
-    const power =
-      cultivator.qi +
-      Math.floor(cultivator.spiritualPower * 0.6) +
-      cultivator.realmLevel * 10 +
-      (hasEffect(cultivator, "qi-surge") ? 18 : 0) +
-      (hasEffect(cultivator, "warded") ? 14 : 0) +
-      (hasEffect(cultivator, "fortune-marked") ? 12 : 0) +
-      (registration?.combatBonus ?? 0) -
-      (hasEffect(cultivator, "poisoned") ? 12 : 0) +
-      (roll % 22);
-    const threat = tuning.threatBase + (roll % tuning.threatVariance);
-
-    cultivator.spiritualPower = clamp(cultivator.spiritualPower - 24, 0, cultivator.maxSpiritualPower);
-    if (power >= threat) {
-      cultivator.inventory["ruin-fragment"] += tuning.fragmentBase + (roll % tuning.fragmentVariance);
-      if (tuning.wardReward > 0) {
-        cultivator.inventory["ward-talisman"] += tuning.wardReward;
-      }
-      cultivator.inventory[metadata.materialBand] += 1;
-      cultivator.spiritStones += tuning.spiritStoneBase + (roll % tuning.spiritStoneVariance);
-      addRealmProgress(cultivator, tuning.realmProgressReward);
-      const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
-      if (challengeGuardianRank === highestUnlockedRank) {
-        ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(
-          highestClearedRankOf(cultivator, metadata.grade),
-          challengeGuardianRank,
-        );
-      }
-      upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 });
-      addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "victory", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.` });
-      addWorldEvent(world, {
-        cultivatorId: cultivator.id,
-        locationId: cultivator.locationId,
-        title: `${location.name} Guardian Broken`,
-        content: `${cultivator.name} defeated the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name} and claimed the sealed reward cache.`,
-        severity: "medium",
-        tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "victory"],
-      });
-      return `${cultivator.name} defeated the rank ${challengeGuardianRank} guardian of ${location.name}.`;
-    }
-
-    cultivator.qi = clamp(
-      cultivator.qi - Math.max(8, tuning.defeatQiBase + (roll % tuning.defeatQiVariance) - ((registration?.combatGuard ?? 0) * 2)),
-      1,
-      cultivator.maxQi,
-    );
-    cultivator.injuryTicksRemaining = Math.max(
-      cultivator.injuryTicksRemaining,
-      Math.max(2, tuning.defeatInjuryTicks - (registration?.combatGuard ?? 0)),
-    );
-    if (tuning.poisonTicks > 0) {
-      upsertEffect(cultivator, { id: "poisoned", name: "Poisoned", description: "Loses qi each tick.", source: "guardian", remainingTicks: tuning.poisonTicks, intensity: 1 });
-    }
-    syncWounded(cultivator);
-    addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: `${location.name} Guardian`, outcome: "defeat", damageTaken: 0, spiritualPowerSpent: 24, loot: {}, summary: `${cultivator.name} was repelled by the guardian of ${location.name}.` });
-    addWorldEvent(world, {
-      cultivatorId: cultivator.id,
-      locationId: cultivator.locationId,
-      title: `${location.name} Guardian Counterattack`,
-      content: `${cultivator.name} was forced back by the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name}.`,
-      severity: "high",
-      tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "defeat"],
-    });
-    return `${cultivator.name} was repelled by the rank ${challengeGuardianRank} guardian of ${location.name}.`;
+  if (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null) {
+    throw new Error("Combat job should resolve through round runtime.");
   }
   /* Legacy fallback block kept temporarily during the registration modifier patch.
   if (job.actionId === "meditate") { cultivator.spiritualPower = clamp(cultivator.spiritualPower + 28 + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (registration?.meditateBonus ?? 0), 0, cultivator.maxSpiritualPower); return `${cultivator.name} recovered spiritual power.`; }
@@ -3840,6 +4150,205 @@ function resolveJob(world: WorldState, job: ActionJob): string {
 function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
   const registration = registrationModifiersOf(cultivator);
+  const combatState = getCombatJobState(job);
+  if (combatState && (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null)) {
+    cultivator.activeJobId = null;
+    const outcome = combatState.outcome ?? finalizeCombat(world, cultivator, job, combatState);
+    combatState.resolved = true;
+    combatState.outcome = outcome;
+    setCombatJobState(job, combatState);
+    const spCost = job.actionId === "hunt-mine-beast" ? 16 : 24;
+    cultivator.spiritualPower = clamp(cultivator.spiritualPower - spCost, 0, cultivator.maxSpiritualPower);
+
+    const totalRounds = combatState.rounds.length;
+    const damageTaken = combatState.rounds.reduce(
+      (sum, round) => sum + (round.enemyAttack?.damage.finalDamage ?? 0),
+      0,
+    );
+
+    if (job.actionId === "hunt-mine-beast") {
+      const baseSeed = `${world.tick}:${job.id}:mine-beast`;
+      if (outcome === "victory") {
+        const spiritOre = 1 + (hashString(`${baseSeed}:loot-spirit-ore`) % 3);
+        const spiritStones = 8 + (hashString(`${baseSeed}:loot-spirit-stones`) % 8);
+        const beastCoreDrop = (hashString(`${baseSeed}:loot-beast-core`) % 100) < 30 ? 1 : 0;
+        cultivator.inventory["spirit-ore"] += spiritOre;
+        cultivator.inventory["foundation-common"] += 1;
+        cultivator.spiritStones += spiritStones;
+        if (beastCoreDrop > 0) {
+          cultivator.inventory["beast-core"] += beastCoreDrop;
+        }
+        upsertEffect(cultivator, {
+          id: "qi-surge",
+          name: "Qi Surge",
+          description: "Better combat and cultivation.",
+          source: "battle",
+          remainingTicks: 4,
+          intensity: 1,
+        });
+        addCombatLog(world, {
+          cultivatorId: cultivator.id,
+          locationId: cultivator.locationId,
+          encounterId: "mine-beast",
+          enemyName: MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName,
+          outcome,
+          damageTaken,
+          spiritualPowerSpent: 16,
+          loot: {
+            "spirit-ore": spiritOre,
+            "foundation-common": 1,
+            ...(beastCoreDrop > 0 ? { "beast-core": beastCoreDrop } : {}),
+          },
+          summary: `${cultivator.name} defeated ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName} in ${totalRounds} rounds.`,
+          encounterTemplateId: MINE_BEAST_ENCOUNTER_TEMPLATE.id,
+          totalRounds,
+          rounds: combatState.rounds,
+          playerSnapshot: combatState.playerSnapshot,
+          enemySnapshot: combatState.enemySnapshot,
+        });
+        return `${cultivator.name} defeated ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName}.`;
+      }
+
+      const qiLossPercent = 8 + (hashString(`${baseSeed}:defeat-qi-loss`) % 8);
+      const qiLoss = Math.max(1, Math.floor(cultivator.maxQi * (qiLossPercent / 100)));
+      cultivator.qi = clamp(cultivator.qi - qiLoss, 1, cultivator.maxQi);
+      if ((hashString(`${baseSeed}:defeat-injury`) % 100) < 50) {
+        cultivator.injuryTicksRemaining = Math.max(
+          cultivator.injuryTicksRemaining,
+          Math.max(2, 5 - (registration?.combatGuard ?? 0)),
+        );
+      }
+      syncWounded(cultivator);
+      addCombatLog(world, {
+        cultivatorId: cultivator.id,
+        locationId: cultivator.locationId,
+        encounterId: "mine-beast",
+        enemyName: MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName,
+        outcome,
+        damageTaken,
+        spiritualPowerSpent: 16,
+        loot: {},
+        summary: `${cultivator.name} was defeated by ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName} after ${totalRounds} rounds.`,
+        encounterTemplateId: MINE_BEAST_ENCOUNTER_TEMPLATE.id,
+        totalRounds,
+        rounds: combatState.rounds,
+        playerSnapshot: combatState.playerSnapshot,
+        enemySnapshot: combatState.enemySnapshot,
+      });
+      return `${cultivator.name} was defeated by ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName}.`;
+    }
+
+    const challengeGuardianRank = parseChallengeGuardianRank(job.actionId);
+    if (challengeGuardianRank !== null) {
+      const location = world.locations[cultivator.locationId];
+      const metadata = dungeonMetadataOf(location);
+      if (!location || !metadata) {
+        throw new Error("Challenge guardian requires dungeon metadata.");
+      }
+      const tuning = guardianTuningForDungeon(metadata.grade, challengeGuardianRank);
+      const baseSeed = `${world.tick}:${job.id}:ruins-guardian:${metadata.grade}:${challengeGuardianRank}`;
+      if (outcome === "victory") {
+        const fragment = tuning.fragmentBase + (hashString(`${baseSeed}:loot-fragment`) % Math.max(1, tuning.fragmentVariance));
+        const ward = tuning.wardReward > 0 && (hashString(`${baseSeed}:loot-ward`) % 100) < 60 ? 1 : 0;
+        const spiritStones = tuning.spiritStoneBase + (hashString(`${baseSeed}:loot-stones`) % Math.max(1, tuning.spiritStoneVariance));
+        cultivator.inventory["ruin-fragment"] += fragment;
+        if (ward > 0) {
+          cultivator.inventory["ward-talisman"] += ward;
+        }
+        cultivator.inventory[metadata.materialBand] += 1;
+        cultivator.spiritStones += spiritStones;
+        addRealmProgress(cultivator, tuning.realmProgressReward);
+        const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
+        if (challengeGuardianRank === highestUnlockedRank) {
+          ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(
+            highestClearedRankOf(cultivator, metadata.grade),
+            challengeGuardianRank,
+          );
+        }
+        upsertEffect(cultivator, {
+          id: "fortune-marked",
+          name: "Fortune Marked",
+          description: "Better ruins outcomes.",
+          source: "guardian",
+          remainingTicks: 6,
+          intensity: 1,
+        });
+        addCombatLog(world, {
+          cultivatorId: cultivator.id,
+          locationId: cultivator.locationId,
+          encounterId: "ruins-guardian",
+          enemyName: `${location.name} Guardian`,
+          outcome,
+          damageTaken,
+          spiritualPowerSpent: 24,
+          loot: {
+            "ruin-fragment": fragment,
+            ...(ward > 0 ? { "ward-talisman": ward } : {}),
+            [metadata.materialBand]: 1,
+          },
+          summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.`,
+          encounterTemplateId: GUARDIAN_ENCOUNTER_TEMPLATE.id,
+          totalRounds,
+          rounds: combatState.rounds,
+          playerSnapshot: combatState.playerSnapshot,
+          enemySnapshot: combatState.enemySnapshot,
+        });
+        addWorldEvent(world, {
+          cultivatorId: cultivator.id,
+          locationId: cultivator.locationId,
+          title: `${location.name} Guardian Broken`,
+          content: `${cultivator.name} defeated the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name} and claimed the sealed reward cache.`,
+          severity: "medium",
+          tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "victory"],
+        });
+        return `${cultivator.name} defeated the rank ${challengeGuardianRank} guardian of ${location.name}.`;
+      }
+
+      const qiLossPercent = 10 + (hashString(`${baseSeed}:defeat-qi-loss`) % 11);
+      const qiLoss = Math.max(1, Math.floor(cultivator.maxQi * (qiLossPercent / 100)));
+      cultivator.qi = clamp(cultivator.qi - qiLoss, 1, cultivator.maxQi);
+      cultivator.injuryTicksRemaining = Math.max(
+        cultivator.injuryTicksRemaining,
+        Math.max(2, tuning.defeatInjuryTicks - (registration?.combatGuard ?? 0)),
+      );
+      if ((hashString(`${baseSeed}:defeat-poison`) % 100) < 30) {
+        upsertEffect(cultivator, {
+          id: "poisoned",
+          name: "Poisoned",
+          description: "Loses qi each tick.",
+          source: "guardian",
+          remainingTicks: Math.max(1, tuning.poisonTicks || 2),
+          intensity: 1,
+        });
+      }
+      syncWounded(cultivator);
+      addCombatLog(world, {
+        cultivatorId: cultivator.id,
+        locationId: cultivator.locationId,
+        encounterId: "ruins-guardian",
+        enemyName: `${location.name} Guardian`,
+        outcome,
+        damageTaken,
+        spiritualPowerSpent: 24,
+        loot: {},
+        summary: `${cultivator.name} was repelled by the guardian of ${location.name}.`,
+        encounterTemplateId: GUARDIAN_ENCOUNTER_TEMPLATE.id,
+        totalRounds,
+        rounds: combatState.rounds,
+        playerSnapshot: combatState.playerSnapshot,
+        enemySnapshot: combatState.enemySnapshot,
+      });
+      addWorldEvent(world, {
+        cultivatorId: cultivator.id,
+        locationId: cultivator.locationId,
+        title: `${location.name} Guardian Counterattack`,
+        content: `${cultivator.name} was forced back by the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name}.`,
+        severity: "high",
+        tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "defeat"],
+      });
+      return `${cultivator.name} was repelled by the rank ${challengeGuardianRank} guardian of ${location.name}.`;
+    }
+  }
   if (parseStartDungeonExpeditionActionId(job.actionId)) {
     cultivator.activeJobId = null;
     const report = world.dungeonExpeditionReports[cultivator.id];
@@ -4195,6 +4704,30 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (selectedRank > highestUnlockedRank) {
         throw new Error(`Dungeon rank ${selectedRank} is not unlocked.`);
       }
+      if (challengeGuardianRank !== null) {
+        const jobResult = startJob(
+          world,
+          cultivator,
+          actionId as TimedActionId,
+          `Challenge guardian rank ${selectedRank}`,
+          {
+            dungeonGrade: metadata.grade,
+            dungeonRank: selectedRank,
+          },
+          GUARDIAN_ENCOUNTER_TEMPLATE.maxRounds,
+        );
+        if (!jobResult.job) {
+          throw new Error("Guardian combat job was not created.");
+        }
+        const combatState = initializeCombatJobState(
+          world,
+          cultivator,
+          GUARDIAN_ENCOUNTER_TEMPLATE,
+          guardianCombatScale(metadata.grade, challengeGuardianRank),
+        );
+        setCombatJobState(jobResult.job, combatState);
+        return jobResult;
+      }
       return startJob(
         world,
         cultivator,
@@ -4208,6 +4741,22 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     }
     if (actionId === "cultivate") { if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED) throw new Error("Realm progress is capped. Complete a breakthrough before more cultivation."); if (cultivator.spiritStones < 80) throw new Error("Not enough spirit stones."); if (cultivator.spiritualPower < 20) throw new Error("Not enough spiritual power."); cultivator.spiritStones -= 80; cultivator.spiritualPower -= 20; }
     if ((actionId === "mine-spirit-stones" || actionId === "hunt-mine-beast") && location.nodeType !== "wilderness") throw new Error("Action only available in wilderness.");
+    if (actionId === "hunt-mine-beast") {
+      const jobResult = startJob(
+        world,
+        cultivator,
+        actionId as TimedActionId,
+        actionId,
+        undefined,
+        MINE_BEAST_ENCOUNTER_TEMPLATE.maxRounds,
+      );
+      if (!jobResult.job) {
+        throw new Error("Mine beast combat job was not created.");
+      }
+      const combatState = initializeCombatJobState(world, cultivator, MINE_BEAST_ENCOUNTER_TEMPLATE);
+      setCombatJobState(jobResult.job, combatState);
+      return jobResult;
+    }
     if (actionId === "take-mortal-task" && location.kind !== "safe") throw new Error("Action only available in safe settlements.");
     if (actionId === "take-sect-errand") {
       const sect = getCultivatorSect(world, cultivator);
@@ -4257,6 +4806,17 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
     }
     for (const job of Object.values(world.jobs)) {
       job.remainingTicks -= 1;
+      const combatState = getCombatJobState(job);
+      if (combatState && !combatState.resolved) {
+        const cultivator = world.cultivators[job.cultivatorId];
+        if (cultivator) {
+          resolveOneRound(combatState, world, job, cultivator);
+          setCombatJobState(job, combatState);
+          if (combatState.resolved) {
+            job.remainingTicks = 0;
+          }
+        }
+      }
       const travelDestination = parseTravelDestination(job.actionId);
       if (travelDestination && job.remainingTicks > 0) {
         const cultivator = world.cultivators[job.cultivatorId];
@@ -4280,7 +4840,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         resolveDungeonExpeditionStepIfDue(world, job, activeDungeonExpedition);
       }
 
-      if (job.remainingTicks > 0) {
+      if (job.remainingTicks > 0 && !(combatState?.resolved)) {
         continue;
       }
 

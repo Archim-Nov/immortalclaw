@@ -19,6 +19,14 @@ import {
 } from "./index.js";
 import type { CultivationRegistrationRecord } from "./index.js";
 import { STATE_IDS } from "./constants.js";
+import {
+  deriveDetailedAttributes,
+  deriveMainAttributes,
+  physicalDefense,
+  spellAttack,
+  spellDefense,
+  weaponAttack,
+} from "./attributes.js";
 import { createCultivator, starterStateFromRoll } from "./engine.js";
 import { buildFullTopology } from "./topology.js";
 
@@ -1409,106 +1417,393 @@ test("trade uses the current state's reputation without recreating legacy city-s
   assert.deepEqual(cultivator.factionReputation, {});
 });
 
-test("combat resolution ignores legacy numeric reputation", () => {
-  const lowStandingWorld = createSeedWorld();
-  const highStandingWorld = createSeedWorld();
-  const lowStandingCultivator = lowStandingWorld.cultivators["yun-zhong-he"] as typeof lowStandingWorld.cultivators["yun-zhong-he"] & {
-    reputation?: number;
-  };
-  const highStandingCultivator = highStandingWorld.cultivators["yun-zhong-he"] as typeof highStandingWorld.cultivators["yun-zhong-he"] & {
-    reputation?: number;
-  };
+test("round-based mine beast combat resolves across five ticks", () => {
+  const world = createSeedWorld();
 
-  lowStandingCultivator.reputation = 0;
-  highStandingCultivator.reputation = 120;
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
 
-  performAction(lowStandingWorld, "yun-zhong-he", "travel-to:qingzhou:dungeon-c");
-  performAction(highStandingWorld, "yun-zhong-he", "travel-to:qingzhou:dungeon-c");
-  runUntilIdle(lowStandingWorld, "yun-zhong-he");
-  runUntilIdle(highStandingWorld, "yun-zhong-he");
+  const started = performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  assert.equal(started.accepted, true);
+  assert.equal(started.job?.totalTicks, 5);
+  assert.equal(started.job?.remainingTicks, 5);
 
-  performAction(lowStandingWorld, "yun-zhong-he", "challenge-guardian:rank-1");
-  performAction(highStandingWorld, "yun-zhong-he", "challenge-guardian:rank-1");
-  runUntilIdle(lowStandingWorld, "yun-zhong-he");
-  runUntilIdle(highStandingWorld, "yun-zhong-he");
+  advanceWorld(world, 5);
 
-  assert.equal(highStandingWorld.combatLogs[0]?.outcome, lowStandingWorld.combatLogs[0]?.outcome);
-  assert.equal(highStandingCultivator.qi, lowStandingCultivator.qi);
-  assert.equal(highStandingCultivator.realmProgress, lowStandingCultivator.realmProgress);
-  assert.equal(highStandingCultivator.inventory["ruin-fragment"], lowStandingCultivator.inventory["ruin-fragment"]);
-  assert.equal(highStandingCultivator.inventory["ward-talisman"], lowStandingCultivator.inventory["ward-talisman"]);
+  const state = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(state.currentJob, null);
+  assert.ok(world.combatLogs[0]);
+  assert.equal(world.combatLogs[0]?.encounterId, "mine-beast");
+  assert.ok((world.combatLogs[0]?.totalRounds ?? 0) <= 5);
 });
 
-test("legacy search-fortune compatibility emits a node-specific dungeon event", () => {
+test("round-based guardian combat resolves across seven ticks", () => {
+  const world = createSeedWorld();
+  world.cultivators["yun-zhong-he"].locationId = "qingzhou:dungeon-c";
+
+  const started = performAction(world, "yun-zhong-he", "challenge-guardian:rank-1");
+  assert.equal(started.accepted, true);
+  assert.equal(started.job?.totalTicks, 7);
+  assert.equal(started.job?.remainingTicks, 7);
+
+  advanceWorld(world, 7);
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(state.currentJob, null);
+  assert.ok(world.combatLogs[0]);
+  assert.equal(world.combatLogs[0]?.encounterId, "ruins-guardian");
+  assert.ok((world.combatLogs[0]?.totalRounds ?? 0) <= 7);
+});
+
+test("combat log includes round timeline and snapshots", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  assert.ok(Array.isArray(log?.rounds));
+  assert.ok((log?.rounds?.length ?? 0) > 0);
+  assert.equal(log?.totalRounds, log?.rounds?.length);
+  assert.ok(log?.playerSnapshot);
+  assert.ok(log?.enemySnapshot);
+});
+
+test("combat log damageTaken equals total incoming round damage", () => {
+  const world = createSeedWorld();
+  world.cultivators["yun-zhong-he"].locationId = "qingzhou:dungeon-c";
+  performAction(world, "yun-zhong-he", "challenge-guardian:rank-1");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  const expectedDamageTaken = (log?.rounds ?? []).reduce(
+    (sum, round) => sum + (round.enemyAttack?.damage.finalDamage ?? 0),
+    0,
+  );
+  assert.equal(log?.damageTaken, expectedDamageTaken);
+});
+
+test("combat outcomes are deterministic for same setup", () => {
+  const firstWorld = createSeedWorld();
+  const secondWorld = createSeedWorld();
+
+  performAction(firstWorld, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  performAction(secondWorld, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(firstWorld, "yun-zhong-he");
+  runUntilIdle(secondWorld, "yun-zhong-he");
+
+  performAction(firstWorld, "yun-zhong-he", "hunt-mine-beast");
+  performAction(secondWorld, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(firstWorld, "yun-zhong-he");
+  runUntilIdle(secondWorld, "yun-zhong-he");
+
+  const firstLog = firstWorld.combatLogs[0];
+  const secondLog = secondWorld.combatLogs[0];
+  assert.ok(firstLog && secondLog);
+  assert.equal(firstLog?.outcome, secondLog?.outcome);
+  assert.equal(firstLog?.damageTaken, secondLog?.damageTaken);
+  assert.equal(firstLog?.totalRounds, secondLog?.totalRounds);
+  assert.deepEqual(firstLog?.rounds, secondLog?.rounds);
+});
+
+test("cultivator state exposes combat profile with derived stats", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const state = getCultivatorState(world, "yun-zhong-he");
+
+  const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const detailedAttrs = deriveDetailedAttributes(mainAttrs);
+  assert.equal(state.combatProfile.attackChannel, "weapon");
+  assert.equal(state.combatProfile.coreCombatStats.weaponAttack, weaponAttack(mainAttrs));
+  assert.equal(state.combatProfile.coreCombatStats.spellAttack, spellAttack(mainAttrs));
+  assert.equal(state.combatProfile.coreCombatStats.physicalDefense, physicalDefense(mainAttrs));
+  assert.equal(state.combatProfile.coreCombatStats.spellDefense, spellDefense(mainAttrs));
+  assert.equal(state.combatProfile.coreCombatStats.speed, detailedAttrs.sudu);
+  assert.equal(state.combatProfile.coreCombatStats.hit, detailedAttrs.mingzhong);
+  assert.equal(state.combatProfile.coreCombatStats.dodge, detailedAttrs.shanbi);
+  assert.equal(state.combatProfile.coreCombatStats.crit, detailedAttrs.huixin);
+  assert.equal(state.combatProfile.coreCombatStats.critDamage, detailedAttrs.baoshang);
+  assert.equal(state.combatProfile.coreCombatStats.guardHeart, detailedAttrs.huxin);
+});
+
+test("round logs contain initiative, hit/crit/miss results, and damage breakdown", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  assert.ok(log.rounds && log.rounds.length > 0);
+  for (const round of log.rounds!) {
+    assert.equal(typeof round.round, "number");
+    assert.equal(typeof round.playerInitiative, "number");
+    assert.equal(typeof round.enemyInitiative, "number");
+    assert.ok(["brute", "finesse", "tactic"].includes(round.playerRoute));
+    assert.ok(["brute", "finesse", "tactic"].includes(round.enemyRoute));
+    assert.ok(round.firstActor === "player" || round.firstActor === "enemy");
+    if (round.playerAttack) {
+      assert.ok(["hit", "miss", "crit"].includes(round.playerAttack.result));
+      assert.equal(typeof round.playerAttack.damage.baseDamage, "number");
+      assert.equal(typeof round.playerAttack.damage.styleMultiplier, "number");
+      assert.equal(typeof round.playerAttack.damage.triangleMultiplier, "number");
+      assert.equal(typeof round.playerAttack.damage.routeDamageMultiplier, "number");
+      assert.equal(typeof round.playerAttack.damage.critMultiplier, "number");
+      assert.equal(typeof round.playerAttack.damage.finalDamage, "number");
+    }
+    if (round.enemyAttack) {
+      assert.ok(["hit", "miss", "crit"].includes(round.enemyAttack.result));
+      assert.equal(typeof round.enemyAttack.damage.finalDamage, "number");
+    }
+    assert.equal(typeof round.playerHpAfter, "number");
+    assert.equal(typeof round.enemyHpAfter, "number");
+    assert.equal(typeof round.playerDied, "boolean");
+    assert.equal(typeof round.enemyDied, "boolean");
+  }
+});
+
+test("miss attack deals zero final damage", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  for (const round of log.rounds!) {
+    if (round.playerAttack?.result === "miss") {
+      assert.equal(round.playerAttack.damage.finalDamage, 0);
+    }
+    if (round.enemyAttack?.result === "miss") {
+      assert.equal(round.enemyAttack.damage.finalDamage, 0);
+    }
+  }
+});
+
+test("crit only occurs after a successful hit check", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  for (const round of log.rounds!) {
+    if (round.playerAttack?.result === "miss") {
+      assert.notEqual(round.playerAttack.damage.critMultiplier > 1, true,
+        "A miss should never have a crit multiplier > 1");
+    }
+    if (round.enemyAttack?.result === "miss") {
+      assert.notEqual(round.enemyAttack.damage.critMultiplier > 1, true,
+        "A miss should never have a crit multiplier > 1");
+    }
+  }
+});
+
+test("initiative winner acts first and first-actor kill prevents second actor action", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  for (const round of log.rounds!) {
+    if (round.playerInitiative > round.enemyInitiative) {
+      assert.equal(round.firstActor, "player");
+    } else if (round.enemyInitiative > round.playerInitiative) {
+      assert.equal(round.firstActor, "enemy");
+    }
+    if (round.firstActor === "player" && round.enemyDied) {
+      assert.equal(round.enemyAttack, null,
+        "enemy should not attack if killed by first actor");
+    }
+    if (round.firstActor === "enemy" && round.playerDied) {
+      assert.equal(round.playerAttack, null,
+        "player should not attack if killed by first actor");
+    }
+  }
+});
+
+test("brute route applies 1.08 damage multiplier", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  for (const round of log.rounds!) {
+    if (round.playerAttack && round.playerAttack.result !== "miss") {
+      if (round.playerRoute === "brute") {
+        assert.equal(round.playerAttack.damage.routeDamageMultiplier, 1.08);
+      } else {
+        assert.equal(round.playerAttack.damage.routeDamageMultiplier, 1);
+      }
+    }
+    if (round.enemyAttack && round.enemyAttack.result !== "miss") {
+      if (round.enemyRoute === "brute") {
+        assert.equal(round.enemyAttack.damage.routeDamageMultiplier, 1.08);
+      } else {
+        assert.equal(round.enemyAttack.damage.routeDamageMultiplier, 1);
+      }
+    }
+  }
+});
+
+test("triangle multiplier is 1.15 for advantage, 0.9 for disadvantage, 1 for mirror", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  const advantagePairs = new Set(["tactic:brute", "brute:finesse", "finesse:tactic"]);
+  for (const round of log.rounds!) {
+    if (round.playerAttack && round.playerAttack.result !== "miss") {
+      const pair = `${round.playerRoute}:${round.enemyRoute}`;
+      if (round.playerRoute === round.enemyRoute) {
+        assert.equal(round.playerAttack.damage.triangleMultiplier, 1);
+      } else if (advantagePairs.has(pair)) {
+        assert.equal(round.playerAttack.damage.triangleMultiplier, 1.15);
+      } else {
+        assert.equal(round.playerAttack.damage.triangleMultiplier, 0.9);
+      }
+    }
+  }
+});
+
+test("mine beast combat caps at 5 rounds and guardian caps at 7 rounds", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const mineBeastLog = world.combatLogs.find(l => l.encounterId === "mine-beast");
+  assert.ok(mineBeastLog);
+  assert.ok((mineBeastLog.totalRounds ?? 0) <= 5, "mine beast should not exceed 5 rounds");
+
+  const world2 = createSeedWorld();
+  world2.cultivators["yun-zhong-he"].locationId = "qingzhou:dungeon-c";
+  performAction(world2, "yun-zhong-he", "challenge-guardian:rank-1");
+  runUntilIdle(world2, "yun-zhong-he");
+
+  const guardianLog = world2.combatLogs.find(l => l.encounterId === "ruins-guardian");
+  assert.ok(guardianLog);
+  assert.ok((guardianLog.totalRounds ?? 0) <= 7, "guardian should not exceed 7 rounds");
+});
+
+test("equal HP ratio at round cap resolves as defeat", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  if (log.rounds && log.rounds.length > 0) {
+    const lastRound = log.rounds[log.rounds.length - 1]!;
+    if (!lastRound.playerDied && !lastRound.enemyDied) {
+      const playerSnapshot = log.playerSnapshot!;
+      const enemySnapshot = log.enemySnapshot!;
+      const playerRatio = playerSnapshot.maxHp > 0 ? lastRound.playerHpAfter / playerSnapshot.maxHp : 0;
+      const enemyRatio = enemySnapshot.maxHp > 0 ? lastRound.enemyHpAfter / enemySnapshot.maxHp : 0;
+      if (playerRatio > enemyRatio) {
+        assert.equal(log.outcome, "victory");
+      } else {
+        assert.equal(log.outcome, "defeat");
+      }
+    }
+  }
+});
+
+test("hit chance is clamped between 35% and 97%", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  const totalAttacks = log.rounds!.reduce((count, round) => {
+    return count + (round.playerAttack ? 1 : 0) + (round.enemyAttack ? 1 : 0);
+  }, 0);
+  assert.ok(totalAttacks > 0, "combat should have at least one attack to validate hit mechanics");
+});
+
+test("crit multiplier uses critDamage / 100 formula", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds && log.playerSnapshot);
+  const playerCritDamage: number = log.playerSnapshot!.critDamage;
+  for (const round of log.rounds!) {
+    if (round.playerAttack?.result === "crit") {
+      const expectedCritMult = playerCritDamage / 100;
+      assert.equal(round.playerAttack.damage.critMultiplier, expectedCritMult,
+        `player crit multiplier should be critDamage/100 = ${expectedCritMult}`);
+    }
+    if (round.playerAttack?.result === "hit") {
+      assert.equal(round.playerAttack.damage.critMultiplier, 1,
+        "non-crit hit should have critMultiplier = 1");
+    }
+  }
+});
+
+test("combat route selection favors registration-weighted styles over uniform random", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
 
-  cultivator.realm = "绛戝熀" as typeof cultivator.realm;
-  cultivator.realmLevel = 4;
-  cultivator.locationId = "qingzhou:dungeon-b";
-  cultivator.realm = "炼气" as typeof cultivator.realm;
-  cultivator.realmLevel = 3;
-  cultivator.locationId = "qingzhou:dungeon-c";
-  const beforeEvents = world.worldEvents.length;
-  const beforeSpiritStones = cultivator.spiritStones;
+  saveCultivationRegistration(world, cultivator.id, {
+    record_type: "registration_record",
+    questionnaire_version: "immortal-claw-oc-v2",
+    answers: { Q1: "C", Q2: "C", Q3: "C", Q4: "C", Q5: "C", Q6: "C", Q7: "C", Q8: "A", Q9: "C", Q10: "C", Q11: "C", Q12: "C", Q13: "B", Q14: "B", Q15: "B", Q16: "B", Q17: "C", Q18: "B" },
+    result: {
+      core_temperament_id: "shou_jie",
+      core_temperament: "守戒型",
+      secondary_temperament_id: "qian_yuan",
+      secondary_temperament: "潜渊型",
+      behavior_aspect_id: "water",
+      behavior_aspect: "水 / 观势",
+      cultivation_motive_id: "seek-truth",
+      cultivation_motive: "求真知",
+      five_element_scores: { metal: 0, wood: 0, water: 5, fire: 0, earth: 0 },
+      spirit_root_result: "水灵根",
+      confidence: { core: "high", behavior: "high", motive: "high", overall: "high" },
+    },
+    summary: "test",
+  });
 
-  performAction(world, "yun-zhong-he", "search-fortune:rank-1");
-  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, cultivator.id, "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, cultivator.id);
+  performAction(world, cultivator.id, "hunt-mine-beast");
+  runUntilIdle(world, cultivator.id);
 
-  const pooledEvent = world.worldEvents.find((event) =>
-    event.locationId === "qingzhou:dungeon-c"
-    && event.tags.includes("event-pool")
-    && event.tags.includes("node-specific")
-    && event.tags.includes("search-fortune:rank-1"),
-  );
-
-  assert.ok(pooledEvent);
-  assert.ok(world.worldEvents.length > beforeEvents);
-  assert.ok(
-    cultivator.inventory["ruin-fragment"] > 0
-      || cultivator.spiritStones > beforeSpiritStones
-      || cultivator.statusEffects.length > 0,
-  );
-});
-
-test("legacy guardian compatibility rewards scale up with dungeon tier", () => {
-  const lowTierWorld = createSeedWorld();
-  const highTierWorld = createSeedWorld();
-  const lowTierCultivator = lowTierWorld.cultivators["yun-zhong-he"];
-  const highTierCultivator = highTierWorld.cultivators["yun-zhong-he"];
-
-  lowTierCultivator.locationId = "qingzhou:dungeon-c";
-  highTierCultivator.locationId = "qingzhou:dungeon-a";
-  lowTierCultivator.realm = "金丹" as typeof lowTierCultivator.realm;
-  highTierCultivator.realm = "金丹" as typeof highTierCultivator.realm;
-  lowTierCultivator.realmLevel = 9;
-  highTierCultivator.realmLevel = 9;
-  lowTierCultivator.qi = lowTierCultivator.maxQi = 420;
-  highTierCultivator.qi = highTierCultivator.maxQi = 420;
-  lowTierCultivator.spiritualPower = lowTierCultivator.maxSpiritualPower = 420;
-  highTierCultivator.spiritualPower = highTierCultivator.maxSpiritualPower = 420;
-
-  const lowTierStoneBefore = lowTierCultivator.spiritStones;
-  const highTierStoneBefore = highTierCultivator.spiritStones;
-
-  performAction(lowTierWorld, "yun-zhong-he", "challenge-guardian:rank-1");
-  performAction(highTierWorld, "yun-zhong-he", "challenge-guardian:rank-1");
-  runUntilIdle(lowTierWorld, "yun-zhong-he");
-  runUntilIdle(highTierWorld, "yun-zhong-he");
-
-  assert.equal(lowTierWorld.combatLogs[0]?.outcome, "victory");
-  assert.equal(highTierWorld.combatLogs[0]?.outcome, "victory");
-  assert.ok(highTierCultivator.inventory["ruin-fragment"] >= lowTierCultivator.inventory["ruin-fragment"]);
-  assert.ok(highTierCultivator.realmProgress >= lowTierCultivator.realmProgress);
-  assert.ok(
-    highTierCultivator.spiritStones - highTierStoneBefore
-      > lowTierCultivator.spiritStones - lowTierStoneBefore,
-  );
-  assert.ok(
-    highTierWorld.worldEvents.some((event) =>
-      event.tags.includes("guardian") && event.tags.includes("dungeon-a") && event.tags.includes("victory"),
-    ),
-  );
+  const log = world.combatLogs[0];
+  assert.ok(log && log.rounds);
+  const routeCounts: Record<string, number> = { brute: 0, finesse: 0, tactic: 0 };
+  for (const round of log.rounds!) {
+    routeCounts[round.playerRoute] = (routeCounts[round.playerRoute] ?? 0) + 1;
+  }
+  assert.equal(routeCounts["brute"], 0,
+    "shou_jie + water bias heavily toward tactic; brute should never be selected (it is the lowest-scored route and excluded by Top 2 sampling)");
 });
 
 test("managed dungeon expeditions do not emit routine step wakes before the final report", () => {

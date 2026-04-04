@@ -95,6 +95,16 @@ test("buildAuthenticatedAgentActions does not append generic inbox actions durin
       unlockedNextRank: false,
       lastResolvedAction: "search",
       flavorEventTitles: [],
+      strategy: {
+        posture: "balanced",
+        bias: "survival-first",
+        pushPreference: "neutral",
+      },
+      wakeNodesEncountered: 0,
+      maxWakeNodes: 2,
+      pendingWakeNode: null,
+      pendingWakeNodeDeadlineTick: null,
+      resolvedWakeNodeCount: 0,
     },
   };
   world.jobs["job-expedition"] = {

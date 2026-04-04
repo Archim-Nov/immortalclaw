@@ -149,6 +149,22 @@ export function deriveDetailedAttributes(
   };
 }
 
+export function weaponAttack(mainAttributes: Record<MainAttributeId, number>): number {
+  return Math.floor(20 + 0.60 * mainAttributes.tipu);
+}
+
+export function spellAttack(mainAttributes: Record<MainAttributeId, number>): number {
+  return Math.floor(20 + 0.60 * mainAttributes.lingyuan);
+}
+
+export function physicalDefense(mainAttributes: Record<MainAttributeId, number>): number {
+  return Math.floor(8 + 0.45 * mainAttributes.gengu);
+}
+
+export function spellDefense(mainAttributes: Record<MainAttributeId, number>): number {
+  return Math.floor(8 + 0.45 * mainAttributes.shenshi);
+}
+
 
 const DEFAULT_FIVE_ELEMENT_SCORES: Record<FiveElementId, number> = { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 };
 
