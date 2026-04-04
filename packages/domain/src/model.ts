@@ -687,6 +687,8 @@ export type ImmediateActionId =
   | `enter-wilderness:${string}`
   | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
+  | `equip-weapon:${string}`
+  | `equip-spell:${string}`
   | "abort-dungeon-expedition"
   | "retreat-from-bahuang"
   | "open-player-sect-founding"
@@ -866,6 +868,11 @@ export interface Cultivator {
   activeJobId: string | null;
   injuryTicksRemaining: number;
   registrationRecord: CultivationRegistrationRecord | null;
+  // ---- Combat Loadout System ----
+  equippedWeaponLoadoutId: WeaponLoadoutId | null;
+  equippedSpellLoadoutId: SpellLoadoutId | null;
+  unlockedWeaponLoadoutIds: readonly WeaponLoadoutId[];
+  unlockedSpellLoadoutIds: readonly SpellLoadoutId[];
 }
 
 export interface CultivationRegistrationResult {
@@ -1075,6 +1082,49 @@ export interface PendingMoralityChoiceView {
   }>;
 }
 
+// ---- Weapon and Combat Loadout System ----
+export type WeaponFamilyId = "quick" | "heavy" | "polearm" | "flexible" | "ranged-mystic";
+
+export type WeaponTypeId =
+  | "sword" | "dual-swords" | "dagger" | "gauntlets"
+  | "saber" | "greatsaber" | "axe" | "hammer"
+  | "spear" | "halberd" | "staff" | "hook-sickle"
+  | "whip" | "chain-blade" | "meteor-hammer" | "silk-ribbon"
+  | "bow" | "crossbow" | "fan" | "umbrella";
+
+export type SpellBranchId =
+  | "metal-edge" | "metal-guard" | "metal-break"
+  | "wood-growth" | "wood-bind" | "wood-bloom"
+  | "water-frost" | "water-illusion" | "water-flow"
+  | "fire-blaze" | "fire-smelt" | "fire-burst"
+  | "earth-wall" | "earth-suppress" | "earth-vein";
+
+export type WeaponLoadoutId = string & { readonly __brand: "WeaponLoadoutId" };
+export type SpellLoadoutId = string & { readonly __brand: "SpellLoadoutId" };
+export type StatusHookId = string;
+
+export interface WeaponLoadoutDefinition {
+  id: WeaponLoadoutId;
+  name: string;
+  weaponTypeId: WeaponTypeId;
+  attackPowerBonus: number;
+  coreSkillCategory: CombatStyle;
+  coreSkillSpiritCost: number;
+  basicAttackStatusHookIds: readonly StatusHookId[];
+  coreSkillStatusHookIds: readonly StatusHookId[];
+}
+
+export interface SpellLoadoutDefinition {
+  id: SpellLoadoutId;
+  name: string;
+  spellBranchId: SpellBranchId;
+  attackPowerBonus: number;
+  coreSkillCategory: CombatStyle;
+  coreSkillSpiritCost: number;
+  basicAttackStatusHookIds: readonly StatusHookId[];
+  coreSkillStatusHookIds: readonly StatusHookId[];
+}
+
 export type CombatStyle = "brute" | "finesse" | "tactic";
 export type AttackChannel = "weapon" | "spell";
 export type AttackResult = "hit" | "miss" | "crit";
@@ -1155,6 +1205,9 @@ export interface CombatSnapshot {
   maxSpirit?: number;
   coreSkillSpiritCost?: number;
   coreSkillPreferredRoute?: CombatStyle | null;
+  equippedLoadoutId?: WeaponLoadoutId | SpellLoadoutId | null;
+  basicAttackStatusHookIds?: readonly StatusHookId[];
+  coreSkillStatusHookIds?: readonly StatusHookId[];
   escapeAllowed?: boolean;
 }
 
@@ -1189,6 +1242,9 @@ export interface EncounterTemplate {
   critDamage: number;
   guardHeart: number;
   escapeAllowed?: boolean;
+  // Combat Loadout System — enemies also carry loadout info
+  equippedWeaponLoadoutId?: string;
+  equippedSpellLoadoutId?: string;
 }
 
 export interface CombatLogEntry {
@@ -1596,6 +1652,37 @@ export interface CultivatorStateView {
       guardHeart: number;
     };
     combatTraits: CombatStyle[];
+    // ---- Combat Loadout Info ----
+    equippedWeaponLoadout: {
+      id: WeaponLoadoutId;
+      name: string;
+      weaponTypeId: WeaponTypeId;
+      attackPowerBonus: number;
+      coreSkillCategory: CombatStyle;
+      coreSkillSpiritCost: number;
+      basicAttackStatusHookIds: readonly StatusHookId[];
+      coreSkillStatusHookIds: readonly StatusHookId[];
+    } | null;
+    equippedSpellLoadout: {
+      id: SpellLoadoutId;
+      name: string;
+      spellBranchId: SpellBranchId;
+      attackPowerBonus: number;
+      coreSkillCategory: CombatStyle;
+      coreSkillSpiritCost: number;
+      basicAttackStatusHookIds: readonly StatusHookId[];
+      coreSkillStatusHookIds: readonly StatusHookId[];
+    } | null;
+    unlockedWeaponLoadouts: Array<{
+      id: WeaponLoadoutId;
+      name: string;
+      weaponTypeId: WeaponTypeId;
+    }>;
+    unlockedSpellLoadouts: Array<{
+      id: SpellLoadoutId;
+      name: string;
+      spellBranchId: SpellBranchId;
+    }>;
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;

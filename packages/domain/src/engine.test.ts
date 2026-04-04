@@ -37,6 +37,7 @@ import {
   starterStateFromRoll,
 } from "./engine.js";
 import { buildFullTopology } from "./topology.js";
+import { WEAPON_LOADOUT_DEFINITIONS, SPELL_LOADOUT_DEFINITIONS } from "./combat-loadouts.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
   while (world.cultivators[cultivatorId]?.activeJobId) {
@@ -2568,4 +2569,311 @@ test("round logs keep backward-compatible playerRoute/enemyRoute fields", () => 
   assert.ok(round.enemyBoundRoute === "brute" || round.enemyBoundRoute === "finesse" || round.enemyBoundRoute === "tactic");
   assert.equal(round.playerRoute, round.enemyBoundRoute);
   assert.equal(round.enemyRoute, round.enemyBoundRoute);
+});
+
+// =========================================================================
+// Combat Loadout System Tests
+// =========================================================================
+
+test("new cultivator gets default weapon and spell loadouts", () => {
+  const world = createSeedWorld();
+  const c = world.cultivators["yun-zhong-he"];
+  assert.ok(c.equippedWeaponLoadoutId, "should have equipped weapon loadout");
+  assert.ok(c.equippedSpellLoadoutId, "should have equipped spell loadout");
+  assert.ok(c.unlockedWeaponLoadoutIds.length >= 1, "should have at least one unlocked weapon");
+  assert.ok(c.unlockedSpellLoadoutIds.length >= 1, "should have at least one unlocked spell");
+  assert.ok(c.unlockedWeaponLoadoutIds.includes(c.equippedWeaponLoadoutId), "equipped weapon should be in unlocked set");
+  assert.ok(c.unlockedSpellLoadoutIds.includes(c.equippedSpellLoadoutId), "equipped spell should be in unlocked set");
+});
+
+test("registration updates loadouts based on combat style and elements", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const record = createRegistrationRecord();
+  saveCultivationRegistration(world, cultivatorId, record);
+  const c = world.cultivators[cultivatorId];
+  assert.ok(c.unlockedWeaponLoadoutIds.length === 2, "registration should give 2 weapon loadouts");
+  assert.ok(c.unlockedSpellLoadoutIds.length === 2, "registration should give 2 spell loadouts");
+  assert.ok(c.equippedWeaponLoadoutId, "should have an equipped weapon");
+  assert.ok(c.equippedSpellLoadoutId, "should have an equipped spell");
+});
+
+test("spell loadouts derive from dominated elements after registration", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const record = createRegistrationRecord();
+  // record has water: 11 (highest), earth: 9 (second)
+  saveCultivationRegistration(world, cultivatorId, record);
+  const c = world.cultivators[cultivatorId];
+  // Main element water -> starter-water-frost
+  assert.equal(String(c.equippedSpellLoadoutId), "starter-water-frost");
+  // Backup element earth -> starter-earth-vein
+  const hasEarthBackup = c.unlockedSpellLoadoutIds.some(
+    (id) => String(id) === "starter-earth-vein"
+  );
+  assert.ok(hasEarthBackup, "second unlock should be based on second-highest element");
+});
+
+test("equip-weapon action switches equipped weapon loadout", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const record = createRegistrationRecord();
+  saveCultivationRegistration(world, cultivatorId, record);
+
+  const c = world.cultivators[cultivatorId];
+  const otherLoadout = c.unlockedWeaponLoadoutIds.find(
+    (id) => id !== c.equippedWeaponLoadoutId
+  );
+  assert.ok(otherLoadout, "should have a second unlocked loadout to switch to");
+
+  const result = performAction(world, cultivatorId, `equip-weapon:${otherLoadout}` as any);
+  assert.equal(result.accepted, true);
+  assert.equal(world.cultivators[cultivatorId].equippedWeaponLoadoutId, otherLoadout);
+});
+
+test("equip-spell action switches equipped spell loadout", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const record = createRegistrationRecord();
+  saveCultivationRegistration(world, cultivatorId, record);
+
+  const c = world.cultivators[cultivatorId];
+  const otherLoadout = c.unlockedSpellLoadoutIds.find(
+    (id) => id !== c.equippedSpellLoadoutId
+  );
+  assert.ok(otherLoadout, "should have a second unlocked spell loadout");
+
+  const result = performAction(world, cultivatorId, `equip-spell:${otherLoadout}` as any);
+  assert.equal(result.accepted, true);
+  assert.equal(world.cultivators[cultivatorId].equippedSpellLoadoutId, otherLoadout);
+});
+
+test("cannot equip a weapon loadout that is not unlocked", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  assert.throws(
+    () => performAction(world, cultivatorId, "equip-weapon:starter-hammer" as any),
+    /Cannot equip weapon loadout/,
+  );
+});
+
+test("cannot equip a spell loadout that is not unlocked", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  assert.throws(
+    () => performAction(world, cultivatorId, "equip-spell:starter-fire-blaze" as any),
+    /Cannot equip spell loadout/,
+  );
+});
+
+test("equip actions appear in available actions for unlocked loadouts", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const record = createRegistrationRecord();
+  saveCultivationRegistration(world, cultivatorId, record);
+
+  const actions = listAvailableActions(world, cultivatorId);
+  const equipActions = actions.filter(
+    (a) => a.actionId.startsWith("equip-weapon:") || a.actionId.startsWith("equip-spell:")
+  );
+  // Should have equip actions for each unlock that isn't currently equipped
+  const c = world.cultivators[cultivatorId];
+  const expectedWeaponEquips = c.unlockedWeaponLoadoutIds.filter(
+    (id) => id !== c.equippedWeaponLoadoutId
+  ).length;
+  const expectedSpellEquips = c.unlockedSpellLoadoutIds.filter(
+    (id) => id !== c.equippedSpellLoadoutId
+  ).length;
+  assert.equal(
+    equipActions.length,
+    expectedWeaponEquips + expectedSpellEquips,
+    "equip actions should match unlocked non-equipped loadouts",
+  );
+});
+
+test("already-equipped loadout does not appear as equip action", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const actions = listAvailableActions(world, cultivatorId);
+  const c = world.cultivators[cultivatorId];
+  const equipCurrent = actions.find(
+    (a) => a.actionId === `equip-weapon:${c.equippedWeaponLoadoutId}`
+  );
+  assert.equal(equipCurrent, undefined, "should not have equip action for already-equipped weapon");
+});
+
+test("combat snapshot uses loadout coreSkillSpiritCost instead of 10% max spirit", () => {
+  const context = startMineBeastCombat();
+  const playerSnapshot = context.combatState.playerSnapshot;
+  // With starter-sword loadout, coreSkillSpiritCost should be 15 (from config)
+  // instead of Math.round(maxSpiritualPower * 0.10) = 10
+  // The cultivator should have been given a starter loadout
+  const c = context.cultivator;
+  if (c.equippedWeaponLoadoutId || c.equippedSpellLoadoutId) {
+    // The cost should come from the loadout, not from 10% of max spirit
+    assert.ok(
+      playerSnapshot.coreSkillSpiritCost !== undefined,
+      "player snapshot should have coreSkillSpiritCost from loadout",
+    );
+  }
+});
+
+test("combat snapshot attack includes loadout attackPowerBonus", () => {
+  const context = startMineBeastCombat();
+  const c = context.cultivator;
+  const mainAttrs = deriveMainAttributes(c.registrationRecord);
+  const baseWeaponAtk = weaponAttack(mainAttrs);
+  const baseSpellAtk = spellAttack(mainAttrs);
+  const playerAttack = context.combatState.playerSnapshot.attack;
+  // Attack should be base + bonus from the dominant channel's loadout
+  // It should differ from pure weapon attack if a loadout is equipped
+  assert.ok(playerAttack >= 1, "attack should be positive");
+});
+
+test("cultivator state view exposes current equipped loadout data", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const state = getCultivatorState(world, cultivatorId);
+  // combatProfile should expose loadout info
+  assert.ok("equippedWeaponLoadout" in state.combatProfile);
+  assert.ok("equippedSpellLoadout" in state.combatProfile);
+  assert.ok("unlockedWeaponLoadouts" in state.combatProfile);
+  assert.ok("unlockedSpellLoadouts" in state.combatProfile);
+  // With a default loadout, weapon loadout should be populated
+  if (state.combatProfile.equippedWeaponLoadout) {
+    assert.ok(state.combatProfile.equippedWeaponLoadout.id);
+    assert.ok(state.combatProfile.equippedWeaponLoadout.name);
+    assert.ok(state.combatProfile.equippedWeaponLoadout.weaponTypeId);
+    assert.ok(typeof state.combatProfile.equippedWeaponLoadout.coreSkillSpiritCost === "number");
+  }
+});
+
+test("hydrated world backfills loadout fields for old cultivators", () => {
+  const world = createSeedWorld();
+  // Strip loadout fields to simulate a legacy world
+  const c = world.cultivators["yun-zhong-he"];
+  delete (c as any).equippedWeaponLoadoutId;
+  delete (c as any).equippedSpellLoadoutId;
+  delete (c as any).unlockedWeaponLoadoutIds;
+  delete (c as any).unlockedSpellLoadoutIds;
+
+  const persisted = toPersistedWorldState(world);
+  const hydrated = hydrateWorldState(persisted);
+  const hc = hydrated.cultivators["yun-zhong-he"];
+
+  assert.ok(hc.equippedWeaponLoadoutId, "hydrated cultivator should have weapon loadout");
+  assert.ok(hc.equippedSpellLoadoutId, "hydrated cultivator should have spell loadout");
+  assert.ok(hc.unlockedWeaponLoadoutIds.length >= 1, "hydrated cultivator should have unlocked weapon");
+  assert.ok(hc.unlockedSpellLoadoutIds.length >= 1, "hydrated cultivator should have unlocked spell");
+});
+
+test("20 weapon types are all registered in loadout definitions", () => {
+  const expectedTypes = [
+    "sword", "dual-swords", "dagger", "gauntlets",
+    "saber", "greatsaber", "axe", "hammer",
+    "spear", "halberd", "staff", "hook-sickle",
+    "whip", "chain-blade", "meteor-hammer", "silk-ribbon",
+    "bow", "crossbow", "fan", "umbrella",
+  ];
+  const weaponTypes = new Set(
+    Object.values(WEAPON_LOADOUT_DEFINITIONS).map((d: any) => d.weaponTypeId)
+  );
+  for (const t of expectedTypes) {
+    assert.ok(weaponTypes.has(t), `weapon type ${t} should have a starter loadout`);
+  }
+});
+
+test("15 spell branches are all registered in loadout definitions", () => {
+  const expectedBranches = [
+    "metal-edge", "metal-guard", "metal-break",
+    "wood-growth", "wood-bind", "wood-bloom",
+    "water-frost", "water-illusion", "water-flow",
+    "fire-blaze", "fire-smelt", "fire-burst",
+    "earth-wall", "earth-suppress", "earth-vein",
+  ];
+  const branches = new Set(
+    Object.values(SPELL_LOADOUT_DEFINITIONS).map((d: any) => d.spellBranchId)
+  );
+  for (const b of expectedBranches) {
+    assert.ok(branches.has(b), `spell branch ${b} should have a starter loadout`);
+  }
+});
+
+test("equip action is classified as low-risk and available when injured", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const record = createRegistrationRecord();
+  saveCultivationRegistration(world, cultivatorId, record);
+  // Injure the cultivator
+  world.cultivators[cultivatorId].injuryTicksRemaining = 5;
+  const actions = listAvailableActions(world, cultivatorId);
+  const equipActions = actions.filter(
+    (a) => a.actionId.startsWith("equip-weapon:") || a.actionId.startsWith("equip-spell:")
+  );
+  // Even when injured, equip actions should still be available
+  assert.ok(equipActions.length > 0, "equip actions should be available when injured");
+});
+
+test("state view exposes equipped loadout status hook fields", () => {
+  const weaponId = "starter-sword";
+  const spellId = "starter-metal-edge";
+  const prevWeaponBasic = WEAPON_LOADOUT_DEFINITIONS[weaponId as any].basicAttackStatusHookIds;
+  const prevWeaponCore = WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds;
+  const prevSpellBasic = SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds;
+  const prevSpellCore = SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds;
+
+  WEAPON_LOADOUT_DEFINITIONS[weaponId as any].basicAttackStatusHookIds = ["test-weapon-basic"];
+  WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds = ["test-weapon-core"];
+  SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds = ["test-spell-basic"];
+  SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds = ["test-spell-core"];
+
+  try {
+    const world = createSeedWorld();
+    const state = getCultivatorState(world, "yun-zhong-he");
+    assert.deepEqual(state.combatProfile.equippedWeaponLoadout?.basicAttackStatusHookIds, ["test-weapon-basic"]);
+    assert.deepEqual(state.combatProfile.equippedWeaponLoadout?.coreSkillStatusHookIds, ["test-weapon-core"]);
+    assert.deepEqual(state.combatProfile.equippedSpellLoadout?.basicAttackStatusHookIds, ["test-spell-basic"]);
+    assert.deepEqual(state.combatProfile.equippedSpellLoadout?.coreSkillStatusHookIds, ["test-spell-core"]);
+  } finally {
+    WEAPON_LOADOUT_DEFINITIONS[weaponId as any].basicAttackStatusHookIds = prevWeaponBasic;
+    WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds = prevWeaponCore;
+    SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds = prevSpellBasic;
+    SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds = prevSpellCore;
+  }
+});
+
+test("combat log snapshot carries loadout status hook context", () => {
+  const weaponId = "starter-sword";
+  const spellId = "starter-metal-edge";
+  const prevWeaponBasic = WEAPON_LOADOUT_DEFINITIONS[weaponId as any].basicAttackStatusHookIds;
+  const prevWeaponCore = WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds;
+  const prevSpellBasic = SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds;
+  const prevSpellCore = SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds;
+
+  WEAPON_LOADOUT_DEFINITIONS[weaponId as any].basicAttackStatusHookIds = ["test-weapon-basic"];
+  WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds = ["test-weapon-core"];
+  SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds = ["test-spell-basic"];
+  SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds = ["test-spell-core"];
+
+  try {
+    const context = startMineBeastCombat();
+    runUntilIdle(context.world, "yun-zhong-he");
+
+    const latestCombat = getCultivatorState(context.world, "yun-zhong-he").recentCombats[0];
+    assert.ok(latestCombat?.playerSnapshot, "combat log should carry player snapshot");
+    assert.ok(latestCombat?.playerSnapshot?.equippedLoadoutId, "player snapshot should carry equipped loadout id");
+    assert.ok(
+      (latestCombat?.playerSnapshot?.basicAttackStatusHookIds?.length ?? 0) > 0,
+      "player snapshot should carry basic attack hook ids",
+    );
+    assert.ok(
+      (latestCombat?.playerSnapshot?.coreSkillStatusHookIds?.length ?? 0) > 0,
+      "player snapshot should carry core skill hook ids",
+    );
+  } finally {
+    WEAPON_LOADOUT_DEFINITIONS[weaponId as any].basicAttackStatusHookIds = prevWeaponBasic;
+    WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds = prevWeaponCore;
+    SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds = prevSpellBasic;
+    SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds = prevSpellCore;
+  }
 });

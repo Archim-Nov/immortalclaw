@@ -1,0 +1,153 @@
+# 战斗装配层落地计划：具体装备、固定耗灵、20 种兵器类型
+
+## Summary
+- 在当前 `动作层（普通攻击 / 核心技 / 逃跑） + 路线层（蛮力 / 巧劲 / 战术）` 之间，新增一层真正可配置的“战斗装配层”。
+- 这层的核心职责很单纯：决定本回合走哪件**具体武器装配**或哪套**具体法术装配**，并由该装配提供 `攻击力修正`、`攻击类型标签`、`核心技类别`、`核心技固定耗灵`。
+- `核心技耗灵` 不再是 `maxSpirit * 10%`，改为由**具体装配**上的固定整数 `coreSkillSpiritCost` 决定。比如 `木剑 = 10`、`倚天剑 = 100`，以后都由配置表改，不写死在引擎里。
+- 状态系统这轮仍不做详细结算，但要把接口留在**具体装配层**，分别区分 `普通攻击状态钩子` 和 `核心技状态钩子`。
+- 20 种兵器类型这轮正式进入代码类型系统；“兵器类型”和“具体装备”分开。例子：`木剑`、`倚天剑` 都属于 `剑` 这个兵器类型，但两者的核心技耗灵和攻击力修正可以不同。
+
+## Public Interfaces
+- 新增三层类型，分别负责“家族”“类型”“具体装配”：
+  - `WeaponFamilyId`：`quick`、`heavy`、`polearm`、`flexible`、`ranged-mystic`
+  - `WeaponTypeId`：20 种正式兵器类型
+  - `WeaponLoadoutId` / `SpellLoadoutId`：具体装备或具体法术装配的稳定 ID
+- 20 种兵器类型冻结为：
+  - `sword(剑)`、`dual-swords(双剑)`、`dagger(匕首)`、`gauntlets(拳套)`
+  - `saber(刀)`、`greatsaber(巨刀)`、`axe(斧)`、`hammer(锤)`
+  - `spear(枪)`、`halberd(戟)`、`staff(棍)`、`hook-sickle(钩镰)`
+  - `whip(鞭)`、`chain-blade(链刃)`、`meteor-hammer(流星锤)`、`silk-ribbon(绫)`
+  - `bow(弓)`、`crossbow(弩)`、`fan(扇)`、`umbrella(伞)`
+- 5 大家族冻结为：
+  - `quick`：剑、双剑、匕首、拳套
+  - `heavy`：刀、巨刀、斧、锤
+  - `polearm`：枪、戟、棍、钩镰
+  - `flexible`：鞭、链刃、流星锤、绫
+  - `ranged-mystic`：弓、弩、扇、伞
+- 15 条法术分支正式进入代码类型系统：
+  - `metal-edge(金/锋刃)`、`metal-guard(金/罡御)`、`metal-break(金/破禁)`
+  - `wood-growth(木/生息)`、`wood-bind(木/缠束)`、`wood-bloom(木/丰茂)`
+  - `water-frost(水/寒流)`、`water-illusion(水/幻流)`、`water-flow(水/润泽)`
+  - `fire-blaze(火/炽焰)`、`fire-smelt(火/炼化)`、`fire-burst(火/激燃)`
+  - `earth-wall(土/岩壁)`、`earth-suppress(土/镇岳)`、`earth-vein(土/地脉)`
+- 新增具体装配定义：
+  - `WeaponLoadoutDefinition { id, name, weaponTypeId, attackPowerBonus, coreSkillCategory, coreSkillSpiritCost, basicAttackStatusHookIds, coreSkillStatusHookIds }`
+  - `SpellLoadoutDefinition { id, name, spellBranchId, attackPowerBonus, coreSkillCategory, coreSkillSpiritCost, basicAttackStatusHookIds, coreSkillStatusHookIds }`
+- `coreSkillCategory` 继续只允许三种值：`brute | finesse | tactic`。核心技一旦选中装配，就直接锁定这条路线，不再二次抽样。
+- `Cultivator` 新增：
+  - `equippedWeaponLoadoutId`
+  - `equippedSpellLoadoutId`
+  - `unlockedWeaponLoadoutIds`
+  - `unlockedSpellLoadoutIds`
+- `CultivatorStateView` 的 `combatProfile` 新增：
+  - 当前已装备武器装配
+  - 当前已装备法术装配
+  - 已解锁武器装配列表
+  - 已解锁法术装配列表
+- `ActionId` 新增两类即时动作：
+  - `equip-weapon:${weaponLoadoutId}`
+  - `equip-spell:${spellLoadoutId}`
+
+## Implementation Changes
+- 新增一个独立配置模块，专门承载：
+  - 20 种兵器类型表
+  - 15 条法术分支表
+  - 具体武器装配表
+  - 具体法术装配表
+
+- 具体装配与类型的职责严格分开：
+  - `WeaponType / SpellBranch` 负责“这是什么类型”
+  - `WeaponLoadout / SpellLoadout` 负责“这件具体装备数值是多少”
+- 当前战斗引擎改为：
+  - `普通攻击` 和 `核心技` 先在已装备通道里选 `weapon` 或 `spell`
+  - 选中通道后，再读取该通道当前已装备的具体装配
+  - 普通攻击继续沿用现有三路线评分器
+  - 核心技直接锁定到该装配的 `coreSkillCategory`
+- 核心技耗灵改为：
+  - 从选中的具体装配读 `coreSkillSpiritCost`
+  - 只有 `currentSpirit >= coreSkillSpiritCost` 时，该通道的 `core_skill` 才合法
+  - 扣灵时机保持不变：动作真正结算时扣；若出手前已死，则不扣
+- 攻击力接法冻结为：
+  - 玩家：`最终通道攻击力 = 现有属性导出的 channel attack + loadout.attackPowerBonus`
+  - 敌人：`最终通道攻击力 = 现有 encounter/template attack 底盘 + loadout.attackPowerBonus`
+  - 这轮不引入额外倍率树，只接一个显式整数 `attackPowerBonus`
+- 状态接口只留结构，不做执行：
+  - `basicAttackStatusHookIds`
+  - `coreSkillStatusHookIds`
+  - 本轮不触发附着、不跑 tick、不做驱散，只保证字段能进配置、快照、日志和状态视图
+- 通道选择规则保持简单且可解释：
+  - 对每个合法通道计算一次预计原始伤害
+  - 选更高者
+  - 同分时用确定性 tie-break，不引入新的性格权重表
+- 切换装配动作是 `immediate`：
+  - 角色空闲时可切换
+  - 不要求安全区
+  - 只允许切到自己 `unlocked*LoadoutIds` 中存在的装配
+  - 当前已装备的装配不重复生成切换动作
+- 默认装配与初始解锁包按注册结果派生：
+  - 武器：
+    - 先用现有路线评分器的 `staticBias = registrationBias + attributeStyleBias` 排出前两条路线，不加随机、不吃 battleState
+    - `brute -> starter-saber`
+    - `finesse -> starter-sword`
+    - `tactic -> starter-spear`
+    - 解锁前两条路线对应的两套武器装配，第一名默认装备
+  - 法术：
+    - 主修按 `dominantElements[0]` 取代表分支：
+      - 金 -> `starter-metal-edge`
+      - 木 -> `starter-wood-bind`
+      - 水 -> `starter-water-frost`
+      - 火 -> `starter-fire-blaze`
+      - 土 -> `starter-earth-wall`
+    - 备选优先取 `dominantElements[1]` 的代表分支；若没有第二主元素，则取同元素的备选分支：
+      - 金 -> `starter-metal-guard`
+      - 木 -> `starter-wood-growth`
+      - 水 -> `starter-water-flow`
+      - 火 -> `starter-fire-burst`
+      - 土 -> `starter-earth-vein`
+    - 解锁主修和备选两套法术装配，主修默认装备
+  - 无注册记录的旧角色和兜底角色：
+    - 默认武器：`starter-sword`
+    - 默认法术：`starter-metal-edge`
+- 初始具体装配数据：
+  - 每个 20 种兵器类型至少提供 1 个占位 starter 装配
+  - 每个 15 条法术分支至少提供 1 个占位 starter 装配
+  - starter 装配的 `coreSkillSpiritCost`、`attackPowerBonus` 都显式写进配置表，便于你后续直接改数据，不需要再改引擎
+- 敌方模板接入方式：
+  - 现有 `mine-beast`、`guardian` 模板都补显式 loadout 配置
+  - 敌方不需要 `unlocked*` 列表，但要有已装备 loadout
+  - 敌我继续共用同一套动作层、通道层、路线层结算
+
+## Test Plan
+- 回归测试：
+  - 现有 `普通攻击 / 核心技 / 逃跑`
+  - 先手、命中、闪避、会心、暴伤、三路线克制
+- 新增装配测试：
+  - `coreSkillSpiritCost` 改为读取具体装配固定值，不再读取 `maxSpirit * 10%`
+  - 同一个武器类型下，不同具体装备可以有不同核心技耗灵
+  - 同一个法术分支下，不同具体装配可以有不同核心技耗灵
+- 通道与路线测试：
+  - 普通攻击会在 `weapon / spell` 之间自动选通道
+  - 核心技会在合法通道里自动选通道
+  - 核心技一旦选中装配，路线直接锁到该装配的 `coreSkillCategory`
+- 切换动作测试：
+  - `equip-weapon:*` 和 `equip-spell:*` 出现在可用动作列表中
+  - 只能切到已解锁装配
+  - 已装备装配不会重复生成 equip 动作
+  - 切换后状态视图同步更新
+- 默认派生测试：
+  - 有注册记录的角色会稳定得到 2 武器 + 2 法术初始解锁包
+  - 没有注册记录的角色走兜底默认
+  - hydrate 旧世界时会补齐缺失的装配字段
+- 接口占位测试：
+  - `basicAttackStatusHookIds` / `coreSkillStatusHookIds` 能从配置进入状态视图和战斗日志上下文
+  - 本轮不会真的触发状态执行
+- 类型完整性测试：
+  - 20 种兵器类型全部注册
+  - 15 条法术分支全部注册
+  - 每个 starter loadout 都能映射到合法类型或分支
+
+## Assumptions
+- 这轮“状态接口挂钩”只做字段和数据流，不做任何真实状态结算。
+- 这轮不把战斗装配绑定到 `inventory` 或现有 `techniques`；它是独立的战斗装配层。
+- 这轮切换装配动作会先做出来，但真实“如何解锁更多装配”只实现最小 starter 解锁包，不展开掉落、制作、学习或装备获取系统。
+- starter 装配只是占位具体装备；以后你直接在配置表里改 `name`、`attackPowerBonus`、`coreSkillSpiritCost` 即可把它们变成 `木剑`、`倚天剑` 这类正式装备。

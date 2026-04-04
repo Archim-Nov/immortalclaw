@@ -330,6 +330,11 @@ const cultivators: Record<string, Cultivator> = {
     activeJobId: null,
     injuryTicksRemaining: 0,
     registrationRecord: null,
+    // Combat Loadout System
+    equippedWeaponLoadoutId: "starter-sword" as any as import("./model.js").WeaponLoadoutId,
+    equippedSpellLoadoutId: "starter-metal-edge" as any as import("./model.js").SpellLoadoutId,
+    unlockedWeaponLoadoutIds: ["starter-sword" as any as import("./model.js").WeaponLoadoutId],
+    unlockedSpellLoadoutIds: ["starter-metal-edge" as any as import("./model.js").SpellLoadoutId],
   },
 };
 
@@ -556,6 +561,22 @@ export function hydrateWorldState(
   hydrated.states = buildAllStates(hydrated.locations, geographyRegistry);
   hydrated.topology = buildFullTopology(hydrated.locations, { geographyRegistry });
   hydrated.eventPools = createEventPools(hydrated.locations, { geographyRegistry });
+
+  // Migrate old cultivators: backfill missing combat loadout fields
+  for (const cultivator of Object.values(hydrated.cultivators)) {
+    if (!cultivator.equippedWeaponLoadoutId) {
+      cultivator.equippedWeaponLoadoutId = "starter-sword" as any;
+    }
+    if (!cultivator.equippedSpellLoadoutId) {
+      cultivator.equippedSpellLoadoutId = "starter-metal-edge" as any;
+    }
+    if (!cultivator.unlockedWeaponLoadoutIds || cultivator.unlockedWeaponLoadoutIds.length === 0) {
+      cultivator.unlockedWeaponLoadoutIds = [cultivator.equippedWeaponLoadoutId!];
+    }
+    if (!cultivator.unlockedSpellLoadoutIds || cultivator.unlockedSpellLoadoutIds.length === 0) {
+      cultivator.unlockedSpellLoadoutIds = [cultivator.equippedSpellLoadoutId!];
+    }
+  }
 
   return hydrated;
 }

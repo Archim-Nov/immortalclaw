@@ -12,6 +12,7 @@ import type {
   StrategySnapshot, TickSummary, UpdateSectAdmissionPolicyResult, WorldEvent, WorldState, OnboardingProgress,
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
   CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution,
+  WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
 } from "./model.js";
 import {
   deriveMainAttributes,
@@ -47,6 +48,15 @@ import {
   type EventSourceType,
 } from "./events.js";
 import { repairCultivatorRealm } from "./realms.js";
+import {
+  getWeaponLoadoutsByFamily,
+  getSpellLoadoutsByElement,
+  getAllWeaponLoadouts,
+  getAllSpellLoadouts,
+  getWeaponLoadoutDefinition,
+  getSpellLoadoutDefinition,
+  SPELL_BRANCH_ELEMENT_MAP,
+} from "./combat-loadouts.js";
 import {
   acceptQuest,
   getActiveQuest,
@@ -264,6 +274,7 @@ const MINE_BEAST_ENCOUNTER_TEMPLATE: EncounterTemplate = {
   crit: 8,
   critDamage: 40,
   guardHeart: 5,
+  equippedWeaponLoadoutId: "starter-gauntlets",
 };
 const GUARDIAN_ENCOUNTER_TEMPLATE: EncounterTemplate = {
   id: "ruins-guardian",
@@ -279,6 +290,8 @@ const GUARDIAN_ENCOUNTER_TEMPLATE: EncounterTemplate = {
   crit: 12,
   critDamage: 50,
   guardHeart: 10,
+  equippedWeaponLoadoutId: "starter-halberd",
+  equippedSpellLoadoutId: "starter-earth-suppress",
 };
 const REALM_PHASES: readonly RealmPhase[] = ["前期", "中期", "后期"];
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
@@ -394,6 +407,114 @@ const BEHAVIOR_ASPECT_ACTION_WEIGHTS: Record<string, { basic_attack: number; cor
   "water-earth": { basic_attack: 0, core_skill: -1, escape: +1 },
   "fire-earth":  { basic_attack: 0, core_skill: +1, escape:  0 },
 };
+
+// ---- Combat Loadout Derivation ----
+function deriveInitialWeaponLoadouts(
+  registrationRecord: CultivationRegistrationRecord | null,
+): {
+  unlockedLoadoutIds: readonly WeaponLoadoutId[];
+  equippedLoadoutId: WeaponLoadoutId;
+} {
+  if (!registrationRecord) {
+    return {
+      unlockedLoadoutIds: ["starter-sword" as WeaponLoadoutId],
+      equippedLoadoutId: "starter-sword" as WeaponLoadoutId,
+    };
+  }
+
+  // Use the route evaluator's staticBias = registrationBias + attributeStyleBias
+  // to rank the top two routes, then map to starter loadouts.
+  const regResult = registrationRecord.result;
+  const temperamentId = regResult.core_temperament_id
+    ?? (regResult.core_temperament ? resolveTemperamentId(regResult.core_temperament) : null);
+  const aspectId = regResult.behavior_aspect_id
+    ?? (regResult.behavior_aspect ? resolveBehaviorAspectId(regResult.behavior_aspect) : null);
+  const tempWeights = temperamentId ? CORE_TEMPERAMENT_STYLE_WEIGHTS[temperamentId] : undefined;
+  const aspectWeights = aspectId ? BEHAVIOR_ASPECT_STYLE_WEIGHTS[aspectId] : undefined;
+  const registrationBias = {
+    brute:   (tempWeights?.brute ?? 0) + (aspectWeights?.brute ?? 0),
+    finesse: (tempWeights?.finesse ?? 0) + (aspectWeights?.finesse ?? 0),
+    tactic:  (tempWeights?.tactic ?? 0) + (aspectWeights?.tactic ?? 0),
+  };
+  const mainAttrs = deriveMainAttributes(registrationRecord);
+  const axisAvg = (mainAttrs.bingpo + mainAttrs.shenfa + mainAttrs.daoxin) / 3;
+  const attributeStyleBias = {
+    brute:   clamp((mainAttrs.bingpo - axisAvg) * 0.01, -0.15, 0.15),
+    finesse: clamp((mainAttrs.shenfa - axisAvg) * 0.01, -0.15, 0.15),
+    tactic:  clamp((mainAttrs.daoxin - axisAvg) * 0.01, -0.15, 0.15),
+  };
+  const styles: { style: CombatStyle; score: number }[] = [
+    { style: "brute",   score: registrationBias.brute   + attributeStyleBias.brute },
+    { style: "finesse", score: registrationBias.finesse + attributeStyleBias.finesse },
+    { style: "tactic",  score: registrationBias.tactic  + attributeStyleBias.tactic },
+  ];
+  styles.sort((a, b) => b.score - a.score);
+
+  const styleToLoadoutMap: Record<CombatStyle, WeaponLoadoutId> = {
+    brute: "starter-saber" as WeaponLoadoutId,
+    finesse: "starter-sword" as WeaponLoadoutId,
+    tactic: "starter-spear" as WeaponLoadoutId,
+  };
+
+  const firstLoadoutId = styleToLoadoutMap[styles[0]!.style];
+  const secondLoadoutId = styleToLoadoutMap[styles[1]!.style];
+
+  return {
+    unlockedLoadoutIds: [firstLoadoutId, secondLoadoutId],
+    equippedLoadoutId: firstLoadoutId,
+  };
+}
+
+function deriveInitialSpellLoadouts(
+  registrationRecord: CultivationRegistrationRecord | null,
+): {
+  unlockedLoadoutIds: readonly SpellLoadoutId[];
+  equippedLoadoutId: SpellLoadoutId;
+} {
+  if (!registrationRecord) {
+    // Fallback: default to starter-metal-edge
+    return {
+      unlockedLoadoutIds: ["starter-metal-edge" as SpellLoadoutId],
+      equippedLoadoutId: "starter-metal-edge" as SpellLoadoutId,
+    };
+  }
+
+  // Derive spell loadouts from the dominant elements
+  const fiveElementScores = registrationRecord.result.five_element_scores;
+  const elements: Array<[string, number]> = Object.entries(fiveElementScores);
+  elements.sort((a, b) => b[1] - a[1]);
+
+  // Map element to starter spell loadout
+  const elementToMainLoadoutMap: Record<string, SpellLoadoutId> = {
+    metal: "starter-metal-edge" as SpellLoadoutId,
+    wood: "starter-wood-bind" as SpellLoadoutId,
+    water: "starter-water-frost" as SpellLoadoutId,
+    fire: "starter-fire-blaze" as SpellLoadoutId,
+    earth: "starter-earth-wall" as SpellLoadoutId,
+  };
+
+  const elementToBackupLoadoutMap: Record<string, SpellLoadoutId> = {
+    metal: "starter-metal-guard" as SpellLoadoutId,
+    wood: "starter-wood-growth" as SpellLoadoutId,
+    water: "starter-water-flow" as SpellLoadoutId,
+    fire: "starter-fire-burst" as SpellLoadoutId,
+    earth: "starter-earth-vein" as SpellLoadoutId,
+  };
+
+  const mainElement = elements[0]?.[0] || "metal";
+  const backupElement = elements[1]?.[0] || mainElement;
+
+  const mainLoadoutId = elementToMainLoadoutMap[mainElement] || ("starter-metal-edge" as SpellLoadoutId);
+  const backupLoadoutId = backupElement !== mainElement
+    ? elementToBackupLoadoutMap[backupElement] || elementToMainLoadoutMap[backupElement]
+    : elementToBackupLoadoutMap[mainElement];
+
+  const unlockedLoadoutIds = [mainLoadoutId, backupLoadoutId] as const;
+  const equippedLoadoutId = mainLoadoutId;
+
+  return { unlockedLoadoutIds, equippedLoadoutId };
+}
+
 export function selectCombatRoute(
   cultivator: Cultivator,
   seed: string,
@@ -460,6 +581,30 @@ export function getAvailableActions(
   }
   return actions;
 }
+
+// ---- Combat Loadout Switching ----
+export function canEquipWeapon(cultivator: Cultivator, loadoutId: WeaponLoadoutId): boolean {
+  return cultivator.unlockedWeaponLoadoutIds.includes(loadoutId);
+}
+
+export function canEquipSpell(cultivator: Cultivator, loadoutId: SpellLoadoutId): boolean {
+  return cultivator.unlockedSpellLoadoutIds.includes(loadoutId);
+}
+
+export function equipWeapon(cultivator: Cultivator, loadoutId: WeaponLoadoutId): void {
+  if (!canEquipWeapon(cultivator, loadoutId)) {
+    throw new Error(`Cannot equip weapon loadout: ${loadoutId}`);
+  }
+  cultivator.equippedWeaponLoadoutId = loadoutId;
+}
+
+export function equipSpell(cultivator: Cultivator, loadoutId: SpellLoadoutId): void {
+  if (!canEquipSpell(cultivator, loadoutId)) {
+    throw new Error(`Cannot equip spell loadout: ${loadoutId}`);
+  }
+  cultivator.equippedSpellLoadoutId = loadoutId;
+}
+
 export function selectCombatAction(
   cultivator: Cultivator,
   selfSnapshot: CombatSnapshot,
@@ -623,10 +768,28 @@ const initializeCombatJobState = (
   const playerMaxHp = Math.max(60, Math.round(80 + (mainAttrs.gengu * 2) + (mainAttrs.tipu * 0.5)));
   const playerSpirit = cultivator.spiritualPower;
   const playerMaxSpirit = cultivator.maxSpiritualPower;
+
+  // ---- Loadout-aware combat snapshot ----
+  // Determine which channel (weapon vs spell) has higher expected raw damage
+  const weaponLoadout = cultivator.equippedWeaponLoadoutId
+    ? getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId)
+    : null;
+  const spellLoadout = cultivator.equippedSpellLoadoutId
+    ? getSpellLoadoutDefinition(cultivator.equippedSpellLoadoutId)
+    : null;
+  const wAtk = weaponAttack(mainAttrs) + (weaponLoadout?.attackPowerBonus ?? 0);
+  const sAtk = spellAttack(mainAttrs) + (spellLoadout?.attackPowerBonus ?? 0);
+  // Choose higher-damage channel; tie-break: weapon
+  const chosenChannel: "weapon" | "spell" = sAtk > wAtk ? "spell" : "weapon";
+  const chosenLoadout = chosenChannel === "weapon" ? weaponLoadout : spellLoadout;
+  const channelAttack = chosenChannel === "weapon" ? wAtk : sAtk;
+  const loadoutCoreSkillSpiritCost = chosenLoadout?.coreSkillSpiritCost ?? Math.max(1, Math.round(playerMaxSpirit * 0.10));
+  const loadoutCoreSkillPreferredRoute = chosenLoadout?.coreSkillCategory ?? null;
+
   const playerSnapshot: CombatSnapshot = {
     hp: playerMaxHp,
     maxHp: playerMaxHp,
-    attack: weaponAttack(mainAttrs),
+    attack: channelAttack,
     defense: physicalDefense(mainAttrs),
     speed: Math.round(detailedAttrs.sudu),
     hit: Math.round(detailedAttrs.mingzhong),
@@ -636,14 +799,28 @@ const initializeCombatJobState = (
     guardHeart: Math.round(detailedAttrs.huxin),
     spirit: playerSpirit,
     maxSpirit: playerMaxSpirit,
-    coreSkillSpiritCost: Math.max(1, Math.round(playerMaxSpirit * 0.10)),
+    coreSkillSpiritCost: loadoutCoreSkillSpiritCost,
+    coreSkillPreferredRoute: loadoutCoreSkillPreferredRoute,
+    equippedLoadoutId: chosenLoadout?.id ?? null,
+    basicAttackStatusHookIds: chosenLoadout?.basicAttackStatusHookIds ?? [],
+    coreSkillStatusHookIds: chosenLoadout?.coreSkillStatusHookIds ?? [],
     escapeAllowed: template.escapeAllowed !== false,
   };
+  // ---- Enemy snapshot with optional loadout ----
+  const enemyLoadout = template.equippedWeaponLoadoutId
+    ? getWeaponLoadoutDefinition(template.equippedWeaponLoadoutId as WeaponLoadoutId)
+    : null;
+  const enemySpellLoadout = template.equippedSpellLoadoutId
+    ? getSpellLoadoutDefinition(template.equippedSpellLoadoutId as SpellLoadoutId)
+    : null;
+  const enemyChosenLoadout: WeaponLoadoutDefinition | SpellLoadoutDefinition | null = enemyLoadout ?? enemySpellLoadout;
+  const enemyAttackBonus = enemyLoadout?.attackPowerBonus ?? enemySpellLoadout?.attackPowerBonus ?? 0;
+  const enemyCoreSkillCost = enemyLoadout?.coreSkillSpiritCost ?? enemySpellLoadout?.coreSkillSpiritCost ?? 0;
   const enemyMaxHp = Math.max(1, Math.round(template.baseHp * enemyScale));
   const enemySnapshot: CombatSnapshot = {
     hp: enemyMaxHp,
     maxHp: enemyMaxHp,
-    attack: Math.max(1, Math.round(template.attack * enemyScale)),
+    attack: Math.max(1, Math.round((template.attack + enemyAttackBonus) * enemyScale)),
     defense: Math.max(1, Math.round(template.defense * enemyScale)),
     speed: Math.max(1, Math.round(template.speed * enemyScale)),
     hit: Math.max(1, Math.round(template.hit)),
@@ -653,7 +830,11 @@ const initializeCombatJobState = (
     guardHeart: Math.max(0, Math.round(template.guardHeart)),
     spirit: 0,
     maxSpirit: 0,
-    coreSkillSpiritCost: 0,
+    coreSkillSpiritCost: enemyCoreSkillCost,
+    coreSkillPreferredRoute: enemyChosenLoadout?.coreSkillCategory ?? null,
+    equippedLoadoutId: enemyChosenLoadout?.id ?? null,
+    basicAttackStatusHookIds: enemyChosenLoadout?.basicAttackStatusHookIds ?? [],
+    coreSkillStatusHookIds: enemyChosenLoadout?.coreSkillStatusHookIds ?? [],
     escapeAllowed: false,
   };
   return {
@@ -1042,7 +1223,9 @@ const isLowRiskAction = (actionId: ActionId) =>
   || actionId === "retreat-from-bahuang"
   || actionId === "take-neutral-duty"
   || actionId === "take-mortal-task"
-  || actionId.startsWith("travel-to:");
+  || actionId.startsWith("travel-to:")
+  || actionId.startsWith("equip-weapon:")
+  || actionId.startsWith("equip-spell:");
 const findNearestLocationId = (world: WorldState, fromLocationId: string, predicate: (location: WorldState["locations"][string]) => boolean) => {
   let bestLocationId: string | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -2037,15 +2220,75 @@ function registrationViewOf(cultivator: Cultivator): CultivationRegistrationView
 }
 
 export function createCultivator(world: WorldState, input: CreateCultivatorInput): CharacterSummary {
-  const name = input.name.trim(); if (!name || name.length > 24) throw new Error("Character name must be 1-24 chars.");
-  const agentId = normalizeAgentId(input.agentId); const starter = starterProfile();
+  const name = input.name.trim();
+  if (!name || name.length > 24) throw new Error("Character name must be 1-24 chars.");
+  const agentId = normalizeAgentId(input.agentId);
+  const starter = starterProfile();
   const cultivatorId = `cultivator-${world.nextCultivatorSequence++}`;
   const starterLocationId = starterLocationIdFromRoll(Math.random());
-  const cultivator: Cultivator = { id: cultivatorId, name, genderPresentation: input.genderPresentation ?? "unspecified", pronouns: input.pronouns?.trim() || "TA/TA", origin: input.origin?.trim() || "Yun Province", temperament: input.temperament?.trim() || "Cautious", createdByAgentId: agentId, realm: REALM_QI, realmLevel: 1, realmProgress: 0, locationId: starterLocationId, residence: defaultResidenceAt(starterLocationId, cultivatorId), spiritStones: starter.spiritStones, qi: 100, maxQi: 100, spiritualPower: 100, maxSpiritualPower: 100, stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }), factionReputation: starter.factionReputation, lifespan: 160, age: clamp(input.age ?? 18, 16, 80), sectId: null, neutralSectId: null, sectTitle: null, moralityScore: 0, pendingSectApplicationId: null, pendingMoralityChoiceId: null, totalContribution: 0, neutralContribution: 0, contributionReachedAt: 0, activeQuests: [], completedBaseQuests: 0, techniques: starter.techniques, inventory: starter.inventory, statusEffects: [], breakthroughRecords: [], dungeonProgress: createDungeonProgress(), activeJobId: null, injuryTicksRemaining: 0, registrationRecord: null };
+
+  // Derive initial loadouts (will be updated after registration)
+  const weaponLoadouts = deriveInitialWeaponLoadouts(null);
+  const spellLoadouts = deriveInitialSpellLoadouts(null);
+
+  const cultivator: Cultivator = {
+    id: cultivatorId,
+    name,
+    genderPresentation: input.genderPresentation ?? "unspecified",
+    pronouns: input.pronouns?.trim() || "TA/TA",
+    origin: input.origin?.trim() || "Yun Province",
+    temperament: input.temperament?.trim() || "Cautious",
+    createdByAgentId: agentId,
+    realm: REALM_QI,
+    realmLevel: 1,
+    realmProgress: 0,
+    locationId: starterLocationId,
+    residence: defaultResidenceAt(starterLocationId, cultivatorId),
+    spiritStones: starter.spiritStones,
+    qi: 100,
+    maxQi: 100,
+    spiritualPower: 100,
+    maxSpiritualPower: 100,
+    stateReputation: createStateReputation({ [stateIdFromLocationId(starterLocationId)]: 12 }),
+    factionReputation: starter.factionReputation,
+    lifespan: 160,
+    age: clamp(input.age ?? 18, 16, 80),
+    sectId: null,
+    neutralSectId: null,
+    sectTitle: null,
+    moralityScore: 0,
+    pendingSectApplicationId: null,
+    pendingMoralityChoiceId: null,
+    totalContribution: 0,
+    neutralContribution: 0,
+    contributionReachedAt: 0,
+    activeQuests: [],
+    completedBaseQuests: 0,
+    techniques: starter.techniques,
+    inventory: starter.inventory,
+    statusEffects: [],
+    breakthroughRecords: [],
+    dungeonProgress: createDungeonProgress(),
+    activeJobId: null,
+    injuryTicksRemaining: 0,
+    registrationRecord: null,
+    // Combat Loadout System
+    equippedWeaponLoadoutId: weaponLoadouts.equippedLoadoutId,
+    equippedSpellLoadoutId: spellLoadouts.equippedLoadoutId,
+    unlockedWeaponLoadoutIds: [...weaponLoadouts.unlockedLoadoutIds],
+    unlockedSpellLoadoutIds: [...spellLoadouts.unlockedLoadoutIds],
+  };
+
   world.cultivators[cultivator.id] = cultivator;
   let selectedCultivatorId: string | null = null;
-  if (agentId) { const binding = ensureAgentBinding(world, agentId); binding.cultivatorIds.push(cultivator.id); binding.selectedCultivatorId = cultivator.id; selectedCultivatorId = cultivator.id; }
-  addDaoLog(world, cultivator.id, "Character Created", `${cultivator.name} enters the realm.`, ["character"]); addMessage(world, cultivator.id, "Registry", "Created", `${cultivator.name} is now active.`);
+  if (agentId) {
+    const binding = ensureAgentBinding(world, agentId);
+    binding.cultivatorIds.push(cultivator.id);
+    binding.selectedCultivatorId = cultivator.id;
+    selectedCultivatorId = cultivator.id;
+  }
+  addDaoLog(world, cultivator.id, "Character Created", `${cultivator.name} enters the realm.`, ["character"]);
+  addMessage(world, cultivator.id, "Registry", "Created", `${cultivator.name} is now active.`);
   return toSummary(cultivator, selectedCultivatorId);
 }
 export function syncCultivatorFromPersona(world: WorldState, input: CreateCultivatorInput & { agentId: string }): AgentPersonaSyncResult {
@@ -2146,6 +2389,15 @@ export function saveCultivationRegistration(
     agent_id: normalizeAgentId(savedByAgentId) ?? cultivator.createdByAgentId,
   };
   cultivator.registrationRecord = stored;
+
+  // Update initial loadouts based on registration data
+  const weaponLoadouts = deriveInitialWeaponLoadouts(stored);
+  const spellLoadouts = deriveInitialSpellLoadouts(stored);
+  cultivator.equippedWeaponLoadoutId = weaponLoadouts.equippedLoadoutId;
+  cultivator.equippedSpellLoadoutId = spellLoadouts.equippedLoadoutId;
+  cultivator.unlockedWeaponLoadoutIds = [...weaponLoadouts.unlockedLoadoutIds];
+  cultivator.unlockedSpellLoadoutIds = [...spellLoadouts.unlockedLoadoutIds];
+
   addDaoLog(world, cultivator.id, "问心定档", `${cultivator.name} completed registration: ${stored.result.core_temperament}, ${stored.result.behavior_aspect}, ${stored.result.cultivation_motive}.`, ["registration", "attunement"]);
   addMessage(world, cultivator.id, "Immortal Registry", "Registration Locked", `${cultivator.name}'s cultivation registration has been recorded.`);
   return structuredClone(stored);
@@ -3461,6 +3713,57 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       guardHeart: detailedAttrs.huxin,
     },
     combatTraits: [],
+    // Combat Loadout Info
+    equippedWeaponLoadout: cultivator.equippedWeaponLoadoutId
+      ? (() => {
+          const def = getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId);
+          return def
+            ? {
+                id: def.id,
+                name: def.name,
+                weaponTypeId: def.weaponTypeId,
+                attackPowerBonus: def.attackPowerBonus,
+                coreSkillCategory: def.coreSkillCategory,
+                coreSkillSpiritCost: def.coreSkillSpiritCost,
+                basicAttackStatusHookIds: [...def.basicAttackStatusHookIds],
+                coreSkillStatusHookIds: [...def.coreSkillStatusHookIds],
+              }
+            : null;
+        })()
+      : null,
+    equippedSpellLoadout: cultivator.equippedSpellLoadoutId
+      ? (() => {
+          const def = getSpellLoadoutDefinition(cultivator.equippedSpellLoadoutId);
+          return def
+            ? {
+                id: def.id,
+                name: def.name,
+                spellBranchId: def.spellBranchId,
+                attackPowerBonus: def.attackPowerBonus,
+                coreSkillCategory: def.coreSkillCategory,
+                coreSkillSpiritCost: def.coreSkillSpiritCost,
+                basicAttackStatusHookIds: [...def.basicAttackStatusHookIds],
+                coreSkillStatusHookIds: [...def.coreSkillStatusHookIds],
+              }
+            : null;
+        })()
+      : null,
+    unlockedWeaponLoadouts: cultivator.unlockedWeaponLoadoutIds
+      .map((id) => getWeaponLoadoutDefinition(id))
+      .filter(Boolean)
+      .map((def) => ({
+        id: def!.id,
+        name: def!.name,
+        weaponTypeId: def!.weaponTypeId,
+      })),
+    unlockedSpellLoadouts: cultivator.unlockedSpellLoadoutIds
+      .map((id) => getSpellLoadoutDefinition(id))
+      .filter(Boolean)
+      .map((def) => ({
+        id: def!.id,
+        name: def!.name,
+        spellBranchId: def!.spellBranchId,
+      })),
   };
   return {
     tick: world.tick,
@@ -3637,6 +3940,33 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
     actions.push(buildItemAction(world, cultivator, definition.use.actionId, registration));
   }
+
+  // ---- Equip loadout actions (always available when not busy) ----
+  for (const loadoutId of cultivator.unlockedWeaponLoadoutIds) {
+    if (loadoutId === cultivator.equippedWeaponLoadoutId) continue;
+    const wDef = getWeaponLoadoutDefinition(loadoutId);
+    if (!wDef) continue;
+    actions.push({
+      actionId: `equip-weapon:${loadoutId}` as ActionId,
+      label: `Equip ${wDef.name}`,
+      description: `Switch weapon loadout to ${wDef.name} (${WEAPON_TYPE_NAMES_INLINE[wDef.weaponTypeId] ?? wDef.weaponTypeId}, core skill cost: ${wDef.coreSkillSpiritCost}, bonus: +${wDef.attackPowerBonus}).`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  for (const loadoutId of cultivator.unlockedSpellLoadoutIds) {
+    if (loadoutId === cultivator.equippedSpellLoadoutId) continue;
+    const sDef = getSpellLoadoutDefinition(loadoutId);
+    if (!sDef) continue;
+    actions.push({
+      actionId: `equip-spell:${loadoutId}` as ActionId,
+      label: `Equip ${sDef.name}`,
+      description: `Switch spell loadout to ${sDef.name} (${SPELL_BRANCH_NAMES_INLINE[sDef.spellBranchId] ?? sDef.spellBranchId}, core skill cost: ${sDef.coreSkillSpiritCost}, bonus: +${sDef.attackPowerBonus}).`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+
   if (cultivator.injuryTicksRemaining > 0) {
     if (activeWilderness) {
       actions.push({
@@ -3860,8 +4190,25 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
+
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
+
+// Inline name lookups for loadout action descriptions
+const WEAPON_TYPE_NAMES_INLINE: Record<string, string> = {
+  sword: "剑", "dual-swords": "双剑", dagger: "匕首", gauntlets: "拳套",
+  saber: "刀", greatsaber: "巨刀", axe: "斧", hammer: "锤",
+  spear: "枪", halberd: "戟", staff: "棍", "hook-sickle": "钩镰",
+  whip: "鞭", "chain-blade": "链刃", "meteor-hammer": "流星锤", "silk-ribbon": "绫",
+  bow: "弓", crossbow: "弩", fan: "扇", umbrella: "伞",
+};
+const SPELL_BRANCH_NAMES_INLINE: Record<string, string> = {
+  "metal-edge": "金/锋刃", "metal-guard": "金/罡御", "metal-break": "金/破禁",
+  "wood-growth": "木/生息", "wood-bind": "木/缠束", "wood-bloom": "木/丰茂",
+  "water-frost": "水/寒流", "water-illusion": "水/幻流", "water-flow": "水/润泽",
+  "fire-blaze": "火/炽焰", "fire-smelt": "火/炼化", "fire-burst": "火/激燃",
+  "earth-wall": "土/岩壁", "earth-suppress": "土/镇岳", "earth-vein": "土/地脉",
+};
 
 function requireIdle(cultivator: Cultivator) { if (cultivator.activeJobId) throw new Error("Cultivator is already executing another action."); }
 function isResidenceAction(actionId: ActionId): actionId is ResidenceActionId {
@@ -3976,8 +4323,46 @@ function executeItemImmediateAction(
       : `${cultivator.name} used ${binding.itemId}.`,
   };
 }
+const parseEquipWeaponLoadoutId = (actionId: ActionId): WeaponLoadoutId | null =>
+  actionId.startsWith("equip-weapon:") ? actionId.slice("equip-weapon:".length) as WeaponLoadoutId : null;
+const parseEquipSpellLoadoutId = (actionId: ActionId): SpellLoadoutId | null =>
+  actionId.startsWith("equip-spell:") ? actionId.slice("equip-spell:".length) as SpellLoadoutId : null;
+
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
+
+  // ---- Equip weapon loadout ----
+  const equipWeaponId = parseEquipWeaponLoadoutId(actionId);
+  if (equipWeaponId) {
+    const def = getWeaponLoadoutDefinition(equipWeaponId);
+    if (!def) throw new Error(`Unknown weapon loadout: ${equipWeaponId}`);
+    equipWeapon(cultivator, equipWeaponId);
+    addDaoLog(world, cultivator.id, "装配切换", `${cultivator.name} equipped ${def.name}.`, ["combat-loadout", "equip-weapon"]);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} equipped weapon loadout: ${def.name}.`,
+    };
+  }
+
+  // ---- Equip spell loadout ----
+  const equipSpellId = parseEquipSpellLoadoutId(actionId);
+  if (equipSpellId) {
+    const def = getSpellLoadoutDefinition(equipSpellId);
+    if (!def) throw new Error(`Unknown spell loadout: ${equipSpellId}`);
+    equipSpell(cultivator, equipSpellId);
+    addDaoLog(world, cultivator.id, "装配切换", `${cultivator.name} equipped ${def.name}.`, ["combat-loadout", "equip-spell"]);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} equipped spell loadout: ${def.name}.`,
+    };
+  }
+
   const wildernessLayerId = parseEnterWildernessLayer(actionId);
   const bahuangStrategy = parseEnterBahuangStrategy(actionId);
   if (wildernessLayerId) {
