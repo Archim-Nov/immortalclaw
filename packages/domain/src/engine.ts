@@ -11,7 +11,7 @@ import type {
   SectApplicationView, SectMotiveBucketId, SectReapplyCooldown, SectTitle, StatusEffect, TimedActionId,
   StrategySnapshot, TickSummary, UpdateSectAdmissionPolicyResult, WorldEvent, WorldState, OnboardingProgress,
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
-  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution,
+  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution, AttackChannel,
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
 } from "./model.js";
 import {
@@ -292,6 +292,8 @@ const GUARDIAN_ENCOUNTER_TEMPLATE: EncounterTemplate = {
   guardHeart: 10,
   equippedWeaponLoadoutId: "starter-halberd",
   equippedSpellLoadoutId: "starter-earth-suppress",
+  spirit: 60,
+  maxSpirit: 60,
 };
 const REALM_PHASES: readonly RealmPhase[] = ["前期", "中期", "后期"];
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
@@ -770,7 +772,7 @@ const initializeCombatJobState = (
   const playerMaxSpirit = cultivator.maxSpiritualPower;
 
   // ---- Loadout-aware combat snapshot ----
-  // Determine which channel (weapon vs spell) has higher expected raw damage
+  // Store per-channel data on the snapshot for per-round channel selection
   const weaponLoadout = cultivator.equippedWeaponLoadoutId
     ? getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId)
     : null;
@@ -779,17 +781,17 @@ const initializeCombatJobState = (
     : null;
   const wAtk = weaponAttack(mainAttrs) + (weaponLoadout?.attackPowerBonus ?? 0);
   const sAtk = spellAttack(mainAttrs) + (spellLoadout?.attackPowerBonus ?? 0);
-  // Choose higher-damage channel; tie-break: weapon
-  const chosenChannel: "weapon" | "spell" = sAtk > wAtk ? "spell" : "weapon";
-  const chosenLoadout = chosenChannel === "weapon" ? weaponLoadout : spellLoadout;
-  const channelAttack = chosenChannel === "weapon" ? wAtk : sAtk;
-  const loadoutCoreSkillSpiritCost = chosenLoadout?.coreSkillSpiritCost ?? Math.max(1, Math.round(playerMaxSpirit * 0.10));
-  const loadoutCoreSkillPreferredRoute = chosenLoadout?.coreSkillCategory ?? null;
+  // Default channel for snapshot base attack (used as initial value; real choice is per-round)
+  const defaultChannel: "weapon" | "spell" = sAtk > wAtk ? "spell" : "weapon";
+  const defaultLoadout = defaultChannel === "weapon" ? weaponLoadout : spellLoadout;
+  const defaultAttack = defaultChannel === "weapon" ? wAtk : sAtk;
+  const defaultCoreSkillSpiritCost = defaultLoadout?.coreSkillSpiritCost ?? Math.max(1, Math.round(playerMaxSpirit * 0.10));
+  const defaultCoreSkillPreferredRoute = defaultLoadout?.coreSkillCategory ?? null;
 
   const playerSnapshot: CombatSnapshot = {
     hp: playerMaxHp,
     maxHp: playerMaxHp,
-    attack: channelAttack,
+    attack: defaultAttack,
     defense: physicalDefense(mainAttrs),
     speed: Math.round(detailedAttrs.sudu),
     hit: Math.round(detailedAttrs.mingzhong),
@@ -799,12 +801,21 @@ const initializeCombatJobState = (
     guardHeart: Math.round(detailedAttrs.huxin),
     spirit: playerSpirit,
     maxSpirit: playerMaxSpirit,
-    coreSkillSpiritCost: loadoutCoreSkillSpiritCost,
-    coreSkillPreferredRoute: loadoutCoreSkillPreferredRoute,
-    equippedLoadoutId: chosenLoadout?.id ?? null,
-    basicAttackStatusHookIds: chosenLoadout?.basicAttackStatusHookIds ?? [],
-    coreSkillStatusHookIds: chosenLoadout?.coreSkillStatusHookIds ?? [],
+    coreSkillSpiritCost: defaultCoreSkillSpiritCost,
+    coreSkillPreferredRoute: defaultCoreSkillPreferredRoute,
+    equippedLoadoutId: defaultLoadout?.id ?? null,
+    basicAttackStatusHookIds: defaultLoadout?.basicAttackStatusHookIds ?? [],
+    coreSkillStatusHookIds: defaultLoadout?.coreSkillStatusHookIds ?? [],
     escapeAllowed: template.escapeAllowed !== false,
+    // Per-channel data for per-round selection
+    weaponAttack: wAtk,
+    spellAttack: sAtk,
+    weaponLoadoutId: weaponLoadout?.id ?? null,
+    spellLoadoutId: spellLoadout?.id ?? null,
+    weaponCoreSkillSpiritCost: weaponLoadout?.coreSkillSpiritCost ?? 0,
+    spellCoreSkillSpiritCost: spellLoadout?.coreSkillSpiritCost ?? 0,
+    weaponCoreSkillPreferredRoute: weaponLoadout?.coreSkillCategory ?? null,
+    spellCoreSkillPreferredRoute: spellLoadout?.coreSkillCategory ?? null,
   };
   // ---- Enemy snapshot with optional loadout ----
   const enemyLoadout = template.equippedWeaponLoadoutId
@@ -815,12 +826,20 @@ const initializeCombatJobState = (
     : null;
   const enemyChosenLoadout: WeaponLoadoutDefinition | SpellLoadoutDefinition | null = enemyLoadout ?? enemySpellLoadout;
   const enemyAttackBonus = enemyLoadout?.attackPowerBonus ?? enemySpellLoadout?.attackPowerBonus ?? 0;
-  const enemyCoreSkillCost = enemyLoadout?.coreSkillSpiritCost ?? enemySpellLoadout?.coreSkillSpiritCost ?? 0;
+  const enemyCoreSkillCost = enemyChosenLoadout?.coreSkillSpiritCost ?? 0;
+  const enemySpirit = template.spirit ?? 0;
+  const enemyMaxSpirit = template.maxSpirit ?? 0;
   const enemyMaxHp = Math.max(1, Math.round(template.baseHp * enemyScale));
+  // Enemy per-channel data
+  const enemyWeaponAtk = enemyLoadout ? Math.max(1, Math.round((template.attack + (enemyLoadout.attackPowerBonus ?? 0)) * enemyScale)) : 0;
+  const enemySpellAtk = enemySpellLoadout ? Math.max(1, Math.round((template.attack + (enemySpellLoadout.attackPowerBonus ?? 0)) * enemyScale)) : 0;
+  const enemyDefaultChannel: "weapon" | "spell" = enemySpellAtk > enemyWeaponAtk ? "spell" : "weapon";
+  const enemyDefaultLoadout = enemyDefaultChannel === "weapon" ? enemyLoadout : enemySpellLoadout;
+  const enemyDefaultAtk = enemyDefaultChannel === "weapon" ? (enemyWeaponAtk || Math.max(1, Math.round((template.attack + enemyAttackBonus) * enemyScale))) : enemySpellAtk;
   const enemySnapshot: CombatSnapshot = {
     hp: enemyMaxHp,
     maxHp: enemyMaxHp,
-    attack: Math.max(1, Math.round((template.attack + enemyAttackBonus) * enemyScale)),
+    attack: enemyDefaultAtk,
     defense: Math.max(1, Math.round(template.defense * enemyScale)),
     speed: Math.max(1, Math.round(template.speed * enemyScale)),
     hit: Math.max(1, Math.round(template.hit)),
@@ -828,14 +847,22 @@ const initializeCombatJobState = (
     crit: Math.max(0, Math.round(template.crit)),
     critDamage: Math.max(0, Math.round(template.critDamage)),
     guardHeart: Math.max(0, Math.round(template.guardHeart)),
-    spirit: 0,
-    maxSpirit: 0,
+    spirit: enemySpirit,
+    maxSpirit: enemyMaxSpirit,
     coreSkillSpiritCost: enemyCoreSkillCost,
-    coreSkillPreferredRoute: enemyChosenLoadout?.coreSkillCategory ?? null,
-    equippedLoadoutId: enemyChosenLoadout?.id ?? null,
+    coreSkillPreferredRoute: enemyDefaultLoadout?.coreSkillCategory ?? null,
+    equippedLoadoutId: enemyDefaultLoadout?.id ?? null,
     basicAttackStatusHookIds: enemyChosenLoadout?.basicAttackStatusHookIds ?? [],
     coreSkillStatusHookIds: enemyChosenLoadout?.coreSkillStatusHookIds ?? [],
     escapeAllowed: false,
+    weaponAttack: enemyWeaponAtk || undefined,
+    spellAttack: enemySpellAtk || undefined,
+    weaponLoadoutId: enemyLoadout?.id ?? null,
+    spellLoadoutId: enemySpellLoadout?.id ?? null,
+    weaponCoreSkillSpiritCost: enemyLoadout?.coreSkillSpiritCost ?? 0,
+    spellCoreSkillSpiritCost: enemySpellLoadout?.coreSkillSpiritCost ?? 0,
+    weaponCoreSkillPreferredRoute: enemyLoadout?.coreSkillCategory ?? null,
+    spellCoreSkillPreferredRoute: enemySpellLoadout?.coreSkillCategory ?? null,
   };
   return {
     encounterTemplateId: template.id,
@@ -850,6 +877,8 @@ const initializeCombatJobState = (
     outcome: null,
     playerSpirit,
     playerMaxSpirit,
+    enemySpirit,
+    enemyMaxSpirit,
     retreated: false,
   };
 };
@@ -881,6 +910,39 @@ const finalizeCombat = (
   state.outcome = outcome;
   return outcome;
 };
+// Resolve the best attack channel for a given action from a snapshot's per-channel data
+function resolveAttackChannel(
+  snapshot: CombatSnapshot,
+  action: CombatActionType,
+  currentSpirit: number,
+): { channel: AttackChannel; attack: number; coreSkillSpiritCost: number; coreSkillPreferredRoute: CombatStyle | null } {
+  const wAtk = snapshot.weaponAttack ?? snapshot.attack;
+  const sAtk = snapshot.spellAttack ?? 0;
+  const wCost = snapshot.weaponCoreSkillSpiritCost ?? (snapshot.coreSkillSpiritCost ?? 0);
+  const sCost = snapshot.spellCoreSkillSpiritCost ?? 0;
+  const wRoute = snapshot.weaponCoreSkillPreferredRoute ?? (snapshot.coreSkillPreferredRoute ?? null);
+  const sRoute = snapshot.spellCoreSkillPreferredRoute ?? null;
+
+  if (action === "core_skill") {
+    // Only channels where spirit covers the cost are legal
+    const wLegal = wAtk > 0 && currentSpirit >= wCost;
+    const sLegal = sAtk > 0 && currentSpirit >= sCost;
+    if (wLegal && sLegal) {
+      // Both legal: pick higher damage; tie-break: weapon
+      return sAtk > wAtk
+        ? { channel: "spell", attack: sAtk, coreSkillSpiritCost: sCost, coreSkillPreferredRoute: sRoute }
+        : { channel: "weapon", attack: wAtk, coreSkillSpiritCost: wCost, coreSkillPreferredRoute: wRoute };
+    }
+    if (sLegal) return { channel: "spell", attack: sAtk, coreSkillSpiritCost: sCost, coreSkillPreferredRoute: sRoute };
+    if (wLegal) return { channel: "weapon", attack: wAtk, coreSkillSpiritCost: wCost, coreSkillPreferredRoute: wRoute };
+  }
+  // basic_attack or fallback: pick higher damage; tie-break: weapon
+  if (sAtk > wAtk && sAtk > 0) {
+    return { channel: "spell", attack: sAtk, coreSkillSpiritCost: sCost, coreSkillPreferredRoute: sRoute };
+  }
+  return { channel: "weapon", attack: wAtk, coreSkillSpiritCost: wCost, coreSkillPreferredRoute: wRoute };
+}
+
 const resolveOneRound = (
   state: CombatJobState,
   world: WorldState,
@@ -904,16 +966,44 @@ const resolveOneRound = (
     state.playerSnapshot.coreSkillSpiritCost ?? 0,
     `${seedBase}:player-action`,
   );
-  const enemyAction: CombatActionType = "basic_attack";
+  // Enemy uses the same action-layer selector; escape is never allowed for PVE enemies
+  const enemyCurrentSpirit = state.enemySpirit ?? state.enemySnapshot.spirit ?? 0;
+  const enemyMaxSpirit = state.enemyMaxSpirit ?? state.enemySnapshot.maxSpirit ?? 0;
+  const enemyAction: CombatActionType = selectCombatAction(
+    cultivator,
+    state.enemySnapshot,
+    state.playerSnapshot,
+    false,
+    false,
+    enemyCurrentSpirit,
+    enemyMaxSpirit,
+    state.enemySnapshot.coreSkillSpiritCost ?? 0,
+    `${seedBase}:enemy-action`,
+  );
+
+  // Per-round channel selection
+  const playerCurrentSpirit = state.playerSpirit ?? state.playerSnapshot.spirit ?? 0;
+  const playerChannelResult = resolveAttackChannel(state.playerSnapshot, playerAction, playerCurrentSpirit);
+  const enemyChannelResult = resolveAttackChannel(state.enemySnapshot, enemyAction, enemyCurrentSpirit);
+
+  // Apply per-round channel to snapshot attack and core skill params
+  state.playerSnapshot.attack = playerChannelResult.attack;
+  state.playerSnapshot.coreSkillSpiritCost = playerChannelResult.coreSkillSpiritCost;
+  state.playerSnapshot.coreSkillPreferredRoute = playerChannelResult.coreSkillPreferredRoute;
+  state.enemySnapshot.attack = enemyChannelResult.attack;
+  state.enemySnapshot.coreSkillSpiritCost = enemyChannelResult.coreSkillSpiritCost;
+  state.enemySnapshot.coreSkillPreferredRoute = enemyChannelResult.coreSkillPreferredRoute;
 
   const playerBoundRoute = playerAction === "escape"
     ? null
     : selectCombatRoute(
       cultivator,
       `${seedBase}:player-route`,
-      playerAction === "core_skill" ? (state.playerSnapshot.coreSkillPreferredRoute ?? null) : null,
+      playerAction === "core_skill" ? (playerChannelResult.coreSkillPreferredRoute ?? null) : null,
     );
-  const enemyBoundRoute = state.enemyStylePreference[hashString(`${seedBase}:enemy-route`) % state.enemyStylePreference.length] ?? "brute";
+  const enemyBoundRoute = enemyAction === "core_skill" && enemyChannelResult.coreSkillPreferredRoute
+    ? enemyChannelResult.coreSkillPreferredRoute
+    : state.enemyStylePreference[hashString(`${seedBase}:enemy-route`) % state.enemyStylePreference.length] ?? "brute";
 
   const playerInitiative =
     state.playerSnapshot.speed
@@ -1035,9 +1125,17 @@ const resolveOneRound = (
       playerBoundRoute ?? "brute",
       false,
       phaseSuffix,
-      1,
+      enemyAction === "core_skill" ? 1.6 : 1,
     );
-    enemySpiritSpent = 0;
+    if (enemyAction === "core_skill") {
+      const spiritCost = state.enemySnapshot.coreSkillSpiritCost ?? 0;
+      const nextSpirit = Math.max(0, (state.enemySpirit ?? state.enemySnapshot.spirit ?? 0) - spiritCost);
+      state.enemySpirit = nextSpirit;
+      state.enemySnapshot.spirit = nextSpirit;
+      enemySpiritSpent = spiritCost;
+    } else {
+      enemySpiritSpent = 0;
+    }
   };
 
   if (playerFirst) {
@@ -1079,6 +1177,8 @@ const resolveOneRound = (
     enemyEscape: enemyEscape ?? undefined,
     playerActionSkipped,
     enemyActionSkipped,
+    playerChannel: playerAction !== "escape" ? playerChannelResult.channel : undefined,
+    enemyChannel: enemyChannelResult.channel,
   };
   state.rounds.push(roundLog);
 
@@ -3699,7 +3799,18 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
   const combatProfile: CultivatorStateView["combatProfile"] = {
     battleReadiness: computeReadiness(cultivator),
-    attackChannel: "weapon",
+    attackChannel: (() => {
+      const wLoadout = cultivator.equippedWeaponLoadoutId ? getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId) : null;
+      const sLoadout = cultivator.equippedSpellLoadoutId ? getSpellLoadoutDefinition(cultivator.equippedSpellLoadoutId) : null;
+      if (wLoadout && !sLoadout) return "weapon" as const;
+      if (sLoadout && !wLoadout) return "spell" as const;
+      if (wLoadout && sLoadout) {
+        const wAtk = weaponAttack(mainAttrs) + wLoadout.attackPowerBonus;
+        const sAtk = spellAttack(mainAttrs) + sLoadout.attackPowerBonus;
+        return sAtk > wAtk ? "spell" as const : "weapon" as const;
+      }
+      return "weapon" as const;
+    })(),
     coreCombatStats: {
       weaponAttack: weaponAttack(mainAttrs),
       spellAttack: spellAttack(mainAttrs),

@@ -1188,6 +1188,8 @@ export interface CombatRoundLog {
   enemyEscape?: EscapeResolution | null;
   playerActionSkipped?: boolean;
   enemyActionSkipped?: boolean;
+  playerChannel?: AttackChannel;
+  enemyChannel?: AttackChannel;
 }
 
 export interface CombatSnapshot {
@@ -1209,6 +1211,15 @@ export interface CombatSnapshot {
   basicAttackStatusHookIds?: readonly StatusHookId[];
   coreSkillStatusHookIds?: readonly StatusHookId[];
   escapeAllowed?: boolean;
+  // Per-channel attack data for per-round channel selection
+  weaponAttack?: number;
+  spellAttack?: number;
+  weaponLoadoutId?: WeaponLoadoutId | null;
+  spellLoadoutId?: SpellLoadoutId | null;
+  weaponCoreSkillSpiritCost?: number;
+  spellCoreSkillSpiritCost?: number;
+  weaponCoreSkillPreferredRoute?: CombatStyle | null;
+  spellCoreSkillPreferredRoute?: CombatStyle | null;
 }
 
 export interface CombatJobState {
@@ -1224,6 +1235,8 @@ export interface CombatJobState {
   outcome: "victory" | "defeat" | null;
   playerSpirit?: number;
   playerMaxSpirit?: number;
+  enemySpirit?: number;
+  enemyMaxSpirit?: number;
   retreated?: boolean;
 }
 
@@ -1245,6 +1258,8 @@ export interface EncounterTemplate {
   // Combat Loadout System — enemies also carry loadout info
   equippedWeaponLoadoutId?: string;
   equippedSpellLoadoutId?: string;
+  spirit?: number;
+  maxSpirit?: number;
 }
 
 export interface CombatLogEntry {

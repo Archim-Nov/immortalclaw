@@ -56,7 +56,7 @@
 - 当前 V1 战斗决策分为两层：
   - **当前 V1 动作层 (Action Layer)**:
     - `普通攻击` (basic_attack)：基线伤害动作，倍率 1.0，无消耗。
-    - `核心技` (core_skill)：高价值伤害动作，倍率 1.6，消耗 10% 最大灵力。
+    - `核心技` (core_skill)：高价值伤害动作，倍率 1.6，消耗固定 `coreSkillSpiritCost`（由装配层配置表提供，V2 装配层替代了早期的 `10% 最大灵力` 规则，参见 `docs/plans/2026-04-05-combat-gameplay-v2.md` 及 `docs/plans/2026-04-05-combat-gameplay-v2-gap-closure.md`）。
     - `逃跑` (escape)：非伤害动作，仅限玩家侧，成功则结束战斗（记为战败/撤退）。
   - **当前 V1 路线层 (Route Layer)**:
     - `蛮力` (brute)：正面压制，对应兵魄。

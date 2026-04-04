@@ -1589,7 +1589,7 @@ test("cultivator state exposes combat profile with derived stats", () => {
 
   const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
-  assert.equal(state.combatProfile.attackChannel, "weapon");
+  assert.ok(["weapon", "spell"].includes(state.combatProfile.attackChannel), "attackChannel should be weapon or spell");
   assert.equal(state.combatProfile.coreCombatStats.weaponAttack, weaponAttack(mainAttrs));
   assert.equal(state.combatProfile.coreCombatStats.spellAttack, spellAttack(mainAttrs));
   assert.equal(state.combatProfile.coreCombatStats.physicalDefense, physicalDefense(mainAttrs));
@@ -2246,6 +2246,8 @@ test("core_skill spends spirit on hit", () => {
   context.combatState.maxRounds = 1;
   context.combatState.playerSnapshot.escapeAllowed = false;
   context.combatState.playerSnapshot.coreSkillSpiritCost = 12;
+  context.combatState.playerSnapshot.weaponCoreSkillSpiritCost = 12;
+  context.combatState.playerSnapshot.spellCoreSkillSpiritCost = 12;
   context.combatState.playerSpirit = 90;
   context.combatState.playerSnapshot.spirit = 90;
   context.combatState.playerSnapshot.speed = 300;
@@ -2277,6 +2279,8 @@ test("core_skill spends spirit on miss", () => {
   context.combatState.maxRounds = 1;
   context.combatState.playerSnapshot.escapeAllowed = false;
   context.combatState.playerSnapshot.coreSkillSpiritCost = 11;
+  context.combatState.playerSnapshot.weaponCoreSkillSpiritCost = 11;
+  context.combatState.playerSnapshot.spellCoreSkillSpiritCost = 11;
   context.combatState.playerSpirit = 90;
   context.combatState.playerSnapshot.spirit = 90;
   context.combatState.playerSnapshot.speed = 300;
@@ -2509,6 +2513,8 @@ test("core_skill rounds include action fields and spirit spending", () => {
   combatState.maxRounds = 1;
   combatState.playerSnapshot.escapeAllowed = false;
   combatState.playerSnapshot.coreSkillSpiritCost = 13;
+  combatState.playerSnapshot.weaponCoreSkillSpiritCost = 13;
+  combatState.playerSnapshot.spellCoreSkillSpiritCost = 13;
   combatState.playerSpirit = 90;
   combatState.playerSnapshot.spirit = 90;
   combatState.enemySnapshot.hp = 10;
@@ -2519,7 +2525,7 @@ test("core_skill rounds include action fields and spirit spending", () => {
   const round = world.combatLogs[0]?.rounds?.[0];
   assert.ok(round);
   assert.equal(round.playerAction, "core_skill");
-  assert.equal(round.enemyAction, "basic_attack");
+  assert.ok(["basic_attack", "core_skill"].includes(round.enemyAction!), "enemy should use action layer");
   assert.equal(round.playerSpiritSpent, 13);
   assert.equal(round.enemySpiritSpent, 0);
 });
@@ -2875,5 +2881,89 @@ test("combat log snapshot carries loadout status hook context", () => {
     WEAPON_LOADOUT_DEFINITIONS[weaponId as any].coreSkillStatusHookIds = prevWeaponCore;
     SPELL_LOADOUT_DEFINITIONS[spellId as any].basicAttackStatusHookIds = prevSpellBasic;
     SPELL_LOADOUT_DEFINITIONS[spellId as any].coreSkillStatusHookIds = prevSpellCore;
+  }
+});
+
+// =========================================================================
+// Gap-Closure Tests (per-round channel, enemy action layer, attackChannel)
+// =========================================================================
+
+test("round log records playerChannel and enemyChannel per round", () => {
+  const context = startMineBeastCombat();
+  runUntilIdle(context.world, "yun-zhong-he");
+  const log = context.world.combatLogs[0];
+  assert.ok(log?.rounds?.length, "should have at least one round");
+  for (const round of log!.rounds!) {
+    if (round.playerAction !== "escape") {
+      assert.ok(
+        round.playerChannel === "weapon" || round.playerChannel === "spell",
+        `round ${round.round} should have valid playerChannel, got: ${round.playerChannel}`,
+      );
+    }
+    assert.ok(
+      round.enemyChannel === "weapon" || round.enemyChannel === "spell",
+      `round ${round.round} should have valid enemyChannel, got: ${round.enemyChannel}`,
+    );
+  }
+});
+
+test("attackChannel in combatProfile reflects loadout comparison, not hardcoded weapon", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const state = getCultivatorState(world, cultivatorId);
+  const c = world.cultivators[cultivatorId];
+  const mainAttrs = deriveMainAttributes(c.registrationRecord);
+  const wLoadout = c.equippedWeaponLoadoutId
+    ? WEAPON_LOADOUT_DEFINITIONS[c.equippedWeaponLoadoutId as any]
+    : null;
+  const sLoadout = c.equippedSpellLoadoutId
+    ? SPELL_LOADOUT_DEFINITIONS[c.equippedSpellLoadoutId as any]
+    : null;
+  const wAtk = weaponAttack(mainAttrs) + (wLoadout?.attackPowerBonus ?? 0);
+  const sAtk = spellAttack(mainAttrs) + (sLoadout?.attackPowerBonus ?? 0);
+  const expected = sAtk > wAtk ? "spell" : "weapon";
+  assert.equal(state.combatProfile.attackChannel, expected, "attackChannel should match loadout comparison");
+});
+
+test("enemy can choose core_skill when it has spirit and a loadout", () => {
+  const context = startMineBeastCombat();
+  context.combatState.enemySnapshot.spirit = 100;
+  context.combatState.enemySnapshot.maxSpirit = 100;
+  context.combatState.enemySnapshot.coreSkillSpiritCost = 10;
+  context.combatState.enemySnapshot.weaponCoreSkillSpiritCost = 10;
+  context.combatState.enemySnapshot.spellCoreSkillSpiritCost = 10;
+  context.combatState.enemySpirit = 100;
+  context.combatState.enemyMaxSpirit = 100;
+  context.combatState.maxRounds = 10;
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const log = context.world.combatLogs[0];
+  assert.ok(log?.rounds?.length, "should have rounds");
+  const enemyActions = log!.rounds!.map((r) => r.enemyAction);
+  const hasCoreSkill = enemyActions.some((a) => a === "core_skill");
+  assert.ok(hasCoreSkill, `enemy should use core_skill at least once; actions: ${enemyActions.join(",")}`);
+});
+
+test("enemy core_skill spends configured spirit cost", () => {
+  const context = startMineBeastCombat();
+  context.combatState.enemySnapshot.spirit = 50;
+  context.combatState.enemySnapshot.maxSpirit = 50;
+  context.combatState.enemySnapshot.coreSkillSpiritCost = 10;
+  context.combatState.enemySnapshot.weaponCoreSkillSpiritCost = 10;
+  context.combatState.enemySnapshot.spellCoreSkillSpiritCost = 10;
+  context.combatState.enemySpirit = 50;
+  context.combatState.enemyMaxSpirit = 50;
+  context.combatState.maxRounds = 10;
+  context.combatState.playerSnapshot.speed = 1;
+  context.combatState.enemySnapshot.speed = 300;
+
+  runUntilIdle(context.world, "yun-zhong-he");
+  const log = context.world.combatLogs[0];
+  assert.ok(log?.rounds?.length, "should have rounds");
+  const coreSkillRounds = log!.rounds!.filter((r) => r.enemyAction === "core_skill");
+  if (coreSkillRounds.length > 0) {
+    for (const r of coreSkillRounds) {
+      assert.equal(r.enemySpiritSpent, 10, `enemy should spend 10 spirit per core_skill in round ${r.round}`);
+    }
   }
 });
