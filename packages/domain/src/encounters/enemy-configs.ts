@@ -24,7 +24,9 @@ export type EnemyContextTag =
   | "ruin"
   | "beast"
   | "construct"
-  | "cultivator";
+  | "cultivator"
+  | "pvp"
+  | "city";
 
 // ---- Reward Bias Tags ----
 export type RewardBiasTag =
@@ -732,6 +734,28 @@ const ENEMY_CONFIGS: Record<string, EnemyConfigDefinition> = {
     maxSpirit: 95,
     contextTags: ["guardian", "dungeon", "elite"],
     rewardBias: ["spell-fragment", "cultivation-aid"],
+  },
+
+  // ── PVP (placeholder — real stats generated from cultivator snapshots) ──
+  "pvp-cultivator": {
+    id: "pvp-cultivator" as EnemyConfigId,
+    name: "Rival Cultivator",
+    nameCn: "对手修士",
+    maxRounds: 7,
+    stylePreference: ["finesse", "tactic", "brute"],
+    baseHp: 100,
+    attack: 30,
+    defense: 20,
+    speed: 20,
+    hit: 25,
+    dodge: 15,
+    crit: 10,
+    critDamage: 40,
+    guardHeart: 8,
+    spirit: 50,
+    maxSpirit: 50,
+    contextTags: ["pvp", "cultivator"],
+    rewardBias: [],
   },
 };
 

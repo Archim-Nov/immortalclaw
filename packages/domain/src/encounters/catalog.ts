@@ -29,7 +29,9 @@ export type EncounterFamily =
   | "dungeon-guardian-swift"
   | "dungeon-guardian-drain"
   | "dungeon-hazard"
-  | "event-encounter";
+  | "event-encounter"
+  | "pvp-duel"
+  | "pvp-wilderness";
 
 // ---- Encounter Build Definition ----
 export interface EncounterBuildDefinition {
@@ -369,6 +371,28 @@ const ENCOUNTER_BUILDS: Record<string, EncounterBuildDefinition> = {
     encounterFamily: "wilderness-beast",
     contextTags: ["wilderness", "beast"],
     rewardBias: ["salvage", "cultivation-aid"],
+  },
+
+  // ── PVP ──
+  "pvp-city-duel": {
+    id: "pvp-city-duel" as EncounterBuildId,
+    name: "City Duel",
+    nameCn: "主城切磋",
+    battleSourceKind: "pvp-duel",
+    enemyConfigIds: ["pvp-cultivator" as EnemyConfigId],
+    encounterFamily: "pvp-duel",
+    contextTags: ["pvp", "city"],
+    rewardBias: [],
+  },
+  "pvp-wilderness-clash": {
+    id: "pvp-wilderness-clash" as EncounterBuildId,
+    name: "Wilderness Cultivator Clash",
+    nameCn: "荒野修士冲突",
+    battleSourceKind: "pvp-duel",
+    enemyConfigIds: ["pvp-cultivator" as EnemyConfigId],
+    encounterFamily: "pvp-wilderness",
+    contextTags: ["pvp", "wilderness"],
+    rewardBias: ["salvage"],
   },
 };
 

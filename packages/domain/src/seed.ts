@@ -312,6 +312,7 @@ const cultivators: Record<string, Cultivator> = {
     moralityScore: 0,
     pendingSectApplicationId: null,
     pendingMoralityChoiceId: null,
+    pendingPvpChallengeId: null,
     totalContribution: 0,
     neutralContribution: 0,
     contributionReachedAt: 0,
@@ -516,6 +517,7 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     questBoards: {},
     pendingSectApplications: {},
     pendingMoralityChoices: {},
+    pendingPvpChallenges: {},
     sectReapplyCooldowns: {},
     wildernessLayers: structuredClone(WILDERNESS_LAYERS),
     wildernessProgress: {},
@@ -557,6 +559,7 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     nextCombatSequence: 1,
     nextSectApplicationSequence: 1,
     nextMoralityChoiceSequence: 1,
+    nextPvpChallengeSequence: 1,
     nextSectCooldownSequence: 1,
   };
   seedQuestBoards(world);

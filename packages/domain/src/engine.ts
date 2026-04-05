@@ -14,6 +14,7 @@ import type {
   CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution, AttackChannel,
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
   CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectKind, StatusTargetSide,
+  PendingPvpChallenge, PvpBattleKind,
 } from "./model.js";
 import {
   deriveMainAttributes,
@@ -150,6 +151,7 @@ import {
   resolveWildernessSurvey,
   withdrawFromWilderness,
 } from "./wilderness-service.js";
+import { getWildernessEventDefinition } from "./wilderness-events.js";
 import {
   buildDungeonExpeditionStateView,
   buildDungeonRankYieldHints,
@@ -813,21 +815,16 @@ const guardianCombatScale = (grade: DungeonGrade, rank: DungeonRank): number => 
   const tuning = guardianTuningForDungeon(grade, rank);
   return tuning.threatBase / 136;
 };
-const initializeCombatJobState = (
-  world: WorldState,
+export const buildCultivatorCombatSnapshot = (
   cultivator: Cultivator,
-  template: EncounterTemplate,
-  enemyScale = 1,
-  encounterBuildId?: string,
-): CombatJobState => {
+  escapeAllowed: boolean,
+): CombatSnapshot => {
   const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
-  const playerMaxHp = Math.max(60, Math.round(80 + (mainAttrs.gengu * 2) + (mainAttrs.tipu * 0.5)));
-  const playerSpirit = cultivator.spiritualPower;
-  const playerMaxSpirit = cultivator.maxSpiritualPower;
+  const maxHp = Math.max(60, Math.round(80 + (mainAttrs.gengu * 2) + (mainAttrs.tipu * 0.5)));
+  const spirit = cultivator.spiritualPower;
+  const maxSpirit = cultivator.maxSpiritualPower;
 
-  // ---- Loadout-aware combat snapshot ----
-  // Store per-channel data on the snapshot for per-round channel selection
   const weaponLoadout = cultivator.equippedWeaponLoadoutId
     ? getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId)
     : null;
@@ -836,14 +833,12 @@ const initializeCombatJobState = (
     : null;
   const wAtk = weaponAttack(mainAttrs) + (weaponLoadout?.attackPowerBonus ?? 0);
   const sAtk = spellAttack(mainAttrs) + (spellLoadout?.attackPowerBonus ?? 0);
-  // Default channel for snapshot base attack (used as initial value; real choice is per-round)
   const defaultChannel: "weapon" | "spell" = sAtk > wAtk ? "spell" : "weapon";
   const defaultLoadout = defaultChannel === "weapon" ? weaponLoadout : spellLoadout;
   const defaultAttack = defaultChannel === "weapon" ? wAtk : sAtk;
-  const defaultCoreSkillSpiritCost = defaultLoadout?.coreSkillSpiritCost ?? Math.max(1, Math.round(playerMaxSpirit * 0.10));
+  const defaultCoreSkillSpiritCost = defaultLoadout?.coreSkillSpiritCost ?? Math.max(1, Math.round(maxSpirit * 0.10));
   const defaultCoreSkillPreferredRoute = defaultLoadout?.coreSkillCategory ?? null;
 
-  // ---- Weapon family/type bonus ----
   const weaponTier = (weaponLoadout?.weaponTier ?? 1) as SpellTier;
   const weaponFamilyId = weaponLoadout?.weaponFamilyId ?? null;
   const weaponTypeId = weaponLoadout?.weaponTypeId ?? null;
@@ -853,55 +848,54 @@ const initializeCombatJobState = (
     if (!bonusProfile) return baseStat;
     return baseStat + (bonusProfile.values[weaponTier - 1] ?? 0);
   };
-  let playerSpeed = Math.round(detailedAttrs.sudu);
-  let playerHit = Math.round(detailedAttrs.mingzhong);
-  let playerDodge = Math.round(detailedAttrs.shanbi);
-  let playerCrit = Math.round(detailedAttrs.huixin);
-  let playerCritDamage = Math.round(detailedAttrs.baoshang);
-  let playerGuardHeart = Math.round(detailedAttrs.huxin);
-  let playerTenacity = 0; // tenacity is bonus-only; used as extra guardHeart
+  let speed = Math.round(detailedAttrs.sudu);
+  let hit = Math.round(detailedAttrs.mingzhong);
+  let dodge = Math.round(detailedAttrs.shanbi);
+  let crit = Math.round(detailedAttrs.huixin);
+  let critDamage = Math.round(detailedAttrs.baoshang);
+  let guardHeart = Math.round(detailedAttrs.huxin);
+  let tenacity = 0;
   if (familyDef) {
     const b = familyDef.bonusProfile;
-    playerSpeed = applyBonusStat(playerSpeed, b.stat1.stat === "speed" ? b.stat1 : b.stat2.stat === "speed" ? b.stat2 : undefined);
-    playerHit = applyBonusStat(playerHit, b.stat1.stat === "hit" ? b.stat1 : b.stat2.stat === "hit" ? b.stat2 : undefined);
-    playerDodge = applyBonusStat(playerDodge, b.stat1.stat === "dodge" ? b.stat1 : b.stat2.stat === "dodge" ? b.stat2 : undefined);
-    playerCrit = applyBonusStat(playerCrit, b.stat1.stat === "crit" ? b.stat1 : b.stat2.stat === "crit" ? b.stat2 : undefined);
-    playerCritDamage = applyBonusStat(playerCritDamage, b.stat1.stat === "critDamage" ? b.stat1 : b.stat2.stat === "critDamage" ? b.stat2 : undefined);
-    playerGuardHeart = applyBonusStat(playerGuardHeart, b.stat1.stat === "guardHeart" ? b.stat1 : b.stat2.stat === "guardHeart" ? b.stat2 : undefined);
-    playerTenacity += (b.stat1.stat === "tenacity" ? b.stat1.values[weaponTier - 1] ?? 0 : 0) + (b.stat2.stat === "tenacity" ? b.stat2.values[weaponTier - 1] ?? 0 : 0);
+    speed = applyBonusStat(speed, b.stat1.stat === "speed" ? b.stat1 : b.stat2.stat === "speed" ? b.stat2 : undefined);
+    hit = applyBonusStat(hit, b.stat1.stat === "hit" ? b.stat1 : b.stat2.stat === "hit" ? b.stat2 : undefined);
+    dodge = applyBonusStat(dodge, b.stat1.stat === "dodge" ? b.stat1 : b.stat2.stat === "dodge" ? b.stat2 : undefined);
+    crit = applyBonusStat(crit, b.stat1.stat === "crit" ? b.stat1 : b.stat2.stat === "crit" ? b.stat2 : undefined);
+    critDamage = applyBonusStat(critDamage, b.stat1.stat === "critDamage" ? b.stat1 : b.stat2.stat === "critDamage" ? b.stat2 : undefined);
+    guardHeart = applyBonusStat(guardHeart, b.stat1.stat === "guardHeart" ? b.stat1 : b.stat2.stat === "guardHeart" ? b.stat2 : undefined);
+    tenacity += (b.stat1.stat === "tenacity" ? b.stat1.values[weaponTier - 1] ?? 0 : 0) + (b.stat2.stat === "tenacity" ? b.stat2.values[weaponTier - 1] ?? 0 : 0);
   }
   if (typeDef) {
     const tb = typeDef.typeBonusProfile;
-    playerSpeed = applyBonusStat(playerSpeed, tb.stat === "speed" ? tb : undefined);
-    playerHit = applyBonusStat(playerHit, tb.stat === "hit" ? tb : undefined);
-    playerDodge = applyBonusStat(playerDodge, tb.stat === "dodge" ? tb : undefined);
-    playerCrit = applyBonusStat(playerCrit, tb.stat === "crit" ? tb : undefined);
-    playerCritDamage = applyBonusStat(playerCritDamage, tb.stat === "critDamage" ? tb : undefined);
-    playerGuardHeart = applyBonusStat(playerGuardHeart, tb.stat === "guardHeart" ? tb : undefined);
-    playerTenacity += tb.stat === "tenacity" ? tb.values[weaponTier - 1] ?? 0 : 0;
+    speed = applyBonusStat(speed, tb.stat === "speed" ? tb : undefined);
+    hit = applyBonusStat(hit, tb.stat === "hit" ? tb : undefined);
+    dodge = applyBonusStat(dodge, tb.stat === "dodge" ? tb : undefined);
+    crit = applyBonusStat(crit, tb.stat === "crit" ? tb : undefined);
+    critDamage = applyBonusStat(critDamage, tb.stat === "critDamage" ? tb : undefined);
+    guardHeart = applyBonusStat(guardHeart, tb.stat === "guardHeart" ? tb : undefined);
+    tenacity += tb.stat === "tenacity" ? tb.values[weaponTier - 1] ?? 0 : 0;
   }
-  playerGuardHeart += playerTenacity; // tenacity maps to guardHeart
+  guardHeart += tenacity;
 
-  const playerSnapshot: CombatSnapshot = {
-    hp: playerMaxHp,
-    maxHp: playerMaxHp,
+  return {
+    hp: maxHp,
+    maxHp,
     attack: defaultAttack,
     defense: physicalDefense(mainAttrs),
-    speed: playerSpeed,
-    hit: playerHit,
-    dodge: playerDodge,
-    crit: playerCrit,
-    critDamage: playerCritDamage,
-    guardHeart: playerGuardHeart,
-    spirit: playerSpirit,
-    maxSpirit: playerMaxSpirit,
+    speed,
+    hit,
+    dodge,
+    crit,
+    critDamage,
+    guardHeart,
+    spirit,
+    maxSpirit,
     coreSkillSpiritCost: defaultCoreSkillSpiritCost,
     coreSkillPreferredRoute: defaultCoreSkillPreferredRoute,
     equippedLoadoutId: defaultLoadout?.id ?? null,
     basicAttackStatusHookIds: defaultLoadout?.basicAttackStatusHookIds ?? [],
     coreSkillStatusHookIds: defaultLoadout?.coreSkillStatusHookIds ?? [],
-    escapeAllowed: template.escapeAllowed !== false,
-    // Per-channel data for per-round selection
+    escapeAllowed,
     weaponAttack: wAtk,
     spellAttack: sAtk,
     weaponLoadoutId: weaponLoadout?.id ?? null,
@@ -912,6 +906,65 @@ const initializeCombatJobState = (
     spellCoreSkillPreferredRoute: spellLoadout?.coreSkillCategory ?? null,
     combatStatuses: [],
   };
+};
+function matchWildernessOpponent(
+  world: WorldState,
+  cultivator: Cultivator,
+  seed: number,
+): Cultivator | null {
+  const currentStateId = cultivator.locationId.split(":")[0];
+  const candidates = Object.values(world.cultivators).filter(c => {
+    if (c.id === cultivator.id) return false;
+    const cStateId = c.locationId.split(":")[0];
+    if (cStateId !== currentStateId) return false;
+    const loc = world.locations[c.locationId];
+    if (!loc || loc.kind === "safe") return false;
+    const realmGap = Math.abs((REALM_ORDER[cultivator.realm] ?? 0) - (REALM_ORDER[c.realm] ?? 0));
+    if (realmGap > 1) return false;
+    if (cultivator.sectId && cultivator.sectId === c.sectId) return false;
+    if (c.activeJobId) return false;
+    return true;
+  });
+  if (candidates.length === 0) return null;
+  return candidates[seed % candidates.length] ?? null;
+}
+function scaleRogueCultivator(
+  cultivator: Cultivator,
+): CombatSnapshot {
+  const realmMult = cultivator.realm === REALM_QI ? 0.7 : cultivator.realm === REALM_FOUNDATION ? 1.0 : 1.3;
+  const hp = Math.round(100 * realmMult);
+  const atk = Math.round(30 * realmMult);
+  const def = Math.round(20 * realmMult);
+  const spd = Math.round(20 * realmMult);
+  const hitVal = Math.round(25 * realmMult);
+  const dodgeVal = Math.round(15 * realmMult);
+  const critVal = Math.round(10 * realmMult);
+  const guardVal = Math.round(8 * realmMult);
+  const spiritVal = Math.round(50 * realmMult);
+  return {
+    hp, maxHp: hp, attack: atk, defense: def, speed: spd,
+    hit: hitVal, dodge: dodgeVal, crit: critVal, critDamage: 40, guardHeart: guardVal,
+    spirit: spiritVal, maxSpirit: spiritVal,
+    coreSkillSpiritCost: Math.round(8 * realmMult),
+    coreSkillPreferredRoute: null,
+    equippedLoadoutId: null,
+    basicAttackStatusHookIds: [],
+    coreSkillStatusHookIds: [],
+    escapeAllowed: true,
+    combatStatuses: [],
+  };
+}
+const initializeCombatJobState = (
+  world: WorldState,
+  cultivator: Cultivator,
+  template: EncounterTemplate,
+  enemyScale = 1,
+  encounterBuildId?: string,
+): CombatJobState => {
+  const playerSnapshot = buildCultivatorCombatSnapshot(cultivator, template.escapeAllowed !== false);
+  const playerSpirit = cultivator.spiritualPower;
+  const playerMaxSpirit = cultivator.maxSpiritualPower;
+
   // ---- Enemy snapshot with optional loadout ----
   const enemyLoadout = template.equippedWeaponLoadoutId
     ? getWeaponLoadoutDefinition(template.equippedWeaponLoadoutId as WeaponLoadoutId)
@@ -2634,6 +2687,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
     moralityScore: 0,
     pendingSectApplicationId: null,
     pendingMoralityChoiceId: null,
+    pendingPvpChallengeId: null,
     totalContribution: 0,
     neutralContribution: 0,
     contributionReachedAt: 0,
@@ -4995,6 +5049,117 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
+
+  // ---- PVP: Challenge a cultivator ----
+  if (actionId.startsWith("challenge-cultivator:")) {
+    const targetId = actionId.slice("challenge-cultivator:".length);
+    const target = world.cultivators[targetId];
+    if (!target) throw new Error("Target cultivator not found.");
+    const location = world.locations[cultivator.locationId];
+    if (!location || location.kind !== "safe") throw new Error("City duels can only be initiated in safe zones.");
+    if (cultivator.locationId !== target.locationId) throw new Error("Target must be in the same location.");
+    if (cultivator.activeJobId) throw new Error("Cannot challenge while in an active job.");
+    if (target.activeJobId) throw new Error("Target is busy with an active job.");
+    if (target.pendingPvpChallengeId) throw new Error("Target already has a pending PVP challenge.");
+    if (cultivator.pendingPvpChallengeId) throw new Error("You already have a pending PVP challenge.");
+    const hpRatio = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
+    if (hpRatio < 0.5) throw new Error("Your qi must be at least 50% to issue a challenge.");
+    const realmGap = Math.abs((REALM_ORDER[cultivator.realm] ?? 0) - (REALM_ORDER[target.realm] ?? 0));
+    if (realmGap > 2) throw new Error("Realm gap too large for a fair duel.");
+    if (cultivator.sectId && cultivator.sectId === target.sectId) throw new Error("Cannot challenge a sect member in the city.");
+
+    const challengeId = `pvp-challenge-${world.nextPvpChallengeSequence++}`;
+    const challenge: PendingPvpChallenge = {
+      id: challengeId,
+      challengerCultivatorId: cultivator.id,
+      targetCultivatorId: targetId,
+      createdAtTick: world.tick,
+      expiresAtTick: world.tick + 3,
+      locationId: cultivator.locationId,
+    };
+    world.pendingPvpChallenges[challengeId] = challenge;
+    target.pendingPvpChallengeId = challengeId;
+    addMessage(world, targetId, "切磋挑战", "挑战书", `${cultivator.name}向你发起了切磋挑战，请在3个tick内回复。`, { fromCultivatorId: cultivator.id });
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} challenged ${target.name} to a duel.` };
+  }
+
+  // ---- PVP: Reject challenge ----
+  if (actionId.startsWith("reject-pvp-challenge:")) {
+    const challengeId = actionId.slice("reject-pvp-challenge:".length);
+    const challenge = world.pendingPvpChallenges[challengeId];
+    if (!challenge) throw new Error("Challenge not found or already expired.");
+    if (challenge.targetCultivatorId !== cultivator.id) throw new Error("Only the challenged cultivator can reject.");
+    delete world.pendingPvpChallenges[challengeId];
+    cultivator.pendingPvpChallengeId = null;
+    const challenger = world.cultivators[challenge.challengerCultivatorId];
+    if (challenger) {
+      addMessage(world, challenger.id, "切磋回复", "挑战被拒绝", `${cultivator.name}拒绝了你的切磋挑战。`);
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected the duel challenge.` };
+  }
+
+  // ---- PVP: Accept challenge → start combat ----
+  if (actionId.startsWith("accept-pvp-challenge:")) {
+    const challengeId = actionId.slice("accept-pvp-challenge:".length);
+    const challenge = world.pendingPvpChallenges[challengeId];
+    if (!challenge) throw new Error("Challenge not found or already expired.");
+    if (challenge.targetCultivatorId !== cultivator.id) throw new Error("Only the challenged cultivator can accept.");
+    if (world.tick >= challenge.expiresAtTick) {
+      delete world.pendingPvpChallenges[challengeId];
+      cultivator.pendingPvpChallengeId = null;
+      throw new Error("Challenge has expired.");
+    }
+    const challenger = world.cultivators[challenge.challengerCultivatorId];
+    if (!challenger) throw new Error("Challenger no longer exists.");
+    if (cultivator.locationId !== challenge.locationId || challenger.locationId !== challenge.locationId) {
+      delete world.pendingPvpChallenges[challengeId];
+      cultivator.pendingPvpChallengeId = null;
+      throw new Error("Both duelists must remain at the original challenge location.");
+    }
+    if (challenger.activeJobId) {
+      delete world.pendingPvpChallenges[challengeId];
+      cultivator.pendingPvpChallengeId = null;
+      throw new Error("Challenger is busy.");
+    }
+
+    // Clean up challenge
+    delete world.pendingPvpChallenges[challengeId];
+    cultivator.pendingPvpChallengeId = null;
+
+    // Build opponent snapshot from target (the acceptor)
+    const opponentSnapshot = buildCultivatorCombatSnapshot(cultivator, true);
+    // Build a dummy template so initializeCombatJobState works for the challenger
+    const duelTemplate: EncounterTemplate = {
+      id: "pvp-city-duel",
+      enemyName: cultivator.name,
+      maxRounds: 7,
+      stylePreference: ["finesse", "tactic", "brute"],
+      baseHp: opponentSnapshot.maxHp,
+      attack: opponentSnapshot.attack,
+      defense: opponentSnapshot.defense,
+      speed: opponentSnapshot.speed,
+      hit: opponentSnapshot.hit,
+      dodge: opponentSnapshot.dodge,
+      crit: opponentSnapshot.crit,
+      critDamage: opponentSnapshot.critDamage,
+      guardHeart: opponentSnapshot.guardHeart,
+      escapeAllowed: true,
+      spirit: opponentSnapshot.spirit,
+      maxSpirit: opponentSnapshot.maxSpirit,
+    };
+    const combatState = initializeCombatJobState(world, challenger, duelTemplate, 1, "pvp-city-duel");
+    // Overwrite enemy snapshot with real cultivator snapshot
+    combatState.enemySnapshot = opponentSnapshot;
+    combatState.pvpTargetCultivatorId = cultivator.id;
+    combatState.pvpBattleKind = "city-duel";
+    const result = startJob(world, challenger, "pvp-duel", "切磋对决");
+    if (result.job) {
+      setCombatJobState(result.job, combatState);
+    }
+    addMessage(world, cultivator.id, "切磋开始", "挑战已接受", `你接受了${challenger.name}的切磋挑战，战斗即将开始。`);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted the duel. Combat started for ${challenger.name}.`, job: result.job };
+  }
+
   throw new Error(`Unsupported action: ${actionId}`);
 }
 function resolveJob(world: WorldState, job: ActionJob): string {
@@ -5580,6 +5745,100 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       return `${cultivator.name} was repelled by the rank ${challengeGuardianRank} guardian of ${location.name}.`;
     }
   }
+  // ---- PVP Duel Resolution ----
+  if (combatState && job.actionId === "pvp-duel") {
+    cultivator.activeJobId = null;
+    const outcome = combatState.outcome ?? finalizeCombat(world, cultivator, job, combatState);
+    combatState.resolved = true;
+    combatState.outcome = outcome;
+    setCombatJobState(job, combatState);
+
+    const totalRounds = combatState.rounds.length;
+    const damageTaken = combatState.rounds.reduce(
+      (sum, round) => sum + (round.enemyAttack?.damage.finalDamage ?? 0),
+      0,
+    );
+    const retreated = combatState.retreated === true;
+    const targetId = combatState.pvpTargetCultivatorId;
+    const target = targetId ? world.cultivators[targetId] : null;
+    const targetName = target?.name ?? "Unknown";
+    const pvpBattleKind = combatState.pvpBattleKind ?? "city-duel";
+    const isCityDuel = pvpBattleKind === "city-duel";
+    const baseSeed = `${world.tick}:${job.id}:pvp`;
+
+    // Helper to add combat log for both sides
+    const pvpEncounterBuildId = combatState.encounterBuildId ?? "pvp-city-duel";
+    const addPvpLog = (cId: string, locId: string, opp: string, oppId: string | undefined, result: "victory" | "defeat", dmg: number, lootMap: Partial<Record<ItemId, number>>, summary: string, isRetreated: boolean) => {
+      addCombatLog(world, {
+        cultivatorId: cId,
+        locationId: locId,
+        encounterId: pvpEncounterBuildId,
+        enemyName: opp,
+        outcome: result,
+        damageTaken: dmg,
+        spiritualPowerSpent: 0,
+        loot: lootMap,
+        summary,
+        encounterTemplateId: pvpEncounterBuildId,
+        encounterBuildId: pvpEncounterBuildId,
+        totalRounds,
+        rounds: combatState.rounds,
+        playerSnapshot: combatState.playerSnapshot,
+        enemySnapshot: combatState.enemySnapshot,
+        retreated: isRetreated || undefined,
+        pvpOpponentCultivatorId: oppId,
+        pvpOpponentName: opp,
+        pvpBattleKind: pvpBattleKind,
+      });
+    };
+
+    const enemyDamageTaken = combatState.rounds.reduce(
+      (sum, round) => sum + (round.playerAttack?.damage.finalDamage ?? 0),
+      0,
+    );
+
+    if (retreated) {
+      // Challenger retreated → defeat for challenger
+      if (isCityDuel) {
+        cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 8);
+        if (target) target.spiritStones += 5;
+      }
+      addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} retreated from the duel with ${targetName}.`, true);
+      if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, isCityDuel ? { "spirit-stone-reward": 5 } as Partial<Record<ItemId, number>> : {}, `${targetName} won — ${cultivator.name} retreated.`, false);
+      return `${cultivator.name} retreated from the duel with ${targetName}.`;
+    }
+
+    if (outcome === "victory") {
+      // Challenger wins
+      if (isCityDuel) {
+        cultivator.spiritStones += 15;
+        addCurrentStateReputation(cultivator, 2);
+        if (target) target.spiritStones = Math.max(0, target.spiritStones - 5);
+      }
+      addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, isCityDuel ? {} : {}, `${cultivator.name} defeated ${targetName} in a duel (${totalRounds} rounds).`, false);
+      if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} was defeated by ${cultivator.name} in a duel.`, false);
+      return `${cultivator.name} defeated ${targetName} in a duel.`;
+    }
+
+    if (outcome === "defeat") {
+      // Challenger loses
+      if (isCityDuel) {
+        cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 10);
+        if (target) {
+          target.spiritStones += 10;
+          addCurrentStateReputation(target, 1);
+        }
+      }
+      addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} was defeated by ${targetName} in a duel (${totalRounds} rounds).`, false);
+      if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, {}, `${targetName} defeated ${cultivator.name} in a duel.`, false);
+      return `${cultivator.name} was defeated by ${targetName} in a duel.`;
+    }
+
+    // Draw (rounds exhausted)
+    addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} fought ${targetName} to a draw (${totalRounds} rounds).`, false);
+    if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} fought ${cultivator.name} to a draw.`, false);
+    return `${cultivator.name} fought ${targetName} to a draw.`;
+  }
   if (parseStartDungeonExpeditionActionId(job.actionId)) {
     cultivator.activeJobId = null;
     const report = world.dungeonExpeditionReports[cultivator.id];
@@ -5668,6 +5927,93 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       { grade: metadata.grade, rank: searchFortuneRank },
     );
     return `${cultivator.name} searched the rank ${searchFortuneRank} ruins at ${location.name}.`;
+  }
+  // ---- Wilderness PVP Combat Resolution ----
+  if (combatState && job.actionId === "survey-wilderness") {
+    cultivator.activeJobId = null;
+    const outcome = combatState.outcome ?? finalizeCombat(world, cultivator, job, combatState);
+    combatState.resolved = true;
+    combatState.outcome = outcome;
+    setCombatJobState(job, combatState);
+
+    const totalRounds = combatState.rounds.length;
+    const damageTaken = combatState.rounds.reduce(
+      (sum, round) => sum + (round.enemyAttack?.damage.finalDamage ?? 0),
+      0,
+    );
+    const enemyDamageTaken = combatState.rounds.reduce(
+      (sum, round) => sum + (round.playerAttack?.damage.finalDamage ?? 0),
+      0,
+    );
+    const retreated = combatState.retreated === true;
+    const targetId = combatState.pvpTargetCultivatorId;
+    const target = targetId ? world.cultivators[targetId] : null;
+    const targetName = target?.name ?? combatState.enemySnapshot?.maxHp ? "散修" : "Unknown";
+    const wBuildId = combatState.encounterBuildId ?? "pvp-wilderness-clash";
+
+    const addWildPvpLog = (cId: string, locId: string, opp: string, oppId: string | undefined, result: "victory" | "defeat", dmg: number, lootMap: Partial<Record<ItemId, number>>, summary: string, isRetreated: boolean) => {
+      addCombatLog(world, {
+        cultivatorId: cId,
+        locationId: locId,
+        encounterId: wBuildId,
+        enemyName: opp,
+        outcome: result,
+        damageTaken: dmg,
+        spiritualPowerSpent: 0,
+        loot: lootMap,
+        summary,
+        encounterTemplateId: wBuildId,
+        encounterBuildId: wBuildId,
+        totalRounds,
+        rounds: combatState.rounds,
+        playerSnapshot: combatState.playerSnapshot,
+        enemySnapshot: combatState.enemySnapshot,
+        retreated: isRetreated || undefined,
+        pvpOpponentCultivatorId: oppId,
+        pvpOpponentName: opp,
+        pvpBattleKind: "wilderness-clash",
+      });
+    };
+
+    if (retreated) {
+      cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 5);
+      cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 1);
+      if (target) target.spiritStones += 10;
+      addWildPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} retreated from ${targetName} in the wilderness.`, true);
+      if (target) addWildPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, {}, `${targetName} won — ${cultivator.name} retreated.`, false);
+      return `${cultivator.name} retreated from ${targetName} in the wilderness.`;
+    }
+
+    if (outcome === "victory") {
+      cultivator.spiritStones += 20;
+      cultivator.inventory["beast-core"] = (cultivator.inventory["beast-core"] ?? 0) + 1;
+      if (target) {
+        target.spiritStones = Math.max(0, target.spiritStones - 15);
+        target.injuryTicksRemaining = Math.max(target.injuryTicksRemaining, 2);
+      }
+      addWildPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, { "beast-core": 1 }, `${cultivator.name} defeated ${targetName} in the wilderness (${totalRounds} rounds).`, false);
+      if (target) addWildPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} was defeated by ${cultivator.name} in the wilderness.`, false);
+      return `${cultivator.name} defeated ${targetName} in the wilderness.`;
+    }
+
+    if (outcome === "defeat") {
+      cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 15);
+      cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 2);
+      if (target) {
+        target.spiritStones += 20;
+        target.inventory["beast-core"] = (target.inventory["beast-core"] ?? 0) + 1;
+      }
+      addWildPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} was defeated by ${targetName} in the wilderness (${totalRounds} rounds).`, false);
+      if (target) addWildPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, { "beast-core": 1 }, `${targetName} defeated ${cultivator.name} in the wilderness.`, false);
+      return `${cultivator.name} was defeated by ${targetName} in the wilderness.`;
+    }
+
+    // Draw
+    cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 1);
+    if (target) target.injuryTicksRemaining = Math.max(target.injuryTicksRemaining, 1);
+    addWildPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} fought ${targetName} to a draw in the wilderness.`, false);
+    if (target) addWildPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} fought ${cultivator.name} to a draw.`, false);
+    return `${cultivator.name} fought ${targetName} to a draw in the wilderness.`;
   }
   return resolveJob(world, job);
 }
@@ -5844,10 +6190,43 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         layer,
         `${world.tick}:${cultivator.id}:${world.nextJobSequence}:survey-wilderness`,
       );
-      return startJob(world, cultivator, actionId as TimedActionId, `Survey ${layer.name}`, {
+      const surveyResult = startJob(world, cultivator, actionId as TimedActionId, `Survey ${layer.name}`, {
         wildernessLayerId: layer.layerId,
         wildernessEventId: eventId,
       });
+      // Detect PVP wilderness event and attach combat state
+      const wildernessEvt = getWildernessEventDefinition(eventId);
+      if (wildernessEvt?.encounterBuildId?.startsWith("pvp-") && surveyResult.job) {
+        const opponent = matchWildernessOpponent(world, cultivator, hashString(`${world.tick}:${cultivator.id}:pvp-match`));
+        const opponentSnapshot = opponent
+          ? buildCultivatorCombatSnapshot(opponent, true)
+          : scaleRogueCultivator(cultivator);
+        const opponentName = opponent?.name ?? "散修";
+        const pvpTemplate: EncounterTemplate = {
+          id: wildernessEvt.encounterBuildId!,
+          enemyName: opponentName,
+          maxRounds: 7,
+          stylePreference: ["finesse", "tactic", "brute"],
+          baseHp: opponentSnapshot.maxHp,
+          attack: opponentSnapshot.attack,
+          defense: opponentSnapshot.defense,
+          speed: opponentSnapshot.speed,
+          hit: opponentSnapshot.hit,
+          dodge: opponentSnapshot.dodge,
+          crit: opponentSnapshot.crit,
+          critDamage: opponentSnapshot.critDamage,
+          guardHeart: opponentSnapshot.guardHeart,
+          escapeAllowed: true,
+          spirit: opponentSnapshot.spirit,
+          maxSpirit: opponentSnapshot.maxSpirit,
+        };
+        const pvpCombat = initializeCombatJobState(world, cultivator, pvpTemplate, 1, wildernessEvt.encounterBuildId!);
+        pvpCombat.enemySnapshot = opponentSnapshot;
+        pvpCombat.pvpTargetCultivatorId = opponent?.id;
+        pvpCombat.pvpBattleKind = "wilderness-clash";
+        setCombatJobState(surveyResult.job, pvpCombat);
+      }
+      return surveyResult;
     }
     if (exploreGuixuNodeId) {
       const node = getGuixuNodeById(world, exploreGuixuNodeId);
@@ -6039,6 +6418,21 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       syncWounded(cultivator);
       applyWildernessPressure(world, cultivator);
       advanceBahuangExpedition(world, cultivator);
+      // PVP challenge auto-expiry
+      if (cultivator.pendingPvpChallengeId) {
+        const pvpChallenge = world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
+        if (!pvpChallenge || world.tick >= pvpChallenge.expiresAtTick) {
+          if (pvpChallenge) {
+            const pvpChallenger = world.cultivators[pvpChallenge.challengerCultivatorId];
+            if (pvpChallenger) {
+              addMessage(world, pvpChallenger.id, "切磋超时", "挑战取消", `对${cultivator.name}的切磋挑战已超时取消。`);
+            }
+            addMessage(world, cultivator.id, "切磋超时", "挑战取消", `${world.cultivators[pvpChallenge.challengerCultivatorId]?.name ?? "某人"}的切磋挑战已超时取消。`);
+            delete world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
+          }
+          cultivator.pendingPvpChallengeId = null;
+        }
+      }
     }
     for (const job of Object.values(world.jobs)) {
       job.remainingTicks -= 1;

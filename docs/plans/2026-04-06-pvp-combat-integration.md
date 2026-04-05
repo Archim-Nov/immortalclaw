@@ -29,9 +29,42 @@ PVP 不需要新造一套战斗系统，只需要：
 
 ### 动作定义
 
+主城切磋分为**发起**和**应答**两个阶段：
+
+**阶段 A — 发起挑战（Immediate Action）**
+
 ```
-TimedActionId: `challenge-cultivator:${targetCultivatorId}`
+ImmediateActionId: `challenge-cultivator:${targetCultivatorId}`
 ```
+
+发起后在 `WorldState.pendingPvpChallenges` 中创建一条 `PendingPvpChallenge`，并给目标修士发送一条系统消息。
+
+**阶段 B — 应答挑战（Immediate Action）**
+
+```
+ImmediateActionId: `accept-pvp-challenge:${challengeId}` | `reject-pvp-challenge:${challengeId}`
+```
+
+- 被挑战者在 **3 tick** 内选择接受或拒绝
+- 3 tick 内未回复 → 自动视为拒绝，挑战过期清除
+- 拒绝挑战**没有任何损失或奖励**
+- 接受挑战 → 立即进入战斗流程
+
+### PendingPvpChallenge 结构
+
+```typescript
+export interface PendingPvpChallenge {
+  id: string;
+  challengerCultivatorId: string;
+  targetCultivatorId: string;
+  createdAtTick: number;
+  expiresAtTick: number;       // createdAtTick + 3
+  locationId: string;           // 发起时的位置（用于验证双方仍在同一地点）
+}
+```
+
+存储在 `WorldState.pendingPvpChallenges: Record<string, PendingPvpChallenge>`。
+被挑战者通过 `Cultivator.pendingPvpChallengeId: string | null` 引用。
 
 ### 前置条件
 
@@ -88,17 +121,36 @@ export interface CombatJobState {
 ### 战斗流程
 
 ```
-performAction(world, challengerId, `challenge-cultivator:${targetId}`)
+发起者: performAction(world, challengerId, `challenge-cultivator:${targetId}`)
   → 前置条件检查
+  → 创建 PendingPvpChallenge（expiresAtTick = world.tick + 3）
+  → 设置 target.pendingPvpChallengeId = challengeId
+  → 给目标发送系统消息通知
+  → 返回 ActionExecutionResult（accepted: true, summary: "挑战已发出"）
+
+被挑战者 — 拒绝: performAction(world, targetId, `reject-pvp-challenge:${challengeId}`)
+  → 清除 PendingPvpChallenge
+  → 清除 target.pendingPvpChallengeId
+  → 无任何损失或奖励
+
+被挑战者 — 接受: performAction(world, targetId, `accept-pvp-challenge:${challengeId}`)
+  → 验证挑战仍有效（未过期、双方仍在同一地点、双方仍可战斗）
   → buildCultivatorCombatSnapshot(target) 生成对手快照
   → 构造 EncounterTemplate（使用对手名称和快照属性）
   → initializeCombatJobState(world, challenger, template, 1, "pvp-city-duel")
   → 覆写 enemySnapshot（用真实对手快照替换 template 生成的）
   → state.pvpTargetCultivatorId = targetId
-  → startJob + setCombatJobState
+  → startJob + setCombatJobState（挂在挑战者身上）
+  → 清除 PendingPvpChallenge
   → advanceWorld tick 推演 → resolveOneRound × N
   → finalizeCombat
   → 双方各自收到 CombatLogEntry
+
+过期自动清除: advanceWorld 中每 tick 检查
+  → world.tick >= challenge.expiresAtTick
+  → 删除 PendingPvpChallenge
+  → 清除 target.pendingPvpChallengeId
+  → 给双方发送消息："挑战已超时取消"
 ```
 
 ### 输赢结算
@@ -293,21 +345,24 @@ export interface CombatLogEntry {
 
 ### Phase 1：基础设施
 
-1. 新增 `buildCultivatorCombatSnapshot(cultivator)` 函数（从 `initializeCombatJobState` 中提取玩家快照生成逻辑）
-2. `CombatJobState` 添加 `pvpTargetCultivatorId?: string`
-3. `CombatLogEntry` 添加 `pvpOpponentCultivatorId?`, `pvpOpponentName?`, `pvpBattleKind?`
-4. 添加 PVP encounter builds 到 catalog
-5. 添加 `wilderness-rogue-cultivator` 敌人配置到 enemy-configs
-6. 添加 `ambushBonus` 字段到 `CombatJobState`，`resolveOneRound` 消费逻辑
+1. `model.ts` — 新增 `PendingPvpChallenge` 接口
+2. `model.ts` — `WorldState` 添加 `pendingPvpChallenges` 和 `nextPvpChallengeSequence`
+3. `model.ts` — `Cultivator` 添加 `pendingPvpChallengeId`
+4. `model.ts` — `CombatJobState` 添加 `pvpTargetCultivatorId`, `ambushBonus`
+5. `model.ts` — `CombatLogEntry` 添加 PVP 字段
+6. `model.ts` — `ImmediateActionId` 添加挑战相关动作
+7. 新增 `buildCultivatorCombatSnapshot(cultivator)` 函数（从 `initializeCombatJobState` 中提取玩家快照生成逻辑）
+8. 添加 PVP encounter builds 到 catalog
+9. 添加 `wilderness-rogue-cultivator` 敌人配置到 enemy-configs
+10. `resolveOneRound` 接入 `ambushBonus` 消费逻辑
 
 ### Phase 2：主城切磋入口
 
-1. `TimedActionId` 添加 `challenge-cultivator:${string}`
-2. `performAction` 添加 `challenge-cultivator` 分支
-3. 前置条件校验（同城、非战斗、境界差、宗门）
-4. 使用 `buildCultivatorCombatSnapshot` 生成对手快照
-5. 走 `initializeCombatJobState` → `setCombatJobState`
-6. `resolveEnhancedJob` 中区分 PVP 结算（双方日志 + 灵石 + 声望）
+1. `performAction` 添加 `challenge-cultivator` 分支 → 创建 PendingPvpChallenge
+2. `performAction` 添加 `accept-pvp-challenge` 分支 → 验证 + 触发战斗
+3. `performAction` 添加 `reject-pvp-challenge` 分支 → 清除挑战
+4. `advanceWorld` 添加过期挑战清理逻辑
+5. `resolveEnhancedJob` 中区分 PVP 结算（双方日志 + 灵石 + 声望）
 
 ### Phase 3：荒野遭遇入口
 

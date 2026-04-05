@@ -443,6 +443,7 @@ export type TimedActionId =
   | "hunt-mine-beast"
   | `challenge-guardian:rank-${DungeonRank}`
   | "survey-wilderness"
+  | "pvp-duel"
   | `residence-produce:${string}`
   | `residence-heal:${"use-pill" | "no-pill"}`
   | `residence-recover-qi:${"use-pill" | "no-pill"}`;
@@ -717,7 +718,10 @@ export type ImmediateActionId =
   | "sell-beast-core"
   | "join-sect"
   | "leave-neutral-sect"
-  | "withdraw-from-wilderness";
+  | "withdraw-from-wilderness"
+  | `challenge-cultivator:${string}`
+  | `accept-pvp-challenge:${string}`
+  | `reject-pvp-challenge:${string}`;
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
@@ -871,6 +875,7 @@ export interface Cultivator {
   moralityScore: number;
   pendingSectApplicationId: string | null;
   pendingMoralityChoiceId: string | null;
+  pendingPvpChallengeId: string | null;
   totalContribution: number;
   neutralContribution: number;
   contributionReachedAt: number;
@@ -1097,6 +1102,18 @@ export interface PendingMoralityChoiceView {
     summary: string;
   }>;
 }
+
+// ---- PVP Challenge ----
+export interface PendingPvpChallenge {
+  id: string;
+  challengerCultivatorId: string;
+  targetCultivatorId: string;
+  createdAtTick: number;
+  expiresAtTick: number;
+  locationId: string;
+}
+
+export type PvpBattleKind = "city-duel" | "wilderness-clash";
 
 // ---- Weapon and Combat Loadout System ----
 export type WeaponFamilyId = "quick" | "heavy" | "polearm" | "flexible" | "ranged-mystic";
@@ -1371,6 +1388,8 @@ export interface CombatJobState {
   enemySpirit?: number;
   enemyMaxSpirit?: number;
   retreated?: boolean;
+  pvpTargetCultivatorId?: string;
+  pvpBattleKind?: PvpBattleKind;
 }
 
 export interface EncounterTemplate {
@@ -1409,6 +1428,9 @@ export interface CombatLogEntry {
   summary: string;
   encounterTemplateId?: string;
   encounterBuildId?: string;
+  pvpOpponentCultivatorId?: string;
+  pvpOpponentName?: string;
+  pvpBattleKind?: PvpBattleKind;
   totalRounds?: number;
   rounds?: CombatRoundLog[];
   playerSnapshot?: CombatSnapshot;
@@ -1905,6 +1927,7 @@ export interface WorldState {
   questBoards: Record<string, QuestBoard>;
   pendingSectApplications: Record<string, SectApplication>;
   pendingMoralityChoices: Record<string, PendingMoralityChoice>;
+  pendingPvpChallenges: Record<string, PendingPvpChallenge>;
   sectReapplyCooldowns: Record<string, SectReapplyCooldown>;
   wildernessLayers: Record<string, WildernessLayer>;
   wildernessProgress: Record<string, WildernessProgress>;
@@ -1928,6 +1951,7 @@ export interface WorldState {
   nextCombatSequence: number;
   nextSectApplicationSequence: number;
   nextMoralityChoiceSequence: number;
+  nextPvpChallengeSequence: number;
   nextSectCooldownSequence: number;
 }
 

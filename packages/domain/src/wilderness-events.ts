@@ -249,6 +249,21 @@ export const WILDERNESS_EVENT_POOL: Record<string, WildernessEventDefinition> = 
     },
     encounterBuildId: "wilderness-rift-serpent-strike" as EncounterBuildId,
   },
+
+  // ── PVP Wilderness Events ──
+  "wilderness-cultivator-clash": {
+    eventId: "wilderness-cultivator-clash",
+    title: "Cultivator Clash",
+    content: "Another cultivator blocks the path ahead and shows no intention of yielding. Their spiritual pressure is unmistakable — this will end in a fight.",
+    summary: "fought a rival cultivator in the wilderness",
+    severity: "high",
+    tags: ["wilderness", "pvp", "cultivator"],
+    qiDamage: 0,
+    spiritualDamage: 0,
+    injuryTicks: 2,
+    encounterBuildId: "pvp-wilderness-clash" as EncounterBuildId,
+    combatMode: "full",
+  },
 };
 
 export function getWildernessEventDefinition(eventId: string): WildernessEventDefinition | null {
