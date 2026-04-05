@@ -73,6 +73,43 @@ function startMineBeastCombat() {
   };
 }
 
+function stateIdOfLocation(locationId: string): (typeof STATE_IDS)[number] {
+  const stateId = STATE_IDS.find((candidate) => locationId.startsWith(`${candidate}:`));
+  assert.ok(stateId);
+  return stateId;
+}
+
+function startCityDuelCombat() {
+  const world = createSeedWorld();
+  const challenger = world.cultivators["yun-zhong-he"];
+  assert.ok(challenger);
+  const summary = createCultivator(world, { name: "Duel Target" });
+  const target = world.cultivators[summary.id];
+  assert.ok(target);
+  target.locationId = challenger.locationId;
+  target.injuryTicksRemaining = 0;
+  target.activeJobId = null;
+  const challengeResult = performAction(world, challenger.id, `challenge-cultivator:${target.id}`);
+  assert.equal(challengeResult.accepted, true);
+  const challengeId = target.pendingPvpChallengeId;
+  assert.ok(challengeId);
+  const acceptResult = performAction(world, target.id, `accept-pvp-challenge:${challengeId}`);
+  assert.equal(acceptResult.accepted, true);
+  const jobId = challenger.activeJobId;
+  assert.ok(jobId);
+  const job = world.jobs[jobId];
+  assert.ok(job);
+  const combatState = (job.meta as { combatState?: CombatJobState } | undefined)?.combatState;
+  assert.ok(combatState);
+  return {
+    world,
+    job,
+    combatState,
+    cultivator: challenger,
+    target,
+  };
+}
+
 function firstRoundHitRoll(world: ReturnType<typeof createSeedWorld>, jobId: string, encounterTemplateId: string) {
   const seedBase = `${world.tick + 1}:${jobId}:${encounterTemplateId}:round-1`;
   return hashString(`${seedBase}:hit-first`) % 100;
@@ -98,6 +135,27 @@ function firstRoundPlayerAction(context: ReturnType<typeof startMineBeastCombat>
   );
 }
 
+function firstRoundEnemyAction(context: ReturnType<typeof startCityDuelCombat>) {
+  const seedBase = `${context.world.tick + 1}:${context.job.id}:${context.combatState.encounterTemplateId}:round-1`;
+  return selectCombatAction(
+    context.cultivator,
+    context.combatState.enemySnapshot,
+    context.combatState.playerSnapshot,
+    false,
+    context.combatState.enemySnapshot.escapeAllowed !== false,
+    context.combatState.enemySpirit ?? context.combatState.enemySnapshot.spirit ?? 0,
+    context.combatState.enemyMaxSpirit ?? context.combatState.enemySnapshot.maxSpirit ?? 0,
+    context.combatState.enemySnapshot.coreSkillSpiritCost ?? 0,
+    `${seedBase}:enemy-action`,
+    context.combatState.enemySnapshot.escapeAllowed !== false,
+  );
+}
+
+function firstRoundEnemyEscapeRoll(context: ReturnType<typeof startCityDuelCombat>) {
+  const seedBase = `${context.world.tick + 1}:${context.job.id}:${context.combatState.encounterTemplateId}:round-1`;
+  return hashString(`${seedBase}:enemy-escape-roll`) % 100;
+}
+
 function findCombatContextByAction(
   expectedAction: "basic_attack" | "core_skill" | "escape",
   configure: (context: ReturnType<typeof startMineBeastCombat>) => void,
@@ -109,6 +167,42 @@ function findCombatContextByAction(
     candidate.world.tick += i;
     configure(candidate);
     if (firstRoundPlayerAction(candidate) === expectedAction) {
+      if (!postFilter || postFilter(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+function findCityDuelContextByPlayerAction(
+  expectedAction: "basic_attack" | "core_skill" | "escape",
+  configure: (context: ReturnType<typeof startCityDuelCombat>) => void,
+  postFilter?: (context: ReturnType<typeof startCityDuelCombat>) => boolean,
+) {
+  for (let i = 0; i < 500; i += 1) {
+    const candidate = startCityDuelCombat();
+    candidate.world.tick += i;
+    configure(candidate);
+    if (firstRoundPlayerAction(candidate) === expectedAction) {
+      if (!postFilter || postFilter(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+function findCityDuelContextByEnemyAction(
+  expectedAction: "basic_attack" | "core_skill" | "escape",
+  configure: (context: ReturnType<typeof startCityDuelCombat>) => void,
+  postFilter?: (context: ReturnType<typeof startCityDuelCombat>) => boolean,
+) {
+  for (let i = 0; i < 500; i += 1) {
+    const candidate = startCityDuelCombat();
+    candidate.world.tick += i;
+    configure(candidate);
+    if (firstRoundEnemyAction(candidate) === expectedAction) {
       if (!postFilter || postFilter(candidate)) {
         return candidate;
       }
@@ -2484,6 +2578,91 @@ test("retreat grants no victory reward and preserves qi", () => {
   assert.equal(context.cultivator.inventory["spirit-ore"], beforeOre);
   assert.equal(context.cultivator.inventory["foundation-common"], beforeFoundation);
   assert.equal(context.cultivator.inventory["beast-core"], beforeBeastCore);
+});
+
+test("city duel challenger retreat applies challenger-side penalties", () => {
+  const configureFn = (candidate: ReturnType<typeof startCityDuelCombat>) => {
+    candidate.combatState.maxRounds = 5;
+    candidate.combatState.playerSnapshot.escapeAllowed = true;
+    candidate.combatState.playerSnapshot.coreSkillSpiritCost = 999;
+    candidate.combatState.playerSpirit = 0;
+    candidate.combatState.playerSnapshot.spirit = 0;
+    candidate.combatState.playerSnapshot.hp = 10;
+    candidate.combatState.playerSnapshot.maxHp = 100;
+    candidate.combatState.playerSnapshot.speed = 300;
+    candidate.combatState.enemySnapshot.speed = 1;
+  };
+  const escapeSucceeds = (ctx: ReturnType<typeof startCityDuelCombat>) => {
+    const chance = computeEscapeChance(300, 1, 0.1, "stable");
+    const roll = firstRoundEscapeRoll(ctx.world, ctx.job.id, ctx.combatState.encounterTemplateId);
+    return roll < chance;
+  };
+  const context = findCityDuelContextByPlayerAction("escape", configureFn, escapeSucceeds);
+  assert.ok(context);
+
+  const challengerStateId = stateIdOfLocation(context.cultivator.locationId);
+  const challengerReputation = context.cultivator.stateReputation[challengerStateId];
+  const challengerStones = context.cultivator.spiritStones;
+  const targetStones = context.target.spiritStones;
+
+  runUntilIdle(context.world, context.cultivator.id);
+
+  assert.equal(context.cultivator.spiritStones, challengerStones - 8);
+  assert.equal(context.cultivator.stateReputation[challengerStateId], challengerReputation - 1);
+  assert.equal(context.target.spiritStones, targetStones + 5);
+
+  const challengerLog = context.world.combatLogs.find((entry) => entry.cultivatorId === context.cultivator.id);
+  const targetLog = context.world.combatLogs.find((entry) => entry.cultivatorId === context.target.id);
+  assert.ok(challengerLog);
+  assert.ok(targetLog);
+  assert.equal(challengerLog.outcome, "defeat");
+  assert.equal(challengerLog.retreated, true);
+  assert.equal(targetLog.outcome, "victory");
+  assert.equal(targetLog.retreated, undefined);
+});
+
+test("city duel target retreat applies target-side penalties", () => {
+  const configureFn = (candidate: ReturnType<typeof startCityDuelCombat>) => {
+    candidate.combatState.maxRounds = 5;
+    candidate.combatState.enemySnapshot.escapeAllowed = true;
+    candidate.combatState.enemySnapshot.coreSkillSpiritCost = 999;
+    candidate.combatState.enemySpirit = 0;
+    candidate.combatState.enemySnapshot.spirit = 0;
+    candidate.combatState.enemySnapshot.hp = 10;
+    candidate.combatState.enemySnapshot.maxHp = 100;
+    candidate.combatState.enemySnapshot.speed = 300;
+    candidate.combatState.playerSnapshot.speed = 1;
+    candidate.combatState.playerSnapshot.attack = 1;
+  };
+  const escapeSucceeds = (ctx: ReturnType<typeof startCityDuelCombat>) => {
+    const chance = computeEscapeChance(300, 1, 0.1, "stable");
+    const roll = firstRoundEnemyEscapeRoll(ctx);
+    return roll < chance;
+  };
+  const context = findCityDuelContextByEnemyAction("escape", configureFn, escapeSucceeds);
+  assert.ok(context);
+
+  const challengerStateId = stateIdOfLocation(context.cultivator.locationId);
+  const challengerReputation = context.cultivator.stateReputation[challengerStateId];
+  const challengerStones = context.cultivator.spiritStones;
+  const targetStones = context.target.spiritStones;
+
+  runUntilIdle(context.world, context.cultivator.id);
+
+  assert.equal(context.cultivator.spiritStones, challengerStones + 8);
+  assert.equal(context.cultivator.stateReputation[challengerStateId], challengerReputation);
+  assert.equal(context.target.spiritStones, targetStones - 3);
+
+  const challengerLog = context.world.combatLogs.find((entry) => entry.cultivatorId === context.cultivator.id);
+  const targetLog = context.world.combatLogs.find((entry) => entry.cultivatorId === context.target.id);
+  assert.ok(challengerLog);
+  assert.ok(targetLog);
+  assert.equal(challengerLog.outcome, "victory");
+  assert.equal(challengerLog.retreated, undefined);
+  assert.equal(targetLog.outcome, "defeat");
+  assert.equal(targetLog.retreated, true);
+  assert.equal(targetLog.rounds?.[0]?.enemyEscape?.attempted, true);
+  assert.equal(targetLog.rounds?.[0]?.enemyEscape?.success, true);
 });
 
 test("player killed before escape turn does not attempt escape", () => {

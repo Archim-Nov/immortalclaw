@@ -629,12 +629,13 @@ export function getAvailableActions(
   currentSpirit: number,
   coreSkillSpiritCost: number,
   escapeAllowed: boolean,
+  allowEnemyEscape = false,
 ): CombatActionType[] {
   const actions: CombatActionType[] = ["basic_attack"];
   if (currentSpirit >= coreSkillSpiritCost) {
     actions.push("core_skill");
   }
-  if (isPlayer && escapeAllowed) {
+  if ((isPlayer || allowEnemyEscape) && escapeAllowed) {
     actions.push("escape");
   }
   return actions;
@@ -673,8 +674,9 @@ export function selectCombatAction(
   maxSpirit: number,
   coreSkillSpiritCost: number,
   seed: string,
+  allowEnemyEscape = false,
 ): CombatActionType {
-  const availableActions = getAvailableActions(isPlayer, currentSpirit, coreSkillSpiritCost, escapeAllowed);
+  const availableActions = getAvailableActions(isPlayer, currentSpirit, coreSkillSpiritCost, escapeAllowed, allowEnemyEscape);
   if (availableActions.length === 1) {
     return availableActions[0]!;
   }
@@ -1040,8 +1042,8 @@ const finalizeCombat = (
 ): "victory" | "defeat" => {
   if (state.retreated) {
     state.resolved = true;
-    state.outcome = "defeat";
-    return "defeat";
+    state.outcome = state.retreatingSide === "enemy" ? "victory" : "defeat";
+    return state.outcome;
   }
   if (state.playerSnapshot.hp <= 0) {
     state.resolved = true;
@@ -1116,7 +1118,7 @@ const resolveOneRound = (
     state.playerSnapshot.coreSkillSpiritCost ?? 0,
     `${seedBase}:player-action`,
   );
-  // Enemy uses the same action-layer selector; escape is never allowed for PVE enemies
+  const enemyCanEscape = state.pvpTargetCultivatorId != null && state.enemySnapshot.escapeAllowed !== false;
   const enemyCurrentSpirit = state.enemySpirit ?? state.enemySnapshot.spirit ?? 0;
   const enemyMaxSpirit = state.enemyMaxSpirit ?? state.enemySnapshot.maxSpirit ?? 0;
   const enemyAction: CombatActionType = selectCombatAction(
@@ -1124,11 +1126,12 @@ const resolveOneRound = (
     state.enemySnapshot,
     state.playerSnapshot,
     false,
-    false,
+    enemyCanEscape,
     enemyCurrentSpirit,
     enemyMaxSpirit,
     state.enemySnapshot.coreSkillSpiritCost ?? 0,
     `${seedBase}:enemy-action`,
+    enemyCanEscape,
   );
 
   // Per-round channel selection
@@ -1233,7 +1236,7 @@ const resolveOneRound = (
   let playerSpiritSpent = 0;
   let enemySpiritSpent = 0;
   let playerEscape: EscapeResolution | null | undefined;
-  const enemyEscape: EscapeResolution | null | undefined = undefined;
+  let enemyEscape: EscapeResolution | null | undefined;
   let playerActionSkipped = false;
   let enemyActionSkipped = false;
   let battleEndedByRetreat = false;
@@ -1315,6 +1318,7 @@ const resolveOneRound = (
       playerEscape = { attempted: true, success, chance };
       if (success) {
         state.retreated = true;
+        state.retreatingSide = "player";
         state.resolved = true;
         state.outcome = "defeat";
         battleEndedByRetreat = true;
@@ -1347,6 +1351,28 @@ const resolveOneRound = (
   const resolveEnemyAction = (phaseSuffix: "first" | "second") => {
     if (state.enemySnapshot.hp <= 0) {
       enemyActionSkipped = true;
+      if (enemyAction === "escape") {
+        enemyEscape = { attempted: false, success: false, chance: 0 };
+      }
+      return;
+    }
+    if (enemyAction === "escape") {
+      const selfHpRatio = state.enemySnapshot.maxHp > 0 ? state.enemySnapshot.hp / state.enemySnapshot.maxHp : 0;
+      const chance = computeEscapeChance(
+        state.enemySnapshot.speed,
+        state.playerSnapshot.speed,
+        selfHpRatio,
+        "stable",
+      );
+      const success = (hashString(`${seedBase}:enemy-escape-roll`) % 100) < chance;
+      enemyEscape = { attempted: true, success, chance };
+      if (success) {
+        state.retreated = true;
+        state.retreatingSide = "enemy";
+        state.resolved = true;
+        state.outcome = "victory";
+        battleEndedByRetreat = true;
+      }
       return;
     }
     enemyAttack = resolveAttack(
@@ -1389,6 +1415,9 @@ const resolveOneRound = (
 
   if (playerAction === "escape" && !playerEscape) {
     playerEscape = { attempted: false, success: false, chance: 0 };
+  }
+  if (enemyAction === "escape" && !enemyEscape) {
+    enemyEscape = { attempted: false, success: false, chance: 0 };
   }
 
   // ---- Consumable status triggers ----
@@ -1502,7 +1531,7 @@ const resolveOneRound = (
     playerActionSkipped,
     enemyActionSkipped,
     playerChannel: playerAction !== "escape" ? playerChannelResult.channel : undefined,
-    enemyChannel: enemyChannelResult.channel,
+    enemyChannel: enemyAction !== "escape" ? enemyChannelResult.channel : undefined,
     appliedStatuses: roundAppliedStatuses.length > 0 ? roundAppliedStatuses : undefined,
     tickEvents: roundTickEvents.length > 0 ? roundTickEvents : undefined,
     consumedStatuses: roundConsumedStatuses.length > 0 ? roundConsumedStatuses : undefined,
@@ -5759,6 +5788,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       0,
     );
     const retreated = combatState.retreated === true;
+    const retreatingSide = combatState.retreatingSide ?? "player";
     const targetId = combatState.pvpTargetCultivatorId;
     const target = targetId ? world.cultivators[targetId] : null;
     const targetName = target?.name ?? "Unknown";
@@ -5798,9 +5828,20 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     );
 
     if (retreated) {
-      // Challenger retreated → defeat for challenger
+      if (retreatingSide === "enemy") {
+        if (isCityDuel) {
+          cultivator.spiritStones += 8;
+          if (target) {
+            target.spiritStones = Math.max(0, target.spiritStones - 3);
+          }
+        }
+        addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, {}, `${cultivator.name} won — ${targetName} retreated from the duel.`, false);
+        if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} retreated from the duel with ${cultivator.name}.`, true);
+        return `${targetName} retreated from the duel with ${cultivator.name}.`;
+      }
       if (isCityDuel) {
         cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 8);
+        addCurrentStateReputation(cultivator, -1);
         if (target) target.spiritStones += 5;
       }
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} retreated from the duel with ${targetName}.`, true);
@@ -5946,6 +5987,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       0,
     );
     const retreated = combatState.retreated === true;
+    const retreatingSide = combatState.retreatingSide ?? "player";
     const targetId = combatState.pvpTargetCultivatorId;
     const target = targetId ? world.cultivators[targetId] : null;
     const targetName = target?.name ?? combatState.enemySnapshot?.maxHp ? "散修" : "Unknown";
@@ -5976,6 +6018,16 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     };
 
     if (retreated) {
+      if (retreatingSide === "enemy") {
+        cultivator.spiritStones += 10;
+        if (target) {
+          target.spiritStones = Math.max(0, target.spiritStones - 5);
+          target.injuryTicksRemaining = Math.max(target.injuryTicksRemaining, 1);
+        }
+        addWildPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, {}, `${targetName} retreated from ${cultivator.name} in the wilderness.`, false);
+        if (target) addWildPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} retreated from ${cultivator.name} in the wilderness.`, true);
+        return `${targetName} retreated from ${cultivator.name} in the wilderness.`;
+      }
       cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 5);
       cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 1);
       if (target) target.spiritStones += 10;

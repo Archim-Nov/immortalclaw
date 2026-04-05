@@ -1388,6 +1388,7 @@ export interface CombatJobState {
   enemySpirit?: number;
   enemyMaxSpirit?: number;
   retreated?: boolean;
+  retreatingSide?: "player" | "enemy";
   pvpTargetCultivatorId?: string;
   pvpBattleKind?: PvpBattleKind;
 }
