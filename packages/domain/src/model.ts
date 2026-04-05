@@ -1102,11 +1102,17 @@ export type SpellBranchId =
 export type WeaponLoadoutId = string & { readonly __brand: "WeaponLoadoutId" };
 export type SpellLoadoutId = string & { readonly __brand: "SpellLoadoutId" };
 export type StatusHookId = string;
+export type CombatStatusId = string & { readonly __brand: "CombatStatusId" };
+
+export type WeaponTier = 1 | 2 | 3 | 4 | 5;
+export type SpellTier = 1 | 2 | 3 | 4 | 5;
 
 export interface WeaponLoadoutDefinition {
   id: WeaponLoadoutId;
   name: string;
   weaponTypeId: WeaponTypeId;
+  weaponTier?: WeaponTier;
+  weaponFamilyId?: WeaponFamilyId;
   attackPowerBonus: number;
   coreSkillCategory: CombatStyle;
   coreSkillSpiritCost: number;
@@ -1118,11 +1124,114 @@ export interface SpellLoadoutDefinition {
   id: SpellLoadoutId;
   name: string;
   spellBranchId: SpellBranchId;
+  spellTier?: SpellTier;
+  primaryStatusId?: CombatStatusId;
+  secondaryStatusId?: CombatStatusId;
   attackPowerBonus: number;
   coreSkillCategory: CombatStyle;
   coreSkillSpiritCost: number;
   basicAttackStatusHookIds: readonly StatusHookId[];
   coreSkillStatusHookIds: readonly StatusHookId[];
+}
+
+// ---- Weapon Family & Type Metadata ----
+export interface WeaponFamilyDefinition {
+  id: WeaponFamilyId;
+  name: string;
+  memberWeaponTypes: readonly WeaponTypeId[];
+  bonusProfile: WeaponBonusProfile;
+}
+
+export interface WeaponBonusProfile {
+  stat1: { stat: string; values: readonly [number, number, number, number, number] };
+  stat2: { stat: string; values: readonly [number, number, number, number, number] };
+}
+
+export interface WeaponTypeDefinition {
+  id: WeaponTypeId;
+  name: string;
+  weaponFamilyId: WeaponFamilyId;
+  coreSkillCategory: CombatStyle;
+  typeBonusProfile: WeaponBonusProfile["stat1"];
+}
+
+// ---- Combat Status System ----
+export type StatusEffectKind =
+  | "defense_down"
+  | "initiative_down"
+  | "dodge_down"
+  | "dodge_up"
+  | "accuracy_up"
+  | "accuracy_down"
+  | "crit_up"
+  | "crit_down"
+  | "damage_taken_down"
+  | "core_skill_damage_taken_up"
+  | "core_skill_damage_taken_down"
+  | "fire_damage_taken_up"
+  | "healing_power_up"
+  | "damage_dealt_down"
+  | "guard_heart_up"
+  | "heal_over_time"
+  | "damage_over_time"
+  | "spirit_regen"
+  | "next_damage_taken_down"
+  | "next_core_skill_damage_taken_up"
+  | "next_core_skill_damage_taken_down"
+  | "next_fire_damage_taken_up"
+  | "initiative_down_extra"
+  | "damage_and_healing_up";
+
+export type StatusExpiryMode = "round_decay" | "consume_on_trigger";
+export type StatusTriggerWindow = "passive" | "round_end" | "on_damage_taken" | "on_core_skill_damage_taken" | "on_fire_damage_taken";
+export type StatusTargetSide = "self" | "enemy";
+
+export interface CombatStatusDefinition {
+  id: CombatStatusId;
+  name: string;
+  description: string;
+  targetSide: StatusTargetSide;
+  durationRounds: number;
+  stacking: "refresh";
+  effectKind: StatusEffectKind;
+  tierValues: readonly [number, number, number, number, number];
+  expiryMode: StatusExpiryMode;
+  triggerWindow: StatusTriggerWindow;
+  secondaryEffects?: {
+    effectKind: StatusEffectKind;
+    tierValues: readonly [number, number, number, number, number];
+  };
+}
+
+export interface StatusHookDefinition {
+  id: StatusHookId;
+  applications: readonly {
+    statusId: CombatStatusId;
+    targetSide: StatusTargetSide;
+  }[];
+}
+
+export interface CombatStatusInstance {
+  id: CombatStatusId;
+  name: string;
+  sourceLoadoutId: WeaponLoadoutId | SpellLoadoutId;
+  sourceActionType: CombatActionType;
+  remainingRounds: number;
+  magnitude: number;
+  secondaryMagnitude?: number;
+  effectKind: StatusEffectKind;
+  secondaryEffects?: { effectKind: StatusEffectKind; magnitude: number };
+  expiryMode: StatusExpiryMode;
+  triggerWindow: StatusTriggerWindow;
+  consumed: boolean;
+}
+
+// ---- Spell Branch Metadata ----
+export interface SpellBranchDefinition {
+  id: SpellBranchId;
+  element: "metal" | "wood" | "water" | "fire" | "earth";
+  primaryStatusId: CombatStatusId;
+  secondaryStatusId: CombatStatusId;
 }
 
 export type CombatStyle = "brute" | "finesse" | "tactic";
@@ -1190,6 +1299,11 @@ export interface CombatRoundLog {
   enemyActionSkipped?: boolean;
   playerChannel?: AttackChannel;
   enemyChannel?: AttackChannel;
+  // Status events for this round
+  appliedStatuses?: { statusId: CombatStatusId; statusName: string; targetSide: "player" | "enemy"; sourceSide: "player" | "enemy"; magnitude: number; isRefresh: boolean }[];
+  tickEvents?: { statusId: CombatStatusId; statusName: string; targetSide: "player" | "enemy"; effectKind: StatusEffectKind; value: number }[];
+  consumedStatuses?: { statusId: CombatStatusId; statusName: string; targetSide: "player" | "enemy" }[];
+  expiredStatuses?: { statusId: CombatStatusId; statusName: string; targetSide: "player" | "enemy" }[];
 }
 
 export interface CombatSnapshot {
@@ -1220,6 +1334,8 @@ export interface CombatSnapshot {
   spellCoreSkillSpiritCost?: number;
   weaponCoreSkillPreferredRoute?: CombatStyle | null;
   spellCoreSkillPreferredRoute?: CombatStyle | null;
+  // Combat status instances active on this combatant
+  combatStatuses?: CombatStatusInstance[];
 }
 
 export interface CombatJobState {
@@ -1672,6 +1788,8 @@ export interface CultivatorStateView {
       id: WeaponLoadoutId;
       name: string;
       weaponTypeId: WeaponTypeId;
+      weaponTier?: WeaponTier;
+      weaponFamilyId?: WeaponFamilyId;
       attackPowerBonus: number;
       coreSkillCategory: CombatStyle;
       coreSkillSpiritCost: number;
@@ -1682,6 +1800,9 @@ export interface CultivatorStateView {
       id: SpellLoadoutId;
       name: string;
       spellBranchId: SpellBranchId;
+      spellTier?: SpellTier;
+      primaryStatusId?: CombatStatusId;
+      secondaryStatusId?: CombatStatusId;
       attackPowerBonus: number;
       coreSkillCategory: CombatStyle;
       coreSkillSpiritCost: number;

@@ -13,6 +13,7 @@ import type {
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
   CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution, AttackChannel,
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
+  CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectKind, StatusTargetSide,
 } from "./model.js";
 import {
   deriveMainAttributes,
@@ -56,7 +57,21 @@ import {
   getWeaponLoadoutDefinition,
   getSpellLoadoutDefinition,
   SPELL_BRANCH_ELEMENT_MAP,
+  WEAPON_FAMILY_DEFINITIONS,
+  WEAPON_TYPE_DEFINITIONS,
 } from "./combat-loadouts.js";
+import {
+  applyOrRefreshStatus,
+  gatherPassiveModifiers,
+  gatherConsumableModifiers,
+  markConsumed,
+  processRoundEndTicks,
+  decayAndCleanStatuses,
+  getCombatStatusDefinition,
+  getStatusHookDefinition,
+  type StatusModifiers,
+  type TickEvent,
+} from "./combat-statuses.js";
 import {
   acceptQuest,
   getActiveQuest,
@@ -788,17 +803,56 @@ const initializeCombatJobState = (
   const defaultCoreSkillSpiritCost = defaultLoadout?.coreSkillSpiritCost ?? Math.max(1, Math.round(playerMaxSpirit * 0.10));
   const defaultCoreSkillPreferredRoute = defaultLoadout?.coreSkillCategory ?? null;
 
+  // ---- Weapon family/type bonus ----
+  const weaponTier = (weaponLoadout?.weaponTier ?? 1) as SpellTier;
+  const weaponFamilyId = weaponLoadout?.weaponFamilyId ?? null;
+  const weaponTypeId = weaponLoadout?.weaponTypeId ?? null;
+  const familyDef = weaponFamilyId ? WEAPON_FAMILY_DEFINITIONS[weaponFamilyId] : null;
+  const typeDef = weaponTypeId ? WEAPON_TYPE_DEFINITIONS[weaponTypeId] : null;
+  const applyBonusStat = (baseStat: number, bonusProfile: { stat: string; values: readonly number[] } | undefined): number => {
+    if (!bonusProfile) return baseStat;
+    return baseStat + (bonusProfile.values[weaponTier - 1] ?? 0);
+  };
+  let playerSpeed = Math.round(detailedAttrs.sudu);
+  let playerHit = Math.round(detailedAttrs.mingzhong);
+  let playerDodge = Math.round(detailedAttrs.shanbi);
+  let playerCrit = Math.round(detailedAttrs.huixin);
+  let playerCritDamage = Math.round(detailedAttrs.baoshang);
+  let playerGuardHeart = Math.round(detailedAttrs.huxin);
+  let playerTenacity = 0; // tenacity is bonus-only; used as extra guardHeart
+  if (familyDef) {
+    const b = familyDef.bonusProfile;
+    playerSpeed = applyBonusStat(playerSpeed, b.stat1.stat === "speed" ? b.stat1 : b.stat2.stat === "speed" ? b.stat2 : undefined);
+    playerHit = applyBonusStat(playerHit, b.stat1.stat === "hit" ? b.stat1 : b.stat2.stat === "hit" ? b.stat2 : undefined);
+    playerDodge = applyBonusStat(playerDodge, b.stat1.stat === "dodge" ? b.stat1 : b.stat2.stat === "dodge" ? b.stat2 : undefined);
+    playerCrit = applyBonusStat(playerCrit, b.stat1.stat === "crit" ? b.stat1 : b.stat2.stat === "crit" ? b.stat2 : undefined);
+    playerCritDamage = applyBonusStat(playerCritDamage, b.stat1.stat === "critDamage" ? b.stat1 : b.stat2.stat === "critDamage" ? b.stat2 : undefined);
+    playerGuardHeart = applyBonusStat(playerGuardHeart, b.stat1.stat === "guardHeart" ? b.stat1 : b.stat2.stat === "guardHeart" ? b.stat2 : undefined);
+    playerTenacity += (b.stat1.stat === "tenacity" ? b.stat1.values[weaponTier - 1] ?? 0 : 0) + (b.stat2.stat === "tenacity" ? b.stat2.values[weaponTier - 1] ?? 0 : 0);
+  }
+  if (typeDef) {
+    const tb = typeDef.typeBonusProfile;
+    playerSpeed = applyBonusStat(playerSpeed, tb.stat === "speed" ? tb : undefined);
+    playerHit = applyBonusStat(playerHit, tb.stat === "hit" ? tb : undefined);
+    playerDodge = applyBonusStat(playerDodge, tb.stat === "dodge" ? tb : undefined);
+    playerCrit = applyBonusStat(playerCrit, tb.stat === "crit" ? tb : undefined);
+    playerCritDamage = applyBonusStat(playerCritDamage, tb.stat === "critDamage" ? tb : undefined);
+    playerGuardHeart = applyBonusStat(playerGuardHeart, tb.stat === "guardHeart" ? tb : undefined);
+    playerTenacity += tb.stat === "tenacity" ? tb.values[weaponTier - 1] ?? 0 : 0;
+  }
+  playerGuardHeart += playerTenacity; // tenacity maps to guardHeart
+
   const playerSnapshot: CombatSnapshot = {
     hp: playerMaxHp,
     maxHp: playerMaxHp,
     attack: defaultAttack,
     defense: physicalDefense(mainAttrs),
-    speed: Math.round(detailedAttrs.sudu),
-    hit: Math.round(detailedAttrs.mingzhong),
-    dodge: Math.round(detailedAttrs.shanbi),
-    crit: Math.round(detailedAttrs.huixin),
-    critDamage: Math.round(detailedAttrs.baoshang),
-    guardHeart: Math.round(detailedAttrs.huxin),
+    speed: playerSpeed,
+    hit: playerHit,
+    dodge: playerDodge,
+    crit: playerCrit,
+    critDamage: playerCritDamage,
+    guardHeart: playerGuardHeart,
     spirit: playerSpirit,
     maxSpirit: playerMaxSpirit,
     coreSkillSpiritCost: defaultCoreSkillSpiritCost,
@@ -816,6 +870,7 @@ const initializeCombatJobState = (
     spellCoreSkillSpiritCost: spellLoadout?.coreSkillSpiritCost ?? 0,
     weaponCoreSkillPreferredRoute: weaponLoadout?.coreSkillCategory ?? null,
     spellCoreSkillPreferredRoute: spellLoadout?.coreSkillCategory ?? null,
+    combatStatuses: [],
   };
   // ---- Enemy snapshot with optional loadout ----
   const enemyLoadout = template.equippedWeaponLoadoutId
@@ -863,6 +918,7 @@ const initializeCombatJobState = (
     spellCoreSkillSpiritCost: enemySpellLoadout?.coreSkillSpiritCost ?? 0,
     weaponCoreSkillPreferredRoute: enemyLoadout?.coreSkillCategory ?? null,
     spellCoreSkillPreferredRoute: enemySpellLoadout?.coreSkillCategory ?? null,
+    combatStatuses: [],
   };
   return {
     encounterTemplateId: template.id,
@@ -1005,13 +1061,25 @@ const resolveOneRound = (
     ? enemyChannelResult.coreSkillPreferredRoute
     : state.enemyStylePreference[hashString(`${seedBase}:enemy-route`) % state.enemyStylePreference.length] ?? "brute";
 
+  // ---- Status passive modifiers ----
+  const playerStatuses = state.playerSnapshot.combatStatuses ?? [];
+  const enemyStatuses = state.enemySnapshot.combatStatuses ?? [];
+  const playerPassiveMods = gatherPassiveModifiers(playerStatuses);
+  const enemyPassiveMods = gatherPassiveModifiers(enemyStatuses);
+
+  // Status hook tracking for this round
+  const roundAppliedStatuses: NonNullable<CombatRoundLog["appliedStatuses"]> = [];
+  const roundConsumedStatuses: NonNullable<CombatRoundLog["consumedStatuses"]> = [];
+
   const playerInitiative =
     state.playerSnapshot.speed
+    + playerPassiveMods.initiativeFlat
     + readinessModifier(computeReadiness(cultivator))
     + (playerBoundRoute ? routeInitiativeBonus(playerBoundRoute) : 0)
     + (hashString(`${seedBase}:initiative`) % 11);
   const enemyInitiative =
     state.enemySnapshot.speed
+    + enemyPassiveMods.initiativeFlat
     + (enemyBoundRoute ? routeInitiativeBonus(enemyBoundRoute) : 0)
     + (hashString(`${seedBase}:initiative-enemy`) % 11);
   const playerFirst = playerInitiative === enemyInitiative
@@ -1028,22 +1096,25 @@ const resolveOneRound = (
     phaseSuffix: "first" | "second",
     actionMultiplier: number,
   ): { result: AttackResult; damage: CombatDamageBreakdown } => {
+    const atkMods = attackerIsPlayer ? playerPassiveMods : enemyPassiveMods;
+    const defMods = attackerIsPlayer ? enemyPassiveMods : playerPassiveMods;
     const hitChance = computeHitChance(
-      attacker.hit + routeHitBonus(attackerStyle),
-      defender.dodge + routeDodgeBonus(defenderStyle),
+      attacker.hit + routeHitBonus(attackerStyle) + atkMods.accuracyFlat,
+      defender.dodge + routeDodgeBonus(defenderStyle) + defMods.dodgeFlat,
     );
     const hit = (hashString(`${seedBase}:hit-${phaseSuffix}`) % 100) < hitChance;
     if (!hit) {
       return { result: "miss", damage: missDamageBreakdown() };
     }
     const critChance = computeCritChance(
-      attacker.crit + routeCritBonus(attackerStyle),
-      defender.guardHeart,
+      attacker.crit + routeCritBonus(attackerStyle) + atkMods.critPercent,
+      defender.guardHeart + defMods.guardHeartFlat,
     );
     const isCrit = (hashString(`${seedBase}:crit-${phaseSuffix}`) % 100) < critChance;
+    const modifiedDefense = Math.max(0, Math.round(defender.defense * (1 + defMods.defensePercent / 100)));
     const damage = computeDamage(
       attacker.attack,
-      defender.defense,
+      modifiedDefense,
       attackerStyle,
       attackerIsPlayer ? playerMainAttrs : null,
       triangleMultiplier(attackerStyle, defenderStyle),
@@ -1052,10 +1123,14 @@ const resolveOneRound = (
       attacker.critDamage,
       actionMultiplier,
     );
-    defender.hp = Math.max(0, defender.hp - damage.finalDamage);
+    // Apply damage dealt/taken modifiers from statuses
+    const dealtMult = Math.max(0, 1 + atkMods.damageDealtPercent / 100);
+    const takenMult = Math.max(0, 1 + defMods.damageTakenPercent / 100);
+    const adjustedFinal = Math.max(1, Math.round(damage.finalDamage * dealtMult * takenMult));
+    defender.hp = Math.max(0, defender.hp - adjustedFinal);
     return {
       result: isCrit ? "crit" : "hit",
-      damage,
+      damage: { ...damage, finalDamage: adjustedFinal },
     };
   };
 
@@ -1068,6 +1143,62 @@ const resolveOneRound = (
   let playerActionSkipped = false;
   let enemyActionSkipped = false;
   let battleEndedByRetreat = false;
+  let playerDidHit = false;
+  let enemyDidHit = false;
+  let playerDamageDealt = 0;
+  let enemyDamageDealt = 0;
+
+  // ---- Status hook resolver ----
+  const getChannelLoadout = (side: "player" | "enemy", channel: AttackChannel): WeaponLoadoutDefinition | SpellLoadoutDefinition | null => {
+    const snapshot = side === "player" ? state.playerSnapshot : state.enemySnapshot;
+    if (channel === "weapon") {
+      const id = snapshot.weaponLoadoutId;
+      return id ? getWeaponLoadoutDefinition(id) : null;
+    }
+    const id = snapshot.spellLoadoutId;
+    return id ? getSpellLoadoutDefinition(id) : null;
+  };
+  const getChannelTier = (side: "player" | "enemy", channel: AttackChannel): SpellTier => {
+    const snapshot = side === "player" ? state.playerSnapshot : state.enemySnapshot;
+    if (channel === "spell") {
+      const id = snapshot.spellLoadoutId;
+      const def = id ? getSpellLoadoutDefinition(id) : null;
+      return (def?.spellTier ?? 1) as SpellTier;
+    }
+    const id = snapshot.weaponLoadoutId;
+    const def = id ? getWeaponLoadoutDefinition(id) : null;
+    return ((def as WeaponLoadoutDefinition | null)?.weaponTier ?? 1) as SpellTier;
+  };
+  const resolveStatusHooks = (sourceSide: "player" | "enemy", action: CombatActionType, channel: AttackChannel): void => {
+    const loadout = getChannelLoadout(sourceSide, channel);
+    if (!loadout) return;
+    const hookIds = action === "core_skill" ? loadout.coreSkillStatusHookIds : loadout.basicAttackStatusHookIds;
+    if (!hookIds || hookIds.length === 0) return;
+    const tier = getChannelTier(sourceSide, channel);
+    const sourceLoadoutId = loadout.id;
+    for (const hookId of hookIds) {
+      const hookDef = getStatusHookDefinition(hookId);
+      if (!hookDef) continue;
+      for (const app of hookDef.applications) {
+        const statusDef = getCombatStatusDefinition(app.statusId);
+        if (!statusDef) continue;
+        // Determine target: "self" means the caster, "enemy" means the opponent
+        const targetIsPlayer = app.targetSide === "self" ? sourceSide === "player" : sourceSide !== "player";
+        const targetSnapshot = targetIsPlayer ? state.playerSnapshot : state.enemySnapshot;
+        const currentStatuses = targetSnapshot.combatStatuses ?? [];
+        const result = applyOrRefreshStatus(currentStatuses, statusDef, tier, sourceLoadoutId, action);
+        targetSnapshot.combatStatuses = result.statuses;
+        roundAppliedStatuses.push({
+          statusId: statusDef.id,
+          statusName: statusDef.name,
+          targetSide: targetIsPlayer ? "player" : "enemy",
+          sourceSide,
+          magnitude: result.statuses.find(s => s.id === statusDef.id)?.magnitude ?? 0,
+          isRefresh: result.isRefresh,
+        });
+      }
+    }
+  };
 
   const firstActor: CombatRoundLog["firstActor"] = playerFirst ? "player" : "enemy";
   const resolvePlayerAction = (phaseSuffix: "first" | "second") => {
@@ -1105,12 +1236,18 @@ const resolveOneRound = (
       phaseSuffix,
       playerAction === "core_skill" ? 1.6 : 1,
     );
+    playerDidHit = playerAttack.result !== "miss";
+    playerDamageDealt = playerAttack.damage.finalDamage;
     if (playerAction === "core_skill") {
       const spiritCost = state.playerSnapshot.coreSkillSpiritCost ?? 0;
       const nextSpirit = Math.max(0, (state.playerSpirit ?? state.playerSnapshot.spirit ?? 0) - spiritCost);
       state.playerSpirit = nextSpirit;
       state.playerSnapshot.spirit = nextSpirit;
       playerSpiritSpent = spiritCost;
+    }
+    // Resolve player status hooks on hit
+    if (playerDidHit) {
+      resolveStatusHooks("player", playerAction, playerChannelResult.channel);
     }
   };
   const resolveEnemyAction = (phaseSuffix: "first" | "second") => {
@@ -1127,6 +1264,8 @@ const resolveOneRound = (
       phaseSuffix,
       enemyAction === "core_skill" ? 1.6 : 1,
     );
+    enemyDidHit = enemyAttack.result !== "miss";
+    enemyDamageDealt = enemyAttack.damage.finalDamage;
     if (enemyAction === "core_skill") {
       const spiritCost = state.enemySnapshot.coreSkillSpiritCost ?? 0;
       const nextSpirit = Math.max(0, (state.enemySpirit ?? state.enemySnapshot.spirit ?? 0) - spiritCost);
@@ -1135,6 +1274,10 @@ const resolveOneRound = (
       enemySpiritSpent = spiritCost;
     } else {
       enemySpiritSpent = 0;
+    }
+    // Resolve enemy status hooks on hit
+    if (enemyDidHit) {
+      resolveStatusHooks("enemy", enemyAction, enemyChannelResult.channel);
     }
   };
 
@@ -1152,6 +1295,93 @@ const resolveOneRound = (
 
   if (playerAction === "escape" && !playerEscape) {
     playerEscape = { attempted: false, success: false, chance: 0 };
+  }
+
+  // ---- Consumable status triggers ----
+  // If player took damage this round, check defender (player) consumable statuses
+  if (enemyDidHit && !battleEndedByRetreat) {
+    const pStatuses = state.playerSnapshot.combatStatuses ?? [];
+    const triggerEvent = (enemyAction === "core_skill") ? "on_core_skill_damage_taken" as const : "on_damage_taken" as const;
+    const { modifiers: consumeMods, consumed } = gatherConsumableModifiers(pStatuses, triggerEvent);
+    if (consumed.length > 0) {
+      state.playerSnapshot.combatStatuses = markConsumed(pStatuses, consumed);
+      for (const cid of consumed) {
+        const s = pStatuses.find(st => st.id === cid);
+        roundConsumedStatuses.push({ statusId: cid, statusName: s?.name ?? String(cid), targetSide: "player" });
+      }
+      // Apply consumable damage reduction retroactively to player hp
+      if (consumeMods.damageTakenPercent !== 0) {
+        const reduction = Math.round(enemyDamageDealt * Math.abs(consumeMods.damageTakenPercent) / 100);
+        state.playerSnapshot.hp = Math.min(state.playerSnapshot.maxHp, state.playerSnapshot.hp + reduction);
+      }
+    }
+  }
+  // If enemy took damage this round, check defender (enemy) consumable statuses
+  if (playerDidHit && !battleEndedByRetreat) {
+    const eStatuses = state.enemySnapshot.combatStatuses ?? [];
+    const triggerEvent = (playerAction === "core_skill") ? "on_core_skill_damage_taken" as const : "on_damage_taken" as const;
+    const { modifiers: consumeMods, consumed } = gatherConsumableModifiers(eStatuses, triggerEvent);
+    if (consumed.length > 0) {
+      state.enemySnapshot.combatStatuses = markConsumed(eStatuses, consumed);
+      for (const cid of consumed) {
+        const s = eStatuses.find(st => st.id === cid);
+        roundConsumedStatuses.push({ statusId: cid, statusName: s?.name ?? String(cid), targetSide: "enemy" });
+      }
+      if (consumeMods.damageTakenPercent !== 0) {
+        const reduction = Math.round(playerDamageDealt * Math.abs(consumeMods.damageTakenPercent) / 100);
+        state.enemySnapshot.hp = Math.min(state.enemySnapshot.maxHp, state.enemySnapshot.hp + reduction);
+      }
+    }
+  }
+
+  // ---- Round-end ticks (HOT/DOT/spirit regen) ----
+  const roundTickEvents: NonNullable<CombatRoundLog["tickEvents"]> = [];
+  if (!battleEndedByRetreat) {
+    // Player round-end ticks
+    const pTicks = processRoundEndTicks(
+      state.playerSnapshot.combatStatuses ?? [],
+      state.playerSnapshot.hp,
+      state.playerSnapshot.maxHp,
+      state.playerSpirit ?? state.playerSnapshot.spirit ?? 0,
+      state.playerMaxSpirit ?? state.playerSnapshot.maxSpirit ?? 0,
+      spellAttack(deriveMainAttributes(cultivator.registrationRecord)),
+    );
+    state.playerSnapshot.hp = pTicks.hp;
+    state.playerSpirit = pTicks.spirit;
+    state.playerSnapshot.spirit = pTicks.spirit;
+    for (const t of pTicks.ticks) {
+      roundTickEvents.push({ ...t, targetSide: "player" });
+    }
+    // Enemy round-end ticks (use enemy's attack as proxy for spellAttack)
+    const eTicks = processRoundEndTicks(
+      state.enemySnapshot.combatStatuses ?? [],
+      state.enemySnapshot.hp,
+      state.enemySnapshot.maxHp,
+      state.enemySpirit ?? state.enemySnapshot.spirit ?? 0,
+      state.enemyMaxSpirit ?? state.enemySnapshot.maxSpirit ?? 0,
+      state.enemySnapshot.attack,
+    );
+    state.enemySnapshot.hp = eTicks.hp;
+    state.enemySpirit = eTicks.spirit;
+    state.enemySnapshot.spirit = eTicks.spirit;
+    for (const t of eTicks.ticks) {
+      roundTickEvents.push({ ...t, targetSide: "enemy" });
+    }
+  }
+
+  // ---- Decay and clean statuses ----
+  const roundExpiredStatuses: NonNullable<CombatRoundLog["expiredStatuses"]> = [];
+  if (!battleEndedByRetreat) {
+    const pDecay = decayAndCleanStatuses(state.playerSnapshot.combatStatuses ?? []);
+    state.playerSnapshot.combatStatuses = pDecay.remaining;
+    for (const e of pDecay.expired) {
+      roundExpiredStatuses.push({ ...e, targetSide: "player" });
+    }
+    const eDecay = decayAndCleanStatuses(state.enemySnapshot.combatStatuses ?? []);
+    state.enemySnapshot.combatStatuses = eDecay.remaining;
+    for (const e of eDecay.expired) {
+      roundExpiredStatuses.push({ ...e, targetSide: "enemy" });
+    }
   }
 
   const roundLog: CombatRoundLog = {
@@ -1179,6 +1409,10 @@ const resolveOneRound = (
     enemyActionSkipped,
     playerChannel: playerAction !== "escape" ? playerChannelResult.channel : undefined,
     enemyChannel: enemyChannelResult.channel,
+    appliedStatuses: roundAppliedStatuses.length > 0 ? roundAppliedStatuses : undefined,
+    tickEvents: roundTickEvents.length > 0 ? roundTickEvents : undefined,
+    consumedStatuses: roundConsumedStatuses.length > 0 ? roundConsumedStatuses : undefined,
+    expiredStatuses: roundExpiredStatuses.length > 0 ? roundExpiredStatuses : undefined,
   };
   state.rounds.push(roundLog);
 
@@ -3833,6 +4067,8 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
                 id: def.id,
                 name: def.name,
                 weaponTypeId: def.weaponTypeId,
+                weaponTier: def.weaponTier,
+                weaponFamilyId: def.weaponFamilyId,
                 attackPowerBonus: def.attackPowerBonus,
                 coreSkillCategory: def.coreSkillCategory,
                 coreSkillSpiritCost: def.coreSkillSpiritCost,
@@ -3850,6 +4086,9 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
                 id: def.id,
                 name: def.name,
                 spellBranchId: def.spellBranchId,
+                spellTier: def.spellTier,
+                primaryStatusId: def.primaryStatusId,
+                secondaryStatusId: def.secondaryStatusId,
                 attackPowerBonus: def.attackPowerBonus,
                 coreSkillCategory: def.coreSkillCategory,
                 coreSkillSpiritCost: def.coreSkillSpiritCost,
