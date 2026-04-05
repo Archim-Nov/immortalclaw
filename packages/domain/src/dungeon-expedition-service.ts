@@ -492,8 +492,8 @@ export function recordDungeonExpeditionStep(input: {
 }
 
 function summarizeSecondaryDrops(drops: Partial<Record<ItemId, number>>): string {
-  const topDrops = Object.entries(drops)
-    .filter(([, count]) => count > 0)
+  const topDrops = (Object.entries(drops) as Array<[ItemId, number | undefined]>)
+    .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([itemId, count]) => `${count} ${itemId}`);

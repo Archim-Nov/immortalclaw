@@ -57,7 +57,11 @@ test("wilderness expedition verbs are isolated from routine resource gathering",
 
   const wildernessActions = listAvailableActions(world, cultivator.id).map((action) => action.actionId);
   assert.equal(wildernessActions.includes("survey-wilderness"), false);
-  assert.equal(wildernessActions.some((actionId) => String(actionId).startsWith("enter-wilderness:")), false);
+  assert.equal(
+    wildernessActions.some((actionId) => String(actionId).startsWith("enter-wilderness:")),
+    true,
+    "wilderness nodes should expose the live tier-1 wilderness entry action",
+  );
 
   cultivator.locationId = "qingzhou:dungeon-a";
 

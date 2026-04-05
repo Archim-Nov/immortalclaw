@@ -598,7 +598,7 @@ test("sect titles recalculate on cadence", () => {
   assert.equal(sect.lastTitleUpdateTick, 2880);
 });
 
-test("residence actions are visible at residence and hidden away", () => {
+test("residence actions stay visible at residence while recipes remain gated by current materials", () => {
   const world = createSeedWorld();
 
   const atResidenceActionIds = new Set(
@@ -607,10 +607,10 @@ test("residence actions are visible at residence and hidden away", () => {
   assert.ok(atResidenceActionIds.has("residence-meditate"));
   assert.ok(atResidenceActionIds.has("residence-heal"));
   assert.ok(atResidenceActionIds.has("residence-recover-qi"));
-  assert.ok(atResidenceActionIds.has("residence-produce:recipe-healing-pill"));
-  assert.ok(atResidenceActionIds.has("residence-produce:recipe-qi-pill"));
-  assert.ok(atResidenceActionIds.has("residence-produce:recipe-ward-talisman"));
   assert.ok(atResidenceActionIds.has("residence-socialize"));
+  assert.equal(atResidenceActionIds.has("residence-produce:recipe-healing-pill"), false);
+  assert.equal(atResidenceActionIds.has("residence-produce:recipe-qi-pill"), false);
+  assert.equal(atResidenceActionIds.has("residence-produce:recipe-ward-talisman"), false);
 
   performAction(world, "yun-zhong-he", "travel-to:qingzhou:sub-town-east");
   advanceWorld(world, 1);

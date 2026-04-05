@@ -4,7 +4,9 @@ import type {
   ItemActionOperation,
   ItemDefinition,
   ItemId,
+  LegacyItemId,
 } from "../model.js";
+import { LOADOUT_SOURCE_ITEMS } from "../loadout-sourcing.js";
 
 type BuyActionId = "buy-healing-pill" | "buy-qi-pill" | "buy-ward-talisman";
 type SellActionId = "sell-spirit-ore" | "sell-ruin-fragment" | "sell-beast-core";
@@ -17,9 +19,11 @@ const materialUse = {
   effectBundle: null,
   grantsTechnique: null,
   ticketTargets: null,
+  grantsWeaponLoadoutId: null,
+  grantsSpellLoadoutId: null,
 };
 
-export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
+const LEGACY_ITEM_CATALOG: Record<LegacyItemId, ItemDefinition> = {
   "healing-pill": {
     id: "healing-pill",
     name: "疗伤丹",
@@ -43,6 +47,8 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       },
       grantsTechnique: null,
       ticketTargets: null,
+      grantsWeaponLoadoutId: null,
+      grantsSpellLoadoutId: null,
     },
   },
   "qi-pill": {
@@ -68,6 +74,8 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       },
       grantsTechnique: null,
       ticketTargets: null,
+      grantsWeaponLoadoutId: null,
+      grantsSpellLoadoutId: null,
     },
   },
   "ward-talisman": {
@@ -92,6 +100,8 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       },
       grantsTechnique: null,
       ticketTargets: null,
+      grantsWeaponLoadoutId: null,
+      grantsSpellLoadoutId: null,
     },
   },
   "spirit-ore": {
@@ -310,6 +320,8 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
       effectBundle: null,
       grantsTechnique: null,
       ticketTargets: ["eight-wastes-threshold"],
+      grantsWeaponLoadoutId: null,
+      grantsSpellLoadoutId: null,
     },
   },
   "ancient-artifact": {
@@ -340,6 +352,11 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
     },
     use: materialUse,
   },
+};
+
+export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
+  ...LEGACY_ITEM_CATALOG,
+  ...LOADOUT_SOURCE_ITEMS,
 };
 
 export const ITEM_IDS = Object.freeze(Object.keys(ITEM_CATALOG) as ItemId[]);

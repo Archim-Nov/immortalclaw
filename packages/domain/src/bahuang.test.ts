@@ -39,7 +39,11 @@ test("enter-bahuang:balanced appears when cultivator meets requirement at entry 
 test("eight-wastes is no longer modeled as a wilderness layer", () => {
   const world = createSeedWorld();
 
-  assert.deepEqual(world.wildernessLayers, {});
+  assert.ok(world.wildernessLayers["starter-wilderness-tier-1"]);
+  assert.equal(
+    Object.values(world.wildernessLayers).some((layer) => layer.locationIds.includes("eight-wastes-threshold")),
+    false,
+  );
   assert.equal(world.itemDefinitions["eight-wastes-pass"].tags.includes("wilderness-expansion"), false);
 });
 

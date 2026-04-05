@@ -1,4 +1,5 @@
 import { recordWildernessAttunement } from "./guixu-service.js";
+import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
 import type {
   ActionJob,
   Cultivator,
@@ -301,6 +302,12 @@ export function resolveWildernessSurvey(
     severity: eventDefinition.severity,
     tags: eventDefinition.tags,
   });
+
+  // ---- Loadout source drop (wilderness survey) ----
+  if (layer.tier >= 1 && layer.tier <= 3) {
+    const wsSourceDrop = pickLoadoutSourceDrop(layer.tier as 1 | 2 | 3, `${world.tick}:${cultivator.id}:${job.id}:wilderness-source`);
+    cultivator.inventory[wsSourceDrop] = (cultivator.inventory[wsSourceDrop] ?? 0) + 1;
+  }
 
   if (eventDefinition.forcedRetreat) {
     withdrawFromWilderness(world, cultivator, eventId);

@@ -372,7 +372,7 @@ export interface SectReapplyCooldown {
   expiresAtTick: number;
 }
 
-export type ItemId =
+export type LegacyItemId =
   | "healing-pill"
   | "qi-pill"
   | "ward-talisman"
@@ -393,6 +393,14 @@ export type ItemId =
   | "eight-wastes-pass"
   | "ancient-artifact"
   | "legendary-artifact";
+
+export type WeaponMaterialItemId = `weapon-material-${string}`;
+export type WeaponUnlockItemId = `weapon-item-${string}`;
+export type SpellFragmentItemId = `spell-fragment-${string}`;
+export type SpellManualItemId = `spell-manual-${string}`;
+export type GeneratedItemId = WeaponMaterialItemId | WeaponUnlockItemId | SpellFragmentItemId | SpellManualItemId;
+
+export type ItemId = LegacyItemId | GeneratedItemId;
 
 export type ItemCategory = "consumable" | "talisman" | "material" | "manual";
 
@@ -453,6 +461,7 @@ export interface ProductionRecipe {
   inputMaterials: ReadonlyArray<{ itemId: ItemId; count: number }>;
   spiritStoneCost: number;
   durationTicks: number;
+  enabledInLive: boolean;
 }
 
 export interface WildernessReward {
@@ -695,6 +704,7 @@ export type ImmediateActionId =
   | "open-player-sect-recruitment"
   | "review-player-sect-applications"
   | "resolve-morality-event-choice"
+  | `unlock-loadout:${string}`
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
@@ -711,7 +721,7 @@ export type ImmediateActionId =
 export type ActionId = TimedActionId | ImmediateActionId;
 
 export type ItemTradeScope = "settlement" | "none";
-export type ItemUseKind = "consume" | "study" | "ticket" | "material";
+export type ItemUseKind = "consume" | "study" | "ticket" | "material" | "unlock-loadout";
 export type ItemActionOperation = "buy" | "sell" | "use" | "study";
 
 export interface ItemTradeDefinition {
@@ -728,6 +738,8 @@ export interface ItemUseDefinition {
   effectBundle: EventEffect | null;
   grantsTechnique: string | null;
   ticketTargets: string[] | null;
+  grantsWeaponLoadoutId: WeaponLoadoutId | null;
+  grantsSpellLoadoutId: SpellLoadoutId | null;
 }
 
 export interface ActionItemBinding {

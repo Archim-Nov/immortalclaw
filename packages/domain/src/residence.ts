@@ -22,7 +22,13 @@ export function getResidenceRecipeById(recipeId: string): ProductionRecipe | nul
 }
 
 export function getFirstCraftableResidenceRecipe(cultivator: Cultivator): ProductionRecipe | null {
-  return RESIDENCE_PRODUCTION_RECIPES.find((recipe) => canCraftResidenceRecipe(cultivator, recipe)) ?? null;
+  return RESIDENCE_PRODUCTION_RECIPES.find((recipe) => recipe.enabledInLive && canCraftResidenceRecipe(cultivator, recipe)) ?? null;
+}
+
+export function getLiveCraftableRecipes(cultivator: Cultivator): ProductionRecipe[] {
+  return RESIDENCE_PRODUCTION_RECIPES.filter(
+    (recipe) => recipe.enabledInLive && canCraftResidenceRecipe(cultivator, recipe),
+  );
 }
 
 export function canCraftResidenceRecipe(cultivator: Cultivator, recipe: ProductionRecipe): boolean {

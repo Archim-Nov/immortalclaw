@@ -370,7 +370,42 @@ export const BAHUANG_EXPEDITIONS = {
 
 export const EIGHT_WASTES_CONTENT = BAHUANG_EXPEDITIONS["eight-wastes-threshold"];
 
-const WILDERNESS_LAYERS: Record<string, WildernessLayer> = {};
+const WILDERNESS_LAYERS: Record<string, WildernessLayer> = {
+  "starter-wilderness-tier-1": {
+    layerId: "starter-wilderness-tier-1",
+    name: "荒原·灵材散落带",
+    type: "wilderness-expansion",
+    tier: 1,
+    status: "active",
+    locationIds: [
+      "qingzhou:wilderness",
+      "yangzhou:wilderness",
+      "zhongzhou:wilderness",
+      "shuzhou:wilderness",
+      "youzhou:wilderness",
+      "liangzhou:wilderness",
+      "leizhou:wilderness",
+      "cangzhou:wilderness",
+      "wanzhou:wilderness",
+    ],
+    entryRequirement: {
+      minRealm: "炼气" as any,
+    },
+    survivalPressure: {
+      maxSurvivalTicks: 8,
+      qiDamagePerTick: 8,
+      spiritualDamagePerTick: 4,
+      injuryTicksOnRetreat: 2,
+    },
+    retreatCost: {
+      spiritStoneLoss: 0,
+      progressLoss: 0,
+      itemLoss: {},
+    },
+    rewardTable: [],
+    eventPool: ["wilderness-calm-foraging", "wilderness-beast-trace", "wilderness-spirit-vein-fragment"],
+  },
+};
 
 const GUIXU_NODES: Record<string, GuixuNode> = {
   "guixu-threshold-gate": {

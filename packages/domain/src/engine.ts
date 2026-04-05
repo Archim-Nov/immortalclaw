@@ -114,7 +114,7 @@ import {
   resolveSpiritRootKindId,
   resolveTemperamentId,
 } from "./registration-taxonomy.js";
-import { getItemActionBinding, getItemOperationActionId } from "./items/catalog.js";
+import { getItemActionBinding, getItemOperationActionId, ITEM_CATALOG } from "./items/catalog.js";
 import {
   createDungeonProgress,
   createEmptyInventory,
@@ -172,6 +172,8 @@ import {
   enterBahuangExpedition,
   retreatFromBahuang,
 } from "./bahuang-service.js";
+import { pickLoadoutSourceDrop, LOADOUT_SOURCE_ITEMS } from "./loadout-sourcing.js";
+import { getLiveCraftableRecipes } from "./residence.js";
 
 const TICKS_PER_YEAR = 4380;
 const TIMED_ACTION_IDS = new Set<string>(Object.keys(DEFAULT_ACTION_DURATIONS));
@@ -3124,6 +3126,17 @@ function finalizeDungeonExpedition(
     primaryMaterial: metadata.materialBand,
   });
 
+  // ---- Loadout source drop (dungeon expedition) ----
+  const expSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
+  if (
+    (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0))
+    && expSourceTier >= 1 && expSourceTier <= 3
+  ) {
+    const expSourceDrop = pickLoadoutSourceDrop(expSourceTier as 1 | 2 | 3, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
+    cultivator.inventory[expSourceDrop] = (cultivator.inventory[expSourceDrop] ?? 0) + 1;
+    addDaoLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 完成地宫远征后获得了${ITEM_CATALOG[expSourceDrop]?.name ?? expSourceDrop}。`, [expSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"]);
+  }
+
   world.dungeonExpeditionReports[cultivator.id] = report;
   delete world.dungeonExpeditions[cultivator.id];
   writeDungeonExpeditionSummaryEvent(world, cultivator.id, returnLocationId, report);
@@ -3700,6 +3713,38 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     if (registration.mineBonus >= 6) suggestedActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
     if (registration.cultivateBonus >= 8) suggestedActions.push("cultivate");
   }
+
+  // ---- Recommend unlock-loadout if player has unlockable items ----
+  for (const [itemId, count] of Object.entries(cultivator.inventory) as Array<[ItemId, number]>) {
+    if (count <= 0) continue;
+    const def = ITEM_CATALOG[itemId];
+    if (!def || def.use.kind !== "unlock-loadout") continue;
+    const wId = def.use.grantsWeaponLoadoutId;
+    const sId = def.use.grantsSpellLoadoutId;
+    if (wId && !cultivator.unlockedWeaponLoadoutIds.includes(wId)) {
+      suggestedActions.push(`unlock-loadout:${itemId}` as ActionId);
+      priorities.push(`You have ${def.name} — use it to permanently unlock a new weapon loadout. Does NOT auto-equip.`);
+      break;
+    }
+    if (sId && !cultivator.unlockedSpellLoadoutIds.includes(sId)) {
+      suggestedActions.push(`unlock-loadout:${itemId}` as ActionId);
+      priorities.push(`You have ${def.name} — use it to permanently unlock a new spell loadout. Does NOT auto-equip.`);
+      break;
+    }
+  }
+
+  // ---- Recommend residence crafting if player has source materials ----
+  if (isAtResidence(cultivator)) {
+    const craftable = getLiveCraftableRecipes(cultivator);
+    for (const recipe of craftable) {
+      if (recipe.id.startsWith("recipe-forge-") || recipe.id.startsWith("recipe-synthesize-")) {
+        suggestedActions.push(`residence-produce:${recipe.id}` as ActionId);
+        priorities.push(`Craftable at residence: ${recipe.outputItemId}. Costs ${recipe.spiritStoneCost} spirit stones.`);
+        break;
+      }
+    }
+  }
+
   const hasLowRiskSuggestion = suggestedActions.some((actionId) => isLowRiskAction(actionId));
   if ((readiness === "poor" || recoveryState !== "healthy") && !hasLowRiskSuggestion) {
     if (isAtResidence(cultivator)) {
@@ -4257,7 +4302,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const joinedSect = getCultivatorSect(world, cultivator);
   const activeWilderness = getActiveWildernessProgress(world, cultivator.id);
   const wildernessLayer = getWildernessLayerForLocation(world, cultivator.locationId);
-  const recipeActions = RESIDENCE_PRODUCTION_RECIPES.map((recipe) => ({
+  const recipeActions = getLiveCraftableRecipes(cultivator).map((recipe) => ({
     actionId: `residence-produce:${recipe.id}` as ActionId,
     label: `Residence produce (${recipe.outputItemId})`,
     description: `Craft ${recipe.outputItemId} at residence.`,
@@ -4312,6 +4357,29 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actionId: `equip-spell:${loadoutId}` as ActionId,
       label: `Equip ${sDef.name}`,
       description: `Switch spell loadout to ${sDef.name} (${SPELL_BRANCH_NAMES_INLINE[sDef.spellBranchId] ?? sDef.spellBranchId}, core skill cost: ${sDef.coreSkillSpiritCost}, bonus: +${sDef.attackPowerBonus}).`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+
+  // ---- Unlock loadout actions (from inventory items) ----
+  for (const [itemId, count] of Object.entries(cultivator.inventory) as Array<[ItemId, number]>) {
+    if (count <= 0) continue;
+    const def = ITEM_CATALOG[itemId];
+    if (!def || def.use.kind !== "unlock-loadout") continue;
+    const wId = def.use.grantsWeaponLoadoutId;
+    const sId = def.use.grantsSpellLoadoutId;
+    if (wId && cultivator.unlockedWeaponLoadoutIds.includes(wId)) continue;
+    if (sId && cultivator.unlockedSpellLoadoutIds.includes(sId)) continue;
+    const targetName = wId
+      ? getWeaponLoadoutDefinition(wId)?.name ?? wId
+      : sId
+        ? getSpellLoadoutDefinition(sId)?.name ?? sId
+        : itemId;
+    actions.push({
+      actionId: `unlock-loadout:${itemId}` as ActionId,
+      label: `Unlock ${targetName}`,
+      description: `Use ${def.name} to permanently unlock ${wId ? "weapon" : "spell"} loadout「${targetName}」. Consumes the item. Does NOT auto-equip.`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -4677,6 +4745,8 @@ const parseEquipWeaponLoadoutId = (actionId: ActionId): WeaponLoadoutId | null =
   actionId.startsWith("equip-weapon:") ? actionId.slice("equip-weapon:".length) as WeaponLoadoutId : null;
 const parseEquipSpellLoadoutId = (actionId: ActionId): SpellLoadoutId | null =>
   actionId.startsWith("equip-spell:") ? actionId.slice("equip-spell:".length) as SpellLoadoutId : null;
+const parseUnlockLoadoutItemId = (actionId: ActionId): ItemId | null =>
+  actionId.startsWith("unlock-loadout:") ? actionId.slice("unlock-loadout:".length) as ItemId : null;
 
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
@@ -4711,6 +4781,54 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       accepted: true,
       summary: `${cultivator.name} equipped spell loadout: ${def.name}.`,
     };
+  }
+
+  // ---- Unlock loadout via item ----
+  const unlockItemId = parseUnlockLoadoutItemId(actionId);
+  if (unlockItemId) {
+    const itemDef = ITEM_CATALOG[unlockItemId];
+    if (!itemDef || itemDef.use.kind !== "unlock-loadout") {
+      throw new Error(`Invalid unlock-loadout item: ${unlockItemId}`);
+    }
+    if ((cultivator.inventory[unlockItemId] ?? 0) < 1) {
+      throw new Error(`Item not available: ${unlockItemId}`);
+    }
+    const wLoadoutId = itemDef.use.grantsWeaponLoadoutId;
+    const sLoadoutId = itemDef.use.grantsSpellLoadoutId;
+    if (!wLoadoutId && !sLoadoutId) {
+      throw new Error(`Item ${unlockItemId} does not grant any loadout.`);
+    }
+    if (wLoadoutId) {
+      if (cultivator.unlockedWeaponLoadoutIds.includes(wLoadoutId)) {
+        throw new Error(`Weapon loadout ${wLoadoutId} is already unlocked. Item not consumed.`);
+      }
+      cultivator.unlockedWeaponLoadoutIds = [...cultivator.unlockedWeaponLoadoutIds, wLoadoutId];
+      cultivator.inventory[unlockItemId] -= 1;
+      addDaoLog(world, cultivator.id, "装配解锁", `${cultivator.name} 使用「${itemDef.name}」解锁了武器装配「${getWeaponLoadoutDefinition(wLoadoutId)?.name ?? wLoadoutId}」。`, ["loadout-unlock", "weapon-source"]);
+      return {
+        tick: world.tick,
+        cultivatorId: cultivator.id,
+        actionId,
+        accepted: true,
+        summary: `${cultivator.name} unlocked weapon loadout: ${getWeaponLoadoutDefinition(wLoadoutId)?.name ?? wLoadoutId}. Not auto-equipped.`,
+      };
+    }
+    if (sLoadoutId) {
+      if (cultivator.unlockedSpellLoadoutIds.includes(sLoadoutId)) {
+        throw new Error(`Spell loadout ${sLoadoutId} is already unlocked. Item not consumed.`);
+      }
+      cultivator.unlockedSpellLoadoutIds = [...cultivator.unlockedSpellLoadoutIds, sLoadoutId];
+      cultivator.inventory[unlockItemId] -= 1;
+      addDaoLog(world, cultivator.id, "装配解锁", `${cultivator.name} 使用「${itemDef.name}」解锁了法术装配「${getSpellLoadoutDefinition(sLoadoutId)?.name ?? sLoadoutId}」。`, ["loadout-unlock", "spell-source"]);
+      return {
+        tick: world.tick,
+        cultivatorId: cultivator.id,
+        actionId,
+        accepted: true,
+        summary: `${cultivator.name} unlocked spell loadout: ${getSpellLoadoutDefinition(sLoadoutId)?.name ?? sLoadoutId}. Not auto-equipped.`,
+      };
+    }
+    throw new Error(`Item ${unlockItemId} does not grant any loadout.`);
   }
 
   const wildernessLayerId = parseEnterWildernessLayer(actionId);
@@ -5121,6 +5239,11 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
     }
     cultivator.inventory[metadata.materialBand] += 1;
+    // ---- Loadout source drop (search-fortune) ----
+    const sfSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
+    const sfSourceDrop = pickLoadoutSourceDrop(sfSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:loadout-source`);
+    cultivator.inventory[sfSourceDrop] = (cultivator.inventory[sfSourceDrop] ?? 0) + 1;
+    addDaoLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 在探索地宫时获得了${ITEM_CATALOG[sfSourceDrop]?.name ?? sfSourceDrop}。`, [sfSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"]);
     return `${cultivator.name} searched the ruins.`;
   }
   if (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null) {
@@ -5293,6 +5416,11 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         cultivator.inventory[metadata.materialBand] += 1;
         cultivator.spiritStones += spiritStones;
         addRealmProgress(cultivator, tuning.realmProgressReward);
+        // ---- Loadout source drop (challenge-guardian victory) ----
+        const cgSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
+        const cgSourceDrop = pickLoadoutSourceDrop(cgSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:guardian-loadout-source`);
+        cultivator.inventory[cgSourceDrop] = (cultivator.inventory[cgSourceDrop] ?? 0) + 1;
+        addDaoLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 击败守关后获得了${ITEM_CATALOG[cgSourceDrop]?.name ?? cgSourceDrop}。`, [cgSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"]);
         const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
         if (challengeGuardianRank === highestUnlockedRank) {
           ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(

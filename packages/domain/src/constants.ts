@@ -5,6 +5,7 @@ import type {
   SectMotiveBucketId,
   SectTitleSlot,
 } from "./model.js";
+import { LOADOUT_SOURCE_RECIPES } from "./loadout-sourcing.js";
 import {
   GEOGRAPHY_REGISTRY,
   getCrossStateEdges,
@@ -128,7 +129,7 @@ export const DEFAULT_ACTION_DURATIONS: Record<string, number> = {
   socialize: 1,
 };
 
-export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
+const LEGACY_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
   {
     id: "recipe-healing-pill",
     outputItemId: "healing-pill",
@@ -139,6 +140,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     ],
     spiritStoneCost: 30,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-qi-pill",
@@ -147,6 +149,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "spirit-ore", count: 2 }],
     spiritStoneCost: 25,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-ward-talisman",
@@ -155,6 +158,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "ruin-fragment", count: 1 }],
     spiritStoneCost: 40,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-qi-stage-1-special",
@@ -163,6 +167,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "qi-common", count: 1 }],
     spiritStoneCost: 80,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-qi-stage-2-special",
@@ -171,6 +176,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "qi-common", count: 1 }],
     spiritStoneCost: 120,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-qi-major-special",
@@ -179,6 +185,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "qi-common", count: 1 }],
     spiritStoneCost: 180,
     durationTicks: 3,
+    enabledInLive: true,
   },
   {
     id: "recipe-foundation-stage-1-special",
@@ -187,6 +194,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "foundation-common", count: 1 }],
     spiritStoneCost: 80,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-foundation-stage-2-special",
@@ -195,6 +203,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "foundation-common", count: 1 }],
     spiritStoneCost: 120,
     durationTicks: 2,
+    enabledInLive: true,
   },
   {
     id: "recipe-foundation-major-special",
@@ -203,6 +212,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "foundation-common", count: 1 }],
     spiritStoneCost: 260,
     durationTicks: 3,
+    enabledInLive: true,
   },
   {
     id: "recipe-core-stage-1-special",
@@ -211,6 +221,7 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "core-common", count: 1 }],
     spiritStoneCost: 220,
     durationTicks: 3,
+    enabledInLive: true,
   },
   {
     id: "recipe-core-stage-2-special",
@@ -219,7 +230,13 @@ export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
     inputMaterials: [{ itemId: "core-common", count: 1 }],
     spiritStoneCost: 300,
     durationTicks: 3,
+    enabledInLive: true,
   },
+];
+
+export const RESIDENCE_PRODUCTION_RECIPES: readonly ProductionRecipe[] = [
+  ...LEGACY_PRODUCTION_RECIPES,
+  ...LOADOUT_SOURCE_RECIPES,
 ];
 
 export const QUEST_BOARD_REFRESH_INTERVAL = 12;

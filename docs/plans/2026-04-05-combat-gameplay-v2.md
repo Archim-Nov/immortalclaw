@@ -1,6 +1,7 @@
 # 战斗装配层落地计划：共享底座
 
 > Follow-up alignment supplement: `docs/plans/2026-04-05-combat-gameplay-v2-gap-closure.md`
+> Loadout sourcing supplement: `docs/plans/2026-04-05-combat-loadout-sourcing-v2.md`
 > Spell supplement plan: `docs/plans/2026-04-05-combat-lightweight-spell-status-v2.md`
 > Status runtime supplement plan: `docs/plans/2026-04-05-combat-lightweight-status-runtime-v2.md`
 > Weapon supplement plan: `docs/plans/2026-04-05-combat-weapon-family-v2.md`
