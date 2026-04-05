@@ -13,6 +13,7 @@ Recent supporting gameplay specs:
 - `docs/specs/combat-weapon-family-v2/spec.md`
 - `docs/specs/combat-lightweight-spell-status-v2/spec.md`
 - `docs/specs/item-catalog-v1/spec.md`
+- `docs/specs/item-catalog-v2-unification/spec.md`
 - `docs/specs/manual-removal-v1/spec.md`
 - `docs/specs/dungeon-event-pool-alignment-v1/spec.md`
 - `docs/specs/event-content-library-split-v1/spec.md`

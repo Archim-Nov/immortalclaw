@@ -24,6 +24,7 @@ export type RegistrationQuestionId =
 export type RegistrationAnswer = "A" | "B" | "C" | "D";
 export type RegistrationConfidenceLevel = "high" | "medium" | "low";
 export type RegistrationLocale = "zh-CN" | "en";
+export type LocalizedText = Record<RegistrationLocale, string>;
 export type RegistrationQuestionCategory = "core-temperament" | "behavior-aspect" | "cultivation-motive";
 export type RegistrationTemperamentId =
   | "shou_jie"
@@ -735,6 +736,7 @@ export interface ItemUseDefinition {
   actionId: ActionId | null;
   consumesOnUse: boolean;
   effectSummary: string | null;
+  effectSummaryByLocale: LocalizedText | null;
   effectBundle: EventEffect | null;
   grantsTechnique: string | null;
   ticketTargets: string[] | null;
@@ -795,8 +797,10 @@ export interface NeutralSect {
 export interface ItemDefinition {
   id: ItemId;
   name: string;
+  nameByLocale: LocalizedText;
   category: ItemCategory;
   description: string;
+  descriptionByLocale: LocalizedText;
   baseValue: number;
   tags: string[];
   trade: ItemTradeDefinition;
@@ -1482,8 +1486,10 @@ export interface TickSummary {
 export interface InventoryEntryView {
   id: ItemId;
   name: string;
+  nameByLocale: LocalizedText;
   category: ItemCategory;
   description: string;
+  descriptionByLocale: LocalizedText;
   count: number;
   baseValue: number;
   tags: string[];

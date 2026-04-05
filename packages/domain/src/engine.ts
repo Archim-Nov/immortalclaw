@@ -172,7 +172,8 @@ import {
   enterBahuangExpedition,
   retreatFromBahuang,
 } from "./bahuang-service.js";
-import { pickLoadoutSourceDrop, LOADOUT_SOURCE_ITEMS } from "./loadout-sourcing.js";
+import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
+import { LOADOUT_SOURCE_ITEMS } from "./items/loadout-source-items.js";
 import { getLiveCraftableRecipes } from "./residence.js";
 
 const TICKS_PER_YEAR = 4380;
@@ -4176,8 +4177,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         return {
           id,
           name: definition.name,
+          nameByLocale: definition.nameByLocale,
           category: definition.category,
           description: definition.description,
+          descriptionByLocale: definition.descriptionByLocale,
           count,
           baseValue: definition.baseValue,
           tags: definition.tags,

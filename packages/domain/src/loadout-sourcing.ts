@@ -1,5 +1,4 @@
 import type {
-  ItemDefinition,
   ItemId,
   ProductionRecipe,
   WeaponLoadoutId,
@@ -45,64 +44,14 @@ function hashValue(s: string): number {
   return Math.abs(h);
 }
 
-// ---- Generate Weapon Items & Recipes ----
+// ---- Generate Recipes ----
 
-const weaponItems: ItemDefinition[] = [];
 const weaponRecipes: ProductionRecipe[] = [];
 
 for (const wl of Object.values(WEAPON_LOADOUT_DEFINITIONS)) {
   const tier: WeaponTier = wl.weaponTier ?? 1;
   const wlId = wl.id;
 
-  // Weapon Material
-  weaponItems.push(
-    Object.freeze<ItemDefinition>({
-      id: `weapon-material-${wlId}` as ItemId,
-      name: `${wl.name}锻材`,
-      category: "material",
-      description: `用于在洞府锻造${wl.name}的原始材料。`,
-      baseValue: 0,
-      tags: ["material", "weapon-source", "crafted-input", `tier-${tier}`],
-      trade: { buyBasePrice: null, sellBasePrice: null, tradableAt: "none" },
-      use: {
-        kind: "material",
-        actionId: null,
-        consumesOnUse: false,
-        effectSummary: null,
-        effectBundle: null,
-        grantsTechnique: null,
-        ticketTargets: null,
-        grantsWeaponLoadoutId: null,
-        grantsSpellLoadoutId: null,
-      },
-    }),
-  );
-
-  // Weapon Unlock Item
-  weaponItems.push(
-    Object.freeze<ItemDefinition>({
-      id: `weapon-item-${wlId}` as ItemId,
-      name: `${wl.name}`,
-      category: "manual",
-      description: `使用后永久解锁武器装配「${wl.name}」。`,
-      baseValue: 0,
-      tags: ["manual", "weapon-unlock", `tier-${tier}`],
-      trade: { buyBasePrice: null, sellBasePrice: null, tradableAt: "none" },
-      use: {
-        kind: "unlock-loadout",
-        actionId: null,
-        consumesOnUse: true,
-        effectSummary: `永久解锁武器装配「${wl.name}」，不会自动装备。`,
-        effectBundle: null,
-        grantsTechnique: null,
-        ticketTargets: null,
-        grantsWeaponLoadoutId: wlId as WeaponLoadoutId,
-        grantsSpellLoadoutId: null,
-      },
-    }),
-  );
-
-  // Forge Recipe
   weaponRecipes.push(
     Object.freeze<ProductionRecipe>({
       id: `recipe-forge-${wlId}`,
@@ -116,64 +65,12 @@ for (const wl of Object.values(WEAPON_LOADOUT_DEFINITIONS)) {
   );
 }
 
-// ---- Generate Spell Items & Recipes ----
-
-const spellItems: ItemDefinition[] = [];
 const spellRecipes: ProductionRecipe[] = [];
 
 for (const sl of Object.values(SPELL_LOADOUT_DEFINITIONS)) {
   const tier: SpellTier = sl.spellTier ?? 1;
   const slId = sl.id;
 
-  // Spell Fragment
-  spellItems.push(
-    Object.freeze<ItemDefinition>({
-      id: `spell-fragment-${slId}` as ItemId,
-      name: `${sl.name}残本`,
-      category: "material",
-      description: `功法残本，需在洞府合成完整功法「${sl.name}」。`,
-      baseValue: 0,
-      tags: ["material", "spell-source", "crafted-input", `tier-${tier}`],
-      trade: { buyBasePrice: null, sellBasePrice: null, tradableAt: "none" },
-      use: {
-        kind: "material",
-        actionId: null,
-        consumesOnUse: false,
-        effectSummary: null,
-        effectBundle: null,
-        grantsTechnique: null,
-        ticketTargets: null,
-        grantsWeaponLoadoutId: null,
-        grantsSpellLoadoutId: null,
-      },
-    }),
-  );
-
-  // Spell Manual
-  spellItems.push(
-    Object.freeze<ItemDefinition>({
-      id: `spell-manual-${slId}` as ItemId,
-      name: `${sl.name}`,
-      category: "manual",
-      description: `使用后永久解锁法术装配「${sl.name}」。`,
-      baseValue: 0,
-      tags: ["manual", "spell-unlock", `tier-${tier}`],
-      trade: { buyBasePrice: null, sellBasePrice: null, tradableAt: "none" },
-      use: {
-        kind: "unlock-loadout",
-        actionId: null,
-        consumesOnUse: true,
-        effectSummary: `永久解锁法术装配「${sl.name}」，不会自动装备。`,
-        effectBundle: null,
-        grantsTechnique: null,
-        ticketTargets: null,
-        grantsWeaponLoadoutId: null,
-        grantsSpellLoadoutId: slId as SpellLoadoutId,
-      },
-    }),
-  );
-
-  // Synthesis Recipe
   spellRecipes.push(
     Object.freeze<ProductionRecipe>({
       id: `recipe-synthesize-${slId}`,
@@ -186,14 +83,6 @@ for (const sl of Object.values(SPELL_LOADOUT_DEFINITIONS)) {
     }),
   );
 }
-
-// ---- Build Exported Lookups ----
-
-const allItems = [...weaponItems, ...spellItems];
-
-export const LOADOUT_SOURCE_ITEMS: Record<ItemId, ItemDefinition> = Object.freeze(
-  Object.fromEntries(allItems.map((item) => [item.id, item])) as Record<ItemId, ItemDefinition>,
-);
 
 export const LOADOUT_SOURCE_RECIPES: readonly ProductionRecipe[] = Object.freeze([
   ...weaponRecipes,

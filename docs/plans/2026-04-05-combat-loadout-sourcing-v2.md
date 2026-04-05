@@ -3,6 +3,7 @@
 **Relationship:**
 
 - 共享战斗装配底座：`docs/plans/2026-04-05-combat-gameplay-v2.md`
+- 物品目录统一后续计划：`docs/plans/2026-04-05-item-catalog-v2-unification.md`
 - 武器内容包装：`docs/plans/2026-04-05-combat-weapon-family-v2.md`
 - 法术内容包装：`docs/plans/2026-04-05-combat-lightweight-spell-status-v2.md`
 - 状态运行时：`docs/plans/2026-04-05-combat-lightweight-status-runtime-v2.md`
