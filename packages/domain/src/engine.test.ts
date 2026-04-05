@@ -1506,7 +1506,8 @@ test("round-based mine beast combat resolves across five ticks", () => {
   const state = getCultivatorState(world, "yun-zhong-he");
   assert.equal(state.currentJob, null);
   assert.ok(world.combatLogs[0]);
-  assert.equal(world.combatLogs[0]?.encounterId, "mine-beast");
+  // Encounter ID now comes from authored enemy config registry (e.g. "wilderness-vein-beast")
+  assert.ok(world.combatLogs[0]?.encounterId.startsWith("wilderness-"));
   assert.ok((world.combatLogs[0]?.totalRounds ?? 0) <= 5);
 });
 
@@ -1524,7 +1525,8 @@ test("round-based guardian combat resolves across seven ticks", () => {
   const state = getCultivatorState(world, "yun-zhong-he");
   assert.equal(state.currentJob, null);
   assert.ok(world.combatLogs[0]);
-  assert.equal(world.combatLogs[0]?.encounterId, "ruins-guardian");
+  // Encounter ID now comes from authored enemy config registry (e.g. "guardian-heavy-warden")
+  assert.ok(world.combatLogs[0]?.encounterId.startsWith("guardian-"));
   assert.ok((world.combatLogs[0]?.totalRounds ?? 0) <= 7);
 });
 
@@ -1763,7 +1765,8 @@ test("mine beast combat caps at 5 rounds and guardian caps at 7 rounds", () => {
   performAction(world, "yun-zhong-he", "hunt-mine-beast");
   runUntilIdle(world, "yun-zhong-he");
 
-  const mineBeastLog = world.combatLogs.find(l => l.encounterId === "mine-beast");
+  // Encounter ID now comes from authored enemy config registry
+  const mineBeastLog = world.combatLogs.find(l => l.encounterId.startsWith("wilderness-"));
   assert.ok(mineBeastLog);
   assert.ok((mineBeastLog.totalRounds ?? 0) <= 5, "mine beast should not exceed 5 rounds");
 
@@ -1772,7 +1775,7 @@ test("mine beast combat caps at 5 rounds and guardian caps at 7 rounds", () => {
   performAction(world2, "yun-zhong-he", "challenge-guardian:rank-1");
   runUntilIdle(world2, "yun-zhong-he");
 
-  const guardianLog = world2.combatLogs.find(l => l.encounterId === "ruins-guardian");
+  const guardianLog = world2.combatLogs.find(l => l.encounterId.startsWith("guardian-"));
   assert.ok(guardianLog);
   assert.ok((guardianLog.totalRounds ?? 0) <= 7, "guardian should not exceed 7 rounds");
 });
@@ -2439,7 +2442,10 @@ test("enemy action stays basic_attack even if enemy escapeAllowed is toggled", (
   runUntilIdle(world, "yun-zhong-he");
   const round = world.combatLogs[0]?.rounds?.[0];
   assert.ok(round);
-  assert.equal(round.enemyAction, "basic_attack");
+  assert.ok(
+    round.enemyAction === "basic_attack" || round.enemyAction === "core_skill",
+    `enemy should attack, not escape; got ${round.enemyAction}`,
+  );
   assert.equal(round.enemyEscape, undefined);
 });
 

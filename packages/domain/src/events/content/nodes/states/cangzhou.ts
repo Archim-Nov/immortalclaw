@@ -107,6 +107,8 @@ const ROWS = [
       qi: -9,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-seal" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "reef-maw",
@@ -121,6 +123,8 @@ const ROWS = [
       spiritualPower: -4,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-drain" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "brine-wall",

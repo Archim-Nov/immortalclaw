@@ -107,6 +107,8 @@ const ROWS = [
       qi: -11,
       spiritStones: 20,
     },
+    encounterBuildId: "dungeon-guardian-heavy" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "scorpion-surge",
@@ -121,6 +123,8 @@ const ROWS = [
       spiritualPower: -4,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-swift" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "banner-rig",

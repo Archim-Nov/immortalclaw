@@ -108,6 +108,8 @@ const ROWS = [
       spiritualPower: -8,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-spell" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "spark-fiend",
@@ -122,6 +124,8 @@ const ROWS = [
       spiritualPower: -5,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-swift" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "ward-line",

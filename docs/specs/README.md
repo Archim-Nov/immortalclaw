@@ -10,6 +10,7 @@ Recent supporting gameplay specs:
 - `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - `docs/specs/combat-gameplay-v1/spec.md`
 - `docs/specs/combat-loadout-sourcing-v2/spec.md`
+- `docs/specs/combat-encounter-event-integration-v2/spec.md`
 - `docs/specs/combat-weapon-family-v2/spec.md`
 - `docs/specs/combat-lightweight-spell-status-v2/spec.md`
 - `docs/specs/item-catalog-v1/spec.md`

@@ -1356,6 +1356,7 @@ export interface CombatSnapshot {
 
 export interface CombatJobState {
   encounterTemplateId: string;
+  encounterBuildId?: string;
   maxRounds: number;
   currentRound: number;
   playerSnapshot: CombatSnapshot;
@@ -1399,7 +1400,7 @@ export interface CombatLogEntry {
   tick: number;
   cultivatorId: string;
   locationId: string;
-  encounterId: "mine-beast" | "ruins-guardian";
+  encounterId: string;
   enemyName: string;
   outcome: "victory" | "defeat";
   damageTaken: number;
@@ -1407,6 +1408,7 @@ export interface CombatLogEntry {
   loot: Partial<Record<ItemId, number>>;
   summary: string;
   encounterTemplateId?: string;
+  encounterBuildId?: string;
   totalRounds?: number;
   rounds?: CombatRoundLog[];
   playerSnapshot?: CombatSnapshot;

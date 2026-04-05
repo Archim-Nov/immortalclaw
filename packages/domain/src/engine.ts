@@ -73,6 +73,15 @@ import {
   type TickEvent,
 } from "./combat-statuses.js";
 import {
+  getEnemyConfig,
+  enemyConfigToEncounterTemplate,
+  getEncounterBuild,
+  pickDungeonGuardianBuildId,
+  pickWildernessCombatBuildId,
+  type EncounterBuildId,
+  type EnemyConfigId,
+} from "./encounters/index.js";
+import {
   acceptQuest,
   getActiveQuest,
   getQuestBoard,
@@ -313,6 +322,33 @@ const GUARDIAN_ENCOUNTER_TEMPLATE: EncounterTemplate = {
   spirit: 60,
   maxSpirit: 60,
 };
+
+/** Resolve an EncounterTemplate from the authored encounter registry.
+ *  Falls back to legacy hardcoded templates for backward compatibility. */
+function resolveEncounterTemplateFromBuild(buildId: EncounterBuildId): { template: EncounterTemplate; buildId: EncounterBuildId; enemyConfigId: EnemyConfigId } | null {
+  const build = getEncounterBuild(buildId);
+  if (!build || build.enemyConfigIds.length === 0) return null;
+  const enemyConfigId = build.enemyConfigIds[0];
+  const config = getEnemyConfig(enemyConfigId);
+  if (!config) return null;
+  return { template: enemyConfigToEncounterTemplate(config), buildId, enemyConfigId };
+}
+
+/** Pick a wilderness encounter from the authored registry, falling back to legacy mine-beast. */
+function resolveWildernessEncounterTemplate(seed: number): { template: EncounterTemplate; buildId: EncounterBuildId | null; enemyConfigId: EnemyConfigId | null } {
+  const buildId = pickWildernessCombatBuildId(seed);
+  const resolved = resolveEncounterTemplateFromBuild(buildId);
+  if (resolved) return resolved;
+  return { template: MINE_BEAST_ENCOUNTER_TEMPLATE, buildId: null, enemyConfigId: null };
+}
+
+/** Pick a guardian encounter from the authored registry, falling back to legacy ruins-guardian. */
+function resolveGuardianEncounterTemplate(seed: number): { template: EncounterTemplate; buildId: EncounterBuildId | null; enemyConfigId: EnemyConfigId | null } {
+  const buildId = pickDungeonGuardianBuildId(seed);
+  const resolved = resolveEncounterTemplateFromBuild(buildId);
+  if (resolved) return resolved;
+  return { template: GUARDIAN_ENCOUNTER_TEMPLATE, buildId: null, enemyConfigId: null };
+}
 const REALM_PHASES: readonly RealmPhase[] = ["前期", "中期", "后期"];
 const ONBOARDING_STAGE_ORDER: readonly OnboardingStage[] = [
   "registered",
@@ -782,6 +818,7 @@ const initializeCombatJobState = (
   cultivator: Cultivator,
   template: EncounterTemplate,
   enemyScale = 1,
+  encounterBuildId?: string,
 ): CombatJobState => {
   const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
@@ -925,6 +962,7 @@ const initializeCombatJobState = (
   };
   return {
     encounterTemplateId: template.id,
+    encounterBuildId,
     maxRounds: template.maxRounds,
     currentRound: 0,
     playerSnapshot,
@@ -3212,11 +3250,14 @@ function resolveDungeonExpeditionStepIfDue(
     },
   };
   if (actionKind === "guardian") {
+    const expedGuardianSeed = hashString(`${world.tick}:${cultivator.id}:expedition-guardian:${effectiveProgress.grade}:${effectiveProgress.targetRank}`);
+    const expedGuardianEncounter = resolveGuardianEncounterTemplate(expedGuardianSeed);
     const combatState = initializeCombatJobState(
       world,
       cultivator,
-      GUARDIAN_ENCOUNTER_TEMPLATE,
+      expedGuardianEncounter.template,
       guardianCombatScale(effectiveProgress.grade, effectiveProgress.targetRank),
+      expedGuardianEncounter.buildId ?? undefined,
     );
     setCombatJobState(syntheticJob, combatState);
     while (!combatState.resolved && combatState.currentRound < combatState.maxRounds) {
@@ -3230,7 +3271,14 @@ function resolveDungeonExpeditionStepIfDue(
 
   const flavorEventTitles = actionKind === "search"
     ? extractDungeonFlavorEventTitles(world.worldEvents, beforeEventCount, actionId)
-    : [];
+    : (() => {
+        // For guardian steps, extract the encounter identity as a flavor title
+        const guardianCombat = getCombatJobState(syntheticJob);
+        if (!guardianCombat) return [];
+        const cfg = getEnemyConfig(guardianCombat.encounterTemplateId as unknown as EnemyConfigId);
+        const guardianName = cfg?.nameCn ?? cfg?.name ?? "Guardian";
+        return [`${guardianName} encounter`];
+      })();
 
   trimPrependedEntries(world.worldEvents, beforeEventCount);
   trimPrependedEntries(world.combatLogs, beforeCombatCount);
@@ -5289,25 +5337,32 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
 
     if (job.actionId === "hunt-mine-beast") {
       const baseSeed = `${world.tick}:${job.id}:mine-beast`;
+      const encId = combatState.encounterTemplateId;
+      // Use the enemy name from the encounter registry, fall back to legacy
+      const enemyDisplayName = (() => {
+        const cfg = getEnemyConfig(encId as unknown as EnemyConfigId);
+        return cfg?.name ?? MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName;
+      })();
       if (retreated) {
         addCombatLog(world, {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
-          encounterId: "mine-beast",
-          enemyName: MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName,
+          encounterId: encId,
+          enemyName: enemyDisplayName,
           outcome: "defeat",
           damageTaken,
           spiritualPowerSpent: 16,
           loot: {},
-          summary: `${cultivator.name} retreated from ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName} after ${totalRounds} rounds.`,
-          encounterTemplateId: MINE_BEAST_ENCOUNTER_TEMPLATE.id,
+          summary: `${cultivator.name} retreated from ${enemyDisplayName} after ${totalRounds} rounds.`,
+          encounterTemplateId: encId,
+          encounterBuildId: combatState.encounterBuildId ?? encId,
           totalRounds,
           rounds: combatState.rounds,
           playerSnapshot: combatState.playerSnapshot,
           enemySnapshot: combatState.enemySnapshot,
           retreated: true,
         });
-        return `${cultivator.name} retreated from ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName}.`;
+        return `${cultivator.name} retreated from ${enemyDisplayName}.`;
       }
       if (outcome === "victory") {
         const spiritOre = 1 + (hashString(`${baseSeed}:loot-spirit-ore`) % 3);
@@ -5330,8 +5385,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         addCombatLog(world, {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
-          encounterId: "mine-beast",
-          enemyName: MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName,
+          encounterId: encId,
+          enemyName: enemyDisplayName,
           outcome,
           damageTaken,
           spiritualPowerSpent: 16,
@@ -5340,14 +5395,15 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
             "foundation-common": 1,
             ...(beastCoreDrop > 0 ? { "beast-core": beastCoreDrop } : {}),
           },
-          summary: `${cultivator.name} defeated ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName} in ${totalRounds} rounds.`,
-          encounterTemplateId: MINE_BEAST_ENCOUNTER_TEMPLATE.id,
+          summary: `${cultivator.name} defeated ${enemyDisplayName} in ${totalRounds} rounds.`,
+          encounterTemplateId: encId,
+          encounterBuildId: combatState.encounterBuildId ?? encId,
           totalRounds,
           rounds: combatState.rounds,
           playerSnapshot: combatState.playerSnapshot,
           enemySnapshot: combatState.enemySnapshot,
         });
-        return `${cultivator.name} defeated ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName}.`;
+        return `${cultivator.name} defeated ${enemyDisplayName}.`;
       }
 
       const qiLossPercent = 8 + (hashString(`${baseSeed}:defeat-qi-loss`) % 8);
@@ -5363,20 +5419,21 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       addCombatLog(world, {
         cultivatorId: cultivator.id,
         locationId: cultivator.locationId,
-        encounterId: "mine-beast",
-        enemyName: MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName,
+        encounterId: encId,
+        enemyName: enemyDisplayName,
         outcome,
         damageTaken,
         spiritualPowerSpent: 16,
         loot: {},
-        summary: `${cultivator.name} was defeated by ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName} after ${totalRounds} rounds.`,
-        encounterTemplateId: MINE_BEAST_ENCOUNTER_TEMPLATE.id,
+        summary: `${cultivator.name} was defeated by ${enemyDisplayName} after ${totalRounds} rounds.`,
+        encounterTemplateId: encId,
+        encounterBuildId: combatState.encounterBuildId ?? encId,
         totalRounds,
         rounds: combatState.rounds,
         playerSnapshot: combatState.playerSnapshot,
         enemySnapshot: combatState.enemySnapshot,
       });
-      return `${cultivator.name} was defeated by ${MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName}.`;
+      return `${cultivator.name} was defeated by ${enemyDisplayName}.`;
     }
 
     const challengeGuardianRank = parseChallengeGuardianRank(job.actionId);
@@ -5388,18 +5445,24 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       }
       const tuning = guardianTuningForDungeon(metadata.grade, challengeGuardianRank);
       const baseSeed = `${world.tick}:${job.id}:ruins-guardian:${metadata.grade}:${challengeGuardianRank}`;
+      const guardianEncId = combatState.encounterTemplateId;
+      const guardianDisplayName = (() => {
+        const cfg = getEnemyConfig(guardianEncId as unknown as EnemyConfigId);
+        return cfg ? `${location.name} ${cfg.name}` : `${location.name} Guardian`;
+      })();
       if (retreated) {
         addCombatLog(world, {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
-          encounterId: "ruins-guardian",
-          enemyName: `${location.name} Guardian`,
+          encounterId: guardianEncId,
+          enemyName: guardianDisplayName,
           outcome: "defeat",
           damageTaken,
           spiritualPowerSpent: 24,
           loot: {},
           summary: `${cultivator.name} retreated from the guardian of ${location.name}.`,
-          encounterTemplateId: GUARDIAN_ENCOUNTER_TEMPLATE.id,
+          encounterTemplateId: guardianEncId,
+          encounterBuildId: combatState.encounterBuildId ?? guardianEncId,
           totalRounds,
           rounds: combatState.rounds,
           playerSnapshot: combatState.playerSnapshot,
@@ -5442,8 +5505,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         addCombatLog(world, {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
-          encounterId: "ruins-guardian",
-          enemyName: `${location.name} Guardian`,
+          encounterId: guardianEncId,
+          enemyName: guardianDisplayName,
           outcome,
           damageTaken,
           spiritualPowerSpent: 24,
@@ -5453,7 +5516,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
             [metadata.materialBand]: 1,
           },
           summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.`,
-          encounterTemplateId: GUARDIAN_ENCOUNTER_TEMPLATE.id,
+          encounterTemplateId: guardianEncId,
+          encounterBuildId: combatState.encounterBuildId ?? guardianEncId,
           totalRounds,
           rounds: combatState.rounds,
           playerSnapshot: combatState.playerSnapshot,
@@ -5463,7 +5527,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
           title: `${location.name} Guardian Broken`,
-          content: `${cultivator.name} defeated the ${metadata.grade}${challengeGuardianRank} guardian of ${location.name} and claimed the sealed reward cache.`,
+          content: `${cultivator.name} defeated the ${metadata.grade}${challengeGuardianRank} ${guardianDisplayName} and claimed the sealed reward cache.`,
           severity: "medium",
           tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "victory"],
         });
@@ -5491,14 +5555,15 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       addCombatLog(world, {
         cultivatorId: cultivator.id,
         locationId: cultivator.locationId,
-        encounterId: "ruins-guardian",
-        enemyName: `${location.name} Guardian`,
+        encounterId: guardianEncId,
+        enemyName: guardianDisplayName,
         outcome,
         damageTaken,
         spiritualPowerSpent: 24,
         loot: {},
         summary: `${cultivator.name} was repelled by the guardian of ${location.name}.`,
-        encounterTemplateId: GUARDIAN_ENCOUNTER_TEMPLATE.id,
+        encounterTemplateId: guardianEncId,
+        encounterBuildId: combatState.encounterBuildId ?? guardianEncId,
         totalRounds,
         rounds: combatState.rounds,
         playerSnapshot: combatState.playerSnapshot,
@@ -5871,6 +5936,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         throw new Error(`Dungeon rank ${selectedRank} is not unlocked.`);
       }
       if (challengeGuardianRank !== null) {
+        const cgStartSeed = hashString(`${world.tick}:${cultivator.id}:guardian-encounter:${metadata.grade}:${challengeGuardianRank}`);
+        const cgStartEncounter = resolveGuardianEncounterTemplate(cgStartSeed);
         const jobResult = startJob(
           world,
           cultivator,
@@ -5880,7 +5947,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
             dungeonGrade: metadata.grade,
             dungeonRank: selectedRank,
           },
-          GUARDIAN_ENCOUNTER_TEMPLATE.maxRounds,
+          cgStartEncounter.template.maxRounds,
         );
         if (!jobResult.job) {
           throw new Error("Guardian combat job was not created.");
@@ -5888,8 +5955,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         const combatState = initializeCombatJobState(
           world,
           cultivator,
-          GUARDIAN_ENCOUNTER_TEMPLATE,
+          cgStartEncounter.template,
           guardianCombatScale(metadata.grade, challengeGuardianRank),
+          cgStartEncounter.buildId ?? undefined,
         );
         setCombatJobState(jobResult.job, combatState);
         return jobResult;
@@ -5908,18 +5976,20 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     if (actionId === "cultivate") { if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED) throw new Error("Realm progress is capped. Complete a breakthrough before more cultivation."); if (cultivator.spiritStones < 80) throw new Error("Not enough spirit stones."); if (cultivator.spiritualPower < 20) throw new Error("Not enough spiritual power."); cultivator.spiritStones -= 80; cultivator.spiritualPower -= 20; }
     if ((actionId === "mine-spirit-stones" || actionId === "hunt-mine-beast") && location.nodeType !== "wilderness") throw new Error("Action only available in wilderness.");
     if (actionId === "hunt-mine-beast") {
+      const huntSeed = hashString(`${world.tick}:${cultivator.id}:hunt-encounter`);
+      const encounter = resolveWildernessEncounterTemplate(huntSeed);
       const jobResult = startJob(
         world,
         cultivator,
         actionId as TimedActionId,
         actionId,
         undefined,
-        MINE_BEAST_ENCOUNTER_TEMPLATE.maxRounds,
+        encounter.template.maxRounds,
       );
       if (!jobResult.job) {
         throw new Error("Mine beast combat job was not created.");
       }
-      const combatState = initializeCombatJobState(world, cultivator, MINE_BEAST_ENCOUNTER_TEMPLATE);
+      const combatState = initializeCombatJobState(world, cultivator, encounter.template, 1, encounter.buildId ?? undefined);
       setCombatJobState(jobResult.job, combatState);
       return jobResult;
     }

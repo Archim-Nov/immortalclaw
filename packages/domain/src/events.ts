@@ -7,6 +7,7 @@ import type {
   StatusEffectId,
 } from "./model.js";
 import type { NodeType, StateId } from "./constants.js";
+import type { EncounterBuildId } from "./encounters/catalog.js";
 
 export type EventSourceType = "exploration" | "travel";
 export type EventSemanticType = "fortune" | "training" | "human";
@@ -42,6 +43,8 @@ export interface EventTemplate {
   readonly maxDungeonRank?: DungeonRank | null;
   readonly effects: EventEffect;
   readonly moralityChoice?: MoralityChoiceTemplate;
+  readonly encounterBuildId?: EncounterBuildId | null;
+  readonly combatMode?: "light" | "full" | null;
 }
 
 export interface EventPools {

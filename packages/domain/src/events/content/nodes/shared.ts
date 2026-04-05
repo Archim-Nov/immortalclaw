@@ -1,6 +1,7 @@
 import type { NodeType, StateId } from "../../../constants.js";
 import type { EventTemplate } from "../../../events.js";
 import type { Location } from "../../../model.js";
+import type { EncounterBuildId } from "../../../encounters/catalog.js";
 
 interface NodeEventSpec {
   readonly idSuffix: string;
@@ -15,6 +16,8 @@ interface NodeEventSpec {
   readonly minDungeonRank?: EventTemplate["minDungeonRank"];
   readonly maxDungeonRank?: EventTemplate["maxDungeonRank"];
   readonly effects: EventTemplate["effects"];
+  readonly encounterBuildId?: EncounterBuildId | null;
+  readonly combatMode?: EventTemplate["combatMode"];
 }
 
 export function buildNodeEvent(location: Location, spec: NodeEventSpec): EventTemplate {
@@ -35,5 +38,7 @@ export function buildNodeEvent(location: Location, spec: NodeEventSpec): EventTe
     minDungeonRank: spec.minDungeonRank ?? null,
     maxDungeonRank: spec.maxDungeonRank ?? null,
     effects: spec.effects,
+    encounterBuildId: spec.encounterBuildId ?? null,
+    combatMode: spec.combatMode ?? null,
   };
 }

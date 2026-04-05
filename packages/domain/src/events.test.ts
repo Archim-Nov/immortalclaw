@@ -62,14 +62,14 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(nodeSpecificCount, 2448);
+  assert.equal(nodeSpecificCount, 3006);
 
   for (const stateId of STATE_IDS) {
     assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 10);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 2);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 90);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 90);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 90);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 10);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 108);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 108);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 108);
     assert.equal(
       (world.eventPools.nodeSpecific[`${stateId}:dungeon-c`] ?? []).filter((event) => event.id.includes("-band-")).length,
       54,

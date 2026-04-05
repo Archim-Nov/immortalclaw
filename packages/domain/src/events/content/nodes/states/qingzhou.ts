@@ -108,6 +108,8 @@ const ROWS = [
       qi: -8,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-swift" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "pollen-burst",
@@ -122,6 +124,8 @@ const ROWS = [
       spiritualPower: -4,
       spiritStones: 16,
     },
+    encounterBuildId: "dungeon-guardian-drain" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "root-ward",

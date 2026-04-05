@@ -107,6 +107,8 @@ const ROWS = [
       qi: -10,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-seal" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "stone-ape",
@@ -120,6 +122,8 @@ const ROWS = [
       qi: -9,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-heavy" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "wind-baffle",

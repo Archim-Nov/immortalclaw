@@ -107,6 +107,8 @@ const ROWS = [
       qi: -8,
       spiritStones: 20,
     },
+    encounterBuildId: "dungeon-guardian-heavy" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "rogue-feint",
@@ -120,6 +122,8 @@ const ROWS = [
       qi: -9,
       spiritStones: 18,
     },
+    encounterBuildId: "dungeon-guardian-swift" as import("../../../../encounters/catalog.js").EncounterBuildId,
+    combatMode: "full",
   },
   {
     slot: "silent-breath",

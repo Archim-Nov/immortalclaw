@@ -1,5 +1,6 @@
 import type { EventTemplate } from "../../../../events.js";
 import type { Location } from "../../../../model.js";
+import type { EncounterBuildId } from "../../../../encounters/catalog.js";
 
 import { buildNodeEvent } from "../shared.js";
 
@@ -12,6 +13,8 @@ export interface RegionalDungeonEventRow {
   readonly description: string;
   readonly baseWeight?: number;
   readonly effects: EventTemplate["effects"];
+  readonly encounterBuildId?: EncounterBuildId | null;
+  readonly combatMode?: EventTemplate["combatMode"];
 }
 
 const RANK_BANDS = [
@@ -39,6 +42,8 @@ export function buildRegionalDungeonEventPack(
         minDungeonRank: band.minDungeonRank,
         maxDungeonRank: band.maxDungeonRank,
         effects: row.effects,
+        encounterBuildId: row.encounterBuildId ?? null,
+        combatMode: row.combatMode ?? null,
       })),
   );
 }
