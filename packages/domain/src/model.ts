@@ -722,7 +722,12 @@ export type ImmediateActionId =
   | "withdraw-from-wilderness"
   | `challenge-cultivator:${string}`
   | `accept-pvp-challenge:${string}`
-  | `reject-pvp-challenge:${string}`;
+  | `reject-pvp-challenge:${string}`
+  | `chat-up:${string}`
+  | `voice-transmit:${string}`
+  | `propose-dao-companion:${string}`
+  | `accept-dao-companion:${string}`
+  | `reject-dao-companion:${string}`;
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
@@ -1894,6 +1899,7 @@ export interface CultivatorStateView {
     availableNodeIds: string[];
   } | null;
   derivedState: DerivedStateView;
+  socialLinks: readonly import("./social.js").SocialLinkView[];
   onboarding: OnboardingProgress;
   decisionPolicy: DecisionPolicyView;
   agentGuidance: {
@@ -1945,6 +1951,8 @@ export interface WorldState {
   messages: Message[];
   worldEvents: WorldEvent[];
   combatLogs: CombatLogEntry[];
+  socialLinks: Record<string, Record<string, import("./social.js").SocialLink>>;
+  daoCompanionProposals: Record<string, import("./social.js").DaoCompanionProposal>;
   nextCultivatorSequence: number;
   nextJobSequence: number;
   nextLogSequence: number;
@@ -1955,6 +1963,7 @@ export interface WorldState {
   nextMoralityChoiceSequence: number;
   nextPvpChallengeSequence: number;
   nextSectCooldownSequence: number;
+  nextDaoCompanionProposalSequence: number;
 }
 
 export interface PersistedWorldState extends Omit<WorldState, "states" | "topology" | "eventPools"> {

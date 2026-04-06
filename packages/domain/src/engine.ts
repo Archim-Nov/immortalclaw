@@ -143,6 +143,30 @@ import {
   meetsTaskTitleRequirement,
 } from "./sect-tasks.js";
 import {
+  type AffinityLevel,
+  type SocialLink,
+  AFFINITY_GAINS,
+  AFFINITY_THRESHOLDS,
+  CO_LOCATION_AFFINITY_INTERVAL,
+  DAO_COMPANION_MIN_LEVEL,
+  DAO_COMPANION_PROPOSAL_EXPIRY,
+  MAX_DAO_COMPANIONS,
+  VOICE_TRANSMIT_MIN_LEVEL,
+  addMutualAffinity,
+  getAffinityLevel,
+  getCultivatorsAtLocation,
+  getDaoCompanionId,
+  getFriendsAtLevel,
+  getOrCreateSocialLink,
+  getSocialLink,
+  getSocialLinksView,
+  hasDaoCompanion,
+  meetsAffinityLevel,
+  pickChatUpTarget,
+  setBond,
+  writeSocialLink,
+} from "./social.js";
+import {
   buildFullTopology,
   getDistance,
   getNeighbors,
@@ -1595,6 +1619,16 @@ const parseJoinNeutralSectId = (actionId: ActionId) =>
   actionId.startsWith("join-neutral-sect:") ? actionId.slice("join-neutral-sect:".length) : null;
 const parseSectTaskId = (actionId: ActionId | string): string | null =>
   actionId.startsWith("sect-task:") ? actionId.slice("sect-task:".length) : null;
+const parseChatUpTarget = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("chat-up:") ? actionId.slice("chat-up:".length) : null;
+const parseVoiceTransmitTarget = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("voice-transmit:") ? actionId.slice("voice-transmit:".length) : null;
+const parseProposeDaoCompanion = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("propose-dao-companion:") ? actionId.slice("propose-dao-companion:".length) : null;
+const parseAcceptDaoCompanion = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("accept-dao-companion:") ? actionId.slice("accept-dao-companion:".length) : null;
+const parseRejectDaoCompanion = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("reject-dao-companion:") ? actionId.slice("reject-dao-companion:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
 const getDistanceBetween = (world: WorldState, fromLocationId: string, toLocationId: string) =>
   getDistance(topologyOf(world), fromLocationId as never, toLocationId as never);
@@ -4151,6 +4185,16 @@ function ensureOptionalProgressMaps(world: WorldState): void {
   if (!runtimeWorld.guixuProgress.lastResolvedEventIds || typeof runtimeWorld.guixuProgress.lastResolvedEventIds !== "object") {
     runtimeWorld.guixuProgress.lastResolvedEventIds = {};
   }
+  // Social system maps
+  if (!world.socialLinks || typeof world.socialLinks !== "object") {
+    (world as unknown as Record<string, unknown>).socialLinks = {};
+  }
+  if (!world.daoCompanionProposals || typeof world.daoCompanionProposals !== "object") {
+    (world as unknown as Record<string, unknown>).daoCompanionProposals = {};
+  }
+  if (typeof (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence !== "number") {
+    (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence = 1;
+  }
 }
 
 function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorStateView["guixu"] {
@@ -4362,6 +4406,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     wilderness: buildWildernessView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
     derivedState,
+    socialLinks: getSocialLinksView(world, cultivatorId),
     onboarding: computeOnboardingProgress(world, cultivator),
     decisionPolicy: policy,
     agentGuidance: guidance(world, cultivator),
@@ -4781,6 +4826,66 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
 
+  // ---- Social actions (搭讪 / 传音 / 道侣) ----
+  {
+    // 搭讪: chat up someone at the same location (must be in safe zone)
+    if (location.kind === "safe") {
+      const chatTarget = pickChatUpTarget(world, cultivator.id, `${world.tick}:${cultivator.id}:chat-up`);
+      if (chatTarget) {
+        const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
+        const levelLabel = existingLink ? getAffinityLevel(existingLink.affinity) : "陌生人";
+        actions.push({
+          actionId: `chat-up:${chatTarget.id}` as ActionId,
+          label: `搭讪：${chatTarget.name}（${levelLabel}）`,
+          description: `与${chatTarget.name}攀谈，增进好感度。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    }
+    // 传音: send voice message to any 朋友+ level friend, from anywhere
+    const friendLinks = getFriendsAtLevel(world, cultivator.id, VOICE_TRANSMIT_MIN_LEVEL);
+    for (const link of friendLinks.slice(0, 3)) {
+      const friendName = world.cultivators[link.targetCultivatorId]?.name ?? "unknown";
+      const level = getAffinityLevel(link.affinity);
+      const bondLabel = link.specialBond === "道侣" ? "道侣" : level;
+      actions.push({
+        actionId: `voice-transmit:${link.targetCultivatorId}` as ActionId,
+        label: `传音：${friendName}（${bondLabel}）`,
+        description: `向${friendName}传音交流，维系情谊。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+    // 申请道侣: propose dao companion to 好友+ cultivator
+    if (!hasDaoCompanion(world, cultivator.id)) {
+      const companionCandidates = getFriendsAtLevel(world, cultivator.id, DAO_COMPANION_MIN_LEVEL);
+      for (const link of companionCandidates.slice(0, 2)) {
+        if (link.specialBond) continue;
+        if (hasDaoCompanion(world, link.targetCultivatorId)) continue;
+        const targetName = world.cultivators[link.targetCultivatorId]?.name ?? "unknown";
+        actions.push({
+          actionId: `propose-dao-companion:${link.targetCultivatorId}` as ActionId,
+          label: `结为道侣：${targetName}`,
+          description: `向${targetName}提出道侣之约。需双方均为好友以上关系。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    }
+    // 响应道侣: accept/reject pending dao companion proposal
+    const pendingProposals = Object.values(world.daoCompanionProposals ?? {}).filter(
+      (p) => p.toCultivatorId === cultivator.id && world.tick < p.expiresAtTick,
+    );
+    for (const proposal of pendingProposals) {
+      const fromName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
+      actions.push(
+        { actionId: `accept-dao-companion:${proposal.id}` as ActionId, label: `接受道侣：${fromName}`, description: `接受${fromName}的道侣之约。`, durationTicks: 0, kind: "immediate" },
+        { actionId: `reject-dao-companion:${proposal.id}` as ActionId, label: `拒绝道侣：${fromName}`, description: `婉拒${fromName}的道侣之约。`, durationTicks: 0, kind: "immediate" },
+      );
+    }
+  }
+
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
 
@@ -4820,6 +4925,11 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
+  if (actionId.startsWith("chat-up:")) return;
+  if (actionId.startsWith("voice-transmit:")) return;
+  if (actionId.startsWith("propose-dao-companion:")) return;
+  if (actionId.startsWith("accept-dao-companion:")) return;
+  if (actionId.startsWith("reject-dao-companion:")) return;
   // Allow low-risk sect tasks (resource tribute) while injured
   const injuredSectTask = parseSectTaskId(actionId);
   if (injuredSectTask) {
@@ -5233,6 +5343,100 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted the duel. Combat started for ${challenger.name}.`, job: result.job };
   }
 
+  // ---- Social: 搭讪 (Chat Up) ----
+  const chatUpTargetId = parseChatUpTarget(actionId);
+  if (chatUpTargetId) {
+    const target = getCultivatorOrThrow(world, chatUpTargetId);
+    if (cultivator.locationId !== target.locationId) throw new Error("搭讪 requires being at the same location.");
+    if (cultivator.id === target.id) throw new Error("Cannot chat up yourself.");
+    const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.chatUp);
+    const level = getAffinityLevel(linkAB.affinity);
+    addDaoLog(world, cultivator.id, "搭讪", `${cultivator.name}与${target.name}攀谈，好感度上升至${linkAB.affinity}（${level}）。`, ["social", "chat-up"]);
+    addMessage(world, target.id, "社交", "有人搭讪", `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "某处"}向你搭话。`, { fromCultivatorId: cultivator.id });
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} chatted up ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
+  }
+
+  // ---- Social: 传音 (Voice Transmit) ----
+  const voiceTargetId = parseVoiceTransmitTarget(actionId);
+  if (voiceTargetId) {
+    const target = getCultivatorOrThrow(world, voiceTargetId);
+    if (cultivator.id === target.id) throw new Error("Cannot voice-transmit to yourself.");
+    const link = getSocialLink(world, cultivator.id, target.id);
+    if (!link || !meetsAffinityLevel(link.affinity, VOICE_TRANSMIT_MIN_LEVEL)) {
+      throw new Error(`传音 requires at least ${VOICE_TRANSMIT_MIN_LEVEL} level relationship.`);
+    }
+    const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.voiceTransmit);
+    const level = getAffinityLevel(linkAB.affinity);
+    addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传音交流，好感度${linkAB.affinity}（${level}）。`, ["social", "voice-transmit"]);
+    addMessage(world, target.id, "传音", `来自${cultivator.name}的传音`, `${cultivator.name}向你传音问候。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent a voice message to ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
+  }
+
+  // ---- Social: 申请道侣 (Propose Dao Companion) ----
+  const proposeDaoTargetId = parseProposeDaoCompanion(actionId);
+  if (proposeDaoTargetId) {
+    const target = getCultivatorOrThrow(world, proposeDaoTargetId);
+    if (cultivator.id === target.id) throw new Error("Cannot propose to yourself.");
+    if (hasDaoCompanion(world, cultivator.id)) throw new Error("You already have a dao companion.");
+    if (hasDaoCompanion(world, target.id)) throw new Error("Target already has a dao companion.");
+    const link = getSocialLink(world, cultivator.id, target.id);
+    if (!link || !meetsAffinityLevel(link.affinity, DAO_COMPANION_MIN_LEVEL)) {
+      throw new Error(`道侣申请 requires at least ${DAO_COMPANION_MIN_LEVEL} level relationship.`);
+    }
+    // Check no existing pending proposal between these two
+    const existing = Object.values(world.daoCompanionProposals ?? {}).find(
+      (p) => (p.fromCultivatorId === cultivator.id && p.toCultivatorId === target.id)
+        || (p.fromCultivatorId === target.id && p.toCultivatorId === cultivator.id),
+    );
+    if (existing) throw new Error("A dao companion proposal already exists between you two.");
+    if (!world.daoCompanionProposals) (world as unknown as Record<string, unknown>).daoCompanionProposals = {};
+    if (typeof (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence !== "number") (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence = 1;
+    const proposalId = `dao-proposal-${world.nextDaoCompanionProposalSequence++}`;
+    const proposal = { id: proposalId, fromCultivatorId: cultivator.id, toCultivatorId: target.id, createdAtTick: world.tick, expiresAtTick: world.tick + DAO_COMPANION_PROPOSAL_EXPIRY };
+    world.daoCompanionProposals[proposalId] = proposal;
+    addMessage(world, target.id, "道侣之约", "道侣申请", `${cultivator.name}向你提出了道侣之约，请在${DAO_COMPANION_PROPOSAL_EXPIRY}个tick内回复。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "道侣申请", `${cultivator.name}向${target.name}提出了道侣之约。`, ["social", "dao-companion", "proposal"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} proposed dao companionship to ${target.name}.` };
+  }
+
+  // ---- Social: 接受道侣 (Accept Dao Companion) ----
+  const acceptDaoProposalId = parseAcceptDaoCompanion(actionId);
+  if (acceptDaoProposalId) {
+    const proposal = (world.daoCompanionProposals ?? {})[acceptDaoProposalId];
+    if (!proposal) throw new Error("Dao companion proposal not found or expired.");
+    if (proposal.toCultivatorId !== cultivator.id) throw new Error("Only the target can accept.");
+    if (world.tick >= proposal.expiresAtTick) {
+      delete world.daoCompanionProposals[acceptDaoProposalId];
+      throw new Error("Dao companion proposal has expired.");
+    }
+    if (hasDaoCompanion(world, cultivator.id)) throw new Error("You already have a dao companion.");
+    if (hasDaoCompanion(world, proposal.fromCultivatorId)) throw new Error("Proposer already has a dao companion.");
+    // Set mutual 道侣 bond
+    const linkAB = setBond(getOrCreateSocialLink(world, proposal.fromCultivatorId, cultivator.id), "道侣");
+    const linkBA = setBond(getOrCreateSocialLink(world, cultivator.id, proposal.fromCultivatorId), "道侣");
+    writeSocialLink(world, proposal.fromCultivatorId, linkAB);
+    writeSocialLink(world, cultivator.id, linkBA);
+    delete world.daoCompanionProposals[acceptDaoProposalId];
+    const proposerName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
+    addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣确立", `${cultivator.name}接受了你的道侣之约，你们正式结为道侣。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "道侣确立", `${cultivator.name}与${proposerName}正式结为道侣。`, ["social", "dao-companion", "accepted"]);
+    addDaoLog(world, proposal.fromCultivatorId, "道侣确立", `${proposerName}与${cultivator.name}正式结为道侣。`, ["social", "dao-companion", "accepted"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted dao companionship with ${proposerName}.` };
+  }
+
+  // ---- Social: 拒绝道侣 (Reject Dao Companion) ----
+  const rejectDaoProposalId = parseRejectDaoCompanion(actionId);
+  if (rejectDaoProposalId) {
+    const proposal = (world.daoCompanionProposals ?? {})[rejectDaoProposalId];
+    if (!proposal) throw new Error("Dao companion proposal not found or expired.");
+    if (proposal.toCultivatorId !== cultivator.id) throw new Error("Only the target can reject.");
+    delete world.daoCompanionProposals[rejectDaoProposalId];
+    const proposerName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
+    addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣婉拒", `${cultivator.name}婉拒了你的道侣之约。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "道侣婉拒", `${cultivator.name}婉拒了${proposerName}的道侣之约。`, ["social", "dao-companion", "rejected"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected dao companionship with ${proposerName}.` };
+  }
+
   throw new Error(`Unsupported action: ${actionId}`);
 }
 function resolveJob(world: WorldState, job: ActionJob): string {
@@ -5425,13 +5629,15 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} produced ${recipe.outputItemId} at residence.`;
   }
   if (job.actionId === "residence-socialize") {
-    addDaoLog(
-      world,
-      cultivator.id,
-      "洞府会友",
-      `${cultivator.name} 在洞府与道友交流心法。`,
-      ["social", "residence"],
-    );
+    // If there are other cultivators at the same location, grow affinity with one
+    const socialTarget = pickChatUpTarget(world, cultivator.id, `${world.tick}:${job.id}:socialize`);
+    if (socialTarget) {
+      const { linkAB } = addMutualAffinity(world, cultivator.id, socialTarget.id, AFFINITY_GAINS.residenceSocialize);
+      const level = getAffinityLevel(linkAB.affinity);
+      addDaoLog(world, cultivator.id, "洞府会友", `${cultivator.name}在洞府与${socialTarget.name}交流心法，好感度${linkAB.affinity}（${level}）。`, ["social", "residence"]);
+    } else {
+      addDaoLog(world, cultivator.id, "洞府会友", `${cultivator.name}在洞府独自修习心法。`, ["social", "residence"]);
+    }
     return `${cultivator.name} socialized at residence.`;
   }
   if (job.actionId === "take-mortal-task") {
@@ -5954,6 +6160,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       }
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, isCityDuel ? {} : {}, `${cultivator.name} defeated ${targetName} in a duel (${totalRounds} rounds).`, false);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} was defeated by ${cultivator.name} in a duel.`, false);
+      if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
       return `${cultivator.name} defeated ${targetName} in a duel.`;
     }
 
@@ -5968,12 +6175,15 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       }
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} was defeated by ${targetName} in a duel (${totalRounds} rounds).`, false);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, {}, `${targetName} defeated ${cultivator.name} in a duel.`, false);
+      if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
       return `${cultivator.name} was defeated by ${targetName} in a duel.`;
     }
 
     // Draw (rounds exhausted)
     addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} fought ${targetName} to a draw (${totalRounds} rounds).`, false);
     if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} fought ${cultivator.name} to a draw.`, false);
+    // PVP duel grows mutual affinity regardless of outcome
+    if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
     return `${cultivator.name} fought ${targetName} to a draw.`;
   }
   if (parseStartDungeonExpeditionActionId(job.actionId)) {
@@ -6610,6 +6820,39 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
             delete world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
           }
           cultivator.pendingPvpChallengeId = null;
+        }
+      }
+    }
+    // ---- Social: Co-location passive affinity growth ----
+    if (world.tick % CO_LOCATION_AFFINITY_INTERVAL === 0) {
+      const locationGroups = new Map<string, string[]>();
+      for (const c of Object.values(world.cultivators)) {
+        if (c.activeJobId) continue; // only idle cultivators
+        const loc = world.locations[c.locationId];
+        if (!loc || loc.kind !== "safe") continue;
+        const group = locationGroups.get(c.locationId) ?? [];
+        group.push(c.id);
+        locationGroups.set(c.locationId, group);
+      }
+      for (const group of locationGroups.values()) {
+        if (group.length < 2) continue;
+        for (let a = 0; a < group.length; a++) {
+          for (let b = a + 1; b < group.length; b++) {
+            const existing = getSocialLink(world, group[a]!, group[b]!);
+            if (existing && existing.affinity > 0) {
+              addMutualAffinity(world, group[a]!, group[b]!, AFFINITY_GAINS.coLocationPassive);
+            }
+          }
+        }
+      }
+    }
+    // ---- Social: Dao companion proposal auto-expiry ----
+    if (world.daoCompanionProposals) {
+      for (const [proposalId, proposal] of Object.entries(world.daoCompanionProposals)) {
+        if (world.tick >= proposal.expiresAtTick) {
+          const proposerName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
+          addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣申请超时", `对${world.cultivators[proposal.toCultivatorId]?.name ?? "某人"}的道侣申请已超时取消。`);
+          delete world.daoCompanionProposals[proposalId];
         }
       }
     }

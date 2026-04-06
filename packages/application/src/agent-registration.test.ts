@@ -199,6 +199,7 @@ function createState(): CultivatorStateView {
       ],
       summary: "Owner intent can override onboarding. Safety comes before tutorials. Free exploration is allowed.",
     },
+    socialLinks: [],
     agentGuidance: {
       warnings: [],
       priorities: ["Earn more spirit stones."],

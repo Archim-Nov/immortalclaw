@@ -110,3 +110,22 @@ export {
   calculateTaskReward,
   tierMultiplier,
 } from "./sect-tasks.js";
+export {
+  type AffinityLevel,
+  type SpecialBond,
+  type SocialLink,
+  type SocialLinkView,
+  type DaoCompanionProposal,
+  AFFINITY_THRESHOLDS,
+  AFFINITY_GAINS,
+  VOICE_TRANSMIT_MIN_LEVEL,
+  DAO_COMPANION_MIN_LEVEL,
+  getAffinityLevel,
+  meetsAffinityLevel,
+  getSocialLink,
+  getSocialLinksView,
+  getFriendsAtLevel,
+  getDaoCompanionId,
+  hasDaoCompanion,
+  getCultivatorsAtLocation,
+} from "./social.js";
