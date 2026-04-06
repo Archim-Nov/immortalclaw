@@ -231,6 +231,10 @@ function titlePriority(contribution: number): SectTitle {
   return "外门";
 }
 
+function addTitleLog(world: WorldState, cultivatorId: string, title: string, content: string, tags: string[]) {
+  world.daoLogs.unshift({ id: `log-${world.nextLogSequence++}`, cultivatorId, tick: world.tick, title, content, tags });
+}
+
 function recalculateSectTitles(world: WorldState, sectId: string): void {
   const sect = world.sects[sectId];
   if (!sect) return;
@@ -273,6 +277,9 @@ function recalculateSectTitles(world: WorldState, sectId: string): void {
     } else if ((desired === "长老" || desired === "精英" || desired === "内门") && innerSlots > 0) {
       assigned = "内门";
       innerSlots -= 1;
+    }
+    if (assigned !== member.sectTitle) {
+      addTitleLog(world, member.id, "宗门头衔变更", `${member.name} 的宗门头衔从「${member.sectTitle}」变为「${assigned}」。`, ["sect", "title-update", `title-${assigned}`]);
     }
     member.sectTitle = assigned;
   }

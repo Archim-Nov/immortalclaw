@@ -654,7 +654,7 @@ test("sect duties move to the sect outpost and sect info exposes alignment", () 
   performAction(world, "yun-zhong-he", "join-sect");
 
   const outpostActions = new Set(listAvailableActions(world, "yun-zhong-he").map((action) => action.actionId));
-  assert.ok(outpostActions.has("take-sect-errand"));
+  assert.ok([...outpostActions].some((a) => a.startsWith("sect-task:")), "Expected at least one sect-task action at outpost");
 
   const sectInfo = getSectInfo(world, "yun-zhong-he") as { alignment?: string } | null;
   assert.equal(sectInfo?.alignment, "正道");

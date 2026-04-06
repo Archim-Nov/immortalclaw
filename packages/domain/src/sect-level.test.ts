@@ -80,6 +80,8 @@ function prepareSectWarWorld() {
   second.locationId = "qingzhou:sect-outpost:qing-yun-sect";
   first.totalContribution = 3200;
   second.totalContribution = 1800;
+  first.sectTitle = "宗主";
+  second.sectTitle = "长老";
 
   return { world, first, second, sect };
 }
@@ -99,14 +101,14 @@ test("sect level bonuses increase errand rewards for all sect members", () => {
   const firstBefore = first.spiritStones;
   const secondBefore = second.spiritStones;
 
-  performAction(world, first.id, "take-sect-errand");
+  performAction(world, first.id, "sect-task:ps-d-01");
   runUntilIdle(world, first.id);
 
-  performAction(world, second.id, "take-sect-errand");
+  performAction(world, second.id, "sect-task:ps-d-01");
   runUntilIdle(world, second.id);
 
-  assert.ok(first.spiritStones - firstBefore > 180);
-  assert.ok(second.spiritStones - secondBefore > 180);
+  assert.ok(first.spiritStones - firstBefore > 160, "sect task with level bonus should exceed base 160");
+  assert.ok(second.spiritStones - secondBefore > 160, "sect task with level bonus should exceed base 160");
 });
 
 test("sect errands advance the active faction war objective for the sect alignment", () => {
@@ -114,7 +116,7 @@ test("sect errands advance the active faction war objective for the sect alignme
   const war = world.factionWars["war-qingzhou-frontier"]!;
   const before = war.objectives[0]!.progress.righteous;
 
-  performAction(world, first.id, "take-sect-errand");
+  performAction(world, first.id, "sect-task:ps-d-01");
   runUntilIdle(world, first.id);
 
   assert.ok(war.objectives[0]!.progress.righteous > before);

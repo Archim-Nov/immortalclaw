@@ -134,6 +134,15 @@ import {
 } from "./seed.js";
 import { buildSectLevel, sectBonusValue } from "./sect-level.js";
 import {
+  type SectTaskCategory,
+  type SectTaskTemplate,
+  getAvailableTasksForTitle,
+  getSectTaskById,
+  pickRandomSectTask,
+  calculateTaskReward,
+  meetsTaskTitleRequirement,
+} from "./sect-tasks.js";
+import {
   buildFullTopology,
   getDistance,
   getNeighbors,
@@ -1584,6 +1593,8 @@ const isDungeonExpeditionActionId = (actionId: ActionId) =>
   parseStartDungeonExpeditionActionId(actionId) !== null || parseEnterDungeonActionId(actionId) !== null;
 const parseJoinNeutralSectId = (actionId: ActionId) =>
   actionId.startsWith("join-neutral-sect:") ? actionId.slice("join-neutral-sect:".length) : null;
+const parseSectTaskId = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("sect-task:") ? actionId.slice("sect-task:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
 const getDistanceBetween = (world: WorldState, fromLocationId: string, toLocationId: string) =>
   getDistance(topologyOf(world), fromLocationId as never, toLocationId as never);
@@ -2544,6 +2555,8 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
         ? "challenge-guardian"
         : parseStartDungeonExpeditionActionId(actionId) !== null || parseEnterDungeonActionId(actionId) !== null
           ? "start-dungeon-expedition"
+        : parseSectTaskId(actionId) !== null
+          ? "sect-task"
         : actionId;
   const duration = travelDestination
     ? getDistanceBetween(world, cultivator.locationId, travelDestination)
@@ -3825,13 +3838,16 @@ function guidance(world: WorldState, cultivator: Cultivator) {
         );
       } else if (cultivator.sectId) {
         const sect = getCultivatorSect(world, cultivator);
-        suggestedActions.push(
-          sect && cultivator.locationId === sect.headquarters
-            ? "take-sect-errand"
-            : sect
-              ? travelActionIdOf(sect.headquarters)
-              : mainCityTravelAction,
-        );
+        if (sect && cultivator.locationId === sect.headquarters) {
+          // Suggest specific task types based on title — prefer higher value tasks
+          const taskSeed = `${world.tick}:${cultivator.id}:suggest`;
+          const preferredCategory: SectTaskCategory = registration.sectBonus >= 8 ? "patrol-suppress" : "sect-expedition";
+          const suggested = pickRandomSectTask(cultivator.sectTitle, preferredCategory, taskSeed);
+          const fallbackTask = pickRandomSectTask(cultivator.sectTitle, "resource-tribute", taskSeed);
+          suggestedActions.push(suggested ? `sect-task:${suggested.id}` : fallbackTask ? `sect-task:${fallbackTask.id}` : "take-mortal-task");
+        } else {
+          suggestedActions.push(sect ? travelActionIdOf(sect.headquarters) : mainCityTravelAction);
+        }
       }
     }
     if (registration.fortuneBonus >= 8) {
@@ -4624,7 +4640,29 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push({ actionId: "leave-neutral-sect", label: "Leave neutral sect", description: "End neutral sect membership and reset neutral contribution.", durationTicks: 0, kind: "immediate" });
   }
   if (joinedSect?.headquarters === cultivator.locationId) {
-    actions.push({ actionId: "take-sect-errand", label: "Take sect errand", description: "Take a sect assignment from the outpost.", durationTicks: DEFAULT_ACTION_DURATIONS["take-sect-errand"], kind: "timed" });
+    // ---- Sect task categories (spec Chapter 7) ----
+    const sectTaskSeed = `${world.tick}:${cultivator.id}:sect-task`;
+    const sectCategories: SectTaskCategory[] = ["resource-tribute", "sect-liaison", "sect-expedition", "patrol-suppress"];
+    const categoryLabels: Record<SectTaskCategory, { label: string; desc: string }> = {
+      "resource-tribute": { label: "宗门任务：资源上缴", desc: "将资源/材料上缴宗门，获得稳定贡献。" },
+      "sect-liaison": { label: "宗门任务：跑腿联络", desc: "为宗门传递消息、护送物资或协调事务。" },
+      "sect-expedition": { label: "宗门专属游历", desc: "带着宗门任务目标进行专属探索。" },
+      "patrol-suppress": { label: "宗门任务：巡查镇压", desc: "巡逻、镇压、讨伐——风险最高、贡献最多。" },
+    };
+    for (const cat of sectCategories) {
+      const task = pickRandomSectTask(cultivator.sectTitle, cat, `${sectTaskSeed}:${cat}`);
+      if (task) {
+        const actionId = `sect-task:${task.id}` as import("./model.js").TimedActionId;
+        const info = categoryLabels[cat];
+        actions.push({
+          actionId,
+          label: `${info.label}：${task.nameCn}（${task.tier}级）`,
+          description: `${task.description} ${info.desc}`,
+          durationTicks: task.durationTicks,
+          kind: "timed",
+        });
+      }
+    }
   }
   const board = getQuestBoard(world, cultivator.locationId);
   if (board) {
@@ -4782,6 +4820,12 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
+  // Allow low-risk sect tasks (resource tribute) while injured
+  const injuredSectTask = parseSectTaskId(actionId);
+  if (injuredSectTask) {
+    const tpl = getSectTaskById(injuredSectTask);
+    if (tpl && (tpl.riskLevel === "none" || tpl.riskLevel === "low")) return;
+  }
   if (!allowed.has(actionId)) throw new Error("Cultivator is injured and can only do safe actions.");
 }
 function startJob(
@@ -5061,7 +5105,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 8 : -8, "join-sect");
     sect.memberIds.push(cultivator.id);
     addMessage(world, cultivator.id, sect.name, "Accepted", `${cultivator.name} joined ${sect.name}.`);
-    addDaoLog(world, cultivator.id, "Joined Sect", `${cultivator.name} joined ${sect.name}.`, ["sect", "join-sect"]);
+    addDaoLog(world, cultivator.id, "Joined Sect", `${cultivator.name} joined ${sect.name}.`, ["sect", "join-sect", "sect-join-log"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${sect.name}.` };
   }
   if (actionId === "withdraw-from-wilderness") {
@@ -5450,6 +5494,58 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       });
     }
     return `${cultivator.name} finished a sect errand.`;
+  }
+  // ---- New sect task system (spec Chapter 7) ----
+  const sectTaskId = parseSectTaskId(job.actionId);
+  if (sectTaskId) {
+    const taskTemplate = getSectTaskById(sectTaskId);
+    if (!taskTemplate) throw new Error(`Unknown sect task template: ${sectTaskId}`);
+    const sect = getCultivatorSect(world, cultivator);
+    if (!sect) throw new Error("Sect task requires sect membership.");
+    if (!meetsTaskTitleRequirement(cultivator.sectTitle, taskTemplate.minTitle)) {
+      throw new Error(`Sect task ${taskTemplate.nameCn} requires title ${taskTemplate.minTitle}, current: ${cultivator.sectTitle}.`);
+    }
+    const sectLevel = cultivator.sectId ? buildSectLevel(world, cultivator.sectId) : null;
+    const resourceBonus = sectBonusValue(sectLevel, "resource");
+    const reward = calculateTaskReward(taskTemplate, resourceBonus);
+    const previousContribution = cultivator.totalContribution;
+    cultivator.spiritStones += reward.spiritStones + ((registration?.sectBonus ?? 0) * 6);
+    addCurrentStateReputation(cultivator, reward.reputation + Math.floor((registration?.sectBonus ?? 0) / 3));
+    addFactionReputation(cultivator, sect.id, reward.reputation * 2 + Math.floor(resourceBonus / 2));
+    applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 1 : -1, `sect-task:${sectTaskId}`);
+    cultivator.totalContribution += reward.contribution;
+    if (cultivator.totalContribution > previousContribution) {
+      cultivator.contributionReachedAt = world.tick;
+    }
+    const warProgress = recordFactionWarContribution(world, cultivator, Math.max(10, reward.contribution));
+    // Risk effects for high-risk tasks
+    if (taskTemplate.riskLevel === "high") {
+      const riskRoll = hashString(`${world.tick}:${job.id}:risk`);
+      if (riskRoll % 4 === 0) {
+        cultivator.qi = clamp(cultivator.qi - 12, 1, cultivator.maxQi);
+        cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 3);
+        syncWounded(cultivator);
+      }
+    } else if (taskTemplate.riskLevel === "medium") {
+      const riskRoll = hashString(`${world.tick}:${job.id}:risk`);
+      if (riskRoll % 6 === 0) {
+        cultivator.qi = clamp(cultivator.qi - 6, 1, cultivator.maxQi);
+      }
+    }
+    upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: taskTemplate.category === "patrol-suppress" ? 4 : 2, intensity: 1 });
+    const logCategory = taskTemplate.category === "sect-expedition" ? "宗门专属游历" : "宗门任务";
+    addDaoLog(world, cultivator.id, logCategory, `${cultivator.name} 完成了宗门${taskTemplate.tier}级任务「${taskTemplate.nameCn}」，获得贡献 ${reward.contribution}，灵石 ${reward.spiritStones}。`, ["sect", `sect-task-${taskTemplate.category}`, `tier-${taskTemplate.tier}`, "sect-task-log", "sect-contribution-log"]);
+    if (warProgress) {
+      addWorldEvent(world, {
+        cultivatorId: cultivator.id,
+        locationId: cultivator.locationId,
+        title: "Faction War Progress",
+        content: `${cultivator.name} advanced ${warProgress.objectiveId} for ${warProgress.faction}.`,
+        severity: "medium",
+        tags: ["sect", "faction-war", warProgress.faction],
+      });
+    }
+    return `${cultivator.name} completed sect task: ${taskTemplate.nameCn} (${taskTemplate.tier}).`;
   }
   if (job.actionId === "mine-spirit-stones") {
     const roll = hashString(`${world.tick}:${job.id}`);
@@ -5925,6 +6021,23 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     }
     return summary;
   }
+  // ---- Enhanced resolver for new sect tasks ----
+  const enhancedSectTaskId = parseSectTaskId(job.actionId);
+  if (enhancedSectTaskId) {
+    const summary = resolveJob(world, job);
+    const tpl = getSectTaskById(enhancedSectTaskId);
+    // Bonus: expedition tasks may grant extra items
+    if (tpl?.category === "sect-expedition" && hashString(`${world.tick}:${job.id}:exp-bonus`) % 4 === 0) {
+      cultivator.inventory["ruin-fragment"] += 1;
+      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "宗门游历收获", content: `${cultivator.name} 在宗门专属游历中意外发现了遗迹碎片。`, severity: "medium", tags: ["event", "sect", "expedition", "bonus"] });
+    }
+    // Bonus: patrol tasks may grant talisman
+    if (tpl?.category === "patrol-suppress" && hashString(`${world.tick}:${job.id}:patrol-bonus`) % 3 === 0) {
+      cultivator.inventory["ward-talisman"] += 1;
+      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "宗门赏赐", content: "宗门额外赏赐了一张护身符以酬谢你在巡查中的出色表现。", severity: "medium", tags: ["event", "sect", "patrol", "bounty"] });
+    }
+    return summary;
+  }
   const searchFortuneRank = parseSearchFortuneRank(job.actionId);
   if (searchFortuneRank !== null) {
     cultivator.activeJobId = null;
@@ -6213,7 +6326,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   const enterDungeon = parseEnterDungeonActionId(actionId);
   const searchFortuneRank = parseSearchFortuneRank(actionId);
   const challengeGuardianRank = parseChallengeGuardianRank(actionId);
-  if (travelDestination || executeQuestId || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || TIMED_ACTION_IDS.has(actionId)) {
+  if (travelDestination || executeQuestId || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || parseSectTaskId(actionId) || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -6430,6 +6543,20 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!sect || cultivator.locationId !== sect.headquarters) {
         throw new Error("Sect errand requires sect membership at the sect outpost.");
       }
+    }
+    // ---- New sect task validation ----
+    const parsedSectTask = parseSectTaskId(actionId);
+    if (parsedSectTask) {
+      const sect = getCultivatorSect(world, cultivator);
+      if (!sect || cultivator.locationId !== sect.headquarters) {
+        throw new Error("Sect task requires sect membership at the sect outpost.");
+      }
+      const taskTpl = getSectTaskById(parsedSectTask);
+      if (!taskTpl) throw new Error(`Unknown sect task: ${parsedSectTask}`);
+      if (!meetsTaskTitleRequirement(cultivator.sectTitle, taskTpl.minTitle)) {
+        throw new Error(`Sect task requires title ${taskTpl.minTitle}; current title: ${cultivator.sectTitle}.`);
+      }
+      return startJob(world, cultivator, actionId as TimedActionId, `sect-task:${taskTpl.nameCn}`, undefined, taskTpl.durationTicks);
     }
     if (actionId === "take-neutral-duty") {
       const neutralSect = getCultivatorNeutralSect(world, cultivator);

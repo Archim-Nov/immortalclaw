@@ -94,3 +94,19 @@ export {
   REGISTRATION_QUESTION_IDS,
 } from "./registration-questionnaire.js";
 export { normalizeCultivationRegistrationRecord } from "./registration-taxonomy.js";
+export {
+  type SectTaskCategory,
+  type SectTaskTemplate,
+  type SectTaskTier,
+  type SectTaskReward,
+  ALL_SECT_TASKS,
+  getAvailableTasksForTitle,
+  getAvailableTiers,
+  getSectTaskById,
+  getTasksByCategory,
+  meetsTaskTitleRequirement,
+  pickRandomSectTask,
+  pickWeightedSectTask,
+  calculateTaskReward,
+  tierMultiplier,
+} from "./sect-tasks.js";

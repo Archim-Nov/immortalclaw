@@ -440,6 +440,7 @@ export type TimedActionId =
   | `search-fortune:rank-${DungeonRank}`
   | "take-sect-errand"
   | "take-neutral-duty"
+  | `sect-task:${string}`
   | "hunt-mine-beast"
   | `challenge-guardian:rank-${DungeonRank}`
   | "survey-wilderness"

@@ -67,7 +67,7 @@ export function computeActivityContext(cultivator: Cultivator, world: WorldState
   ) {
     return "exploring";
   }
-  if (job.actionId === "take-sect-errand") return "sect-duty";
+  if (job.actionId === "take-sect-errand" || job.actionId.startsWith("sect-task:")) return "sect-duty";
   if (
     job.actionId === "hunt-mine-beast"
     || job.actionId.startsWith("challenge-guardian:rank-")

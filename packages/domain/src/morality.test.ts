@@ -260,10 +260,10 @@ test("approved aligned sect joins and sect errands update morality, and state ex
   assert.equal(applicant.moralityScore, 8);
 
   applicant.locationId = founded.headquartersLocationId;
-  const action = runtime.performAction(world, applicant.id, "take-sect-errand");
+  const action = runtime.performAction(world, applicant.id, "sect-task:rt-d-01");
   assert.equal(action.accepted, true);
   advanceWorld(world, 2);
-  assert.equal(applicant.moralityScore, 10);
+  assert.equal(applicant.moralityScore, 9);
 
   const state = getCultivatorState(world, applicant.id);
   const cultivatorView = state.cultivator as typeof state.cultivator & {
@@ -271,7 +271,7 @@ test("approved aligned sect joins and sect errands update morality, and state ex
     moralityAlignment?: string;
   };
 
-  assert.equal(cultivatorView.moralityScore, 10);
+  assert.equal(cultivatorView.moralityScore, 9);
   assert.equal(cultivatorView.moralityAlignment, "\u6b63\u9053");
 });
 
