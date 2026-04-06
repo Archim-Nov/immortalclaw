@@ -562,8 +562,12 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     nextPvpChallengeSequence: 1,
     nextSectCooldownSequence: 1,
     nextDaoCompanionProposalSequence: 1,
+    nextPartyInvitationSequence: 1,
+    nextPartySequence: 1,
     socialLinks: {},
     daoCompanionProposals: {},
+    partyInvitations: {},
+    parties: {},
   };
   seedQuestBoards(world);
   return world;

@@ -129,6 +129,8 @@ export const DEFAULT_ACTION_DURATIONS: Record<string, number> = {
   "hunt-mine-beast": 3,
   "challenge-guardian": 3,
   "survey-wilderness": 2,
+  "dual-survey-wilderness": 2,
+  "dual-cultivate": 3,
   "pvp-duel": 1,
   "recover-qi": 1,
   "produce-item": 2,

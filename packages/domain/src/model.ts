@@ -444,6 +444,8 @@ export type TimedActionId =
   | "hunt-mine-beast"
   | `challenge-guardian:rank-${DungeonRank}`
   | "survey-wilderness"
+  | "dual-survey-wilderness"
+  | "dual-cultivate"
   | "pvp-duel"
   | `residence-produce:${string}`
   | `residence-heal:${"use-pill" | "no-pill"}`
@@ -727,7 +729,11 @@ export type ImmediateActionId =
   | `voice-transmit:${string}`
   | `propose-dao-companion:${string}`
   | `accept-dao-companion:${string}`
-  | `reject-dao-companion:${string}`;
+  | `reject-dao-companion:${string}`
+  | `party-invite:${string}`
+  | `accept-party:${string}`
+  | `reject-party:${string}`
+  | "disband-party";
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
@@ -1052,6 +1058,9 @@ export interface ActionJob {
     dungeonExpeditionNextResolutionTick?: number;
     guixuNodeId?: string;
     guixuEventId?: string;
+    dualTaskId?: string;
+    dualPartnerId?: string;
+    dualRole?: "initiator" | "partner";
   };
 }
 
@@ -1953,6 +1962,8 @@ export interface WorldState {
   combatLogs: CombatLogEntry[];
   socialLinks: Record<string, Record<string, import("./social.js").SocialLink>>;
   daoCompanionProposals: Record<string, import("./social.js").DaoCompanionProposal>;
+  partyInvitations: Record<string, import("./social.js").PartyInvitation>;
+  parties: Record<string, import("./social.js").Party>;
   nextCultivatorSequence: number;
   nextJobSequence: number;
   nextLogSequence: number;
@@ -1964,6 +1975,8 @@ export interface WorldState {
   nextPvpChallengeSequence: number;
   nextSectCooldownSequence: number;
   nextDaoCompanionProposalSequence: number;
+  nextPartyInvitationSequence: number;
+  nextPartySequence: number;
 }
 
 export interface PersistedWorldState extends Omit<WorldState, "states" | "topology" | "eventPools"> {

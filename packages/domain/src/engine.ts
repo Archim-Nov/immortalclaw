@@ -150,19 +150,28 @@ import {
   CO_LOCATION_AFFINITY_INTERVAL,
   DAO_COMPANION_MIN_LEVEL,
   DAO_COMPANION_PROPOSAL_EXPIRY,
+  DUAL_CULTIVATE_BONUS,
   MAX_DAO_COMPANIONS,
+  PARTY_INVITE_EXPIRY,
+  PARTY_INVITE_MIN_LEVEL,
   VOICE_TRANSMIT_MIN_LEVEL,
   addMutualAffinity,
+  disbandParty,
   getAffinityLevel,
   getCultivatorsAtLocation,
   getDaoCompanionId,
+  getDualWildernessTaskById,
   getFriendsAtLevel,
   getOrCreateSocialLink,
+  getPartyOf,
+  getPartyPartner,
   getSocialLink,
   getSocialLinksView,
   hasDaoCompanion,
+  isInParty,
   meetsAffinityLevel,
   pickChatUpTarget,
+  pickDualWildernessTask,
   setBond,
   writeSocialLink,
 } from "./social.js";
@@ -1629,6 +1638,12 @@ const parseAcceptDaoCompanion = (actionId: ActionId | string): string | null =>
   actionId.startsWith("accept-dao-companion:") ? actionId.slice("accept-dao-companion:".length) : null;
 const parseRejectDaoCompanion = (actionId: ActionId | string): string | null =>
   actionId.startsWith("reject-dao-companion:") ? actionId.slice("reject-dao-companion:".length) : null;
+const parsePartyInviteTarget = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("party-invite:") ? actionId.slice("party-invite:".length) : null;
+const parseAcceptParty = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("accept-party:") ? actionId.slice("accept-party:".length) : null;
+const parseRejectParty = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("reject-party:") ? actionId.slice("reject-party:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
 const getDistanceBetween = (world: WorldState, fromLocationId: string, toLocationId: string) =>
   getDistance(topologyOf(world), fromLocationId as never, toLocationId as never);
@@ -4195,6 +4210,19 @@ function ensureOptionalProgressMaps(world: WorldState): void {
   if (typeof (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence !== "number") {
     (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence = 1;
   }
+  // Party system maps
+  if (!world.partyInvitations || typeof world.partyInvitations !== "object") {
+    (world as unknown as Record<string, unknown>).partyInvitations = {};
+  }
+  if (!world.parties || typeof world.parties !== "object") {
+    (world as unknown as Record<string, unknown>).parties = {};
+  }
+  if (typeof (world as unknown as Record<string, unknown>).nextPartyInvitationSequence !== "number") {
+    (world as unknown as Record<string, unknown>).nextPartyInvitationSequence = 1;
+  }
+  if (typeof (world as unknown as Record<string, unknown>).nextPartySequence !== "number") {
+    (world as unknown as Record<string, unknown>).nextPartySequence = 1;
+  }
 }
 
 function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorStateView["guixu"] {
@@ -4886,6 +4914,71 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
 
+  // ---- Party / Team actions (组队) ----
+  {
+    const party = getPartyOf(world, cultivator.id);
+    if (party) {
+      // Disband party
+      actions.push({ actionId: "disband-party" as ActionId, label: "解散队伍", description: "解散当前队伍。", durationTicks: 0, kind: "immediate" });
+      const partner = getPartyPartner(world, cultivator.id);
+      if (partner && !partner.activeJobId && !cultivator.activeJobId) {
+        // Dual survey wilderness (if in wilderness)
+        if (activeWilderness) {
+          actions.push({
+            actionId: "dual-survey-wilderness" as ActionId,
+            label: "同行历练",
+            description: "与队友共同执行荒野双人任务，获得额外奖励和好感度。",
+            durationTicks: DEFAULT_ACTION_DURATIONS["dual-survey-wilderness"],
+            kind: "timed",
+          });
+        }
+        // Dual cultivate (if at party leader's residence location)
+        const leader = world.cultivators[party.leaderId];
+        if (leader && cultivator.locationId === leader.residence.locationId && partner.locationId === leader.residence.locationId) {
+          actions.push({
+            actionId: "dual-cultivate" as ActionId,
+            label: "同行修炼",
+            description: "与队友在洞府共同修炼，修炼速度略有提升。",
+            durationTicks: DEFAULT_ACTION_DURATIONS["dual-cultivate"],
+            kind: "timed",
+          });
+        }
+      }
+    } else if (!isInParty(world, cultivator.id)) {
+      // Party invite: invite someone with 认识+ affinity at same safe location
+      if (location.kind === "safe") {
+        const inviteCandidates = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+          .filter((c) => {
+            if (c.activeJobId) return false;
+            if (isInParty(world, c.id)) return false;
+            const link = getSocialLink(world, cultivator.id, c.id);
+            return link !== null && meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL);
+          });
+        for (const candidate of inviteCandidates.slice(0, 3)) {
+          const level = getAffinityLevel(getSocialLink(world, cultivator.id, candidate.id)!.affinity);
+          actions.push({
+            actionId: `party-invite:${candidate.id}` as ActionId,
+            label: `组队邀请：${candidate.name}（${level}）`,
+            description: `向${candidate.name}发送组队邀请。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
+      }
+    }
+    // Accept/reject pending party invitations
+    const pendingPartyInvites = Object.values(world.partyInvitations ?? {}).filter(
+      (inv) => inv.toCultivatorId === cultivator.id && world.tick < inv.expiresAtTick,
+    );
+    for (const inv of pendingPartyInvites) {
+      const fromName = world.cultivators[inv.fromCultivatorId]?.name ?? "unknown";
+      actions.push(
+        { actionId: `accept-party:${inv.id}` as ActionId, label: `接受组队：${fromName}`, description: `接受${fromName}的组队邀请。`, durationTicks: 0, kind: "immediate" },
+        { actionId: `reject-party:${inv.id}` as ActionId, label: `拒绝组队：${fromName}`, description: `拒绝${fromName}的组队邀请。`, durationTicks: 0, kind: "immediate" },
+      );
+    }
+  }
+
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
 
@@ -4930,6 +5023,10 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("propose-dao-companion:")) return;
   if (actionId.startsWith("accept-dao-companion:")) return;
   if (actionId.startsWith("reject-dao-companion:")) return;
+  if (actionId.startsWith("party-invite:")) return;
+  if (actionId.startsWith("accept-party:")) return;
+  if (actionId.startsWith("reject-party:")) return;
+  if (actionId === "disband-party") return;
   // Allow low-risk sect tasks (resource tribute) while injured
   const injuredSectTask = parseSectTaskId(actionId);
   if (injuredSectTask) {
@@ -5437,6 +5534,84 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected dao companionship with ${proposerName}.` };
   }
 
+  // ---- Party: 组队邀请 (Party Invite) ----
+  const partyInviteTargetId = parsePartyInviteTarget(actionId);
+  if (partyInviteTargetId) {
+    const target = getCultivatorOrThrow(world, partyInviteTargetId);
+    if (cultivator.id === target.id) throw new Error("Cannot invite yourself to a party.");
+    if (cultivator.locationId !== target.locationId) throw new Error("组队邀请 requires being at the same location.");
+    if (isInParty(world, cultivator.id)) throw new Error("You are already in a party.");
+    if (isInParty(world, target.id)) throw new Error("Target is already in a party.");
+    const link = getSocialLink(world, cultivator.id, target.id);
+    if (!link || !meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL)) {
+      throw new Error(`组队邀请 requires at least ${PARTY_INVITE_MIN_LEVEL} level relationship.`);
+    }
+    if (!world.partyInvitations) (world as unknown as Record<string, unknown>).partyInvitations = {};
+    if (typeof world.nextPartyInvitationSequence !== "number") (world as unknown as Record<string, unknown>).nextPartyInvitationSequence = 1;
+    const inviteId = `party-inv-${world.nextPartyInvitationSequence++}`;
+    world.partyInvitations[inviteId] = {
+      id: inviteId,
+      fromCultivatorId: cultivator.id,
+      toCultivatorId: target.id,
+      createdAtTick: world.tick,
+      expiresAtTick: world.tick + PARTY_INVITE_EXPIRY,
+    };
+    addMessage(world, target.id, "组队邀请", `${cultivator.name}的邀请`, `${cultivator.name}向你发送了组队邀请，请及时回复。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "组队邀请", `${cultivator.name}向${target.name}发送了组队邀请。`, ["social", "party"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} invited ${target.name} to form a party.` };
+  }
+
+  // ---- Party: 接受组队 (Accept Party) ----
+  const acceptPartyInvId = parseAcceptParty(actionId);
+  if (acceptPartyInvId) {
+    const invitation = (world.partyInvitations ?? {})[acceptPartyInvId];
+    if (!invitation) throw new Error("Party invitation not found or expired.");
+    if (invitation.toCultivatorId !== cultivator.id) throw new Error("Only the invited cultivator can accept.");
+    if (world.tick >= invitation.expiresAtTick) throw new Error("Party invitation has expired.");
+    if (isInParty(world, cultivator.id)) throw new Error("You are already in a party.");
+    if (isInParty(world, invitation.fromCultivatorId)) throw new Error("Inviter is already in a party.");
+    if (!world.parties) (world as unknown as Record<string, unknown>).parties = {};
+    if (typeof world.nextPartySequence !== "number") (world as unknown as Record<string, unknown>).nextPartySequence = 1;
+    const partyId = `party-${world.nextPartySequence++}`;
+    world.parties[partyId] = {
+      id: partyId,
+      memberIds: [invitation.fromCultivatorId, cultivator.id],
+      leaderId: invitation.fromCultivatorId,
+      formedAtTick: world.tick,
+    };
+    delete world.partyInvitations[acceptPartyInvId];
+    const leader = world.cultivators[invitation.fromCultivatorId];
+    const leaderName = leader?.name ?? "unknown";
+    addMessage(world, invitation.fromCultivatorId, "组队", "组队成功", `${cultivator.name}接受了你的组队邀请。`);
+    addDaoLog(world, cultivator.id, "组队成功", `${cultivator.name}与${leaderName}组成了队伍。`, ["social", "party"]);
+    addDaoLog(world, invitation.fromCultivatorId, "组队成功", `${leaderName}与${cultivator.name}组成了队伍。`, ["social", "party"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${leaderName}'s party.` };
+  }
+
+  // ---- Party: 拒绝组队 (Reject Party) ----
+  const rejectPartyInvId = parseRejectParty(actionId);
+  if (rejectPartyInvId) {
+    const invitation = (world.partyInvitations ?? {})[rejectPartyInvId];
+    if (!invitation) throw new Error("Party invitation not found.");
+    if (invitation.toCultivatorId !== cultivator.id) throw new Error("Only the invited cultivator can reject.");
+    delete world.partyInvitations[rejectPartyInvId];
+    const inviterName = world.cultivators[invitation.fromCultivatorId]?.name ?? "unknown";
+    addMessage(world, invitation.fromCultivatorId, "组队", "邀请被拒绝", `${cultivator.name}拒绝了你的组队邀请。`);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected party invitation from ${inviterName}.` };
+  }
+
+  // ---- Party: 解散队伍 (Disband Party) ----
+  if (actionId === "disband-party") {
+    const party = disbandParty(world, cultivator.id);
+    if (!party) throw new Error("You are not in a party.");
+    const partnerId = party.memberIds[0] === cultivator.id ? party.memberIds[1] : party.memberIds[0];
+    const partnerName = world.cultivators[partnerId]?.name ?? "unknown";
+    addMessage(world, partnerId, "组队", "队伍解散", `${cultivator.name}解散了队伍。`);
+    addDaoLog(world, cultivator.id, "队伍解散", `${cultivator.name}解散了与${partnerName}的队伍。`, ["social", "party"]);
+    addDaoLog(world, partnerId, "队伍解散", `${cultivator.name}解散了队伍。`, ["social", "party"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} disbanded the party.` };
+  }
+
   throw new Error(`Unsupported action: ${actionId}`);
 }
 function resolveJob(world: WorldState, job: ActionJob): string {
@@ -5489,6 +5664,44 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   }
   if (job.actionId === "survey-wilderness") {
     return resolveWildernessSurvey(world, cultivator, job);
+  }
+  // ---- Dual Survey Wilderness resolution ----
+  if (job.actionId === "dual-survey-wilderness") {
+    const taskId = job.meta?.dualTaskId;
+    const partnerId = job.meta?.dualPartnerId;
+    const role = job.meta?.dualRole;
+    const task = taskId ? getDualWildernessTaskById(taskId) : null;
+    if (task) {
+      cultivator.spiritStones += task.spiritStoneReward;
+      addCurrentStateReputation(cultivator, task.reputationReward);
+      // Only initiator adds mutual affinity (to avoid double-counting)
+      if (role === "initiator" && partnerId) {
+        addMutualAffinity(world, cultivator.id, partnerId, task.affinityGain);
+      }
+      addDaoLog(world, cultivator.id, "同行历练", `${cultivator.name}完成了双人荒野任务：${task.nameCn}，获得${task.spiritStoneReward}灵石。`, ["social", "dual-wilderness"]);
+      return `${cultivator.name} completed dual wilderness task: ${task.nameCn}.`;
+    }
+    return `${cultivator.name} completed a dual wilderness task.`;
+  }
+  // ---- Dual Cultivate resolution ----
+  if (job.actionId === "dual-cultivate") {
+    const partnerId = job.meta?.dualPartnerId;
+    const role = job.meta?.dualRole;
+    addRealmProgress(
+      cultivator,
+      18 +
+        Math.floor(cultivator.realmLevel / 2) +
+        DUAL_CULTIVATE_BONUS +
+        (hasEffect(cultivator, "clear-mind") ? 8 : 0) +
+        (hasEffect(cultivator, "qi-surge") ? 6 : 0) +
+        (registration?.cultivateBonus ?? 0) -
+        (hasEffect(cultivator, "poisoned") ? 8 : 0),
+    );
+    if (role === "initiator" && partnerId) {
+      addMutualAffinity(world, cultivator.id, partnerId, AFFINITY_GAINS.dualCultivate);
+    }
+    addDaoLog(world, cultivator.id, "同行修炼", `${cultivator.name}与同伴在洞府共同修炼，进步更快。`, ["social", "dual-cultivate"]);
+    return `${cultivator.name} cultivated with party partner.`;
   }
   if (guixuNodeId) {
     return resolveGuixuExploration(world, cultivator, job);
@@ -6603,6 +6816,43 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       }
       return surveyResult;
     }
+    // ---- Dual Survey Wilderness (同行历练) ----
+    if (actionId === "dual-survey-wilderness") {
+      const partner = getPartyPartner(world, cultivator.id);
+      if (!partner) throw new Error("同行历练 requires being in a party.");
+      if (partner.activeJobId) throw new Error("Party partner is currently busy.");
+      const progress = getActiveWildernessProgress(world, cultivator.id);
+      if (!progress) throw new Error("同行历练 requires an active wilderness expedition.");
+      const layer = getWildernessLayerById(world, progress.layerId);
+      if (!layer) throw new Error(`Wilderness layer not found: ${progress.layerId}`);
+      const taskSeed = `${world.tick}:${cultivator.id}:${partner.id}:dual-wilderness`;
+      const task = pickDualWildernessTask(taskSeed);
+      const dualMeta = { dualTaskId: task.id, wildernessLayerId: progress.layerId };
+      startJob(world, cultivator, "dual-survey-wilderness" as TimedActionId, `同行历练：${task.nameCn}`, {
+        ...dualMeta, dualPartnerId: partner.id, dualRole: "initiator" as const,
+      });
+      startJob(world, partner, "dual-survey-wilderness" as TimedActionId, `同行历练：${task.nameCn}`, {
+        ...dualMeta, dualPartnerId: cultivator.id, dualRole: "partner" as const,
+      });
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} and ${partner.name} started dual wilderness task: ${task.nameCn}.` };
+    }
+    // ---- Dual Cultivate (同行修炼) ----
+    if (actionId === "dual-cultivate") {
+      const partner = getPartyPartner(world, cultivator.id);
+      if (!partner) throw new Error("同行修炼 requires being in a party.");
+      if (partner.activeJobId) throw new Error("Party partner is currently busy.");
+      const party = getPartyOf(world, cultivator.id)!;
+      const leader = world.cultivators[party.leaderId]!;
+      if (cultivator.locationId !== leader.residence.locationId) throw new Error("同行修炼 must be at the party leader's residence location.");
+      if (partner.locationId !== leader.residence.locationId) throw new Error("Party partner must also be at the leader's residence location.");
+      startJob(world, cultivator, "dual-cultivate" as TimedActionId, "同行修炼", {
+        dualPartnerId: partner.id, dualRole: "initiator" as const,
+      });
+      startJob(world, partner, "dual-cultivate" as TimedActionId, "同行修炼", {
+        dualPartnerId: cultivator.id, dualRole: "partner" as const,
+      });
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} and ${partner.name} started dual cultivation.` };
+    }
     if (exploreGuixuNodeId) {
       const node = getGuixuNodeById(world, exploreGuixuNodeId);
       if (!node) {
@@ -6853,6 +7103,15 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
           const proposerName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
           addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣申请超时", `对${world.cultivators[proposal.toCultivatorId]?.name ?? "某人"}的道侣申请已超时取消。`);
           delete world.daoCompanionProposals[proposalId];
+        }
+      }
+    }
+    // ---- Party invitation auto-expiry ----
+    if (world.partyInvitations) {
+      for (const [invId, inv] of Object.entries(world.partyInvitations)) {
+        if (world.tick >= inv.expiresAtTick) {
+          addMessage(world, inv.fromCultivatorId, "组队", "邀请超时", `对${world.cultivators[inv.toCultivatorId]?.name ?? "某人"}的组队邀请已超时取消。`);
+          delete world.partyInvitations[invId];
         }
       }
     }

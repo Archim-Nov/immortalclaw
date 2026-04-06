@@ -13,9 +13,12 @@ import {
   AFFINITY_THRESHOLDS,
   getAffinityLevel,
   getDaoCompanionId,
+  getPartyOf,
+  getPartyPartner,
   getSocialLink,
   getSocialLinksView,
   hasDaoCompanion,
+  isInParty,
 } from "./social.js";
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
@@ -80,7 +83,7 @@ test("voice-transmit requires 朋友 level relationship", () => {
   );
 
   // Build affinity to 朋友 level (60)
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 6; i++) {
     performAction(world, first.id, `chat-up:${second.id}`);
   }
   const link = getSocialLink(world, first.id, second.id);
@@ -96,7 +99,7 @@ test("voice-transmit works from any location", () => {
   const { world, first, second } = createTwoCultivators();
 
   // Build 朋友 level
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 6; i++) {
     performAction(world, first.id, `chat-up:${second.id}`);
   }
 
@@ -111,7 +114,7 @@ test("dao companion proposal-accept flow creates mutual bond", () => {
   const { world, first, second } = createTwoCultivators();
 
   // Build 好友 level (120)
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 12; i++) {
     performAction(world, first.id, `chat-up:${second.id}`);
   }
   const link = getSocialLink(world, first.id, second.id);
@@ -141,7 +144,7 @@ test("dao companion proposal can be rejected", () => {
   const { world, first, second } = createTwoCultivators();
 
   // Build 好友 level
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 12; i++) {
     performAction(world, first.id, `chat-up:${second.id}`);
   }
 
@@ -184,19 +187,19 @@ test("social links show up in getCultivatorState view", () => {
 test("affinity levels progress through tiers with repeated interaction", () => {
   const { world, first, second } = createTwoCultivators();
 
-  // Each chat-up gives 3 affinity
+  // Each chat-up gives 10 affinity
   // 认识: 0, 熟识: 20, 朋友: 60, 好友: 120, 挚友: 200
-  for (let i = 0; i < 7; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "熟识"); // 21
+  for (let i = 0; i < 2; i++) performAction(world, first.id, `chat-up:${second.id}`);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "熟识"); // 20
 
-  for (let i = 0; i < 14; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "朋友"); // 63
+  for (let i = 0; i < 4; i++) performAction(world, first.id, `chat-up:${second.id}`);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "朋友"); // 60
 
-  for (let i = 0; i < 20; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "好友"); // 123
+  for (let i = 0; i < 6; i++) performAction(world, first.id, `chat-up:${second.id}`);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "好友"); // 120
 
-  for (let i = 0; i < 27; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "挚友"); // 204
+  for (let i = 0; i < 8; i++) performAction(world, first.id, `chat-up:${second.id}`);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "挚友"); // 200
 });
 
 test("chat-up and voice-transmit actions appear in available actions", () => {
@@ -207,7 +210,7 @@ test("chat-up and voice-transmit actions appear in available actions", () => {
   assert.ok(actions1.some((a) => a.startsWith("chat-up:")), "Expected chat-up action when others are at same location");
 
   // Build 朋友 level for voice-transmit
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 6; i++) {
     performAction(world, first.id, `chat-up:${second.id}`);
   }
 
@@ -239,4 +242,98 @@ test("residence-socialize grows affinity when others are nearby", () => {
   const link = getSocialLink(world, first.id, second.id);
   assert.ok(link, "Should have social link after residence-socialize with nearby cultivator");
   assert.ok(link.affinity >= AFFINITY_GAINS.residenceSocialize);
+});
+
+// ---- Party System Tests ----
+
+test("party invite-accept flow creates a party", () => {
+  const { world, first, second } = createTwoCultivators();
+
+  // Need at least 认识 level (any social link with affinity >= 0)
+  performAction(world, first.id, `chat-up:${second.id}`);
+
+  // Invite
+  const inviteResult = performAction(world, first.id, `party-invite:${second.id}`);
+  assert.equal(inviteResult.accepted, true);
+
+  // Find invitation
+  const invitations = Object.values(world.partyInvitations);
+  assert.equal(invitations.length, 1);
+  const inv = invitations[0]!;
+
+  // Accept
+  const acceptResult = performAction(world, second.id, `accept-party:${inv.id}`);
+  assert.equal(acceptResult.accepted, true);
+
+  // Both should be in the same party
+  assert.equal(isInParty(world, first.id), true);
+  assert.equal(isInParty(world, second.id), true);
+  const party = getPartyOf(world, first.id);
+  assert.ok(party);
+  assert.equal(party.leaderId, first.id);
+  assert.equal(getPartyPartner(world, first.id)?.id, second.id);
+  assert.equal(getPartyPartner(world, second.id)?.id, first.id);
+});
+
+test("party invite requires social link", () => {
+  const { world, first, second } = createTwoCultivators();
+
+  // No social link yet — should fail because 认识 requires a social link
+  assert.throws(
+    () => performAction(world, first.id, `party-invite:${second.id}`),
+    /认识/,
+  );
+});
+
+test("party invite requires same location", () => {
+  const { world, first, second } = createTwoCultivators();
+  performAction(world, first.id, `chat-up:${second.id}`);
+  second.locationId = "yangzhou:main-city";
+
+  assert.throws(
+    () => performAction(world, first.id, `party-invite:${second.id}`),
+    /same location/,
+  );
+});
+
+test("disband party removes it", () => {
+  const { world, first, second } = createTwoCultivators();
+  performAction(world, first.id, `chat-up:${second.id}`);
+  const inv = performAction(world, first.id, `party-invite:${second.id}`);
+  const invId = Object.keys(world.partyInvitations)[0]!;
+  performAction(world, second.id, `accept-party:${invId}`);
+
+  assert.equal(isInParty(world, first.id), true);
+  const disbandResult = performAction(world, first.id, "disband-party");
+  assert.equal(disbandResult.accepted, true);
+  assert.equal(isInParty(world, first.id), false);
+  assert.equal(isInParty(world, second.id), false);
+});
+
+test("party actions (invite, accept, disband) are allowed while injured", () => {
+  const { world, first, second } = createTwoCultivators();
+  performAction(world, first.id, `chat-up:${second.id}`);
+  first.injuryTicksRemaining = 5;
+
+  const inviteResult = performAction(world, first.id, `party-invite:${second.id}`);
+  assert.equal(inviteResult.accepted, true);
+});
+
+test("party-invite action appears in available actions after chat-up", () => {
+  const { world, first, second } = createTwoCultivators();
+  performAction(world, first.id, `chat-up:${second.id}`);
+
+  const actions = listAvailableActions(world, first.id).map((a) => a.actionId);
+  assert.ok(actions.some((a) => a.startsWith("party-invite:")), "Expected party-invite action for 认识+ cultivators");
+});
+
+test("disband-party action appears when in a party", () => {
+  const { world, first, second } = createTwoCultivators();
+  performAction(world, first.id, `chat-up:${second.id}`);
+  performAction(world, first.id, `party-invite:${second.id}`);
+  const invId = Object.keys(world.partyInvitations)[0]!;
+  performAction(world, second.id, `accept-party:${invId}`);
+
+  const actions = listAvailableActions(world, first.id).map((a) => a.actionId);
+  assert.ok(actions.includes("disband-party"), "Expected disband-party action when in a party");
 });
