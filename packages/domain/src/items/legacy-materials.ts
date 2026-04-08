@@ -2,7 +2,7 @@ import type { ItemDefinition, LegacyItemId } from "../model.js";
 import { makeLocalizedText, MATERIAL_USE } from "./shared.js";
 
 export const LEGACY_MATERIALS: Record<
-  Extract<LegacyItemId, "spirit-ore" | "ruin-fragment" | "beast-core" | "qi-common" | "foundation-common" | "core-common">,
+  Extract<LegacyItemId, "spirit-ore" | "ruin-fragment" | "beast-core">,
   ItemDefinition
 > = {
   "spirit-ore": {
@@ -59,63 +59,6 @@ export const LEGACY_MATERIALS: Record<
       buyBasePrice: null,
       sellBasePrice: 210,
       tradableAt: "settlement",
-    },
-    use: MATERIAL_USE,
-  },
-  "qi-common": {
-    id: "qi-common",
-    name: "聚气灵材",
-    nameByLocale: makeLocalizedText("聚气灵材", "Qi Gathering Material"),
-    category: "material",
-    description: "炼气期突破通用灵材，可用于炼制本境界突破专用物。",
-    descriptionByLocale: makeLocalizedText(
-      "炼气期突破通用灵材，可用于炼制本境界突破专用物。",
-      "Common material for qi condensation breakthroughs, used to craft stage-specific items.",
-    ),
-    baseValue: 90,
-    tags: ["material", "breakthrough", "qi", "common", "residence-input"],
-    trade: {
-      buyBasePrice: null,
-      sellBasePrice: null,
-      tradableAt: "none",
-    },
-    use: MATERIAL_USE,
-  },
-  "foundation-common": {
-    id: "foundation-common",
-    name: "凝元灵材",
-    nameByLocale: makeLocalizedText("凝元灵材", "Foundation Material"),
-    category: "material",
-    description: "筑基期突破通用灵材，通常来自中期外循环的稳定采获。",
-    descriptionByLocale: makeLocalizedText(
-      "筑基期突破通用灵材，通常来自中期外循环的稳定采获。",
-      "Common material for foundation establishment breakthroughs, from mid-stage gathering.",
-    ),
-    baseValue: 180,
-    tags: ["material", "breakthrough", "foundation", "common", "residence-input"],
-    trade: {
-      buyBasePrice: null,
-      sellBasePrice: null,
-      tradableAt: "none",
-    },
-    use: MATERIAL_USE,
-  },
-  "core-common": {
-    id: "core-common",
-    name: "养丹灵材",
-    nameByLocale: makeLocalizedText("养丹灵材", "Core Formation Material"),
-    category: "material",
-    description: "金丹期突破通用灵材，通常来自高风险遗迹与守关收获。",
-    descriptionByLocale: makeLocalizedText(
-      "金丹期突破通用灵材，通常来自高风险遗迹与守关收获。",
-      "Common material for core formation breakthroughs, from high-risk ruins and tribulations.",
-    ),
-    baseValue: 320,
-    tags: ["material", "breakthrough", "core", "common", "residence-input"],
-    trade: {
-      buyBasePrice: null,
-      sellBasePrice: null,
-      tradableAt: "none",
     },
     use: MATERIAL_USE,
   },

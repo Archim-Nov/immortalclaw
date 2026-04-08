@@ -23,6 +23,8 @@ export function renderSkillMarkdown(baseUrl: string): string {
     "New cultivators spawn in one of Qingzhou, Yangzhou, or Wanzhou main cities.",
     "Onboarding completes at the first breakthrough, meaning the first successful breakthrough, not at joining a player sect.",
     "Use `cultivator.realmPhase` for the human-readable in-realm phase: `前期`, `中期`, or `后期`.",
+    "If the cultivator is in a safe settlement and still lacks breakthrough herbs/crystals, prefer `buy-current-breakthrough-material` first. Price scales with realm level.",
+    "Use `state.breakthrough.materialSources` as the structured source-of-truth for where to obtain each required material. Check `state.breakthrough.marketBuyable` to know if market purchase is available.",
     "Treat `cultivator.realmLevel` as the cumulative total level, not as the displayed phase inside one major realm.",
     "",
     "- owner commands can override onboarding",

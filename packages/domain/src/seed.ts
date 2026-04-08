@@ -124,7 +124,7 @@ function dungeonMetadataForNodeType(nodeType: BaseNodeType): Location["dungeon"]
         minRealm: "炼气" as Cultivator["realm"],
         dangerBase: 1,
         rewardBand: "low",
-        materialBand: "qi-common",
+        materialBand: "cloud-heart-grass",
       };
     case "dungeon-b":
       return {
@@ -133,7 +133,7 @@ function dungeonMetadataForNodeType(nodeType: BaseNodeType): Location["dungeon"]
         minRealm: "筑基" as Cultivator["realm"],
         dangerBase: 2,
         rewardBand: "mid",
-        materialBand: "foundation-common",
+        materialBand: "mystic-jade-stone",
       };
     case "dungeon-a":
       return {
@@ -142,7 +142,7 @@ function dungeonMetadataForNodeType(nodeType: BaseNodeType): Location["dungeon"]
         minRealm: "金丹" as Cultivator["realm"],
         dangerBase: 3,
         rewardBand: "high",
-        materialBand: "core-common",
+        materialBand: "golden-spirit-flower",
       };
     default:
       return null;

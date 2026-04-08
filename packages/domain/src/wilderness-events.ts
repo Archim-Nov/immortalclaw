@@ -81,7 +81,7 @@ export const WILDERNESS_EVENT_POOL: Record<string, WildernessEventDefinition> = 
     tags: ["wilderness", "resource", "herb"],
     spiritStoneReward: 90,
     rewards: {
-      "foundation-common": 1,
+      "still-cloud-wood": 1,
     },
   },
   // ── New: Status encounters ──
@@ -199,7 +199,7 @@ export const WILDERNESS_EVENT_POOL: Record<string, WildernessEventDefinition> = 
     spiritualDamage: 6,
     injuryTicks: 2,
     rewards: {
-      "foundation-common": 1,
+      "tranquil-bamboo": 1,
     },
     encounterBuildId: "wilderness-marsh-lurker-ambush" as EncounterBuildId,
   },

@@ -20,7 +20,7 @@ export function buildDungeonCEventPack(location: Location): EventTemplate[] {
       effects: {
         spiritStones: 18 + (rank * 6),
         itemRewards: ([
-          { itemId: "qi-common", count: 1 },
+          { itemId: "spirit-brook-bamboo" as ItemId, count: 1 },
           { itemId: "ruin-fragment", count: rank >= 4 ? 1 : 0 },
         ] satisfies ReadonlyArray<{ itemId: ItemId; count: number }>).filter((reward) => reward.count > 0),
       },

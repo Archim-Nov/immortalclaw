@@ -10,6 +10,12 @@ import type { Location } from "../../domain/src/model.js";
 import type { LocationId, StateId } from "../../domain/src/constants.js";
 
 const REMOVED_LEGACY_MANUAL_IDS = ["sword-manual", "alchemy-manual", "array-manual"] as const;
+const REMOVED_BREAKTHROUGH_MATERIAL_IDS = [
+  "qi-common", "foundation-common", "core-common",
+  "qi-stage-1-special", "qi-stage-2-special", "qi-major-special",
+  "foundation-stage-1-special", "foundation-stage-2-special", "foundation-major-special",
+  "core-stage-1-special", "core-stage-2-special",
+] as const;
 
 function mergeRecordDefaults<T extends Record<string, unknown>>(
   defaults: T,
@@ -140,6 +146,9 @@ export function hydrateMigratedP3WorldState(
   for (const itemId of REMOVED_LEGACY_MANUAL_IDS) {
     delete (copy.itemDefinitions as Record<string, unknown>)[itemId];
   }
+  for (const itemId of REMOVED_BREAKTHROUGH_MATERIAL_IDS) {
+    delete (copy.itemDefinitions as Record<string, unknown>)[itemId];
+  }
   copy.pendingSectApplications =
     copy.pendingSectApplications && typeof copy.pendingSectApplications === "object"
       ? copy.pendingSectApplications
@@ -200,6 +209,9 @@ export function hydrateMigratedP3WorldState(
       ...(cultivator.inventory ?? {}),
     };
     for (const itemId of REMOVED_LEGACY_MANUAL_IDS) {
+      delete (cultivator.inventory as Record<string, unknown>)[itemId];
+    }
+    for (const itemId of REMOVED_BREAKTHROUGH_MATERIAL_IDS) {
       delete (cultivator.inventory as Record<string, unknown>)[itemId];
     }
     cultivator.factionReputation = {

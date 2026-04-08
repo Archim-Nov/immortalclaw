@@ -31,7 +31,7 @@ export function buildWildernessEventPack(location: Location): EventTemplate[] {
       minRealm: "筑基",
       effects: {
         spiritStones: 36,
-        itemRewards: [{ itemId: "foundation-common", count: 1 }],
+        itemRewards: [{ itemId: "purple-palace-earth", count: 1 }],
       },
     }),
     buildNodeEvent(location, {

@@ -806,26 +806,32 @@ test("explicit residence breakthrough uses crafted materials and advances the re
   assert.equal(state.breakthrough?.category, "minor");
   assert.equal(state.breakthrough?.readyByProgress, true);
   assert.equal(state.breakthrough?.readyByMaterials, false);
-  assert.equal(state.breakthrough?.recommendedAction, "take-mortal-task");
+  assert.equal(state.breakthrough?.recommendedAction, "buy-current-breakthrough-material");
+  assert.ok((state.breakthrough?.materialSources.length ?? 0) > 0);
   assert.equal(
     listAvailableActions(world, created.id).some((action) => action.actionId === "residence-breakthrough"),
     false,
   );
 
-  cultivator.inventory["qi-common"] = 2;
-  state = getCultivatorState(world, created.id);
-  assert.equal(state.breakthrough?.recommendedAction, "residence-produce:recipe-qi-stage-1-special");
+  // Provide all materials for L1→2 breakthrough: 3 generics + 1 special
+  cultivator.inventory["cloud-heart-grass"] = 1;
+  cultivator.inventory["moon-dew-flower"] = 1;
+  cultivator.inventory["clear-zhi-leaf"] = 1;
+  cultivator.inventory["condensed-qi-dew"] = 1;
 
-  performAction(world, created.id, "residence-produce:recipe-qi-stage-1-special");
-  runUntilIdle(world, created.id);
+  state = getCultivatorState(world, created.id);
+  assert.equal(state.breakthrough?.readyByMaterials, true);
+  assert.equal(state.breakthrough?.recommendedAction, "residence-breakthrough");
 
   const breakthroughAction = listAvailableActions(world, created.id).find(
     (action) => action.actionId === "residence-breakthrough",
   );
   assert.ok(breakthroughAction);
   assert.deepEqual(breakthroughAction.costs?.itemConsumes, [
-    { itemId: "qi-common", count: 1 },
-    { itemId: "qi-stage-1-special", count: 1 },
+    { itemId: "cloud-heart-grass", count: 1 },
+    { itemId: "moon-dew-flower", count: 1 },
+    { itemId: "clear-zhi-leaf", count: 1 },
+    { itemId: "condensed-qi-dew", count: 1 },
   ]);
 
   performAction(world, created.id, "residence-breakthrough");
@@ -833,8 +839,10 @@ test("explicit residence breakthrough uses crafted materials and advances the re
 
   assert.equal(cultivator.realmLevel, 2);
   assert.equal(cultivator.realmProgress, 0);
-  assert.equal(cultivator.inventory["qi-common"], 0);
-  assert.equal(cultivator.inventory["qi-stage-1-special"], 0);
+  assert.equal(cultivator.inventory["cloud-heart-grass"], 0);
+  assert.equal(cultivator.inventory["moon-dew-flower"], 0);
+  assert.equal(cultivator.inventory["clear-zhi-leaf"], 0);
+  assert.equal(cultivator.inventory["condensed-qi-dew"], 0);
   assert.equal(cultivator.breakthroughRecords.length, 1);
   assert.equal(cultivator.breakthroughRecords[0]?.outcome, "success");
   assert.equal(getCultivatorState(world, created.id).onboarding.stage, "completed");
@@ -881,8 +889,11 @@ test("failed major breakthrough consumes materials and resets progress without a
     cultivator.realmLevel = 3;
     cultivator.realm = world.cultivators["yun-zhong-he"].realm;
     cultivator.realmProgress = 100;
-    cultivator.inventory["qi-common"] = 3;
-    cultivator.inventory["qi-major-special"] = 1;
+    // L3→4 major: cloud-heart-grass, spirit-brook-bamboo, pure-heart-orchid + meridian-lotus-essence
+    cultivator.inventory["cloud-heart-grass"] = 1;
+    cultivator.inventory["spirit-brook-bamboo"] = 1;
+    cultivator.inventory["pure-heart-orchid"] = 1;
+    cultivator.inventory["meridian-lotus-essence"] = 1;
     cultivator.statusEffects = [];
     cultivator.injuryTicksRemaining = 0;
     world.nextJobSequence = seed;
@@ -901,8 +912,10 @@ test("failed major breakthrough consumes materials and resets progress without a
 
   assert.equal(cultivator.realmLevel, 3);
   assert.equal(cultivator.realmProgress, 60);
-  assert.equal(cultivator.inventory["qi-common"], 0);
-  assert.equal(cultivator.inventory["qi-major-special"], 0);
+  assert.equal(cultivator.inventory["cloud-heart-grass"], 0);
+  assert.equal(cultivator.inventory["spirit-brook-bamboo"], 0);
+  assert.equal(cultivator.inventory["pure-heart-orchid"], 0);
+  assert.equal(cultivator.inventory["meridian-lotus-essence"], 0);
   assert.equal(cultivator.breakthroughRecords.at(-1)?.outcome, "failure");
   assert.equal(cultivator.breakthroughRecords.at(-1)?.successRate, 70);
   assert.equal(cultivator.statusEffects.some((effect) => effect.id === "deviation"), false);
@@ -1104,6 +1117,29 @@ test("item-backed actions expose structured metadata and inventory actionability
   assert.equal(actions.some((action) => action.actionId.startsWith("study-")), false);
 });
 
+test("market exposes current breakthrough material purchase action", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  // L3→L4 (yun-zhong-he starts at realmLevel 3): needs cloud-heart-grass, spirit-brook-bamboo, pure-heart-orchid + meridian-lotus-essence
+  cultivator.realmProgress = 100;
+  const beforeGrass = cultivator.inventory["cloud-heart-grass"];
+
+  const actions = listAvailableActions(world, "yun-zhong-he");
+  const buyCurrent = actions.find((action) => action.actionId === "buy-current-breakthrough-material");
+
+  assert.ok(buyCurrent);
+  assert.ok((buyCurrent?.costs?.spiritStones ?? 0) > 0);
+
+  performAction(world, "yun-zhong-he", "buy-current-breakthrough-material");
+
+  // First missing material should have been bought (one of the generics or the special)
+  const totalMaterials = cultivator.inventory["cloud-heart-grass"]
+    + cultivator.inventory["spirit-brook-bamboo"]
+    + cultivator.inventory["pure-heart-orchid"]
+    + cultivator.inventory["meridian-lotus-essence"];
+  assert.ok(totalMaterials > beforeGrass, "at least one breakthrough material should have been purchased");
+});
+
 test("catalog-driven immediate item actions preserve consumable behavior", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
@@ -1160,7 +1196,7 @@ test("state.dungeon surfaces shared rank progression and realm-gated dungeon act
   assert.equal(state.dungeon?.highestUnlockedRank, 1);
   assert.deepEqual(state.dungeon?.availableRanks, [1]);
   assert.equal(state.dungeon?.frontierRank, 1);
-  assert.equal(state.dungeon?.materialBand, "qi-common");
+  assert.equal(state.dungeon?.materialBand, "cloud-heart-grass");
   assert.equal(state.dungeon?.lockReason, null);
   assert.ok(hasExpeditionActionForRank(1));
   assert.equal(hasExpeditionActionForRank(2), false);
@@ -2566,7 +2602,7 @@ test("retreat grants no victory reward and preserves qi", () => {
   const beforeQi = context.cultivator.qi;
   const beforeStones = context.cultivator.spiritStones;
   const beforeOre = context.cultivator.inventory["spirit-ore"];
-  const beforeFoundation = context.cultivator.inventory["foundation-common"];
+  const beforeFoundation = context.cultivator.inventory["mystic-jade-stone"];
   const beforeBeastCore = context.cultivator.inventory["beast-core"];
 
   runUntilIdle(context.world, "yun-zhong-he");
@@ -2576,7 +2612,7 @@ test("retreat grants no victory reward and preserves qi", () => {
   assert.equal(context.cultivator.qi, beforeQi);
   assert.equal(context.cultivator.spiritStones, beforeStones);
   assert.equal(context.cultivator.inventory["spirit-ore"], beforeOre);
-  assert.equal(context.cultivator.inventory["foundation-common"], beforeFoundation);
+  assert.equal(context.cultivator.inventory["mystic-jade-stone"], beforeFoundation);
   assert.equal(context.cultivator.inventory["beast-core"], beforeBeastCore);
 });
 

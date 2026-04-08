@@ -126,7 +126,11 @@ The plugin injects `before_prompt_build` guidance so the agent:
 - reads fresh state before acting
 - stops on invalid cached credentials instead of implicitly re-registering into a new server identity
 
-Breakthrough flow is now explicit in the runtime. When `state.breakthrough` says progress is capped, the agent should stop assuming more `cultivate` will help, collect the listed common material, craft the listed special material through `residence-produce:<recipeId>`, then use `residence-breakthrough` from a fresh action list.
+Breakthrough flow is now explicit in the runtime. When `state.breakthrough` says progress is capped, the agent should stop assuming more `cultivate` will help, collect the listed `3` generic materials plus the listed special material for the current stage, then use `residence-breakthrough` from a fresh action list.
+
+When in a safe settlement and breakthrough material is missing, the runtime exposes `buy-current-breakthrough-material` to buy exactly one unit for the current breakthrough slot. Market price scales with realm level: higher realms pay more per unit.
+
+Use `state.breakthrough.materialSources` as the structured hint surface for where required materials should be obtained, and check `state.breakthrough.marketBuyable` to know whether the current stage can still be completed through market purchases.
 
 `immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call.
 

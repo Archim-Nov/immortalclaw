@@ -1,6 +1,6 @@
 import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
-  BreakthroughCategory, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
+  BreakthroughCategory, BreakthroughMaterialSourceView, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
   CreateCultivatorInput, DecisionPolicyView, DungeonExpeditionProgress, DungeonExpeditionReport, DungeonExpeditionStateView, DungeonGrade, DungeonRank, DungeonRankYieldHint, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RealmPhase, RegistrationAnswer,
   MoralityAlignment, PendingMoralityChoiceResponse, PlayerSectFoundingBlockerCode, PlayerSectFoundingOptionsView,
@@ -248,10 +248,9 @@ type BreakthroughDefinition = {
   category: BreakthroughCategory;
   targetRealm: Cultivator["realm"];
   targetLevel: number;
-  commonItemId: ItemId;
-  commonCount: number;
-  specialItemId: ItemId;
-  specialCount: number;
+  genericMaterials: ReadonlyArray<{ itemId: ItemId; count: number }>;
+  specialMaterial: { itemId: ItemId; count: number };
+  marketBuyable: boolean;
   durationTicks: number;
   baseSuccessRate: number | null;
 };
@@ -278,10 +277,34 @@ const DUNGEON_META_BY_NODE_TYPE: Record<DungeonNodeType, {
   minRealm: Cultivator["realm"];
   materialBand: ItemId;
 }> = {
-  "dungeon-c": { grade: "丙", minRealm: REALM_QI, materialBand: "qi-common" },
-  "dungeon-b": { grade: "乙", minRealm: REALM_FOUNDATION, materialBand: "foundation-common" },
-  "dungeon-a": { grade: "甲", minRealm: REALM_CORE, materialBand: "core-common" },
+  "dungeon-c": { grade: "丙", minRealm: REALM_QI, materialBand: "cloud-heart-grass" },
+  "dungeon-b": { grade: "乙", minRealm: REALM_FOUNDATION, materialBand: "mystic-jade-stone" },
+  "dungeon-a": { grade: "甲", minRealm: REALM_CORE, materialBand: "golden-spirit-flower" },
 };
+
+const BREAKTHROUGH_TIER_POOL: Record<ItemId, ReadonlyArray<ItemId>> = {
+  "cloud-heart-grass": [
+    "cloud-heart-grass", "moon-dew-flower", "clear-zhi-leaf",
+    "spirit-brook-bamboo", "pure-heart-orchid", "mist-vine",
+    "condensed-qi-dew", "azure-stone-marrow", "meridian-lotus-essence",
+  ],
+  "mystic-jade-stone": [
+    "mystic-jade-stone", "jade-marrow-sand", "purple-palace-earth",
+    "cold-moon-crystal", "still-cloud-wood", "tranquil-bamboo",
+    "foundation-spirit-amber", "wind-control-crystal", "nine-turn-core-sand",
+  ],
+  "golden-spirit-flower": [
+    "golden-spirit-flower", "purple-celestial-leaf", "star-fall-sand",
+    "moon-glory-jade", "clear-mystic-wood", "chaos-moss",
+    "flowing-aurora-core", "dragon-radiance-crystal", "nine-turn-golden-marrow",
+  ],
+};
+
+function pickBreakthroughDrop(bandKey: ItemId, seed: string): ItemId {
+  const pool = BREAKTHROUGH_TIER_POOL[bandKey];
+  if (!pool) return bandKey;
+  return pool[hashString(seed) % pool.length]!;
+}
 const REALM_ORDER = {
   炼气: 0,
   筑基: 1,
@@ -2939,6 +2962,28 @@ function marketStandingDiscount(cultivator: Cultivator) { return Math.max(0, Mat
 function buyPrice(cultivator: Cultivator, base: number) { return Math.max(Math.floor(base * 0.65), base - marketStandingDiscount(cultivator)); }
 function marketStandingBonus(cultivator: Cultivator) { return Math.max(-20, Math.min(40, Math.floor(currentStateReputation(cultivator) / 20) * 10)); }
 function sellPrice(cultivator: Cultivator, base: number) { return Math.max(15, base + marketStandingBonus(cultivator)); }
+function breakthroughMaterialBasePrice(itemId: ItemId, realmLevel: number): number {
+  const PRICES: Record<number, Record<string, number>> = {
+    1: { "cloud-heart-grass": 60, "moon-dew-flower": 60, "clear-zhi-leaf": 60, "condensed-qi-dew": 100 },
+    2: { "spirit-brook-bamboo": 70, "pure-heart-orchid": 70, "mist-vine": 70, "azure-stone-marrow": 120 },
+    3: { "cloud-heart-grass": 90, "spirit-brook-bamboo": 90, "pure-heart-orchid": 90, "meridian-lotus-essence": 250 },
+    4: { "mystic-jade-stone": 120, "jade-marrow-sand": 120, "purple-palace-earth": 120, "foundation-spirit-amber": 200 },
+    5: { "cold-moon-crystal": 150, "still-cloud-wood": 150, "tranquil-bamboo": 150, "wind-control-crystal": 260 },
+    6: { "jade-marrow-sand": 200, "cold-moon-crystal": 200, "tranquil-bamboo": 200, "nine-turn-core-sand": 400 },
+  };
+  const stageMap = PRICES[realmLevel];
+  if (!stageMap || !(itemId in stageMap)) {
+    throw new Error(`Item ${itemId} not buyable at realmLevel ${realmLevel}`);
+  }
+  return stageMap[itemId]!;
+}
+
+function breakthroughMaterialsMissing(cultivator: Cultivator, definition: BreakthroughDefinition): Array<{ itemId: ItemId; count: number }> {
+  const all = [...definition.genericMaterials, definition.specialMaterial];
+  return all
+    .map((req) => ({ itemId: req.itemId, count: Math.max(0, req.count - cultivator.inventory[req.itemId]) }))
+    .filter((m) => m.count > 0);
+}
 function itemDefinition(world: WorldState, itemId: ItemId) {
   const definition = world.itemDefinitions[itemId];
   if (!definition) {
@@ -3013,99 +3058,51 @@ function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinitio
   switch (cultivator.realmLevel) {
     case 1:
       return {
-        category: "minor",
-        targetRealm: REALM_QI,
-        targetLevel: 2,
-        commonItemId: "qi-common",
-        commonCount: 1,
-        specialItemId: "qi-stage-1-special",
-        specialCount: 1,
-        durationTicks: 4,
-        baseSuccessRate: null,
+        category: "minor", targetRealm: REALM_QI, targetLevel: 2, marketBuyable: true, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "cloud-heart-grass", count: 1 }, { itemId: "moon-dew-flower", count: 1 }, { itemId: "clear-zhi-leaf", count: 1 }],
+        specialMaterial: { itemId: "condensed-qi-dew", count: 1 },
       };
     case 2:
       return {
-        category: "minor",
-        targetRealm: REALM_QI,
-        targetLevel: 3,
-        commonItemId: "qi-common",
-        commonCount: 2,
-        specialItemId: "qi-stage-2-special",
-        specialCount: 1,
-        durationTicks: 4,
-        baseSuccessRate: null,
+        category: "minor", targetRealm: REALM_QI, targetLevel: 3, marketBuyable: true, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "spirit-brook-bamboo", count: 1 }, { itemId: "pure-heart-orchid", count: 1 }, { itemId: "mist-vine", count: 1 }],
+        specialMaterial: { itemId: "azure-stone-marrow", count: 1 },
       };
     case 3:
       return {
-        category: "major",
-        targetRealm: REALM_FOUNDATION,
-        targetLevel: 4,
-        commonItemId: "qi-common",
-        commonCount: 3,
-        specialItemId: "qi-major-special",
-        specialCount: 1,
-        durationTicks: 6,
-        baseSuccessRate: 70,
+        category: "major", targetRealm: REALM_FOUNDATION, targetLevel: 4, marketBuyable: true, durationTicks: 6, baseSuccessRate: 70,
+        genericMaterials: [{ itemId: "cloud-heart-grass", count: 1 }, { itemId: "spirit-brook-bamboo", count: 1 }, { itemId: "pure-heart-orchid", count: 1 }],
+        specialMaterial: { itemId: "meridian-lotus-essence", count: 1 },
       };
     case 4:
       return {
-        category: "minor",
-        targetRealm: REALM_FOUNDATION,
-        targetLevel: 5,
-        commonItemId: "foundation-common",
-        commonCount: 1,
-        specialItemId: "foundation-stage-1-special",
-        specialCount: 1,
-        durationTicks: 4,
-        baseSuccessRate: null,
+        category: "minor", targetRealm: REALM_FOUNDATION, targetLevel: 5, marketBuyable: true, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "mystic-jade-stone", count: 1 }, { itemId: "jade-marrow-sand", count: 1 }, { itemId: "purple-palace-earth", count: 1 }],
+        specialMaterial: { itemId: "foundation-spirit-amber", count: 1 },
       };
     case 5:
       return {
-        category: "minor",
-        targetRealm: REALM_FOUNDATION,
-        targetLevel: 6,
-        commonItemId: "foundation-common",
-        commonCount: 2,
-        specialItemId: "foundation-stage-2-special",
-        specialCount: 1,
-        durationTicks: 4,
-        baseSuccessRate: null,
+        category: "minor", targetRealm: REALM_FOUNDATION, targetLevel: 6, marketBuyable: true, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "cold-moon-crystal", count: 1 }, { itemId: "still-cloud-wood", count: 1 }, { itemId: "tranquil-bamboo", count: 1 }],
+        specialMaterial: { itemId: "wind-control-crystal", count: 1 },
       };
     case 6:
       return {
-        category: "major",
-        targetRealm: REALM_CORE,
-        targetLevel: 7,
-        commonItemId: "foundation-common",
-        commonCount: 3,
-        specialItemId: "foundation-major-special",
-        specialCount: 1,
-        durationTicks: 6,
-        baseSuccessRate: 55,
+        category: "major", targetRealm: REALM_CORE, targetLevel: 7, marketBuyable: true, durationTicks: 6, baseSuccessRate: 55,
+        genericMaterials: [{ itemId: "jade-marrow-sand", count: 1 }, { itemId: "cold-moon-crystal", count: 1 }, { itemId: "tranquil-bamboo", count: 1 }],
+        specialMaterial: { itemId: "nine-turn-core-sand", count: 1 },
       };
     case 7:
       return {
-        category: "minor",
-        targetRealm: REALM_CORE,
-        targetLevel: 8,
-        commonItemId: "core-common",
-        commonCount: 1,
-        specialItemId: "core-stage-1-special",
-        specialCount: 1,
-        durationTicks: 4,
-        baseSuccessRate: null,
+        category: "minor", targetRealm: REALM_CORE, targetLevel: 8, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "golden-spirit-flower", count: 1 }, { itemId: "purple-celestial-leaf", count: 1 }, { itemId: "star-fall-sand", count: 1 }],
+        specialMaterial: { itemId: "flowing-aurora-core", count: 1 },
       };
     case 8:
       return {
-        category: "minor",
-        targetRealm: REALM_CORE,
-        targetLevel: 9,
-        commonItemId: "core-common",
-        commonCount: 2,
-        specialItemId: "core-stage-2-special",
-        specialCount: 1,
-        durationTicks: 4,
-        baseSuccessRate: null,
+        category: "minor", targetRealm: REALM_CORE, targetLevel: 9, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "moon-glory-jade", count: 1 }, { itemId: "clear-mystic-wood", count: 1 }, { itemId: "chaos-moss", count: 1 }],
+        specialMaterial: { itemId: "dragon-radiance-crystal", count: 1 },
       };
     default:
       return null;
@@ -3115,14 +3112,7 @@ function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinitio
 function breakthroughConsumedItemsOf(
   definition: BreakthroughDefinition,
 ): Array<{ itemId: ItemId; count: number }> {
-  return [
-    { itemId: definition.commonItemId, count: definition.commonCount },
-    { itemId: definition.specialItemId, count: definition.specialCount },
-  ];
-}
-
-function breakthroughRecipeIdOf(definition: BreakthroughDefinition): string {
-  return `recipe-${definition.specialItemId}`;
+  return [...definition.genericMaterials, definition.specialMaterial];
 }
 
 function breakthroughRateBreakdownOf(
@@ -3436,8 +3426,12 @@ function resolveDungeonExpeditionStepIfDue(
   cultivator.pendingMoralityChoiceId = beforePendingMoralityChoiceId;
 
   const inventoryDelta = positiveInventoryDelta(beforeInventory, cultivator.inventory);
-  const primaryMaterialCount = inventoryDelta[metadata.materialBand] ?? 0;
-  delete inventoryDelta[metadata.materialBand];
+  const tierPool = BREAKTHROUGH_TIER_POOL[metadata.materialBand] ?? [metadata.materialBand];
+  let primaryMaterialCount = 0;
+  for (const matId of tierPool) {
+    primaryMaterialCount += inventoryDelta[matId] ?? 0;
+    delete inventoryDelta[matId];
+  }
 
   const updatedProgress = recordDungeonExpeditionStep({
     progress: effectiveProgress,
@@ -3494,36 +3488,98 @@ function resolveDungeonExpeditionStepIfDue(
   };
 }
 
-function preferredCommonMaterialAction(
+function preferredMaterialAction(
   world: WorldState,
   cultivator: Cultivator,
   definition: BreakthroughDefinition,
 ): ActionId | null {
-  if (definition.commonItemId === "qi-common") {
-    if (world.locations[cultivator.locationId]?.kind === "safe") {
-      return "take-mortal-task";
-    }
-    const nearestSafeLocationId = findNearestLocationId(
-      world,
-      cultivator.locationId,
-      (candidate) => candidate.kind === "safe",
-    );
-    return nearestSafeLocationId ? travelActionIdOf(nearestSafeLocationId) : null;
+  const missing = breakthroughMaterialsMissing(cultivator, definition);
+  if (missing.length === 0) return null;
+
+  if (definition.marketBuyable && world.locations[cultivator.locationId]?.kind === "safe") {
+    const firstMissing = missing[0]!;
+    const price = buyPrice(cultivator, breakthroughMaterialBasePrice(firstMissing.itemId, cultivator.realmLevel));
+    if (cultivator.spiritStones >= price) return "buy-current-breakthrough-material";
+    return "take-mortal-task";
   }
 
-  if (definition.commonItemId === "foundation-common") {
-    if (world.locations[cultivator.locationId]?.nodeType === "wilderness") {
-      return "mine-spirit-stones";
-    }
-    const nearestWildernessId = findNearestLocationId(
-      world,
-      cultivator.locationId,
-      (candidate) => candidate.nodeType === "wilderness",
-    );
-    return nearestWildernessId ? travelActionIdOf(nearestWildernessId) : null;
+  if (definition.marketBuyable) {
+    const nearestSafe = findNearestLocationId(world, cultivator.locationId, (c) => c.kind === "safe");
+    if (nearestSafe) return travelActionIdOf(nearestSafe);
   }
 
+  if (cultivator.realmLevel <= 3) {
+    return preferredDungeonGuardianAction(world, cultivator, "dungeon-c");
+  }
+  if (cultivator.realmLevel <= 6) {
+    if (world.locations[cultivator.locationId]?.nodeType === "wilderness") return "mine-spirit-stones";
+    const nearestWild = findNearestLocationId(world, cultivator.locationId, (c) => c.nodeType === "wilderness");
+    if (nearestWild) return travelActionIdOf(nearestWild);
+    return preferredDungeonGuardianAction(world, cultivator, "dungeon-b");
+  }
   return preferredDungeonGuardianAction(world, cultivator, "dungeon-a");
+}
+
+function materialSourcesOf(
+  definition: BreakthroughDefinition,
+): BreakthroughMaterialSourceView[] {
+  const sources: BreakthroughMaterialSourceView[] = [];
+  const allItems = [...definition.genericMaterials, definition.specialMaterial];
+
+  if (definition.marketBuyable) {
+    for (const mat of allItems) {
+      sources.push({
+        itemId: mat.itemId,
+        channel: "market",
+        locationHint: "safe",
+        actionId: "buy-current-breakthrough-material",
+        note: "可在安全城镇坊市购买，价格随境界提升而递增。",
+      });
+    }
+  }
+
+  const realmLevel = definition.targetLevel - 1;
+  if (realmLevel <= 3) {
+    sources.push({
+      itemId: allItems[0]!.itemId,
+      channel: "task",
+      locationHint: "safe",
+      actionId: "take-mortal-task",
+      note: "城镇任务可稳定补给炼气期突破灵材。",
+    });
+    sources.push({
+      itemId: allItems[0]!.itemId,
+      channel: "dungeon",
+      locationHint: "dungeon-c",
+      actionId: null,
+      note: "丙级地宫与低风险探索事件会掉落炼气期突破灵材。",
+    });
+  } else if (realmLevel <= 6) {
+    sources.push({
+      itemId: allItems[0]!.itemId,
+      channel: "wilderness",
+      locationHint: "wilderness",
+      actionId: "mine-spirit-stones",
+      note: "荒野矿脉与相关事件会掉落筑基期突破灵材。",
+    });
+    sources.push({
+      itemId: allItems[0]!.itemId,
+      channel: "dungeon",
+      locationHint: "dungeon-b",
+      actionId: null,
+      note: "乙级地宫探索与守关链路会掉落筑基期突破灵材。",
+    });
+  } else {
+    sources.push({
+      itemId: allItems[0]!.itemId,
+      channel: "dungeon",
+      locationHint: "dungeon-a",
+      actionId: null,
+      note: "金丹期突破灵材主要来自甲级地宫高风险探索与守关。",
+    });
+  }
+
+  return sources;
 }
 
 function breakthroughRecommendedActionOf(
@@ -3540,17 +3596,8 @@ function breakthroughRecommendedActionOf(
       : (travelActionIdOf(cultivator.residence.locationId) as ActionId);
   }
 
-  const recipe = getResidenceRecipeById(breakthroughRecipeIdOf(definition));
-  const canCraftSpecial = recipe ? canCraftResidenceRecipe(cultivator, recipe) : false;
-  const hasSpecial = cultivator.inventory[definition.specialItemId] >= definition.specialCount;
-
   if (readyByProgress) {
-    if (!hasSpecial && canCraftSpecial) {
-      return isAtResidence(cultivator)
-        ? (`residence-produce:${recipe!.id}` as ActionId)
-        : (travelActionIdOf(cultivator.residence.locationId) as ActionId);
-    }
-    return preferredCommonMaterialAction(world, cultivator, definition);
+    return preferredMaterialAction(world, cultivator, definition);
   }
 
   if (cultivator.locationId === cultivator.residence.locationId) {
@@ -3559,7 +3606,7 @@ function breakthroughRecommendedActionOf(
   if (cultivator.spiritStones >= 80 && cultivator.spiritualPower >= 20) {
     return "cultivate";
   }
-  return preferredCommonMaterialAction(world, cultivator, definition);
+  return preferredMaterialAction(world, cultivator, definition);
 }
 
 function breakthroughViewOf(
@@ -3571,26 +3618,21 @@ function breakthroughViewOf(
     return null;
   }
 
-  const commonRequirement = {
-    itemId: definition.commonItemId,
-    count: definition.commonCount,
-    owned: cultivator.inventory[definition.commonItemId],
-  };
+  const genericRequirements = definition.genericMaterials.map((mat) => ({
+    itemId: mat.itemId,
+    count: mat.count,
+    owned: cultivator.inventory[mat.itemId],
+  }));
   const specialRequirement = {
-    itemId: definition.specialItemId,
-    count: definition.specialCount,
-    owned: cultivator.inventory[definition.specialItemId],
+    itemId: definition.specialMaterial.itemId,
+    count: definition.specialMaterial.count,
+    owned: cultivator.inventory[definition.specialMaterial.itemId],
   };
   const missingItems = breakthroughConsumedItemsOf(definition)
     .map((item) => {
       const owned = cultivator.inventory[item.itemId];
       const missing = Math.max(0, item.count - owned);
-      return {
-        itemId: item.itemId,
-        required: item.count,
-        owned,
-        missing,
-      };
+      return { itemId: item.itemId, required: item.count, owned, missing };
     })
     .filter((item) => item.missing > 0);
   const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
@@ -3602,9 +3644,11 @@ function breakthroughViewOf(
     readyByProgress: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED,
     readyByMaterials: missingItems.length === 0,
     requiresResidence: true,
-    commonRequirement,
+    genericRequirements,
     specialRequirement,
+    materialSources: materialSourcesOf(definition),
     missingItems,
+    marketBuyable: definition.marketBuyable,
     majorSuccessRate: rateInfo.successRate,
     rateBreakdown: rateInfo.rateBreakdown,
     recommendedAction: breakthroughRecommendedActionOf(world, cultivator, definition),
@@ -3846,7 +3890,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   if (breakthrough?.readyByProgress) {
     priorities.push("Realm progress is capped. Advance the breakthrough chain instead of grinding more progress.");
     if (!breakthrough.readyByMaterials) {
-      priorities.push("Collect the missing breakthrough materials, then craft the special item at residence.");
+      priorities.push("Collect the missing breakthrough materials from market or dungeons.");
     }
     if (breakthrough.recommendedAction) {
       suggestedActions.unshift(breakthrough.recommendedAction);
@@ -3854,7 +3898,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   }
   const needsProgressionMaterials = !!breakthrough
     && !breakthrough.readyByMaterials
-    && breakthrough.missingItems.some((item) => item.itemId === "foundation-common" || item.itemId === "core-common");
+    && !breakthrough.marketBuyable;
   if (needsProgressionMaterials) {
     priorities.push("Need progression materials: clear dungeon.");
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
@@ -4686,6 +4730,22 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (location.kind === "safe") actions.push({ actionId: "take-mortal-task", label: "Take town task", description: "Stable income.", durationTicks: DEFAULT_ACTION_DURATIONS["take-mortal-task"], kind: "timed" });
   if (canTradeAtLocation(location)) {
+    const breakthroughDefinition = breakthroughDefinitionOf(cultivator);
+    if (breakthroughDefinition && breakthroughDefinition.marketBuyable) {
+      const missing = breakthroughMaterialsMissing(cultivator, breakthroughDefinition);
+      if (missing.length > 0) {
+        const firstMissing = missing[0]!;
+        const price = buyPrice(cultivator, breakthroughMaterialBasePrice(firstMissing.itemId, cultivator.realmLevel));
+        actions.push({
+          actionId: "buy-current-breakthrough-material",
+          label: "Buy current breakthrough material",
+          description: `Buy 1 ${firstMissing.itemId} for ${price} spirit stones.`,
+          durationTicks: 0,
+          kind: "immediate",
+          costs: { spiritStones: price },
+        });
+      }
+    }
     for (const itemId of ["healing-pill", "qi-pill", "ward-talisman"] as const) {
       const actionId = getItemOperationActionId(itemId, "buy");
       if (actionId) {
@@ -5014,7 +5074,7 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
 
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
-  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
+  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "buy-current-breakthrough-material", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
@@ -5067,6 +5127,38 @@ function executeItemImmediateAction(
   actionId: ActionId,
   registration: ReturnType<typeof registrationModifiersOf>,
 ): ActionExecutionResult | null {
+  if (actionId === "buy-current-breakthrough-material") {
+    const location = world.locations[cultivator.locationId];
+    if (!location || !canTradeAtLocation(location)) {
+      throw new Error("You must be in a trading safe settlement.");
+    }
+    const definition = breakthroughDefinitionOf(cultivator);
+    if (!definition) {
+      throw new Error("No breakthrough material is required at the current realm level.");
+    }
+    if (!definition.marketBuyable) {
+      throw new Error("Current breakthrough materials cannot be purchased at market.");
+    }
+    const missing = breakthroughMaterialsMissing(cultivator, definition);
+    if (missing.length === 0) {
+      throw new Error("All breakthrough materials are already sufficient.");
+    }
+    const firstMissing = missing[0]!;
+    const price = buyPrice(cultivator, breakthroughMaterialBasePrice(firstMissing.itemId, cultivator.realmLevel));
+    if (cultivator.spiritStones < price) {
+      throw new Error("Not enough spirit stones.");
+    }
+    cultivator.spiritStones -= price;
+    cultivator.inventory[firstMissing.itemId] += 1;
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} bought 1 ${firstMissing.itemId} for ${price}.`,
+    };
+  }
+
   const binding = getItemActionBinding(actionId);
   if (!binding) {
     return null;
@@ -5855,7 +5947,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   }
   if (job.actionId === "take-mortal-task") {
     cultivator.spiritStones += 140 + ((registration?.taskBonus ?? 0) * 10);
-    cultivator.inventory["qi-common"] += 1;
+    cultivator.inventory[pickBreakthroughDrop("cloud-heart-grass", `${world.tick}:${job.id}:task-material`)] += 1;
     addCurrentStateReputation(cultivator, 8 + Math.floor((registration?.taskBonus ?? 0) / 2));
     return `${cultivator.name} finished a town task.`;
   }
@@ -5970,7 +6062,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     const roll = hashString(`${world.tick}:${job.id}`);
     cultivator.spiritStones += 110 + (roll % 80) + ((registration?.mineBonus ?? 0) * 8);
     cultivator.inventory["spirit-ore"] += 1 + (roll % 2) + ((registration?.mineBonus ?? 0) >= 8 ? 1 : 0);
-    cultivator.inventory["foundation-common"] += 1;
+    cultivator.inventory[pickBreakthroughDrop("mystic-jade-stone", `${world.tick}:${job.id}:mine-material`)] += 1;
     cultivator.qi = clamp(cultivator.qi - Math.max(6, 14 - (registration?.combatGuard ?? 0)), 1, cultivator.maxQi);
     if (roll % 5 === 0) {
       cultivator.injuryTicksRemaining = Math.max(
@@ -5998,7 +6090,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
     }
-    cultivator.inventory[metadata.materialBand] += 1;
+    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:search-fortune-material`)] += 1;
     // ---- Loadout source drop (search-fortune) ----
     const sfSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
     const sfSourceDrop = pickLoadoutSourceDrop(sfSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:loadout-source`);
@@ -6078,7 +6170,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         const spiritStones = 8 + (hashString(`${baseSeed}:loot-spirit-stones`) % 8);
         const beastCoreDrop = (hashString(`${baseSeed}:loot-beast-core`) % 100) < 30 ? 1 : 0;
         cultivator.inventory["spirit-ore"] += spiritOre;
-        cultivator.inventory["foundation-common"] += 1;
+        cultivator.inventory[pickBreakthroughDrop("mystic-jade-stone", `${baseSeed}:mine-beast-material`)] += 1;
         cultivator.spiritStones += spiritStones;
         if (beastCoreDrop > 0) {
           cultivator.inventory["beast-core"] += beastCoreDrop;
@@ -6101,7 +6193,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           spiritualPowerSpent: 16,
           loot: {
             "spirit-ore": spiritOre,
-            "foundation-common": 1,
+            [pickBreakthroughDrop("mystic-jade-stone", `${baseSeed}:mine-beast-material`)]: 1,
             ...(beastCoreDrop > 0 ? { "beast-core": beastCoreDrop } : {}),
           },
           summary: `${cultivator.name} defeated ${enemyDisplayName} in ${totalRounds} rounds.`,
@@ -6188,7 +6280,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         if (ward > 0) {
           cultivator.inventory["ward-talisman"] += ward;
         }
-        cultivator.inventory[metadata.materialBand] += 1;
+        cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`)] += 1;
         cultivator.spiritStones += spiritStones;
         addRealmProgress(cultivator, tuning.realmProgressReward);
         // ---- Loadout source drop (challenge-guardian victory) ----
@@ -6222,7 +6314,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           loot: {
             "ruin-fragment": fragment,
             ...(ward > 0 ? { "ward-talisman": ward } : {}),
-            [metadata.materialBand]: 1,
+            [pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`)]: 1,
           },
           summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.`,
           encounterTemplateId: guardianEncId,
@@ -6494,7 +6586,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       if (metadata.grade === "乙" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
       if (metadata.grade === "甲") cultivator.inventory["ward-talisman"] += 1;
     }
-    cultivator.inventory[metadata.materialBand] += 1;
+    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:enhanced-search-material`)] += 1;
     triggerNodeSpecificEvent(
       world,
       cultivator,
@@ -6730,10 +6822,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
           breakthroughCategory: definition.category,
           breakthroughTargetRealm: definition.targetRealm,
           breakthroughTargetLevel: definition.targetLevel,
-          breakthroughCommonItemId: definition.commonItemId,
-          breakthroughCommonCount: definition.commonCount,
-          breakthroughSpecialItemId: definition.specialItemId,
-          breakthroughSpecialCount: definition.specialCount,
+          breakthroughGenericMaterials: definition.genericMaterials,
+          breakthroughSpecialMaterial: definition.specialMaterial,
           breakthroughSuccessRate: rateInfo.successRate ?? undefined,
           breakthroughRateBreakdown: rateInfo.rateBreakdown,
         },

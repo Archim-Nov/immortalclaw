@@ -176,28 +176,28 @@ test("realm-gated material events extend travel and exploration support for brea
   );
 
   assert.ok(travelEventsById.get("tr-f-04")?.minRealm);
-  assert.deepEqual(travelEventsById.get("tr-f-04")?.effects.itemRewards, [{ itemId: "foundation-common", count: 1 }]);
+  assert.deepEqual(travelEventsById.get("tr-f-04")?.effects.itemRewards, [{ itemId: "jade-marrow-sand", count: 1 }]);
   assert.ok(travelEventsById.get("tr-h-04")?.minRealm);
-  assert.deepEqual(travelEventsById.get("tr-h-04")?.effects.itemRewards, [{ itemId: "core-common", count: 1 }]);
+  assert.deepEqual(travelEventsById.get("tr-h-04")?.effects.itemRewards, [{ itemId: "star-fall-sand", count: 1 }]);
 
   assert.ok(wildernessEventsById.get("qingzhou:wilderness-spirit-herb-pocket")?.minRealm);
   assert.deepEqual(
     wildernessEventsById.get("qingzhou:wilderness-spirit-herb-pocket")?.effects.itemRewards,
-    [{ itemId: "foundation-common", count: 1 }],
+    [{ itemId: "purple-palace-earth", count: 1 }],
   );
   assert.deepEqual(
     dungeonCEventsById.get("qingzhou:dungeon-c-rank-1-cache")?.effects.itemRewards,
-    [{ itemId: "qi-common", count: 1 }],
+    [{ itemId: "spirit-brook-bamboo", count: 1 }],
   );
   assert.ok(
     dungeonBEventsById.get("qingzhou:dungeon-b-rank-1-cache")?.effects.itemRewards?.some(
-      (reward) => reward.itemId === "foundation-common" && reward.count === 1,
+      (reward) => reward.itemId === "cold-moon-crystal" && reward.count === 1,
     ),
   );
   assert.equal(dungeonAEventsById.get("qingzhou:dungeon-a-rank-1-cache")?.dungeonGrade, "甲");
   assert.ok(
     dungeonAEventsById.get("qingzhou:dungeon-a-rank-1-cache")?.effects.itemRewards?.some(
-      (reward) => reward.itemId === "core-common" && reward.count === 1,
+      (reward) => reward.itemId === "moon-glory-jade" && reward.count === 1,
     ),
   );
 });
@@ -304,7 +304,7 @@ test("minRealm filters shared travel and node-specific event draws", () => {
       stateId: null,
       nodeType: null,
       minRealm: "筑基",
-      effects: { itemRewards: [{ itemId: "foundation-common", count: 1 }] },
+      effects: { itemRewards: [{ itemId: "jade-marrow-sand", count: 1 }] },
     },
   ];
   world.eventPools.travelStateSpecific = {
@@ -341,7 +341,7 @@ test("minRealm filters shared travel and node-specific event draws", () => {
         stateId: "qingzhou",
         nodeType: "dungeon-a",
         minRealm: "金丹",
-        effects: { itemRewards: [{ itemId: "core-common", count: 1 }] },
+        effects: { itemRewards: [{ itemId: "moon-glory-jade", count: 1 }] },
       },
     ],
   };
@@ -385,7 +385,7 @@ test("dungeon grade and rank context filters node-specific event draws", () => {
         dungeonGrade: "甲",
         minDungeonRank: 4,
         maxDungeonRank: 6,
-        effects: { itemRewards: [{ itemId: "core-common", count: 1 }] },
+        effects: { itemRewards: [{ itemId: "moon-glory-jade", count: 1 }] },
       },
     ],
   };

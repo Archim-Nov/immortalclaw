@@ -27,12 +27,13 @@ test("progression-material needs route guidance to dungeon expeditions", () => {
   const cultivator = world.cultivators[CULTIVATOR_ID];
 
   cultivator.locationId = "qingzhou:dungeon-c";
-  cultivator.realm = "筑基" as typeof cultivator.realm;
-  cultivator.realmLevel = 4;
+  cultivator.realm = "金丹" as typeof cultivator.realm;
+  cultivator.realmLevel = 7;
   cultivator.realmProgress = 100;
   cultivator.spiritStones = 900;
-  cultivator.inventory["foundation-common"] = 0;
-  cultivator.inventory["foundation-stage-1-special"] = 0;
+  // L7→8 needs golden-spirit-flower, purple-celestial-leaf, star-fall-sand + flowing-aurora-core (non-buyable)
+  cultivator.inventory["golden-spirit-flower"] = 0;
+  cultivator.inventory["purple-celestial-leaf"] = 0;
   cultivator.dungeonProgress["丙"].highestClearedRank = 1;
   cultivator.injuryTicksRemaining = 0;
 

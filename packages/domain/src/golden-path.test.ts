@@ -61,9 +61,11 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   assert.equal(readStage(), "first-residence-cultivation");
 
   world.cultivators[cultivatorId]!.realmProgress = 100;
-  world.cultivators[cultivatorId]!.inventory["qi-common"] = 2;
-  performAction(world, cultivatorId, "residence-produce:recipe-qi-stage-1-special");
-  runUntilIdle(world, cultivatorId);
+  // L1→2: cloud-heart-grass, moon-dew-flower, clear-zhi-leaf + condensed-qi-dew
+  world.cultivators[cultivatorId]!.inventory["cloud-heart-grass"] = 1;
+  world.cultivators[cultivatorId]!.inventory["moon-dew-flower"] = 1;
+  world.cultivators[cultivatorId]!.inventory["clear-zhi-leaf"] = 1;
+  world.cultivators[cultivatorId]!.inventory["condensed-qi-dew"] = 1;
   checkpoints.push(readStage());
   assert.equal(readStage(), "first-residence-cultivation");
 

@@ -380,17 +380,37 @@ export type LegacyItemId =
   | "spirit-ore"
   | "ruin-fragment"
   | "beast-core"
-  | "qi-common"
-  | "foundation-common"
-  | "core-common"
-  | "qi-stage-1-special"
-  | "qi-stage-2-special"
-  | "qi-major-special"
-  | "foundation-stage-1-special"
-  | "foundation-stage-2-special"
-  | "foundation-major-special"
-  | "core-stage-1-special"
-  | "core-stage-2-special"
+  // 练气 generic materials
+  | "cloud-heart-grass"
+  | "moon-dew-flower"
+  | "clear-zhi-leaf"
+  | "spirit-brook-bamboo"
+  | "pure-heart-orchid"
+  | "mist-vine"
+  // 筑基 generic materials
+  | "mystic-jade-stone"
+  | "jade-marrow-sand"
+  | "purple-palace-earth"
+  | "cold-moon-crystal"
+  | "still-cloud-wood"
+  | "tranquil-bamboo"
+  // 金丹 generic materials
+  | "golden-spirit-flower"
+  | "purple-celestial-leaf"
+  | "star-fall-sand"
+  | "moon-glory-jade"
+  | "clear-mystic-wood"
+  | "chaos-moss"
+  // Breakthrough special materials (1 per stage)
+  | "condensed-qi-dew"
+  | "azure-stone-marrow"
+  | "meridian-lotus-essence"
+  | "foundation-spirit-amber"
+  | "wind-control-crystal"
+  | "nine-turn-core-sand"
+  | "flowing-aurora-core"
+  | "dragon-radiance-crystal"
+  | "nine-turn-golden-marrow"
   | "eight-wastes-pass"
   | "ancient-artifact"
   | "legendary-artifact";
@@ -713,6 +733,7 @@ export type ImmediateActionId =
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
+  | "buy-current-breakthrough-material"
   | "use-healing-pill"
   | "use-qi-pill"
   | "use-ward-talisman"
@@ -1566,6 +1587,14 @@ export interface BreakthroughMissingItemView {
   missing: number;
 }
 
+export interface BreakthroughMaterialSourceView {
+  itemId: ItemId;
+  channel: "market" | "task" | "wilderness" | "dungeon";
+  locationHint: "safe" | "wilderness" | "dungeon-c" | "dungeon-b" | "dungeon-a";
+  actionId: ActionId | null;
+  note: string;
+}
+
 export interface BreakthroughStateView {
   targetRealm: RealmStage;
   targetLevel: number;
@@ -1573,9 +1602,11 @@ export interface BreakthroughStateView {
   readyByProgress: boolean;
   readyByMaterials: boolean;
   requiresResidence: boolean;
-  commonRequirement: BreakthroughRequirementView;
+  genericRequirements: BreakthroughRequirementView[];
   specialRequirement: BreakthroughRequirementView;
+  materialSources: BreakthroughMaterialSourceView[];
   missingItems: BreakthroughMissingItemView[];
+  marketBuyable: boolean;
   majorSuccessRate: number | null;
   rateBreakdown: BreakthroughRateModifier[];
   recommendedAction: ActionId | null;

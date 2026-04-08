@@ -20,7 +20,7 @@ export function buildDungeonBEventPack(location: Location): EventTemplate[] {
       effects: {
         spiritStones: 28 + (rank * 8),
         itemRewards: [
-          { itemId: "foundation-common", count: 1 },
+          { itemId: "cold-moon-crystal", count: 1 },
           { itemId: "ruin-fragment", count: 1 + Math.floor(rank / 4) },
         ],
       },

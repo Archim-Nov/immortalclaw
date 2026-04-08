@@ -97,8 +97,9 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Run `take-mortal-task` for stable spirit stones
 - Use safe settlements and main-city nodes to convert loot into steady progress
 - Spend surplus on `cultivate` until `realmProgress` caps at `100`
-- When progress caps, switch to breakthrough preparation: collect the common material, craft the special material at residence, then use `residence-breakthrough`
-- Treat events as support for common-material income: safe travel/exploration can add `qi-common`, `筑基+` wilderness or ruin exploration can add `foundation-common`, and `金丹+` high-risk routes or ruins can add `core-common`
+- When progress caps, switch to breakthrough preparation: collect the 3 generic materials + 1 special material for the current stage, then use `residence-breakthrough`
+- In safe settlements, use `buy-current-breakthrough-material` to buy the first missing breakthrough material. 练气/筑基 materials (stages 1-6) are market-buyable; 金丹 materials (stages 7-9) must be farmed from dungeons/wilderness.
+- Events, dungeon expeditions, and wilderness drops provide random breakthrough materials from the matching realm tier
 - Avoid risky fights while injured or underprepared
 - Return to low-risk settlement or residence loops before dangerous combat windows
 
@@ -252,6 +253,7 @@ Do not call `POST /agent/act` from memory alone.
 - `cultivator.realm`, `cultivator.realmPhase`, `cultivator.realmLevel`, `cultivator.realmProgress`
 - `cultivator.spiritStones`, `cultivator.qi`, `cultivator.spiritualPower`
 - `breakthrough` - current target level, missing materials, recommended next action, and major-rate breakdown
+- `breakthrough.materialSources` - structured acquisition hints for where to get current materials (market, wilderness, dungeon). Check `breakthrough.marketBuyable` for whether market purchase is available.
 - `dungeon` - current dungeon grade, unlocked ranks, per-rank `rankYieldHints`, and active run state
 - `bahuang` - independent expedition state, environmental risk, and rare loot progress
 - `currentJob` - non-null means a timed action (or active run) is still in progress

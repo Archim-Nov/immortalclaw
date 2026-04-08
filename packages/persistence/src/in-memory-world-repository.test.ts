@@ -200,8 +200,8 @@ test("legacy world input is hydrated with migrated P3 persistence defaults", asy
   assert.ok(hydrated.guixuNodes["guixu-threshold-gate"]);
   assert.ok(hydrated.factionWars["war-qingzhou-frontier"]);
   assert.ok(hydrated.itemDefinitions["legendary-artifact"]);
-  assert.ok(hydrated.itemDefinitions["qi-common"]);
-  assert.ok(hydrated.itemDefinitions["foundation-major-special"]);
+  assert.ok(hydrated.itemDefinitions["cloud-heart-grass"]);
+  assert.ok(hydrated.itemDefinitions["condensed-qi-dew"]);
   assert.ok(hydrated.itemDefinitions["healing-pill"].tags.includes("pill"));
   assert.equal(hydrated.itemDefinitions["eight-wastes-pass"].use.kind, "ticket");
   assert.deepEqual(hydrated.itemDefinitions["eight-wastes-pass"].use.ticketTargets, ["eight-wastes-threshold"]);
@@ -262,7 +262,7 @@ test("legacy dungeon expedition snapshots backfill flavor arrays", async () => {
       endedAtTick: 42,
       stepsResolved: 10,
       primaryMaterial: {
-        itemId: "qi-common",
+        itemId: "cloud-heart-grass",
         count: 3,
       },
       secondaryDrops: { "ruin-fragment": 2 },

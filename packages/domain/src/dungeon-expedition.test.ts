@@ -37,12 +37,12 @@ test("dungeon actions expose managed expeditions and rank yield hints to agents"
 
   const balancedAction = actions.find((action) => action.actionId === expeditionActionId(1, "balanced"));
   assert.ok(balancedAction);
-  assert.match(balancedAction.description, /qi-common/i);
+  assert.match(balancedAction.description, /cloud-heart-grass/i);
 
   assert.ok(dungeonState);
   assert.ok(Array.isArray(dungeonState.rankYieldHints));
   assert.deepEqual(dungeonState.rankYieldHints?.[0]?.rank, 1);
-  assert.equal(dungeonState.rankYieldHints?.[0]?.primaryMaterial, "qi-common");
+  assert.equal(dungeonState.rankYieldHints?.[0]?.primaryMaterial, "cloud-heart-grass");
   assert.ok((dungeonState.rankYieldHints?.[0]?.estimatedExpeditionYieldByPolicy?.balanced?.min ?? 0) > 0);
   assert.ok(dungeonState.rankYieldHints?.[0]?.notableSecondaryDrops.includes("ruin-fragment"));
 });

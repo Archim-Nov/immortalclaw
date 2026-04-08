@@ -481,7 +481,7 @@ test("deserializeStoredWorld backfills dungeon expedition flavor arrays in legac
       endedAtTick: 42,
       stepsResolved: 10,
       primaryMaterial: {
-        itemId: "qi-common",
+        itemId: "cloud-heart-grass",
         count: 3,
       },
       secondaryDrops: { "ruin-fragment": 2 },
