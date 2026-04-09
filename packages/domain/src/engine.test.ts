@@ -433,7 +433,7 @@ function createRuleBoundHealingRegistrationRecord(): CultivationRegistrationReco
   };
 }
 
-test("runtime barrel loads without tribulation exports", async () => {
+test("runtime barrel does not export removed legacy systems", async () => {
   const runtime = await import("./runtime.js");
 
   assert.equal(typeof runtime.createSeedWorld, "function");
@@ -722,7 +722,7 @@ test("residence actions stay visible at residence while recipes remain gated by 
 
   assert.throws(
     () => performAction(world, "yun-zhong-he", "residence-heal"),
-    /Residence actions require being at your residence/,
+    /Residence actions require being at one of your residences/,
   );
 });
 
@@ -1023,6 +1023,161 @@ test("residence-produce rejects unknown recipe id", () => {
   );
 });
 
+// ---- Multi-state residence purchase tests ----
+
+test("new cultivator starts with one residence in starter state", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Residence Buyer" });
+  const cultivator = world.cultivators[created.id]!;
+
+  assert.equal(cultivator.residences.length, 1);
+  assert.equal(cultivator.residence.stateId, cultivator.locationId.split(":")[0]);
+  assert.equal(cultivator.residences[0]!.stateId, cultivator.locationId.split(":")[0]);
+  assert.ok(cultivator.residence.description.length > 0);
+});
+
+test("buy-residence action appears on main city when cultivator does not own local residence", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Buyer" });
+  const cultivator = world.cultivators[created.id]!;
+
+  // Travel to a different state main city
+  const starterState = cultivator.locationId.split(":")[0];
+  const otherState = STATE_IDS.find((id) => id !== starterState)!;
+  cultivator.locationId = `${otherState}:main-city`;
+
+  const actions = listAvailableActions(world, created.id);
+  const buyAction = actions.find((a) => a.actionId === `buy-residence:${otherState}`);
+  assert.ok(buyAction, `Expected buy-residence:${otherState} to appear in available actions`);
+  assert.ok(buyAction.costs?.spiritStones && buyAction.costs.spiritStones >= 3000);
+});
+
+test("buy-residence action does NOT appear when cultivator already owns local residence", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+
+  // yun-zhong-he is at qingzhou:main-city and already has a residence there
+  const actions = listAvailableActions(world, "yun-zhong-he");
+  const buyAction = actions.find((a) => a.actionId === "buy-residence:qingzhou");
+  assert.equal(buyAction, undefined, "Should not offer buy when residence already owned");
+});
+
+test("buy-residence succeeds and adds to residences array", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Shopper" });
+  const cultivator = world.cultivators[created.id]!;
+
+  const starterState = cultivator.locationId.split(":")[0];
+  const otherState = STATE_IDS.find((id) => id !== starterState)!;
+  cultivator.locationId = `${otherState}:main-city`;
+  cultivator.spiritStones = 10000;
+
+  const before = cultivator.residences.length;
+  const result = performAction(world, created.id, `buy-residence:${otherState}`);
+  assert.equal(result.accepted, true);
+  assert.equal(cultivator.residences.length, before + 1);
+
+  const newRes = cultivator.residences.find((r) => r.stateId === otherState);
+  assert.ok(newRes);
+  assert.ok(newRes.description.length > 0);
+  assert.equal(newRes.locationId, `${otherState}:main-city`);
+
+  // Active residence should switch to newly purchased
+  assert.equal(cultivator.residence.stateId, otherState);
+});
+
+test("buy-residence fails when already owned in target state", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  cultivator.spiritStones = 10000;
+
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", "buy-residence:qingzhou"),
+    /already own a residence/,
+  );
+});
+
+test("buy-residence fails with insufficient spirit stones", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Poor" });
+  const cultivator = world.cultivators[created.id]!;
+
+  const starterState = cultivator.locationId.split(":")[0];
+  const otherState = STATE_IDS.find((id) => id !== starterState)!;
+  cultivator.locationId = `${otherState}:main-city`;
+  cultivator.spiritStones = 10;
+
+  assert.throws(
+    () => performAction(world, created.id, `buy-residence:${otherState}`),
+    /Not enough spirit stones/,
+  );
+});
+
+test("buy-residence fails when not in the target state", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  cultivator.spiritStones = 10000;
+
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", "buy-residence:liangzhou"),
+    /must be in the target state/,
+  );
+});
+
+test("residence actions work at any owned residence location", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Multi Home" });
+  const cultivator = world.cultivators[created.id]!;
+
+  const starterState = cultivator.locationId.split(":")[0];
+  const otherState = STATE_IDS.find((id) => id !== starterState)!;
+
+  // Buy second residence
+  cultivator.locationId = `${otherState}:main-city`;
+  cultivator.spiritStones = 10000;
+  performAction(world, created.id, `buy-residence:${otherState}`);
+
+  // Residence actions should be available at the new location
+  const actions = new Set(listAvailableActions(world, created.id).map((a) => a.actionId));
+  assert.ok(actions.has("residence-meditate"));
+  assert.ok(actions.has("residence-heal"));
+  assert.ok(actions.has("residence-recover-qi"));
+  assert.ok(actions.has("residence-socialize"));
+});
+
+test("getCultivatorState includes all residences in view", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "View Test" });
+  const cultivator = world.cultivators[created.id]!;
+
+  const starterState = cultivator.locationId.split(":")[0];
+  const otherState = STATE_IDS.find((id) => id !== starterState)!;
+  cultivator.locationId = `${otherState}:main-city`;
+  cultivator.spiritStones = 10000;
+  performAction(world, created.id, `buy-residence:${otherState}`);
+
+  const state = getCultivatorState(world, created.id);
+  assert.equal(state.residences.length, 2);
+  assert.ok(state.residences.some((r) => r.stateId === starterState));
+  assert.ok(state.residences.some((r) => r.stateId === otherState));
+  assert.ok(state.activeResidence);
+  assert.equal(state.activeResidence!.stateId, otherState);
+});
+
+test("residence price scales with state risk level", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "Price Check" });
+  const cultivator = world.cultivators[created.id]!;
+
+  // Buy in a high-risk state (liangzhou = high risk = 6000)
+  cultivator.locationId = "liangzhou:main-city";
+  cultivator.spiritStones = 20000;
+  const stonesBefore = cultivator.spiritStones;
+  performAction(world, created.id, "buy-residence:liangzhou");
+
+  assert.equal(stonesBefore - cultivator.spiritStones, 6000);
+});
+
 test("residence heal and recover-qi apply expected behavior", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"];
@@ -1280,7 +1435,7 @@ test("first travel onboarding step recommends a quest-board action when availabl
 
   assert.equal(state.onboarding.stage, "first-travel");
   assert.ok(state.onboarding.hint.includes("quest"));
-  assert.match(state.onboarding.nextAction ?? "", /^accept-quest:/);
+  assert.ok(state.onboarding.recommendedActions.some((a: string) => a.startsWith("accept-quest:")));
 });
 
 test("only residence meditation advances the residence cultivation onboarding step", () => {
@@ -1480,7 +1635,7 @@ test("registration effects surface and improve cultivation output", () => {
   assert.ok(registeredState.cultivator.realmProgress > baselineState.cultivator.realmProgress);
 });
 
-test("seek-longevity registration does not add meditate recovery after tribulation cleanup", () => {
+test("seek-longevity registration does not add extra meditate recovery", () => {
   const baselineWorld = createSeedWorld();
   const registeredWorld = createSeedWorld();
 
@@ -1505,7 +1660,7 @@ test("seek-longevity registration does not add meditate recovery after tribulati
   );
 });
 
-test("shou_jie registration does not add heal recovery after tribulation cleanup", () => {
+test("shou_jie registration does not add extra heal recovery", () => {
   const baselineWorld = createSeedWorld();
   const registeredWorld = createSeedWorld();
 
@@ -1532,7 +1687,7 @@ test("shou_jie registration does not add heal recovery after tribulation cleanup
   );
 });
 
-test("registration bonuses improve task rewards without exposing tribulation state", () => {
+test("registration bonuses improve task rewards without exposing legacy state", () => {
   const baselineWorld = createSeedWorld();
   const registeredWorld = createSeedWorld();
 
@@ -2401,6 +2556,8 @@ test("core_skill spends spirit on miss", () => {
   let context: ReturnType<typeof startMineBeastCombat> | null = null;
   for (let i = 0; i < 40; i += 1) {
     const candidate = startMineBeastCombat();
+    // Vary the deterministic seed source so the search does not repeat one roll.
+    candidate.world.tick += i;
     const roll = firstRoundHitRoll(candidate.world, candidate.job.id, candidate.combatState.encounterTemplateId);
     if (roll >= 35) {
       context = candidate;
