@@ -19,7 +19,7 @@ test("low spirit stones routes guidance to wilderness base-material actions", ()
     state.agentGuidance.suggestedActions.includes("mine-spirit-stones")
       || state.agentGuidance.suggestedActions.includes("hunt-mine-beast"),
   );
-  assert.ok(state.agentGuidance.priorities.some((entry) => /wilderness/i.test(entry)));
+  assert.ok(state.agentGuidance.priorities.some((entry) => /荒野|wilderness/i.test(entry)));
 });
 
 test("progression-material needs route guidance to dungeon expeditions", () => {
@@ -61,5 +61,5 @@ test("high-realm rare-reward needs route guidance to bahuang", () => {
   const state = getCultivatorState(world, CULTIVATOR_ID);
 
   assert.ok(state.agentGuidance.suggestedActions.includes("enter-bahuang:balanced"));
-  assert.ok(state.agentGuidance.priorities.some((entry) => /bahuang/i.test(entry)));
+  assert.ok(state.agentGuidance.priorities.some((entry) => /八荒|bahuang/i.test(entry)));
 });

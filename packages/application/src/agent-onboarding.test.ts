@@ -123,6 +123,8 @@ function createState(): CultivatorStateView {
       summary: "Owner intent can override onboarding. Safety comes before tutorials. Free exploration is allowed.",
     },
     socialLinks: [],
+    residences: [],
+    activeResidence: null,
     agentGuidance: {
       warnings: [],
       priorities: [],

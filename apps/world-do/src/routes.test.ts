@@ -191,7 +191,7 @@ test("agent message route rejects missing authorization", async () => {
   assert.equal(payload.error, "Invalid or expired credential.");
 });
 
-test("legacy tribulation routes are no longer exposed", async () => {
+test("removed legacy routes return 404", async () => {
   const app = createTestApp();
 
   const cultivatorResponse = await app.request("https://runtime.test/cultivator/tribulation?cultivatorId=seed-cultivator");

@@ -135,6 +135,7 @@ function serializeWorldForStorage(world: ProjectedPersistedWorldState): Persiste
   return copy;
 }
 
+// MIGRATION: Converts legacy zoneId fields from pre-九州 snapshots to locationId.
 function normalizeLegacyZoneField<T extends { locationId?: string; zoneId?: string }>(entry: T): T {
   if (entry.zoneId !== undefined && entry.locationId === undefined) {
     entry.locationId = entry.zoneId;
@@ -144,6 +145,7 @@ function normalizeLegacyZoneField<T extends { locationId?: string; zoneId?: stri
   return entry;
 }
 
+// MIGRATION: Strips retired faction names from pre-九州 snapshots.
 function stripLegacyCityShellStandings(factionReputation: Record<string, number>): Record<string, number> {
   const copy = { ...factionReputation };
   delete copy.townsfolk;
@@ -183,6 +185,7 @@ function normalizeStoredWorldShape(world: WorldState): WorldState {
   delete (copy as WorldState & { zones?: unknown }).zones;
 
   for (const cultivator of Object.values(copy.cultivators)) {
+    // MIGRATION: Strip retired legacy fields from pre-九州 cultivator snapshots.
     const legacyCultivator = cultivator as typeof cultivator & {
       nextTribulationTick?: unknown;
       reputation?: unknown;
@@ -204,6 +207,25 @@ function normalizeStoredWorldShape(world: WorldState): WorldState {
     delete legacyCultivator.reputation;
     delete legacyCultivator.karma;
     cultivator.factionReputation = stripLegacyCityShellStandings(cultivator.factionReputation ?? {});
+    if (!Array.isArray(cultivator.productionQueue)) {
+      cultivator.productionQueue = [];
+    }
+    if (!Array.isArray(cultivator.pendingGifts)) {
+      cultivator.pendingGifts = [];
+    }
+    if (typeof cultivator.lastGiftTick !== "number") {
+      cultivator.lastGiftTick = -1;
+    }
+    if (!Array.isArray(cultivator.guixuCompletedNodeIds)) {
+      cultivator.guixuCompletedNodeIds = [];
+    }
+  }
+
+  if (!copy.commissions || typeof copy.commissions !== "object") {
+    (copy as Record<string, unknown>).commissions = {};
+  }
+  if (typeof (copy as Record<string, unknown>).nextCommissionSequence !== "number") {
+    (copy as Record<string, unknown>).nextCommissionSequence = 1;
   }
 
   for (const event of copy.worldEvents) {
@@ -498,6 +520,7 @@ export class SqliteWorldRepository implements WorldRepository {
   }
 
   private insertTickRun(summary: TickSummary, trigger: TickRunRecord["trigger"], recordedAt: string): void {
+    // MIGRATION: Strip retired tribulations field from pre-cleanup tick summaries.
     const persistedSummary = structuredClone(summary) as TickSummary & { tribulations?: unknown };
     delete persistedSummary.tribulations;
 

@@ -296,7 +296,17 @@ const cultivators: Record<string, Cultivator> = {
       locationId: "qingzhou:main-city",
       level: 1,
       name: "云隐小筑",
+      stateId: "qingzhou",
+      description: "青岚城外的简朴洞府，竹林掩映间时闻鸟鸣。",
     },
+    residences: [{
+      id: "residence-yun-zhong-he",
+      locationId: "qingzhou:main-city",
+      level: 1,
+      name: "云隐小筑",
+      stateId: "qingzhou",
+      description: "青岚城外的简朴洞府，竹林掩映间时闻鸟鸣。",
+    }],
     spiritStones: 900,
     qi: 92,
     maxQi: 100,
@@ -336,6 +346,10 @@ const cultivators: Record<string, Cultivator> = {
     equippedSpellLoadoutId: "starter-metal-edge" as any as import("./model.js").SpellLoadoutId,
     unlockedWeaponLoadoutIds: ["starter-sword" as any as import("./model.js").WeaponLoadoutId],
     unlockedSpellLoadoutIds: ["starter-metal-edge" as any as import("./model.js").SpellLoadoutId],
+    productionQueue: [],
+    pendingGifts: [],
+    lastGiftTick: -1,
+    guixuCompletedNodeIds: [],
   },
 };
 
@@ -438,6 +452,51 @@ const GUIXU_NODES: Record<string, GuixuNode> = {
     anchorLocationId: "qingzhou:dungeon-a",
     explorationDurationTicks: 2,
     eventPool: ["guixu-ancient-seal"],
+  },
+  "guixu-spirit-nexus": {
+    nodeId: "guixu-spirit-nexus",
+    name: "Guixu Spirit Nexus",
+    tier: "core",
+    unlockRequirement: {
+      wildernessProgress: 4,
+      minRealm: "閲戜腹" as GuixuNode["unlockRequirement"]["minRealm"],
+      uniqueKey: "spirit-nexus",
+    },
+    nodeType: "exploration",
+    sharedProgress: false,
+    anchorLocationId: "qingzhou:dungeon-a",
+    explorationDurationTicks: 3,
+    eventPool: ["guixu-spirit-nexus-echo"],
+  },
+  "guixu-void-corridor": {
+    nodeId: "guixu-void-corridor",
+    name: "Guixu Void Corridor",
+    tier: "deep",
+    unlockRequirement: {
+      wildernessProgress: 6,
+      minRealm: "閲戜腹" as GuixuNode["unlockRequirement"]["minRealm"],
+      uniqueKey: "void-corridor",
+    },
+    nodeType: "guardian",
+    sharedProgress: true,
+    anchorLocationId: "qingzhou:dungeon-a",
+    explorationDurationTicks: 3,
+    eventPool: ["guixu-void-corridor-trial"],
+  },
+  "guixu-origin-heart": {
+    nodeId: "guixu-origin-heart",
+    name: "Guixu Origin Heart",
+    tier: "deep",
+    unlockRequirement: {
+      wildernessProgress: 8,
+      minRealm: "閲戜腹" as GuixuNode["unlockRequirement"]["minRealm"],
+      uniqueKey: "origin-heart",
+    },
+    nodeType: "guardian",
+    sharedProgress: true,
+    anchorLocationId: "qingzhou:dungeon-a",
+    explorationDurationTicks: 4,
+    eventPool: ["guixu-origin-heart-awakening"],
   },
 };
 
@@ -564,10 +623,12 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     nextDaoCompanionProposalSequence: 1,
     nextPartyInvitationSequence: 1,
     nextPartySequence: 1,
+    nextCommissionSequence: 1,
     socialLinks: {},
     daoCompanionProposals: {},
     partyInvitations: {},
     parties: {},
+    commissions: {},
   };
   seedQuestBoards(world);
   return world;
@@ -620,6 +681,27 @@ export function hydrateWorldState(
     }
     if (!cultivator.unlockedSpellLoadoutIds || cultivator.unlockedSpellLoadoutIds.length === 0) {
       cultivator.unlockedSpellLoadoutIds = [cultivator.equippedSpellLoadoutId!];
+    }
+    // Backfill residences array and residence fields for pre-multi-residence worlds
+    if (!cultivator.residences || cultivator.residences.length === 0) {
+      const r = cultivator.residence;
+      const stateId = r?.locationId?.split(":")[0] ?? "qingzhou";
+      const backfilledResidence = {
+        id: r?.id ?? `residence-${cultivator.id}-${stateId}`,
+        locationId: r?.locationId ?? `${stateId}:main-city`,
+        level: 1 as const,
+        name: r?.name ?? "\u6d1e\u5e9c",
+        stateId: (r as any)?.stateId ?? stateId,
+        description: (r as any)?.description ?? "",
+      };
+      cultivator.residence = backfilledResidence;
+      cultivator.residences = [backfilledResidence];
+    }
+    // Backfill stateId/description on existing residence if missing
+    if (cultivator.residence && !(cultivator.residence as any).stateId) {
+      const stateId = cultivator.residence.locationId?.split(":")[0] ?? "qingzhou";
+      (cultivator.residence as any).stateId = stateId;
+      (cultivator.residence as any).description = (cultivator.residence as any).description ?? "";
     }
   }
 

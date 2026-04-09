@@ -394,7 +394,7 @@ export const DUAL_WILDERNESS_TASKS: readonly DualWildernessTask[] = [
   { id: "dwt-14", nameCn: "护法修行", description: "一人修行一人护法，轮流进行深入修炼。", spiritStoneReward: 150, affinityGain: 10, reputationReward: 5 },
   { id: "dwt-15", nameCn: "追踪灵兽", description: "联手追踪一头珍稀灵兽的踪迹。", spiritStoneReward: 200, affinityGain: 8, reputationReward: 10 },
   { id: "dwt-16", nameCn: "守护传送阵", description: "合力守护一座临时传送阵直到启动完毕。", spiritStoneReward: 220, affinityGain: 9, reputationReward: 11 },
-  { id: "dwt-17", nameCn: "对抗天劫余波", description: "联手抵御一次天劫余波的冲击。", spiritStoneReward: 270, affinityGain: 12, reputationReward: 13 },
+  { id: "dwt-17", nameCn: "抵御灵潮冲击", description: "联手抵御一次灵潮余波的冲击。", spiritStoneReward: 270, affinityGain: 12, reputationReward: 13 },
   { id: "dwt-18", nameCn: "深入矿脉", description: "二人深入危险矿脉采集灵矿。", spiritStoneReward: 200, affinityGain: 7, reputationReward: 9 },
   { id: "dwt-19", nameCn: "共御兽潮", description: "合力抵御一波突然涌来的兽潮。", spiritStoneReward: 290, affinityGain: 13, reputationReward: 15 },
   { id: "dwt-20", nameCn: "探查秘境入口", description: "联手探查并开启一处隐藏秘境的入口。", spiritStoneReward: 310, affinityGain: 15, reputationReward: 18 },

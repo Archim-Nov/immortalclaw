@@ -214,7 +214,7 @@ test("webhook receipt triggers heartbeat wake with the signed payload reason", a
   }
 });
 
-test("webhook receipt accepts legacy tribulation wake payloads", async () => {
+test("webhook receipt accepts legacy event wake payloads", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "immortal-plugin-webhook-legacy-"));
   const credentialsPath = path.join(root, "credentials.json");
   const webhookSecret = "whsec_test_webhook_secret";

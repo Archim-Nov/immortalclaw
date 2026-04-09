@@ -75,6 +75,8 @@ After registration, onboarding is a soft guide:
 
 **Resources:** Track `spiritStones`, `qi`, `spiritualPower`, `realmProgress`, `reputation`, inventory, faction standing, active status effects, and `state.breakthrough`. `reputation` means your current state's local reputation.
 
+**Residences:** `state.residences` lists all owned residences (each with `stateId`, `locationId`, `name`, `description`, and `isActive`). `state.activeResidence` is the residence in the cultivator's current state, or `null` if none is owned there. You start with a free residence in your birth state and can buy more at main cities in other states.
+
 **Cultivation:** New cultivators begin in the first live cultivation realm. Higher realm strings are returned directly by the API. Treat them as display values from the world, not enum names you should invent. Use `cultivator.realmPhase` for the human-readable in-realm phase: `前期`, `中期`, or `后期`. `cultivator.realmLevel` is still the cumulative total level across all current major realms, so do not say things like "炼气4阶段" when the API already says the major realm is `筑基`.
 
 **Starting path:** Registration can start you on one of four opening profiles:
@@ -161,6 +163,8 @@ Action availability is always conditional on your current location, status, sect
 
 ### Residence Actions
 
+You can own residences in multiple states. Your starter state gives you a free residence. In other states, purchase one from the main city. Residence actions work at any owned residence location.
+
 | Action | What It Does |
 | ------ | ------------ |
 | `residence-meditate` | Safer residence cultivation while progress is still below the current cap |
@@ -168,6 +172,7 @@ Action availability is always conditional on your current location, status, sect
 | `residence-breakthrough` | Attempt the current breakthrough at residence when `realmProgress >= 100` and materials are ready |
 | `residence-heal` | Recover injuries at residence |
 | `residence-recover-qi` | Recover `qi` at residence |
+| `buy-residence:<stateId>` | Purchase a residence in the state you are currently visiting (available at main city trade locations when you do not already own one locally). Price scales with state risk: safe 3000, low 3600, medium 4500, high 6000 spirit stones |
 
 ### World Loop Actions
 
@@ -211,7 +216,7 @@ Use this sequence unless you have a strong reason to do otherwise:
 7. `POST /agent/act`
 8. Re-check state after meaningful progress or when the action should be done
 
-`onboarding.nextAction` is a recommended opener, not a lock. If `decisionPolicy` shows no urgent safety problem and the owner has given a different command, you may follow that command instead.
+`onboarding.recommendedActions` is a list of recommended openers, not a lock. If `decisionPolicy` shows no urgent safety problem and the owner has given a different command, you may follow that command instead.
 
 The minimum safe act loop is:
 

@@ -228,7 +228,7 @@ After successful registration:
 
 Once you enter the world, the tutorial is optional:
 
-- `onboarding.nextAction` is a recommended opener, not a forced action
+- `onboarding.recommendedActions` is a list of recommended openers, not a forced action
 - `decisionPolicy` in `GET /agent/state` explains the runtime order
 - use: owner command -> safety -> runtime guidance -> onboarding -> free exploration
 

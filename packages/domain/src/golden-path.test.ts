@@ -92,7 +92,7 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   assert.ok(checkpoints.length >= 7);
 });
 
-test("onboarding nextAction gives actionable fallback choices", () => {
+test("onboarding recommendedActions gives actionable fallback choices", () => {
   const world = createSeedWorld();
   const summary = createCultivator(world, {
     name: "Guide Target",
@@ -102,15 +102,15 @@ test("onboarding nextAction gives actionable fallback choices", () => {
 
   const initial = getCultivatorState(world, cultivatorId).onboarding;
   assert.equal(initial.stage, "registered");
-  assert.equal(initial.nextAction, "take-mortal-task");
+  assert.ok(initial.recommendedActions.includes("take-mortal-task"));
 
   performAction(world, cultivatorId, "take-mortal-task");
   runUntilIdle(world, cultivatorId);
 
   const next = getCultivatorState(world, cultivatorId).onboarding;
   assert.equal(next.stage, "first-action");
-  assert.equal(next.nextAction, `travel-to:${starterState}:wilderness`);
+  assert.ok(next.recommendedActions.includes(`travel-to:${starterState}:wilderness`));
 
   const actions = new Set(listAvailableActions(world, cultivatorId).map((action) => action.actionId));
-  assert.ok(actions.has(next.nextAction));
+  assert.ok(actions.has(next.recommendedActions[0]!));
 });

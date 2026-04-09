@@ -169,6 +169,12 @@ export function resolveGuixuExploration(
   }
   world.guixuProgress.lastResolvedEventIds[cultivator.id] = eventId;
 
+  // Track guixu node completion for endgame progress
+  if (!cultivator.guixuCompletedNodeIds) cultivator.guixuCompletedNodeIds = [];
+  if (!cultivator.guixuCompletedNodeIds.includes(nodeId)) {
+    cultivator.guixuCompletedNodeIds.push(nodeId);
+  }
+
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,

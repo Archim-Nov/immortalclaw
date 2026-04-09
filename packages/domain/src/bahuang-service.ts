@@ -334,3 +334,53 @@ export function buildBahuangStateView(
     },
   };
 }
+
+export function resolveBahuangWakeDecision(
+  world: WorldState,
+  cultivator: Cultivator,
+  optionId: string,
+): string {
+  const progress = world.bahuangProgress[cultivator.id];
+  if (!progress || progress.status !== "active") {
+    throw new Error("No active bahuang expedition.");
+  }
+  if (progress.pendingWakeNodeIndex === null) {
+    throw new Error("No pending wake node to resolve.");
+  }
+  const wakeNode = progress.encounteredWakeNodes[progress.pendingWakeNodeIndex];
+  if (!wakeNode) {
+    throw new Error("Wake node not found.");
+  }
+  const option = wakeNode.options.find((o) => o.optionId === optionId);
+  if (!option) {
+    throw new Error(`Invalid wake option: ${optionId}. Valid: ${wakeNode.options.map((o) => o.optionId).join(", ")}`);
+  }
+
+  // Apply option effects
+  if (optionId === "continue-deeper") {
+    progress.pressure = Math.max(0, progress.pressure - 2);
+  } else if (optionId === "bank-now") {
+    cultivator.spiritStones += Math.floor(progress.rewards.spiritStones * 0.1);
+  } else if (optionId === "spend-rare-supply") {
+    if (progress.supplies.talismans > 0) {
+      progress.supplies.talismans -= 1;
+      const bonusStones = 40 + (hashString(`${cultivator.id}:${world.tick}:wake-cache`) % 60);
+      progress.rewards.spiritStones += bonusStones;
+      cultivator.spiritStones += bonusStones;
+    }
+  } else if (optionId === "detour-hazard") {
+    progress.pressure += 3;
+    const bonusProgress = 5 + (hashString(`${cultivator.id}:${world.tick}:wake-detour`) % 8);
+    progress.rewards.realmProgress += bonusProgress;
+    cultivator.realmProgress = Math.min(100, cultivator.realmProgress + bonusProgress);
+  } else if (optionId === "emergency-retreat") {
+    retreatFromBahuang(world, cultivator, "emergency-wake-retreat");
+    return `${cultivator.name} chose emergency retreat from 八荒.`;
+  }
+
+  progress.pendingWakeNodeIndex = null;
+  progress.pendingWakeNodeDeadlineTick = null;
+  progress.resolvedWakeNodeCount += 1;
+
+  return `${cultivator.name} chose "${option.label}" at wake node.`;
+}

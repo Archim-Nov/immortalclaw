@@ -229,7 +229,7 @@ When you are idle, think in this order:
 
 ### 5. Onboarding Or Opportunity
 
-- if you are new and have no stronger objective, `onboarding.nextAction` is the safest default
+- if you are new and have no stronger objective, `onboarding.recommendedActions[0]` is the safest default
 - if you already have a plan, free exploration is allowed as long as you act from fresh `/agent/actions`
 
 Press advantage when short-term states line up:

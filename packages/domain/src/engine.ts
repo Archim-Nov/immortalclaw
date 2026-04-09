@@ -15,7 +15,10 @@ import type {
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
   CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectKind, StatusTargetSide,
   PendingPvpChallenge, PvpBattleKind,
+  type ProductionQueueEntry,
+  type MessageTemplateKind, type PendingGift, type Commission, type CommissionType,
 } from "./model.js";
+import { PRODUCTION_QUEUE_MAX_LENGTH } from "./model.js";
 import {
   deriveMainAttributes,
   deriveDetailedAttributes,
@@ -95,10 +98,16 @@ import {
 import {
   canCraftResidenceRecipe,
   consumeResidenceRecipeInputs,
+  createResidenceForState,
+  getActiveResidence,
   getFirstCraftableResidenceRecipe,
+  getLiveCraftableRecipes,
+  getResidenceCatalogEntry,
   getResidenceRecipeById,
+  hasResidenceInState,
   isAtResidence,
   requireResidenceActionAllowed,
+  residencePriceForState,
 } from "./residence.js";
 import {
   computeActivityContext,
@@ -223,11 +232,11 @@ import {
   buildBahuangStateView,
   canEnterBahuang,
   enterBahuangExpedition,
+  resolveBahuangWakeDecision,
   retreatFromBahuang,
 } from "./bahuang-service.js";
 import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
 import { LOADOUT_SOURCE_ITEMS } from "./items/loadout-source-items.js";
-import { getLiveCraftableRecipes } from "./residence.js";
 
 const TICKS_PER_YEAR = 4380;
 const TIMED_ACTION_IDS = new Set<string>(Object.keys(DEFAULT_ACTION_DURATIONS));
@@ -1631,6 +1640,9 @@ const parseAcceptQuestId = (actionId: ActionId) => actionId.startsWith("accept-q
 const parseExecuteQuestId = (actionId: ActionId) => actionId.startsWith("execute-quest:") ? actionId.slice("execute-quest:".length) : null;
 const parseExploreGuixuNode = (actionId: ActionId) => actionId.startsWith("explore-guixu:") ? actionId.slice("explore-guixu:".length) : null;
 const parseResidenceOption = (actionId: ActionId, prefix: string) => actionId.startsWith(prefix) ? actionId.slice(prefix.length) : null;
+const parseBuyResidenceStateId = (actionId: ActionId) => actionId.startsWith("buy-residence:") ? actionId.slice("buy-residence:".length) : null;
+const parseBahuangWakeDecision = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("bahuang-wake-decision:") ? actionId.slice("bahuang-wake-decision:".length) : null;
 const parseDungeonRank = (actionId: ActionId, prefix: "search-fortune:rank-" | "challenge-guardian:rank-"): DungeonRank | null => {
   if (!actionId.startsWith(prefix)) {
     return null;
@@ -1667,6 +1679,26 @@ const parseAcceptParty = (actionId: ActionId | string): string | null =>
   actionId.startsWith("accept-party:") ? actionId.slice("accept-party:".length) : null;
 const parseRejectParty = (actionId: ActionId | string): string | null =>
   actionId.startsWith("reject-party:") ? actionId.slice("reject-party:".length) : null;
+const parseSendMessage = (actionId: ActionId | string): { targetId: string; kind: MessageTemplateKind } | null => {
+  if (!actionId.startsWith("send-message:")) return null;
+  const rest = actionId.slice("send-message:".length);
+  const lastColon = rest.lastIndexOf(":");
+  if (lastColon === -1) return null;
+  return { targetId: rest.slice(0, lastColon), kind: rest.slice(lastColon + 1) as MessageTemplateKind };
+};
+const parseAcceptGift = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("accept-gift:") ? actionId.slice("accept-gift:".length) : null;
+const parseRejectGift = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("reject-gift:") ? actionId.slice("reject-gift:".length) : null;
+const parsePostCommission = (actionId: ActionId | string): { type: CommissionType; targetItemId: string } | null => {
+  if (!actionId.startsWith("post-commission:")) return null;
+  const rest = actionId.slice("post-commission:".length);
+  const colonIdx = rest.indexOf(":");
+  if (colonIdx === -1) return null;
+  return { type: rest.slice(0, colonIdx) as CommissionType, targetItemId: rest.slice(colonIdx + 1) };
+};
+const parseAcceptCommission = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("accept-commission:") ? actionId.slice("accept-commission:".length) : null;
 const topologyOf = (world: WorldState) => world.topology as unknown as RuntimeTopologyGraph;
 const getDistanceBetween = (world: WorldState, fromLocationId: string, toLocationId: string) =>
   getDistance(topologyOf(world), fromLocationId as never, toLocationId as never);
@@ -2312,8 +2344,27 @@ const MORALITY_EVENT_TTL = 6;
 
 const addWorldEvent = (world: WorldState, event: Omit<WorldEvent, "id" | "tick">): WorldEvent =>
   (world.worldEvents.unshift({ id: `event-${world.nextEventSequence++}`, tick: world.tick, ...event }), world.worldEvents[0]!);
-const addCombatLog = (world: WorldState, entry: Omit<CombatLogEntry, "id" | "tick">): CombatLogEntry =>
-  (world.combatLogs.unshift({ id: `combat-${world.nextCombatSequence++}`, tick: world.tick, ...entry }), world.combatLogs[0]!);
+const addCombatLog = (world: WorldState, entry: Omit<CombatLogEntry, "id" | "tick">): CombatLogEntry => {
+  const rounds = entry.rounds;
+  const withSummary: Omit<CombatLogEntry, "id" | "tick"> = { ...entry };
+  if (rounds && rounds.length > 0) {
+    const startHp = entry.playerSnapshot?.hp ?? 0;
+    const endHp = rounds[rounds.length - 1]!.playerHpAfter;
+    withSummary.totalDamageTaken = Math.max(0, startHp - endHp);
+    withSummary.totalSpiritSpent = rounds.reduce((sum, r) => sum + (r.playerSpiritSpent ?? 0), 0);
+    withSummary.totalQiSpent = 0;
+    const remaining: CombatLogEntry["statusEffectsRemaining"] = [];
+    const lastRound = rounds[rounds.length - 1]!;
+    for (const applied of lastRound.appliedStatuses ?? []) {
+      if (applied.targetSide === "player") {
+        remaining.push({ statusId: applied.statusId, statusName: applied.statusName });
+      }
+    }
+    withSummary.statusEffectsRemaining = remaining;
+  }
+  world.combatLogs.unshift({ id: `combat-${world.nextCombatSequence++}`, tick: world.tick, ...withSummary });
+  return world.combatLogs[0]!;
+};
 
 function triggerLocationEvent(
   world: WorldState,
@@ -2651,11 +2702,15 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
 }
 
 function defaultResidenceAt(locationId: string, cultivatorId: string) {
+  const stateId = stateIdFromLocationId(locationId);
+  const entry = getResidenceCatalogEntry(stateId);
   return {
-    id: `residence-${cultivatorId}`,
+    id: `residence-${cultivatorId}-${stateId}`,
     locationId: locationId as Cultivator["residence"]["locationId"],
     level: 1 as const,
-    name: "洞府",
+    name: entry?.name ?? "洞府",
+    stateId,
+    description: entry?.description ?? "",
   };
 }
 
@@ -2786,6 +2841,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
     realmProgress: 0,
     locationId: starterLocationId,
     residence: defaultResidenceAt(starterLocationId, cultivatorId),
+    residences: [defaultResidenceAt(starterLocationId, cultivatorId)],
     spiritStones: starter.spiritStones,
     qi: 100,
     maxQi: 100,
@@ -2820,6 +2876,8 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
     equippedSpellLoadoutId: spellLoadouts.equippedLoadoutId,
     unlockedWeaponLoadoutIds: [...weaponLoadouts.unlockedLoadoutIds],
     unlockedSpellLoadoutIds: [...spellLoadouts.unlockedLoadoutIds],
+    // Production Queue
+    productionQueue: [],
   };
 
   world.cultivators[cultivator.id] = cultivator;
@@ -3869,17 +3927,21 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   }
   if (recoveryState === "injured" || recoveryState === "wounded") {
     warnings.push("Recovery state requires healing attention.");
+    priorities.unshift("当前受伤，建议先回住处疗伤。");
+    suggestedActions.unshift(canHealHere ? "residence-heal" : safeTravelAction);
   }
   if (recoveryState === "depleted") {
     warnings.push("Qi is depleted.");
+    priorities.unshift("灵力枯竭，建议调息回灵。");
+    suggestedActions.unshift(isAtResidence(cultivator) ? "residence-recover-qi" : safeTravelAction);
   }
   if (cultivator.injuryTicksRemaining > 0) { warnings.push("Character is injured."); priorities.push("Recover before risky actions."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
   if (hasEffect(cultivator, "poisoned")) warnings.push("Poison drains HP each tick.");
   if (hasEffect(cultivator, "deviation")) { warnings.push("Qi deviation is active."); priorities.push("Stabilize before cultivation."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
   if (cultivator.spiritStones < 120) {
-    priorities.push("Need base materials: farm wilderness.");
+    priorities.push("需要基础材料：前往荒野采集（纯后台，不唤醒）。");
     if (location?.nodeType === "wilderness") {
-      suggestedActions.push("mine-spirit-stones", "hunt-mine-beast");
+      suggestedActions.push("mine-spirit-stones");
     } else {
       suggestedActions.push(wildernessTravelAction);
     }
@@ -3900,7 +3962,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     && !breakthrough.readyByMaterials
     && !breakthrough.marketBuyable;
   if (needsProgressionMaterials) {
-    priorities.push("Need progression materials: clear dungeon.");
+    priorities.push("需要进阶材料：挑战对应等阶副本（半托管，1-3次关键决策）。");
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
     suggestedActions.push(
       dungeonView && !dungeonView.lockReason
@@ -3912,7 +3974,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   const needsRareExpeditionRewards = meetsRealmRequirement(cultivator, REALM_CORE)
     && cultivator.inventory["ancient-artifact"] <= 0;
   if (needsRareExpeditionRewards) {
-    priorities.push("Need rare rewards: run bahuang.");
+    priorities.push("需要稀有奇物：进入八荒探索（独立远征，1-3次关键决策）。");
     const canRunBahuangHere = canEnterBahuang(cultivator, cultivator.locationId).allowed;
     suggestedActions.push(canRunBahuangHere ? "enter-bahuang:balanced" : bahuangTravelAction);
   }
@@ -4065,37 +4127,38 @@ function onboardingHint(stage: OnboardingStage): string {
   return "Golden path completed. Continue long-term progression.";
 }
 
-function onboardingNextAction(world: WorldState, stage: OnboardingStage, cultivator: Cultivator): ActionId | null {
+function onboardingRecommendedActions(world: WorldState, stage: OnboardingStage, cultivator: Cultivator): ActionId[] {
   if (stage === "registered") {
-    return "take-mortal-task";
+    return ["take-mortal-task"];
   }
   if (stage === "first-action") {
     const wildernessLocationId = `${stateIdFromLocationId(cultivator.locationId)}:wilderness`;
-    return cultivator.locationId === wildernessLocationId
+    return [cultivator.locationId === wildernessLocationId
       ? travelActionIdOf(mainCityLocationIdOf(stateIdFromLocationId(cultivator.locationId)))
-      : travelActionIdOf(wildernessLocationId);
+      : travelActionIdOf(wildernessLocationId)];
   }
   if (stage === "first-travel") {
     const activeBaseQuest = cultivator.activeQuests.find((quest) => quest.category === "base");
     if (activeBaseQuest) {
-      return `execute-quest:${activeBaseQuest.id}`;
+      return [`execute-quest:${activeBaseQuest.id}`];
     }
     const board = getQuestBoard(world, cultivator.locationId);
     const baseQuest = board?.quests.find((quest) => quest.category === "base");
-    return baseQuest ? (`accept-quest:${baseQuest.id}` as ActionId) : "take-mortal-task";
+    return [baseQuest ? (`accept-quest:${baseQuest.id}` as ActionId) : "take-mortal-task"];
   }
   if (stage === "first-quest") {
-    return cultivator.locationId === cultivator.residence.locationId
+    return [cultivator.locationId === cultivator.residence.locationId
       ? "residence-meditate"
-      : (`travel-to:${cultivator.residence.locationId}` as ActionId);
+      : (`travel-to:${cultivator.residence.locationId}` as ActionId)];
   }
   if (stage === "first-residence-cultivation") {
-    return breakthroughViewOf(world, cultivator)?.recommendedAction
+    const breakthroughAction = breakthroughViewOf(world, cultivator)?.recommendedAction;
+    return [breakthroughAction
       ?? (cultivator.locationId === cultivator.residence.locationId
         ? "residence-meditate"
-        : (`travel-to:${cultivator.residence.locationId}` as ActionId));
+        : (`travel-to:${cultivator.residence.locationId}` as ActionId))];
   }
-  return null;
+  return [];
 }
 
 function computeOnboardingProgress(world: WorldState, cultivator: Cultivator): OnboardingProgress {
@@ -4134,7 +4197,7 @@ function computeOnboardingProgress(world: WorldState, cultivator: Cultivator): O
   return {
     stage,
     completedStages: orderedCompleted,
-    nextAction: onboardingNextAction(world, stage, cultivator),
+    recommendedActions: onboardingRecommendedActions(world, stage, cultivator),
     hint: onboardingHint(stage),
     recommendedOnly: true,
     allowsFreeExploration: true,
@@ -4267,6 +4330,28 @@ function ensureOptionalProgressMaps(world: WorldState): void {
   if (typeof (world as unknown as Record<string, unknown>).nextPartySequence !== "number") {
     (world as unknown as Record<string, unknown>).nextPartySequence = 1;
   }
+  // Ensure productionQueue and pendingGifts exist on all cultivators
+  for (const cultivator of Object.values(world.cultivators)) {
+    if (!Array.isArray(cultivator.productionQueue)) {
+      cultivator.productionQueue = [];
+    }
+    if (!Array.isArray(cultivator.pendingGifts)) {
+      cultivator.pendingGifts = [];
+    }
+    if (typeof cultivator.lastGiftTick !== "number") {
+      cultivator.lastGiftTick = -1;
+    }
+    if (!Array.isArray(cultivator.guixuCompletedNodeIds)) {
+      cultivator.guixuCompletedNodeIds = [];
+    }
+  }
+  // Ensure commissions record exists
+  if (!world.commissions || typeof world.commissions !== "object") {
+    (world as unknown as Record<string, unknown>).commissions = {};
+  }
+  if (typeof (world as unknown as Record<string, unknown>).nextCommissionSequence !== "number") {
+    (world as unknown as Record<string, unknown>).nextCommissionSequence = 1;
+  }
 }
 
 function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorStateView["guixu"] {
@@ -4322,8 +4407,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
   const sectView = buildSectStateView(world, cultivator);
   const policy = decisionPolicy();
+  const allAvailableActions = listAvailableActions(world, cultivatorId);
+  const availableActionIdSet = new Set(allAvailableActions.map((a) => a.actionId));
   const availableItemActionIds = new Map<ItemId, ActionId[]>();
-  for (const action of listAvailableActions(world, cultivatorId)) {
+  for (const action of allAvailableActions) {
     const binding = action.itemBinding ?? getItemActionBinding(action.actionId);
     if (!binding) {
       continue;
@@ -4479,9 +4566,46 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     guixu: buildGuixuView(world, cultivator),
     derivedState,
     socialLinks: getSocialLinksView(world, cultivatorId),
+    residences: cultivator.residences.map((r) => ({
+      id: r.id,
+      stateId: r.stateId,
+      locationId: r.locationId,
+      name: r.name,
+      description: r.description,
+      isActive: r.locationId === cultivator.locationId,
+    })),
+    activeResidence: getActiveResidence(cultivator),
+    productionQueue: (cultivator.productionQueue ?? []).map((e) => ({ slot: e.slot, recipeId: e.recipeId, ticksRemaining: e.ticksRemaining })),
+    pendingGifts: (cultivator.pendingGifts ?? []).map((g) => ({
+      messageId: g.messageId,
+      fromName: world.cultivators[g.fromCultivatorId]?.name ?? "unknown",
+      itemId: g.itemId,
+      count: g.count,
+    })),
+    localCommissions: Object.values(world.commissions ?? {})
+      .filter((c) => c.locationId === cultivator.locationId && c.completedAtTick === null && c.acceptedById === null && c.posterId !== cultivator.id)
+      .map((c) => ({
+        id: c.id,
+        posterName: world.cultivators[c.posterId]?.name ?? "unknown",
+        type: c.type,
+        targetItemId: c.targetItemId,
+        targetCount: c.targetCount,
+        rewardSpiritStones: c.rewardSpiritStones,
+      })),
+    endgame: {
+      guixuCompletedNodeIds: cultivator.guixuCompletedNodeIds ?? [],
+      originHeartAwakened: (cultivator.guixuCompletedNodeIds ?? []).includes("guixu-origin-heart"),
+    },
     onboarding: computeOnboardingProgress(world, cultivator),
     decisionPolicy: policy,
-    agentGuidance: guidance(world, cultivator),
+    agentGuidance: (() => {
+      const raw = guidance(world, cultivator);
+      return {
+        warnings: raw.warnings,
+        priorities: raw.priorities,
+        suggestedActions: raw.suggestedActions.filter((id) => availableActionIdSet.has(id)),
+      };
+    })(),
   };
 }
 
@@ -4544,6 +4668,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const activeBahuang = world.bahuangProgress[cultivator.id]?.status === "active"
     ? world.bahuangProgress[cultivator.id]
     : null;
+  const readinessLevel = computeReadiness(cultivator);
+  const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
   if (cultivator.activeJobId) {
     return activeDungeonExpedition
       ? [{
@@ -4580,6 +4706,33 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       itemConsumes: recipe.inputMaterials.map((material) => ({ itemId: material.itemId, count: material.count })),
     },
   }));
+  const queueActions: AvailableAction[] = [];
+  if (isAtResidence(cultivator) && (cultivator.productionQueue?.length ?? 0) < PRODUCTION_QUEUE_MAX_LENGTH) {
+    for (const recipe of getLiveCraftableRecipes(cultivator)) {
+      queueActions.push({
+        actionId: `queue-production:${recipe.id}` as ActionId,
+        label: `Queue production (${recipe.outputItemId})`,
+        description: `Add ${recipe.outputItemId} to production queue. Materials consumed immediately, product delivered when queue completes.`,
+        durationTicks: 0,
+        kind: "immediate",
+        costs: {
+          spiritStones: recipe.spiritStoneCost,
+          itemConsumes: recipe.inputMaterials.map((m) => ({ itemId: m.itemId, count: m.count })),
+        },
+      });
+    }
+  }
+  if (isAtResidence(cultivator) && cultivator.productionQueue && cultivator.productionQueue.length > 0) {
+    for (const entry of cultivator.productionQueue) {
+      queueActions.push({
+        actionId: `cancel-production:${entry.slot}` as ActionId,
+        label: `Cancel production (slot ${entry.slot}: ${entry.recipeId})`,
+        description: `Cancel queued production and return consumed materials.`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+  }
   const actions: AvailableAction[] = activeWilderness || activeBahuang
     ? []
     : getNeighborLocations(world, cultivator.locationId)
@@ -4590,7 +4743,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         durationTicks: ticks,
         kind: "timed" as const,
       }));
-  actions.push({ actionId: "meditate", label: "Meditate", description: "Recover spiritual power.", durationTicks: DEFAULT_ACTION_DURATIONS.meditate, kind: "timed" });
+  actions.push({
+    actionId: "meditate",
+    label: "Meditate",
+    description: "Recover spiritual power.",
+    durationTicks: DEFAULT_ACTION_DURATIONS.meditate,
+    kind: "timed",
+    ...(cultivator.injuryTicksRemaining > 0
+      ? { suboptimal: { reason: "meditation-does-not-heal-injury" } }
+      : {}),
+  });
   for (const [itemId, count] of Object.entries(cultivator.inventory) as Array<[ItemId, number]>) {
     if (count <= 0) {
       continue;
@@ -4680,6 +4842,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           kind: "timed",
         },
         ...recipeActions,
+        ...queueActions,
       );
       if (breakthroughAction) {
         actions.push(breakthroughAction);
@@ -4716,6 +4879,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         kind: "timed",
       },
       ...recipeActions,
+      ...queueActions,
       {
         actionId: "residence-socialize",
         label: "Residence socialize",
@@ -4760,6 +4924,20 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if (actionId) {
         actions.push(buildItemAction(world, cultivator, actionId, registration));
       }
+    }
+    // ---- Buy residence in current state ----
+    const currentStateId = stateIdFromLocationId(cultivator.locationId);
+    if (!hasResidenceInState(cultivator, currentStateId)) {
+      const price = residencePriceForState(currentStateId);
+      const entry = getResidenceCatalogEntry(currentStateId);
+      actions.push({
+        actionId: `buy-residence:${currentStateId}` as ActionId,
+        label: `Buy residence: ${entry?.name ?? currentStateId}`,
+        description: `Purchase a residence in ${entry?.stateName ?? currentStateId} for ${price} spirit stones. ${entry?.description ?? ""}`.trim(),
+        durationTicks: 0,
+        kind: "immediate",
+        costs: { spiritStones: price },
+      });
     }
   }
   if (!cultivator.sectId && !cultivator.neutralSectId && localNeutralSect?.joinable) {
@@ -4843,11 +5021,26 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       durationTicks: 0,
       kind: "immediate",
     });
+    // If there's a pending wake node, offer decision choices
+    if (activeBahuang.pendingWakeNodeIndex !== null) {
+      const wakeNode = activeBahuang.encounteredWakeNodes[activeBahuang.pendingWakeNodeIndex];
+      if (wakeNode) {
+        for (const option of wakeNode.options) {
+          actions.push({
+            actionId: `bahuang-wake-decision:${option.optionId}` as ActionId,
+            label: `八荒抉择：${option.label}`,
+            description: `${wakeNode.context} — ${option.description}`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
+      }
+    }
     return actions;
   } else if (wildernessLayer) {
     actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
   }
-  if (!activeWilderness && !activeBahuang && EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
+  if (!activeWilderness && !activeBahuang && highRiskAllowed && EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
     const gate = canEnterBahuang(cultivator, cultivator.locationId);
     if (gate.allowed) {
       for (const posture of ["conservative", "balanced", "aggressive"] as const) {
@@ -4886,8 +5079,13 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       }
     }
   }
-  if (location.nodeType === "wilderness") actions.push({ actionId: "mine-spirit-stones", label: "Mine spirit stones", description: "Gather stones and ore.", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" }, { actionId: "hunt-mine-beast", label: "Hunt mine beast", description: "PVE combat for better loot.", durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"], kind: "timed" });
-  if (isDungeonNode(location.nodeType)) {
+  if (location.nodeType === "wilderness") {
+    actions.push({ actionId: "mine-spirit-stones", label: "Mine spirit stones", description: "Gather stones and ore.", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" });
+    if (highRiskAllowed) {
+      actions.push({ actionId: "hunt-mine-beast", label: "Hunt mine beast", description: "PVE combat for better loot.", durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"], kind: "timed" });
+    }
+  }
+  if (isDungeonNode(location.nodeType) && highRiskAllowed) {
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
     if (dungeonView && !dungeonView.lockReason) {
       for (const rank of dungeonView.availableRanks) {
@@ -5039,6 +5237,84 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
 
+  // ---- Social Verbs (结构化消息 / 赠送 / 委托) ----
+  {
+    // send-message to nearby cultivators at same location
+    const nearbyTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id);
+    for (const target of nearbyTargets.slice(0, 3)) {
+      for (const kind of ["greet", "share-info", "request-help"] as const) {
+        actions.push({
+          actionId: `send-message:${target.id}:${kind}` as ActionId,
+          label: `发送消息（${kind}）：${target.name}`,
+          description: `向${target.name}发送${kind === "greet" ? "问候" : kind === "share-info" ? "情报" : "求助"}。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+      // gift-item: only if haven't gifted this tick
+      if ((cultivator.lastGiftTick ?? -1) < world.tick) {
+        const giftableItems = Object.entries(cultivator.inventory).filter(([, count]) => count > 0);
+        for (const [itemId] of giftableItems.slice(0, 2)) {
+          actions.push({
+            actionId: `send-message:${target.id}:gift-item` as ActionId,
+            label: `赠送物品：${itemId} → ${target.name}`,
+            description: `将1个${itemId}赠予${target.name}，增进好感。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
+      }
+    }
+    // read-messages: available when there are unread messages addressed to this cultivator
+    const unreadMessages = (world.messages ?? []).filter((m) => m.toCultivatorId === cultivator.id);
+    if (unreadMessages.length > 0) {
+      actions.push({
+        actionId: "read-messages" as ActionId,
+        label: `阅读消息（${unreadMessages.length}条未读）`,
+        description: "批量确认所有已收到的消息。",
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+    // accept-gift / reject-gift: for each pending gift
+    for (const gift of (cultivator.pendingGifts ?? [])) {
+      const fromName = world.cultivators[gift.fromCultivatorId]?.name ?? "unknown";
+      actions.push(
+        { actionId: `accept-gift:${gift.messageId}` as ActionId, label: `接受赠礼：${fromName}的${gift.itemId}`, description: `接受${fromName}赠送的${gift.count}个${gift.itemId}。`, durationTicks: 0, kind: "immediate" },
+        { actionId: `reject-gift:${gift.messageId}` as ActionId, label: `拒绝赠礼：${fromName}的${gift.itemId}`, description: `拒绝并退还${fromName}赠送的${gift.itemId}。`, durationTicks: 0, kind: "immediate" },
+      );
+    }
+    // post-commission: at safe locations, post a gather/deliver commission
+    if (location.kind === "safe") {
+      for (const commType of ["gather", "deliver"] as const) {
+        const commItems = Object.entries(cultivator.inventory).filter(([, count]) => count > 0).slice(0, 1);
+        for (const [itemId] of commItems) {
+          actions.push({
+            actionId: `post-commission:${commType}:${itemId}` as ActionId,
+            label: `发布委托（${commType === "gather" ? "采集" : "运送"}）：${itemId}`,
+            description: `在告示板发布${commType === "gather" ? "采集" : "运送"}${itemId}的委托。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
+      }
+    }
+    // accept-commission: accept available commissions at same location
+    const localCommissions = Object.values(world.commissions ?? {}).filter(
+      (c) => c.locationId === cultivator.locationId && c.completedAtTick === null && c.acceptedById === null && c.posterId !== cultivator.id,
+    );
+    for (const commission of localCommissions.slice(0, 3)) {
+      const posterName = world.cultivators[commission.posterId]?.name ?? "unknown";
+      actions.push({
+        actionId: `accept-commission:${commission.id}` as ActionId,
+        label: `接受委托：${posterName}的${commission.type === "gather" ? "采集" : "运送"}任务`,
+        description: `接受${posterName}发布的${commission.targetItemId}${commission.type === "gather" ? "采集" : "运送"}委托，完成后获得${commission.rewardSpiritStones}灵石。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+  }
+
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
 
@@ -5087,6 +5363,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("accept-party:")) return;
   if (actionId.startsWith("reject-party:")) return;
   if (actionId === "disband-party") return;
+  if (actionId.startsWith("buy-residence:")) return;
   // Allow low-risk sect tasks (resource tribute) while injured
   const injuredSectTask = parseSectTaskId(actionId);
   if (injuredSectTask) {
@@ -5422,6 +5699,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
 
+  // ---- Bahuang: Wake Decision ----
+  const wakeDecisionOptionId = parseBahuangWakeDecision(actionId);
+  if (wakeDecisionOptionId) {
+    const summary = resolveBahuangWakeDecision(world, cultivator, wakeDecisionOptionId);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
+  }
+
   // ---- PVP: Challenge a cultivator ----
   if (actionId.startsWith("challenge-cultivator:")) {
     const targetId = actionId.slice("challenge-cultivator:".length);
@@ -5702,6 +5986,135 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addDaoLog(world, cultivator.id, "队伍解散", `${cultivator.name}解散了与${partnerName}的队伍。`, ["social", "party"]);
     addDaoLog(world, partnerId, "队伍解散", `${cultivator.name}解散了队伍。`, ["social", "party"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} disbanded the party.` };
+  }
+
+  // ---- Social Verbs: send-message ----
+  const sendMessageParsed = parseSendMessage(actionId);
+  if (sendMessageParsed) {
+    const { targetId, kind } = sendMessageParsed;
+    const target = getCultivatorOrThrow(world, targetId);
+    if (cultivator.id === target.id) throw new Error("Cannot send message to yourself.");
+    if (cultivator.locationId !== target.locationId) throw new Error("send-message requires same location.");
+    if (kind === "gift-item") {
+      // gift-item: deduct 1 of the first available item in inventory, create PendingGift
+      if ((cultivator.lastGiftTick ?? -1) >= world.tick) throw new Error("Already gifted this tick.");
+      // find an item to gift — use the first item with count > 0
+      const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
+      if (!giftableEntry) throw new Error("No items to gift.");
+      const [giftItemId] = giftableEntry;
+      cultivator.inventory[giftItemId as ItemId] = (cultivator.inventory[giftItemId as ItemId] ?? 0) - 1;
+      cultivator.lastGiftTick = world.tick;
+      const giftMsg = addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftItemId}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      const gift: PendingGift = { messageId: giftMsg.id, fromCultivatorId: cultivator.id, itemId: giftItemId as ItemId, count: 1, tick: world.tick };
+      if (!target.pendingGifts) target.pendingGifts = [];
+      target.pendingGifts.push(gift);
+      addMutualAffinity(world, cultivator.id, target.id, 15);
+      addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftItemId}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      addDaoLog(world, cultivator.id, "赠礼", `${cultivator.name}向${target.name}赠送了1个${giftItemId}。好感度+15。`, ["social", "gift"]);
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} gifted 1 ${giftItemId} to ${target.name}. Affinity +15.` };
+    }
+    // Non-gift message: greet / share-info / request-help
+    const kindLabels: Record<string, string> = { greet: "问候", "share-info": "情报分享", "request-help": "求助" };
+    addMutualAffinity(world, cultivator.id, target.id, 3);
+    const msgSubject = kindLabels[kind] ?? kind;
+    addMessage(world, target.id, "消息", msgSubject, `${cultivator.name}向你发送了${msgSubject}。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+    addDaoLog(world, cultivator.id, "消息", `${cultivator.name}向${target.name}发送了${msgSubject}。好感度+3。`, ["social", "message"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}. Affinity +3.` };
+  }
+
+  // ---- Social Verbs: read-messages ----
+  if (actionId === "read-messages") {
+    const myMessages = (world.messages ?? []).filter((m) => m.toCultivatorId === cultivator.id);
+    if (myMessages.length === 0) throw new Error("No messages to read.");
+    // Remove read messages from world.messages
+    world.messages = (world.messages ?? []).filter((m) => m.toCultivatorId !== cultivator.id);
+    addDaoLog(world, cultivator.id, "阅读消息", `${cultivator.name}确认了${myMessages.length}条消息。`, ["social", "message"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} read ${myMessages.length} messages.` };
+  }
+
+  // ---- Social Verbs: accept-gift ----
+  const acceptGiftMsgId = parseAcceptGift(actionId);
+  if (acceptGiftMsgId) {
+    const gifts = cultivator.pendingGifts ?? [];
+    const giftIdx = gifts.findIndex((g) => g.messageId === acceptGiftMsgId);
+    if (giftIdx === -1) throw new Error("Gift not found.");
+    const gift = gifts[giftIdx];
+    cultivator.inventory[gift.itemId] = (cultivator.inventory[gift.itemId] ?? 0) + gift.count;
+    cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
+    const fromName = world.cultivators[gift.fromCultivatorId]?.name ?? "unknown";
+    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${gift.itemId}。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${gift.itemId}。`, ["social", "gift"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted gift of ${gift.count} ${gift.itemId} from ${fromName}.` };
+  }
+
+  // ---- Social Verbs: reject-gift ----
+  const rejectGiftMsgId = parseRejectGift(actionId);
+  if (rejectGiftMsgId) {
+    const gifts = cultivator.pendingGifts ?? [];
+    const giftIdx = gifts.findIndex((g) => g.messageId === rejectGiftMsgId);
+    if (giftIdx === -1) throw new Error("Gift not found.");
+    const gift = gifts[giftIdx];
+    // Return item to sender
+    const sender = getCultivatorOrThrow(world, gift.fromCultivatorId);
+    sender.inventory[gift.itemId] = (sender.inventory[gift.itemId] ?? 0) + gift.count;
+    cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
+    const fromName = sender.name;
+    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼被退还", `${cultivator.name}拒绝了你赠送的${gift.count}个${gift.itemId}，物品已退还。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "拒绝赠礼", `${cultivator.name}拒绝了${fromName}的赠礼，${gift.count}个${gift.itemId}已退还。`, ["social", "gift"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected gift from ${fromName}. Items returned.` };
+  }
+
+  // ---- Social Verbs: post-commission ----
+  const postCommParsed = parsePostCommission(actionId);
+  if (postCommParsed) {
+    const { type, targetItemId } = postCommParsed;
+    const location = world.locations[cultivator.locationId];
+    if (!location || location.kind !== "safe") throw new Error("Commissions can only be posted at safe locations.");
+    const rewardAmount = 50; // fixed reward for now
+    if (cultivator.spiritStones < rewardAmount) throw new Error("Not enough spirit stones to fund the commission reward.");
+    cultivator.spiritStones -= rewardAmount;
+    if (!world.commissions) world.commissions = {};
+    if (!world.nextCommissionSequence) world.nextCommissionSequence = 1;
+    const commId = `comm-${world.nextCommissionSequence++}`;
+    const commission: Commission = {
+      id: commId,
+      posterId: cultivator.id,
+      locationId: cultivator.locationId,
+      type,
+      targetItemId: targetItemId as ItemId,
+      targetCount: 1,
+      rewardSpiritStones: rewardAmount,
+      acceptedById: null,
+      createdAtTick: world.tick,
+      completedAtTick: null,
+    };
+    world.commissions[commId] = commission;
+    addDaoLog(world, cultivator.id, "发布委托", `${cultivator.name}在告示板发布了${type === "gather" ? "采集" : "运送"}${targetItemId}的委托，悬赏${rewardAmount}灵石。`, ["social", "commission"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} posted a ${type} commission for ${targetItemId}.` };
+  }
+
+  // ---- Social Verbs: accept-commission ----
+  const acceptCommId = parseAcceptCommission(actionId);
+  if (acceptCommId) {
+    const commission = (world.commissions ?? {})[acceptCommId];
+    if (!commission) throw new Error("Commission not found.");
+    if (commission.acceptedById) throw new Error("Commission already accepted.");
+    if (commission.completedAtTick !== null) throw new Error("Commission already completed.");
+    if (commission.posterId === cultivator.id) throw new Error("Cannot accept your own commission.");
+    if (commission.locationId !== cultivator.locationId) throw new Error("Must be at the same location as the commission.");
+    // Check if the acceptor has the required item
+    const hasItem = (cultivator.inventory[commission.targetItemId] ?? 0) >= commission.targetCount;
+    if (!hasItem) throw new Error(`Need ${commission.targetCount} ${commission.targetItemId} to fulfill this commission.`);
+    // Fulfill immediately: deduct item, pay reward, add affinity
+    cultivator.inventory[commission.targetItemId] = (cultivator.inventory[commission.targetItemId] ?? 0) - commission.targetCount;
+    cultivator.spiritStones += commission.rewardSpiritStones;
+    world.commissions[acceptCommId] = { ...commission, acceptedById: cultivator.id, completedAtTick: world.tick };
+    addMutualAffinity(world, cultivator.id, commission.posterId, 25);
+    const posterName = world.cultivators[commission.posterId]?.name ?? "unknown";
+    addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commission.type === "gather" ? "采集" : "运送"}${commission.targetItemId}委托。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commission.targetItemId}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
+    addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commission.targetItemId}委托。好感度+25。`, ["social", "commission"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} fulfilled ${posterName}'s commission for ${commission.targetItemId}. Reward: ${commission.rewardSpiritStones} stones. Affinity +25.` };
   }
 
   throw new Error(`Unsupported action: ${actionId}`);
@@ -6725,6 +7138,83 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
+  // ---- Buy Residence ----
+  const buyResidenceStateId = parseBuyResidenceStateId(actionId);
+  if (buyResidenceStateId) {
+    if (!canTradeAtLocation(location)) {
+      throw new Error("You must be in a safe settlement to purchase a residence.");
+    }
+    if (stateIdFromLocationId(cultivator.locationId) !== buyResidenceStateId) {
+      throw new Error("You must be in the target state to buy a residence there.");
+    }
+    if (hasResidenceInState(cultivator, buyResidenceStateId)) {
+      throw new Error("You already own a residence in this state.");
+    }
+    const price = residencePriceForState(buyResidenceStateId);
+    if (cultivator.spiritStones < price) {
+      throw new Error(`Not enough spirit stones. Need ${price}, have ${cultivator.spiritStones}.`);
+    }
+    cultivator.spiritStones -= price;
+    const newResidence = createResidenceForState(buyResidenceStateId, cultivator.id);
+    cultivator.residences = [...cultivator.residences, newResidence];
+    cultivator.residence = newResidence;
+    addDaoLog(world, cultivator.id, "购入洞府", `${cultivator.name}在${getResidenceCatalogEntry(buyResidenceStateId)?.stateName ?? buyResidenceStateId}购入了${newResidence.name}，花费${price}灵石。`, ["residence", "purchase"]);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} purchased ${newResidence.name} in ${buyResidenceStateId} for ${price} spirit stones.`,
+    };
+  }
+  // ---- Queue Production ----
+  if (actionId.startsWith("queue-production:")) {
+    const recipeId = actionId.slice("queue-production:".length);
+    if (!isAtResidence(cultivator)) throw new Error("Must be at residence to queue production.");
+    if ((cultivator.productionQueue?.length ?? 0) >= PRODUCTION_QUEUE_MAX_LENGTH) throw new Error("Production queue is full.");
+    const recipe = RESIDENCE_PRODUCTION_RECIPES.find((r) => r.id === recipeId && r.enabledInLive);
+    if (!recipe) throw new Error(`Unknown or disabled recipe: ${recipeId}`);
+    if (cultivator.spiritStones < recipe.spiritStoneCost) throw new Error(`Not enough spirit stones. Need ${recipe.spiritStoneCost}.`);
+    for (const mat of recipe.inputMaterials) {
+      if ((cultivator.inventory[mat.itemId] ?? 0) < mat.count) throw new Error(`Not enough ${mat.itemId}. Need ${mat.count}.`);
+    }
+    cultivator.spiritStones -= recipe.spiritStoneCost;
+    for (const mat of recipe.inputMaterials) {
+      cultivator.inventory[mat.itemId] = (cultivator.inventory[mat.itemId] ?? 0) - mat.count;
+    }
+    if (!cultivator.productionQueue) cultivator.productionQueue = [];
+    const entry: ProductionQueueEntry = {
+      slot: cultivator.productionQueue.length,
+      recipeId: recipe.id,
+      outputItemId: recipe.outputItemId,
+      outputCount: recipe.outputCount,
+      consumedMaterials: recipe.inputMaterials.map((m) => ({ itemId: m.itemId, count: m.count })),
+      consumedSpiritStones: recipe.spiritStoneCost,
+      ticksRemaining: recipe.durationTicks,
+      totalTicks: recipe.durationTicks,
+    };
+    cultivator.productionQueue.push(entry);
+    addDaoLog(world, cultivator.id, "排队生产", `将${recipe.outputItemId}加入生产队列（位置${entry.slot}）。`, ["production", "queue"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `Queued ${recipe.outputItemId} at slot ${entry.slot}.` };
+  }
+  // ---- Cancel Production ----
+  if (actionId.startsWith("cancel-production:")) {
+    const slotIndex = parseInt(actionId.slice("cancel-production:".length), 10);
+    if (!cultivator.productionQueue || !Number.isFinite(slotIndex) || slotIndex < 0 || slotIndex >= cultivator.productionQueue.length) {
+      throw new Error(`Invalid production queue slot: ${slotIndex}`);
+    }
+    const entry = cultivator.productionQueue[slotIndex]!;
+    cultivator.spiritStones += entry.consumedSpiritStones;
+    for (const mat of entry.consumedMaterials) {
+      cultivator.inventory[mat.itemId] = (cultivator.inventory[mat.itemId] ?? 0) + mat.count;
+    }
+    cultivator.productionQueue.splice(slotIndex, 1);
+    for (let s = 0; s < cultivator.productionQueue.length; s++) {
+      cultivator.productionQueue[s]!.slot = s;
+    }
+    addDaoLog(world, cultivator.id, "取消生产", `取消了${entry.recipeId}的生产，材料已归还。`, ["production", "cancel"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `Cancelled production of ${entry.recipeId}. Materials returned.` };
+  }
   const acceptQuestId = parseAcceptQuestId(actionId);
   if (acceptQuestId) {
     const acceptedQuest = acceptQuest(world, cultivator, acceptQuestId);
@@ -7145,6 +7635,19 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         return effect.remainingTicks > 0;
       });
       syncWounded(cultivator);
+      // ---- Production Queue tick advancement ----
+      if (cultivator.productionQueue && cultivator.productionQueue.length > 0) {
+        const front = cultivator.productionQueue[0]!;
+        front.ticksRemaining -= 1;
+        if (front.ticksRemaining <= 0) {
+          cultivator.inventory[front.outputItemId] = (cultivator.inventory[front.outputItemId] ?? 0) + front.outputCount;
+          addDaoLog(world, cultivator.id, "生产完成", `炼制完成：${front.outputItemId} x${front.outputCount}。`, ["production"]);
+          cultivator.productionQueue.shift();
+          for (let s = 0; s < cultivator.productionQueue.length; s++) {
+            cultivator.productionQueue[s]!.slot = s;
+          }
+        }
+      }
       applyWildernessPressure(world, cultivator);
       advanceBahuangExpedition(world, cultivator);
       // PVP challenge auto-expiry

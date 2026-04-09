@@ -206,6 +206,8 @@ export interface Residence {
   locationId: import("./constants.js").LocationId;
   level: 1;
   name: string;
+  stateId: string;
+  description: string;
 }
 
 export type QuestCategory = "base" | "sect" | "high-risk";
@@ -268,7 +270,7 @@ export interface DecisionPolicyView {
 export interface OnboardingProgress {
   readonly stage: OnboardingStage;
   readonly completedStages: readonly OnboardingStage[];
-  readonly nextAction: ActionId | null;
+  readonly recommendedActions: readonly ActionId[];
   readonly hint: string;
   readonly recommendedOnly: true;
   readonly allowsFreeExploration: true;
@@ -487,6 +489,44 @@ export interface ProductionRecipe {
   spiritStoneCost: number;
   durationTicks: number;
   enabledInLive: boolean;
+}
+
+export const PRODUCTION_QUEUE_MAX_LENGTH = 3;
+
+export type MessageTemplateKind = "greet" | "share-info" | "request-help" | "gift-item";
+
+export interface PendingGift {
+  readonly messageId: string;
+  readonly fromCultivatorId: string;
+  readonly itemId: ItemId;
+  readonly count: number;
+  readonly tick: number;
+}
+
+export type CommissionType = "gather" | "deliver";
+
+export interface Commission {
+  readonly id: string;
+  readonly posterId: string;
+  readonly locationId: string;
+  readonly type: CommissionType;
+  readonly targetItemId: ItemId;
+  readonly targetCount: number;
+  readonly rewardSpiritStones: number;
+  readonly acceptedById: string | null;
+  readonly createdAtTick: number;
+  readonly completedAtTick: number | null;
+}
+
+export interface ProductionQueueEntry {
+  slot: number;
+  recipeId: string;
+  outputItemId: ItemId;
+  outputCount: number;
+  consumedMaterials: ReadonlyArray<{ itemId: ItemId; count: number }>;
+  consumedSpiritStones: number;
+  ticksRemaining: number;
+  totalTicks: number;
 }
 
 export interface WildernessReward {
@@ -754,7 +794,15 @@ export type ImmediateActionId =
   | `party-invite:${string}`
   | `accept-party:${string}`
   | `reject-party:${string}`
-  | "disband-party";
+  | "disband-party"
+  | `buy-residence:${string}`
+  | `send-message:${string}:${MessageTemplateKind}`
+  | "read-messages"
+  | `accept-gift:${string}`
+  | `reject-gift:${string}`
+  | `post-commission:${CommissionType}:${string}`
+  | `accept-commission:${string}`
+  | `bahuang-wake-decision:${string}`;
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
@@ -893,6 +941,7 @@ export interface Cultivator {
   realmProgress: number;
   locationId: string;
   residence: Residence;
+  residences: Residence[];
   spiritStones: number;
   qi: number;
   maxQi: number;
@@ -927,6 +976,13 @@ export interface Cultivator {
   equippedSpellLoadoutId: SpellLoadoutId | null;
   unlockedWeaponLoadoutIds: readonly WeaponLoadoutId[];
   unlockedSpellLoadoutIds: readonly SpellLoadoutId[];
+  // ---- Production Queue ----
+  productionQueue: ProductionQueueEntry[];
+  // ---- Social Verbs ----
+  pendingGifts: PendingGift[];
+  lastGiftTick: number;
+  // ---- Endgame ----
+  guixuCompletedNodeIds: string[];
 }
 
 export interface CultivationRegistrationResult {
@@ -1473,6 +1529,10 @@ export interface CombatLogEntry {
   playerSnapshot?: CombatSnapshot;
   enemySnapshot?: CombatSnapshot;
   retreated?: boolean;
+  totalDamageTaken?: number;
+  totalQiSpent?: number;
+  totalSpiritSpent?: number;
+  statusEffectsRemaining?: { statusId: CombatStatusId; statusName: string }[];
 }
 
 export interface AgentBinding {
@@ -1522,6 +1582,7 @@ export interface AvailableAction {
   itemBinding?: ActionItemBinding;
   costs?: ActionCostSummary;
   effects?: ActionEffectSummary;
+  suboptimal?: { reason: string };
 }
 
 export interface ActionExecutionResult {
@@ -1940,6 +2001,19 @@ export interface CultivatorStateView {
   } | null;
   derivedState: DerivedStateView;
   socialLinks: readonly import("./social.js").SocialLinkView[];
+  residences: readonly {
+    id: string;
+    stateId: string;
+    locationId: string;
+    name: string;
+    description: string;
+    isActive: boolean;
+  }[];
+  activeResidence: Residence | null;
+  productionQueue: readonly { slot: number; recipeId: string; ticksRemaining: number }[];
+  pendingGifts: readonly { messageId: string; fromName: string; itemId: ItemId; count: number }[];
+  localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
+  endgame: { guixuCompletedNodeIds: readonly string[]; originHeartAwakened: boolean };
   onboarding: OnboardingProgress;
   decisionPolicy: DecisionPolicyView;
   agentGuidance: {
@@ -1995,6 +2069,7 @@ export interface WorldState {
   daoCompanionProposals: Record<string, import("./social.js").DaoCompanionProposal>;
   partyInvitations: Record<string, import("./social.js").PartyInvitation>;
   parties: Record<string, import("./social.js").Party>;
+  commissions: Record<string, Commission>;
   nextCultivatorSequence: number;
   nextJobSequence: number;
   nextLogSequence: number;
@@ -2008,6 +2083,7 @@ export interface WorldState {
   nextDaoCompanionProposalSequence: number;
   nextPartyInvitationSequence: number;
   nextPartySequence: number;
+  nextCommissionSequence: number;
 }
 
 export interface PersistedWorldState extends Omit<WorldState, "states" | "topology" | "eventPools"> {
