@@ -181,7 +181,7 @@ function createState(): CultivatorStateView {
     onboarding: {
       stage: "registered",
       completedStages: [],
-      nextAction: "take-mortal-task",
+      recommendedActions: ["take-mortal-task"],
       hint: "Ready to start.",
       recommendedOnly: true,
       allowsFreeExploration: true,
@@ -222,6 +222,9 @@ test("registerAgentWorkflow assembles the richer registration response in applic
 
   const payload = await registerAgentWorkflow({
     world: {
+      async readWorld() {
+        return world;
+      },
       async transactWorld(mutator) {
         return mutator(world);
       },
@@ -278,9 +281,17 @@ test("registerAgentWorkflow assembles the richer registration response in applic
   assert.equal(calls.savedProfile?.agentId, calls.issuedAgentId);
   assert.equal(payload.ok, true);
   assert.equal(payload.baseUrl, "https://runtime.test");
+  assert.equal(payload.agent.name, "Su Mingyue");
+  assert.equal(payload.agent.selectedCultivatorId, payload.selectedCultivatorId);
+  assert.equal(payload.cultivator.name, "Su Mingyue");
+  assert.equal(payload.onboarding.stage, "registered");
+  assert.equal(payload.decisionPolicy.tutorialMode, "optional");
+  assert.deepEqual(payload.agentGuidance.suggestedActions, ["take-mortal-task"]);
   assert.equal(payload.registration?.core_temperament, "Calm strategist");
   assert.equal(payload.registrationEffects?.dominantElements[0]?.id, "water");
   assert.equal(payload.registrationProfile?.spiritRoot.label, "Water-Earth dual root");
-  assert.match(payload.message, /Agent registered/i);
+  assert.match(payload.message, /Identity confirmed as Su Mingyue/i);
+  assert.match(payload.message, /Current state: 炼气前期, location Qinghe City, status idle, readiness ready, recovery healthy/i);
+  assert.match(payload.message, /Recommended next action: take-mortal-task/i);
   assert.match(payload.message, /Core temperament: Calm strategist/i);
 });

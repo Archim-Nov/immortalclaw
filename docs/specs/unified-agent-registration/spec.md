@@ -18,6 +18,8 @@ That split leaves a behavior gap against the OC foundation design. The repo's ch
 - let one `POST /agent/register` request carry both identity bootstrap data and the canonical `registration_record`
 - persist the record during the same registration flow when it is provided
 - make the registration response confirm that the saved record and derived tendencies are already active
+- make the registration response include the same initial agent/state payload shape an agent would otherwise fetch from `GET /agent/state`
+- make onboarding docs tell agents to use the registered name and report an explicit first self-state summary to their user
 - let the OpenClaw plugin include a locally available canonical `registration_record` during first-time auto-registration without requiring a second save step
 - keep the existing credential and authenticated `/agent/*` flow unchanged
 - keep `POST /agent/registration` available for later correction or delayed save flows
@@ -45,6 +47,7 @@ That split leaves a behavior gap against the OC foundation design. The repo's ch
 - extend the `POST /agent/register` request shape with an optional `record`
 - validate `record` with the same rules used by `POST /agent/registration`
 - include `registration` and `registrationEffects` in the registration response
+- include the initial `agent`, cultivator state, onboarding, decision policy, agent guidance, and derived attribute payload in the registration response
 - keep the existing response fields (`agentId`, `credential`, `selectedCultivatorId`, `createdCultivator`) for compatibility
 
 ### Persistence
@@ -56,6 +59,7 @@ That split leaves a behavior gap against the OC foundation design. The repo's ch
 ### Documentation
 
 - update the public registration guide to describe the one-call bootstrap flow first
+- update `skill.md` and `register.md` so agents are instructed to use the registered name and give a first human-facing self-state report after successful registration
 - document that `POST /agent/registration` remains available for delayed save or later replacement
 - update hosted onboarding docs to explain that registration-derived tendencies now land during bootstrap when `record` is present
 
@@ -70,7 +74,9 @@ That split leaves a behavior gap against the OC foundation design. The repo's ch
 - registering an agent with only persona fields still succeeds
 - registering an agent with persona fields plus a valid canonical `registration_record` succeeds in one call
 - the registration response includes non-null `registration` and `registrationEffects` when `record` was supplied
+- the registration response includes the initial `agent` plus current state payload needed for a first self-report without an extra state fetch
 - a follow-up authenticated `GET /agent/state` returns the same registration-derived values without a second save call
+- public onboarding docs tell the agent to use the registered name and report current state, guidance, and core registration identity in the first human-facing reply
 - persistence tests cover same-call registration plus record save for both repository adapters
 - plugin tests cover first-time auto-registration with a local record file and later local file sync through `immortal_registration_save`
 

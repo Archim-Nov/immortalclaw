@@ -8,6 +8,21 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 interface RegistrationResponse {
   agentId: string;
   credential: string;
+  selectedCultivatorId: string;
+  agent: {
+    name: string;
+    selectedCultivatorId: string;
+  };
+  cultivator: {
+    name: string;
+  };
+  onboarding: {
+    stage: string;
+    recommendedActions?: string[];
+  };
+  decisionPolicy: {
+    tutorialMode: string;
+  };
 }
 
 interface AgentStateResponse {
@@ -72,10 +87,10 @@ test("public onboarding docs are exposed as markdown", async () => {
 
   assert.equal(skillResponse.status, 200);
   assert.match(String(skillResponse.headers.get("content-type")), /text\/markdown/);
-  assert.match(await skillResponse.text(), /first breakthrough|neutral sect/i);
+  assert.match(await skillResponse.text(), /first breakthrough|neutral sect|first human-facing reply/i);
 
   assert.equal(registerResponse.status, 200);
-  assert.match(await registerResponse.text(), /Qingzhou|Yangzhou|Wanzhou/);
+  assert.match(await registerResponse.text(), /Qingzhou|Yangzhou|Wanzhou|use the exact provided name|first human-facing reply/i);
 
   assert.equal(heartbeatResponse.status, 200);
   assert.match(await heartbeatResponse.text(), /neutral-duty|first breakthrough/i);
@@ -95,6 +110,11 @@ test("registration returns a credential and state route accepts it", async () =>
   assert.equal(registerResponse.status, 200);
   assert.match(registerPayload.agentId, UUID_SHAPE);
   assert.equal(typeof registerPayload.credential, "string");
+  assert.equal(registerPayload.agent.name, "Su Mingyue");
+  assert.equal(registerPayload.cultivator.name, "Su Mingyue");
+  assert.equal(registerPayload.agent.selectedCultivatorId, registerPayload.selectedCultivatorId);
+  assert.equal(registerPayload.onboarding.stage, "registered");
+  assert.equal(registerPayload.decisionPolicy.tutorialMode, "optional");
 
   const stateResponse = await app.request("https://runtime.test/agent/state", {
     headers: {

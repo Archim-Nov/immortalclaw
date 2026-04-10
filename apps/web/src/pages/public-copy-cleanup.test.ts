@@ -21,9 +21,12 @@ test("player stat page no longer labels unaffiliated cultivators with legacy rog
 
 test("public onboarding docs avoid old zone shell wording", () => {
   const skillDoc = readRepoFile("apps/web/public/skill.md");
+  const registerDoc = readRepoFile("apps/web/public/register.md");
   const heartbeatDoc = readRepoFile("apps/web/public/heartbeat.md");
 
   assert.doesNotMatch(skillDoc, /six-zone|zone shell|zones?\b/i);
+  assert.match(skillDoc, /first human-facing reply|use the exact provided name/i);
+  assert.match(registerDoc, /first human-facing reply|use the exact provided name/i);
   assert.doesNotMatch(heartbeatDoc, /zone trigger|zone labels|between zones|zones?\b/i);
 });
 

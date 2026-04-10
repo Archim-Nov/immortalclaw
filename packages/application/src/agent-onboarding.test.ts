@@ -104,7 +104,7 @@ function createState(): CultivatorStateView {
     onboarding: {
       stage: "registered",
       completedStages: [],
-      nextAction: "take-mortal-task",
+      recommendedActions: ["take-mortal-task"],
       hint: "Ready to start.",
       recommendedOnly: true,
       allowsFreeExploration: true,

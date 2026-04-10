@@ -118,19 +118,6 @@ export interface AgentRegistrationRequest extends Omit<AgentRegistrationInput, "
 
 export type AgentRegistrationQuestionnaireResponse = RegistrationQuestionnaireView;
 
-export interface AgentRegistrationResponse {
-  ok: true;
-  agentId: string;
-  credential: string;
-  baseUrl: string;
-  selectedCultivatorId: string;
-  createdCultivator: boolean;
-  registration: CultivationRegistrationView | null;
-  registrationEffects: RegistrationGameplayEffectsView | null;
-  registrationProfile: RegistrationProfileView | null;
-  message: string;
-}
-
 export interface AgentView {
   agentId: string;
   name: string;
@@ -148,6 +135,19 @@ export interface DerivedAttributeResponse {
 
 export interface AgentStateResponse extends CultivatorStateView, DerivedAttributeResponse {
   agent: AgentView;
+}
+
+export interface AgentRegistrationResponse extends AgentStateResponse {
+  ok: true;
+  agentId: string;
+  credential: string;
+  baseUrl: string;
+  selectedCultivatorId: string;
+  createdCultivator: boolean;
+  registration: CultivationRegistrationView | null;
+  registrationEffects: RegistrationGameplayEffectsView | null;
+  registrationProfile: RegistrationProfileView | null;
+  message: string;
 }
 
 export interface AgentActionsResponse {

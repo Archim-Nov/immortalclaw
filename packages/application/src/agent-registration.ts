@@ -17,8 +17,10 @@ import type {
 } from "../../persistence/src/world-repository.js";
 import type { AuthClient } from "../../persistence/src/auth-client.js";
 import { issueWebhookSecret } from "../../persistence/src/webhook-secret.js";
+import { buildAuthenticatedAgentState } from "./agent-onboarding.js";
 
 export interface AgentRegistrationWorldRepository {
+  readWorld(): Promise<WorldState>;
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null>;
@@ -32,6 +34,54 @@ export interface RegisterAgentWorkflowOptions {
   input: AgentRegistrationInput;
   questionnaireSource: "answers" | "record";
   baseUrl: string;
+}
+
+function buildRegistrationMessage(options: {
+  agentName: string;
+  questionnaireSource: "answers" | "record";
+  realm: string;
+  realmPhase: string;
+  location: string;
+  status: string;
+  readiness: string;
+  recoveryState: string;
+  onboardingStage: string;
+  recommendedActions: readonly string[];
+  registrationProfile: ReturnType<typeof buildRegistrationProfile> | null;
+}): string {
+  const {
+    agentName,
+    questionnaireSource,
+    realm,
+    realmPhase,
+    location,
+    status,
+    readiness,
+    recoveryState,
+    onboardingStage,
+    recommendedActions,
+    registrationProfile,
+  } = options;
+  const nextAction = recommendedActions[0] ?? null;
+  const messagePrefix =
+    questionnaireSource === "answers"
+      ? `Agent registered successfully from questionnaire answers. Identity confirmed as ${agentName}.`
+      : `Agent registered successfully from a canonical registration record. Identity confirmed as ${agentName}.`;
+  const stateSummary =
+    `Current state: ${realm}${realmPhase}, location ${location}, status ${status}, readiness ${readiness}, recovery ${recoveryState}.`;
+  const onboardingSummary =
+    `Onboarding stage: ${onboardingStage}.${nextAction ? ` Recommended next action: ${nextAction}.` : ""}`;
+  const temperamentSummary = registrationProfile
+    ? [
+        `Core temperament: ${registrationProfile.coreTemperament.label}.`,
+        `Secondary temperament: ${registrationProfile.secondaryTemperament.label}.`,
+        `Behavior aspect: ${registrationProfile.behaviorAspect.label}.`,
+        `Spirit root: ${registrationProfile.spiritRoot.label}.`,
+        `Cultivation motive: ${registrationProfile.cultivationMotive.label}.`,
+      ].join(" ")
+    : "";
+
+  return [messagePrefix, stateSummary, onboardingSummary, temperamentSummary].filter(Boolean).join(" ");
 }
 
 export async function registerAgentWorkflow(
@@ -71,34 +121,35 @@ export async function registerAgentWorkflow(
   });
   const credential = await auth.issueAgentCredential(agentId);
   const [state, savedRecord] = await Promise.all([
-    world.getCultivatorState(payload.selectedCultivatorId),
+    buildAuthenticatedAgentState({
+      world,
+      agent: payload,
+    }),
     world.getCultivationRegistration(payload.selectedCultivatorId),
   ]);
   const registrationProfile = savedRecord ? buildRegistrationProfile(savedRecord) : null;
-  const messageDetails = registrationProfile
-    ? [
-        `Core temperament: ${registrationProfile.coreTemperament.label}.`,
-        `Secondary temperament: ${registrationProfile.secondaryTemperament.label}.`,
-        `Behavior aspect: ${registrationProfile.behaviorAspect.label}.`,
-        `Spirit root: ${registrationProfile.spiritRoot.label}.`,
-        `Cultivation motive: ${registrationProfile.cultivationMotive.label}.`,
-      ].join(" ")
-    : "";
-  const messagePrefix =
-    questionnaireSource === "answers"
-      ? "Agent registered, questionnaire answers were processed, and cultivation record saved successfully."
-      : "Agent registered and cultivation record saved successfully.";
 
   return {
     ok: true,
+    ...state,
     agentId: payload.agentId,
     credential: credential.credential,
     baseUrl,
     selectedCultivatorId: payload.selectedCultivatorId,
     createdCultivator: sync.created,
-    registration: state.registration,
-    registrationEffects: state.registrationEffects,
     registrationProfile,
-    message: `${messagePrefix}${messageDetails ? ` ${messageDetails}` : ""}`,
+    message: buildRegistrationMessage({
+      agentName: state.agent.name,
+      questionnaireSource,
+      realm: state.cultivator.realm,
+      realmPhase: state.cultivator.realmPhase,
+      location: state.cultivator.location,
+      status: state.cultivator.status,
+      readiness: state.derivedState.readiness,
+      recoveryState: state.derivedState.recoveryState,
+      onboardingStage: state.onboarding.stage,
+      recommendedActions: state.onboarding.recommendedActions,
+      registrationProfile,
+    }),
   };
 }
