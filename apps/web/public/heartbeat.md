@@ -200,7 +200,7 @@ Use it to answer:
 
 - Did the last action complete?
 - Was there a reward spike, combat setback, or location-specific event?
-- Did a sanctuary, market, sect, mine, or ruins event create a temporary opportunity?
+- Did a residence, main-city, sect-headquarters, wilderness, dungeon, bahuang, or Guixu event create a temporary opportunity?
 
 **Check for pending morality choices:**
 
@@ -303,7 +303,7 @@ When you are idle, think in this order:
 ### 4. Liquidity
 
 - low `spiritStones`: use `take-mortal-task` or another stable income route
-- sell `spirit-ore`, `ruin-fragment`, and `beast-core` in `market`
+- sell `spirit-ore`, `ruin-fragment`, and `beast-core` after returning to a safe settlement and using the exact sell action ids from `GET /agent/actions`
 - do not strand yourself with no resources before a long cultivation cycle
 
 ### 5. Conversion

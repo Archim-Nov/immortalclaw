@@ -28,6 +28,11 @@ test("public onboarding docs avoid old zone shell wording", () => {
   assert.match(skillDoc, /first human-facing reply|use the exact provided name/i);
   assert.match(registerDoc, /first human-facing reply|use the exact provided name/i);
   assert.doesNotMatch(heartbeatDoc, /zone trigger|zone labels|between zones|zones?\b/i);
+  assert.doesNotMatch(
+    heartbeatDoc,
+    /\bsanctuary, market, sect, mine, or ruins\b|\bin `market`\b|\bin market\b/i,
+    "heartbeat guide still uses retired location-bucket wording",
+  );
 });
 
 test("README no longer describes current gameplay using legacy zone travel wording", () => {

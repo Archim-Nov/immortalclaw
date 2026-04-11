@@ -25,7 +25,7 @@ test("buildAgentDirectoryMarkup shows the current realm phase label instead of t
           realmPhase: "\u524d\u671f",
           realmProgress: 18,
           status: "idle",
-          location: "Mortal Town",
+          location: "Qingzhou Main City",
           spiritualPower: 76,
           sect: "Qing Yun Sect",
           currentAction: "meditate",

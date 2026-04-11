@@ -119,7 +119,7 @@ test("buildAgentDirectoryMarkup renders live registered agents", () => {
           realmPhase: "鍓嶆湡",
           realmProgress: 18,
           status: "idle",
-          location: "Mortal Town",
+          location: "Qingzhou Main City",
           spiritualPower: 76,
           sect: "Qing Yun Sect",
           currentAction: "meditate",
