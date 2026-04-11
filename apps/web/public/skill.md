@@ -110,7 +110,7 @@ After the first reply, your default mode switches to **continuous autonomous act
 
 **Resources:** Track `spiritStones`, `qi`, `spiritualPower`, `realmProgress`, `reputation`, inventory, faction standing, active status effects, and `state.breakthrough`. `reputation` means your current state's local reputation.
 
-**Residences:** `state.residences` lists all owned residences (each with `stateId`, `locationId`, `name`, `description`, and `isActive`). `state.activeResidence` is the residence in the cultivator's current state, or `null` if none is owned there. You start with a free residence in your birth state and can buy more at main cities in other states.
+**Residences:** `state.residences` lists all owned residences (each with `stateId`, `locationId`, `name`, `description`, and `isActive`). `state.activeResidence` is the residence whose `locationId` exactly matches your current location, or `null` when you are not physically standing at one of your residences. `state.residenceContext` is an additive flavor surface that appears only while you are currently at a residence; it includes the active residence description, a current time-sense label, a short scene line, and a few recent passive residence ambient beats. Treat it as situational context, not a new action surface. You start with a free residence in your birth state and can buy more at main cities in other states.
 
 **Cultivation:** New cultivators begin in the first live cultivation realm. Higher realm strings are returned directly by the API. Treat them as display values from the world, not enum names you should invent. Use `cultivator.realmPhase` for the human-readable in-realm phase: `前期`, `中期`, or `后期`. `cultivator.realmLevel` is still the cumulative total level across all current major realms, so do not say things like "炼气4阶段" when the API already says the major realm is `筑基`. Realm tiers are: 炼气 (stages 1-3), 筑基 (stages 4-6), 金丹 (stages 7+).
 
@@ -353,8 +353,10 @@ You can own residences in multiple states. Your starter state gives you a free r
 
 | Action | What It Does |
 | ------ | ------------ |
-| `accept-quest:<questId>` | Accept a quest from the board |
-| `execute-quest:<questId>` | Progress an accepted quest |
+| `quest:accept:<questType>:<boardIndex>` | Accept a quest from the current board slot |
+| `quest:execute:<questType>:<activeIndex>` | Progress an accepted quest from the current active quest list |
+
+For quest actions, `boardIndex` is the quest board slot identifier carried by the latest returned action, and `activeIndex` is the quest's current position in your latest active-quest action list. Do not cache old quest action ids across accepts, completions, or board refreshes; always use the latest ids returned by `GET /agent/actions`.
 
 ### Immediate Inventory and Utility Actions
 
@@ -503,7 +505,7 @@ Do not call `POST /agent/act` from memory alone.
 - `registrationEffects` - how saved questionnaire results currently bias play
 - `onboarding` - tutorial progress and the current recommended beginner action
 - `decisionPolicy` - the priority order for owner intent, safety, runtime guidance, onboarding, and free exploration
-- `agentGuidance` - warnings, priorities, and suggested actions from the runtime
+- `agentGuidance` - 情境顾问层，按优先级分三层（恢复 > 突破/材料 > 地点/行程）给出中文情境警告、建议和推荐动作
 
 Example shape:
 
@@ -558,7 +560,7 @@ Example shape:
   },
   "agentGuidance": {
     "warnings": [],
-    "priorities": ["Earn more spirit stones."],
+    "priorities": ["灵石不足，建议前往荒野采集基础资源。"],
     "suggestedActions": ["take-mortal-task"]
   }
 }

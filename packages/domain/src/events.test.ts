@@ -36,7 +36,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
 
   assert.ok(world.eventPools);
   assert.equal(world.eventPools.globalCommon.length, 15);
-  assert.equal(world.eventPools.travelPool.length, 11);
+  assert.equal(world.eventPools.travelPool.length, 14);
   assert.equal(Object.keys(world.eventPools.stateSpecific).length, 9);
   assert.equal(Object.keys(world.eventPools.travelStateSpecific).length, 9);
 
@@ -100,7 +100,7 @@ test("hydrateWorldState rebuilds event pools from persisted world state", () => 
   const hydrated = hydrateWorldState(persisted);
 
   assert.ok(hydrated.eventPools.travelStateSpecific.qingzhou);
-  assert.equal(hydrated.eventPools.travelPool.length, 11);
+  assert.equal(hydrated.eventPools.travelPool.length, 14);
 });
 
 test("drawEvent exploration path returns a merged event candidate", () => {
@@ -239,6 +239,7 @@ test("drawEvent travel path can resolve from the current state's travel overlay"
         source: "travel",
         semanticType: "human",
         resultType: "status",
+        signalType: "decision",
         name: "Leizhou Travel Test",
         nameCn: "Leizhou Travel Test",
         description: "Synthetic travel overlay event for coverage.",
@@ -297,6 +298,7 @@ test("minRealm filters shared travel and node-specific event draws", () => {
       source: "travel",
       semanticType: "fortune",
       resultType: "resource",
+      signalType: "decision",
       name: "Travel Gated",
       nameCn: "Travel Gated",
       description: "Synthetic gated travel event.",
@@ -334,6 +336,7 @@ test("minRealm filters shared travel and node-specific event draws", () => {
         source: "exploration",
         semanticType: "fortune",
         resultType: "resource",
+        signalType: "decision",
         name: "Node Gated",
         nameCn: "Node Gated",
         description: "Synthetic gated node event.",
@@ -376,6 +379,7 @@ test("dungeon grade and rank context filters node-specific event draws", () => {
         source: "exploration",
         semanticType: "fortune",
         resultType: "resource",
+        signalType: "decision",
         name: "Node Rank Gated",
         nameCn: "Node Rank Gated",
         description: "Synthetic rank gated node event.",
@@ -415,4 +419,65 @@ test("engine travel triggers event-pool world event during route progression", (
 
   const pooled = world.worldEvents.filter((event) => event.tags.includes("event-pool"));
   assert.ok(after > before || pooled.length > 0);
+});
+
+test("every event template has a valid signalType", () => {
+  const world = createSeedWorld();
+  const allEvents: EventTemplate[] = [
+    ...world.eventPools.globalCommon,
+    ...world.eventPools.travelPool,
+    ...Object.values(world.eventPools.stateSpecific).flat(),
+    ...Object.values(world.eventPools.travelStateSpecific).flat(),
+  ];
+
+  for (const event of allEvents) {
+    assert.ok(
+      event.signalType === "flavor" || event.signalType === "decision",
+      `Event ${event.id} has invalid signalType: ${event.signalType}`,
+    );
+  }
+
+  const decisionCount = allEvents.filter((e) => e.signalType === "decision").length;
+  const ratio = decisionCount / allEvents.length;
+  assert.ok(ratio >= 0.4, `Decision ratio ${(ratio * 100).toFixed(1)}% is below 40% minimum`);
+});
+
+test("travel event descriptions meet the minimum richness threshold", () => {
+  const world = createSeedWorld();
+  const travelEvents: EventTemplate[] = [
+    ...world.eventPools.travelPool,
+    ...Object.values(world.eventPools.travelStateSpecific).flat(),
+  ];
+
+  for (const event of travelEvents) {
+    assert.ok(
+      event.description.trim().length >= 20,
+      `Travel event ${event.id} description is too short: ${event.description}`,
+    );
+  }
+});
+
+test("single travel emits at most two flavor events even across many travel ticks", () => {
+  for (let seed = 1; seed <= 40; seed += 1) {
+    const world = createSeedWorld();
+    world.nextJobSequence = seed;
+
+    const started = performAction(world, "yun-zhong-he", "travel-to:qingzhou:sub-town-east");
+    assert.equal(started.accepted, true);
+
+    const jobId = world.cultivators["yun-zhong-he"]!.activeJobId!;
+    world.jobs[jobId]!.remainingTicks = 12;
+    advanceWorld(world, 12);
+
+    const flavorTravelEvents = world.worldEvents.filter((event) =>
+      event.tags.includes("event-pool")
+      && event.tags.includes("travel")
+      && event.tags.includes("signal-type:flavor")
+    );
+
+    assert.ok(
+      flavorTravelEvents.length <= 2,
+      `seed ${seed} emitted ${flavorTravelEvents.length} travel flavor events`,
+    );
+  }
 });

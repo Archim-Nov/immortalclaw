@@ -15,8 +15,9 @@ import type {
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
   CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectKind, StatusTargetSide,
   PendingPvpChallenge, PvpBattleKind,
-  type ProductionQueueEntry,
-  type MessageTemplateKind, type PendingGift, type Commission, type CommissionType,
+  ProductionQueueEntry,
+  MessageTemplateKind, PendingGift, Commission, CommissionType,
+  ResourceUsageSummary, SpiritStoneUsageSummary,
 } from "./model.js";
 import { PRODUCTION_QUEUE_MAX_LENGTH } from "./model.js";
 import {
@@ -87,9 +88,13 @@ import {
 } from "./encounters/index.js";
 import {
   acceptQuest,
+  buildAcceptQuestActionId,
+  buildExecuteQuestActionId,
   getActiveQuest,
+  getActiveQuestByReadableIndex,
   getQuestBoard,
   markQuestInProgress,
+  parseQuestActionId,
   refreshQuestBoardsIfDue,
   resolveActiveQuest,
   updateSectTitles,
@@ -109,6 +114,13 @@ import {
   requireResidenceActionAllowed,
   residencePriceForState,
 } from "./residence.js";
+import {
+  buildResidenceContext,
+  describeResidenceAction,
+  describeResidenceScene,
+  getRecentResidenceAmbientEventsForResidence,
+  pickResidenceAmbientEvent,
+} from "./residence-context.js";
 import {
   computeActivityContext,
   computeDaoPotential,
@@ -237,6 +249,13 @@ import {
 } from "./bahuang-service.js";
 import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
 import { LOADOUT_SOURCE_ITEMS } from "./items/loadout-source-items.js";
+import {
+  buildRecipeReverseIndex,
+  buildBreakthroughReverseIndex,
+  buildItemUsageSummary,
+  buildSpiritStoneUsageSummary,
+  type BreakthroughLevelEntry,
+} from "./resource-usage.js";
 
 const TICKS_PER_YEAR = 4380;
 const TIMED_ACTION_IDS = new Set<string>(Object.keys(DEFAULT_ACTION_DURATIONS));
@@ -1094,6 +1113,8 @@ const initializeCombatJobState = (
     encounterBuildId,
     maxRounds: template.maxRounds,
     currentRound: 0,
+    initialPlayerSnapshot: structuredClone(playerSnapshot),
+    initialEnemySnapshot: structuredClone(enemySnapshot),
     playerSnapshot,
     enemySnapshot,
     playerStyle: selectCombatRoute(cultivator, `${world.tick}:${cultivator.id}:init-route`),
@@ -1105,6 +1126,8 @@ const initializeCombatJobState = (
     playerMaxSpirit,
     enemySpirit,
     enemyMaxSpirit,
+    playerStatusEffectsBefore: structuredClone(cultivator.statusEffects),
+    enemyStatusEffectsBefore: [],
     retreated: false,
   };
 };
@@ -1636,8 +1659,6 @@ const parseEnterBahuangStrategy = (
     : null;
 };
 const parseUnlockGuixuNode = (actionId: ActionId) => actionId.startsWith("unlock-guixu:") ? actionId.slice("unlock-guixu:".length) : null;
-const parseAcceptQuestId = (actionId: ActionId) => actionId.startsWith("accept-quest:") ? actionId.slice("accept-quest:".length) : null;
-const parseExecuteQuestId = (actionId: ActionId) => actionId.startsWith("execute-quest:") ? actionId.slice("execute-quest:".length) : null;
 const parseExploreGuixuNode = (actionId: ActionId) => actionId.startsWith("explore-guixu:") ? actionId.slice("explore-guixu:".length) : null;
 const parseResidenceOption = (actionId: ActionId, prefix: string) => actionId.startsWith(prefix) ? actionId.slice(prefix.length) : null;
 const parseBuyResidenceStateId = (actionId: ActionId) => actionId.startsWith("buy-residence:") ? actionId.slice("buy-residence:".length) : null;
@@ -2312,8 +2333,106 @@ function ensureAgentBinding(world: WorldState, agentId: string): AgentBinding {
   world.agentBindings[agentId] = binding;
   return binding;
 }
-const addDaoLog = (world: WorldState, cultivatorId: string, title: string, content: string, tags: string[]) =>
-  world.daoLogs.unshift({ id: `log-${world.nextLogSequence++}`, cultivatorId, tick: world.tick, title, content, tags });
+const addDaoLog = (world: WorldState, cultivatorId: string, title: string, content: string, tags: string[], usableFor?: ResourceUsageSummary | SpiritStoneUsageSummary) =>
+  world.daoLogs.unshift({ id: `log-${world.nextLogSequence++}`, cultivatorId, tick: world.tick, title, content, tags, ...(usableFor ? { usableFor } : {}) });
+
+// ---- Resource usage reverse indices (lazy-cached) ----
+
+let _recipeReverseIndex: ReturnType<typeof buildRecipeReverseIndex> | null = null;
+let _breakthroughReverseIndex: ReturnType<typeof buildBreakthroughReverseIndex> | null = null;
+let _spiritStoneUsageSummary: SpiritStoneUsageSummary | null = null;
+
+function getRecipeReverseIndex() {
+  if (!_recipeReverseIndex) {
+    _recipeReverseIndex = buildRecipeReverseIndex(RESIDENCE_PRODUCTION_RECIPES, ITEM_CATALOG);
+  }
+  return _recipeReverseIndex;
+}
+
+function getBreakthroughReverseIndex() {
+  if (!_breakthroughReverseIndex) {
+    const levels: BreakthroughLevelEntry[] = [];
+    for (let level = 1; level <= 8; level++) {
+      const def = breakthroughDefinitionOf({ realmLevel: level } as Cultivator);
+      if (def) {
+        levels.push({
+          targetLevel: def.targetLevel,
+          targetRealm: def.targetRealm,
+          materials: [...def.genericMaterials, def.specialMaterial],
+        });
+      }
+    }
+    _breakthroughReverseIndex = buildBreakthroughReverseIndex(levels);
+  }
+  return _breakthroughReverseIndex;
+}
+
+function getSpiritStoneUsageSummaryCache(): SpiritStoneUsageSummary {
+  if (!_spiritStoneUsageSummary) {
+    _spiritStoneUsageSummary = buildSpiritStoneUsageSummary(RESIDENCE_PRODUCTION_RECIPES);
+  }
+  return _spiritStoneUsageSummary;
+}
+
+function getItemUsageSummary(itemId: ItemId): ResourceUsageSummary {
+  return buildItemUsageSummary(itemId, ITEM_CATALOG, getRecipeReverseIndex(), getBreakthroughReverseIndex());
+}
+
+const addResourceGainLog = (
+  world: WorldState,
+  cultivatorId: string,
+  title: string,
+  content: string,
+  tags: string[],
+  gainedItems: ReadonlyArray<{ itemId: ItemId; count: number }>,
+) => {
+  const firstItem = gainedItems[0];
+  if (!firstItem) {
+    addDaoLog(world, cultivatorId, title, content, tags);
+    return;
+  }
+  const usableFor = getItemUsageSummary(firstItem.itemId);
+  addDaoLog(world, cultivatorId, title, content, tags, usableFor);
+};
+
+const addSpiritStoneGainLog = (
+  world: WorldState,
+  cultivatorId: string,
+  title: string,
+  content: string,
+  tags: string[],
+) => {
+  addDaoLog(world, cultivatorId, title, content, tags, getSpiritStoneUsageSummaryCache());
+};
+const addResidenceAmbientLog = (
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: TimedActionId,
+  jobId: string,
+) => {
+  const residence = getActiveResidence(cultivator);
+  if (!residence) {
+    return;
+  }
+
+  const ambient = pickResidenceAmbientEvent({
+    tick: world.tick,
+    jobId,
+    actionId,
+    residence,
+  });
+  if (!ambient) {
+    return;
+  }
+
+  addDaoLog(
+    world,
+    cultivator.id,
+    ambient.title,
+    ambient.description,
+    ["residence", "ambient-event", `ambient-kind:${ambient.kind}`, `residence-id:${residence.id}`, actionId],
+  );
+};
 const addMessage = (
   world: WorldState,
   cultivatorId: string,
@@ -2344,23 +2463,69 @@ const MORALITY_EVENT_TTL = 6;
 
 const addWorldEvent = (world: WorldState, event: Omit<WorldEvent, "id" | "tick">): WorldEvent =>
   (world.worldEvents.unshift({ id: `event-${world.nextEventSequence++}`, tick: world.tick, ...event }), world.worldEvents[0]!);
-const addCombatLog = (world: WorldState, entry: Omit<CombatLogEntry, "id" | "tick">): CombatLogEntry => {
+type CombatLogInput = Omit<CombatLogEntry, "id" | "tick"> & {
+  preCultivatorStatusEffects?: readonly StatusEffect[];
+  finalPlayerHp?: number;
+};
+
+const addCombatLog = (world: WorldState, entry: CombatLogInput): CombatLogEntry => {
   const rounds = entry.rounds;
   const withSummary: Omit<CombatLogEntry, "id" | "tick"> = { ...entry };
   if (rounds && rounds.length > 0) {
     const startHp = entry.playerSnapshot?.hp ?? 0;
-    const endHp = rounds[rounds.length - 1]!.playerHpAfter;
+    const endHp = entry.finalPlayerHp ?? rounds[rounds.length - 1]!.playerHpAfter;
     withSummary.totalDamageTaken = Math.max(0, startHp - endHp);
+    withSummary.hpDelta = endHp - startHp;
     withSummary.totalSpiritSpent = rounds.reduce((sum, r) => sum + (r.playerSpiritSpent ?? 0), 0);
-    withSummary.totalQiSpent = 0;
-    const remaining: CombatLogEntry["statusEffectsRemaining"] = [];
-    const lastRound = rounds[rounds.length - 1]!;
-    for (const applied of lastRound.appliedStatuses ?? []) {
-      if (applied.targetSide === "player") {
-        remaining.push({ statusId: applied.statusId, statusName: applied.statusName });
+    withSummary.totalQiSpent = rounds.reduce((sum, r) => {
+      for (const t of r.tickEvents ?? []) {
+        if (t.targetSide === "player" && (t.effectKind === "qi_drain" || t.effectKind === "spirit_drain")) {
+          return sum + Math.abs(t.value);
+        }
+      }
+      return sum;
+    }, 0);
+    // Collect all status changes across rounds
+    const statusMap = new Map<string, { statusId: CombatStatusId | StatusEffectId; statusName: string; applied: boolean }>();
+    for (const r of rounds) {
+      for (const s of r.appliedStatuses ?? []) {
+        if (s.targetSide === "player") statusMap.set(s.statusId, { statusId: s.statusId, statusName: s.statusName, applied: true });
+      }
+      for (const s of r.expiredStatuses ?? []) {
+        if (s.targetSide === "player") statusMap.set(s.statusId, { statusId: s.statusId, statusName: s.statusName, applied: false });
+      }
+      for (const s of r.consumedStatuses ?? []) {
+        if (s.targetSide === "player") statusMap.set(s.statusId, { statusId: s.statusId, statusName: s.statusName, applied: false });
       }
     }
-    withSummary.statusEffectsRemaining = remaining;
+    const currentCultivator = world.cultivators[entry.cultivatorId];
+    const preCultivatorStatusEffects = new Map((entry.preCultivatorStatusEffects ?? []).map((effect) => [effect.id, effect]));
+    const postCultivatorStatusEffects = new Map((currentCultivator?.statusEffects ?? []).map((effect) => [effect.id, effect]));
+    for (const [statusId, effect] of postCultivatorStatusEffects) {
+      if (!preCultivatorStatusEffects.has(statusId)) {
+        statusMap.set(statusId, { statusId, statusName: effect.name, applied: true });
+      }
+    }
+    for (const [statusId, effect] of preCultivatorStatusEffects) {
+      if (!postCultivatorStatusEffects.has(statusId)) {
+        statusMap.set(statusId, { statusId, statusName: effect.name, applied: false });
+      }
+    }
+    withSummary.statusChanges = Array.from(statusMap.values());
+    // Remaining statuses: track combat statuses that survived plus post-combat cultivator statuses.
+    const remaining = new Map<string, { statusId: CombatStatusId | StatusEffectId; statusName: string }>();
+    for (const r of rounds) {
+      for (const s of r.appliedStatuses ?? []) {
+        if (s.targetSide === "player") remaining.set(s.statusId, { statusId: s.statusId, statusName: s.statusName });
+      }
+      for (const s of [...(r.expiredStatuses ?? []), ...(r.consumedStatuses ?? [])]) {
+        if (s.targetSide === "player") remaining.delete(s.statusId);
+      }
+    }
+    for (const effect of currentCultivator?.statusEffects ?? []) {
+      remaining.set(effect.id, { statusId: effect.id, statusName: effect.name });
+    }
+    withSummary.statusEffectsRemaining = Array.from(remaining.values());
   }
   world.combatLogs.unshift({ id: `combat-${world.nextCombatSequence++}`, tick: world.tick, ...withSummary });
   return world.combatLogs[0]!;
@@ -2372,11 +2537,20 @@ function triggerLocationEvent(
   source: EventSourceType,
   locationId: string,
   seed: string,
+  options?: { flavorBudget?: number },
 ): WorldEvent[] {
   cleanupCultivatorPendingMoralityChoice(world, cultivator);
   const drawn = drawEvent(world, source, cultivator, locationId, seed);
   if (!drawn) {
     return [];
+  }
+
+  let remainingFlavorBudget = options?.flavorBudget ?? Number.POSITIVE_INFINITY;
+  if (drawn.template.signalType === "flavor") {
+    if (remainingFlavorBudget <= 0) {
+      return [];
+    }
+    remainingFlavorBudget -= 1;
   }
 
   const queuedChoiceEvents = maybeQueueMoralityChoice(world, cultivator, locationId, drawn.template);
@@ -2393,11 +2567,11 @@ function triggerLocationEvent(
       title: `[${source}] ${drawn.template.name}`,
       content: drawn.template.description,
       severity: eventSeverityOf(drawn.template),
-      tags: ["event-pool", source, drawn.template.semanticType, drawn.template.resultType],
+      tags: ["event-pool", source, drawn.template.semanticType, drawn.template.resultType, `signal-type:${drawn.template.signalType}`],
     }),
   );
 
-  if (drawn.subEvent) {
+  if (drawn.subEvent && !(drawn.subEvent.signalType === "flavor" && remainingFlavorBudget <= 0)) {
     applyEventEffects(cultivator, drawn.subEvent);
     emitted.push(
       addWorldEvent(world, {
@@ -2406,7 +2580,7 @@ function triggerLocationEvent(
         title: `[${source}] ${drawn.subEvent.name}`,
         content: drawn.subEvent.description,
         severity: eventSeverityOf(drawn.subEvent),
-        tags: ["event-pool", source, "sub-event", drawn.subEvent.semanticType, drawn.subEvent.resultType],
+        tags: ["event-pool", source, "sub-event", drawn.subEvent.semanticType, drawn.subEvent.resultType, `signal-type:${drawn.subEvent.signalType}`],
       }),
     );
   }
@@ -2669,7 +2843,10 @@ function registrationEffectsViewOf(cultivator: Cultivator): RegistrationGameplay
 function createJob(world: WorldState, cultivatorId: string, actionId: TimedActionId, label: string): ActionJob {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const travelDestination = parseTravelDestination(actionId);
-  const executeQuestId = parseExecuteQuestId(actionId);
+  const questAction = parseQuestActionId(actionId);
+  const executeQuest = questAction?.phase === "execute"
+    ? getActiveQuestByReadableIndex(cultivator, questAction.questType, questAction.index)
+    : null;
   const guixuNodeId = parseExploreGuixuNode(actionId);
   const normalizedActionId =
     parseSearchFortuneRank(actionId) !== null
@@ -2683,8 +2860,8 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
         : actionId;
   const duration = travelDestination
     ? getDistanceBetween(world, cultivator.locationId, travelDestination)
-    : executeQuestId
-      ? (cultivator.activeQuests.find((quest) => quest.id === executeQuestId)?.durationTicks ?? NaN)
+    : executeQuest
+      ? executeQuest.durationTicks
       : guixuNodeId
         ? (getGuixuNodeById(world, guixuNodeId)?.explorationDurationTicks ?? NaN)
       : DEFAULT_ACTION_DURATIONS[normalizedActionId];
@@ -3366,7 +3543,7 @@ function finalizeDungeonExpedition(
   ) {
     const expSourceDrop = pickLoadoutSourceDrop(expSourceTier as 1 | 2 | 3, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
     cultivator.inventory[expSourceDrop] = (cultivator.inventory[expSourceDrop] ?? 0) + 1;
-    addDaoLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 完成地宫远征后获得了${ITEM_CATALOG[expSourceDrop]?.name ?? expSourceDrop}。`, [expSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"]);
+    addResourceGainLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 完成地宫远征后获得了${ITEM_CATALOG[expSourceDrop]?.name ?? expSourceDrop}。`, [expSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"], [{ itemId: expSourceDrop as ItemId, count: 1 }]);
   }
 
   world.dungeonExpeditionReports[cultivator.id] = report;
@@ -3920,71 +4097,139 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     (candidate) => EIGHT_WASTES_CONTENT.entryLocationIds.includes(candidate.id as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number]),
   );
   const bahuangTravelAction = nearestBahuangEntryId ? travelActionIdOf(nearestBahuangEntryId) : "meditate";
-  const warnings: string[] = []; const priorities: string[] = []; const suggestedActions: ActionId[] = [];
+
+  // ── Layer 1: 恢复层（安全硬优先） ──
+  const recoveryWarnings: string[] = [];
+  const recoveryPriorities: string[] = [];
+  const recoveryActions: ActionId[] = [];
+
   if (readiness === "poor") {
-    warnings.push("Readiness is poor.");
-    priorities.push("Stabilize with low-risk recovery and safe income first.");
+    recoveryWarnings.push("身体状态不佳，行动能力受限。");
+    recoveryPriorities.push("当前状态较差，应优先进行低风险的恢复和安全收入活动。");
   }
   if (recoveryState === "injured" || recoveryState === "wounded") {
-    warnings.push("Recovery state requires healing attention.");
-    priorities.unshift("当前受伤，建议先回住处疗伤。");
-    suggestedActions.unshift(canHealHere ? "residence-heal" : safeTravelAction);
+    recoveryWarnings.push("当前受伤，战斗力和行动效率大幅下降。");
+    recoveryPriorities.push("身体带伤，建议尽快疗伤恢复。");
+    if (!isAtResidence(cultivator) && !canHealHere) {
+      recoveryWarnings.push("此地无法直接疗伤，需先赶往安全地点。");
+    }
+    recoveryActions.push(
+      isAtResidence(cultivator) ? "residence-heal" : canHealHere ? "heal" : safeTravelAction,
+    );
   }
   if (recoveryState === "depleted") {
-    warnings.push("Qi is depleted.");
-    priorities.unshift("灵力枯竭，建议调息回灵。");
-    suggestedActions.unshift(isAtResidence(cultivator) ? "residence-recover-qi" : safeTravelAction);
+    recoveryWarnings.push("灵力枯竭，无法支撑任何高消耗行动。");
+    recoveryPriorities.push("灵力见底，建议调息回灵后再行动。");
+    if (!isAtResidence(cultivator) && !canHealHere) {
+      recoveryWarnings.push("此地无法直接恢复灵力，需先赶往安全地点或居所。");
+    }
+    recoveryActions.push(isAtResidence(cultivator) ? "residence-recover-qi" : canHealHere ? "heal" : safeTravelAction);
   }
-  if (cultivator.injuryTicksRemaining > 0) { warnings.push("Character is injured."); priorities.push("Recover before risky actions."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
-  if (hasEffect(cultivator, "poisoned")) warnings.push("Poison drains HP each tick.");
-  if (hasEffect(cultivator, "deviation")) { warnings.push("Qi deviation is active."); priorities.push("Stabilize before cultivation."); suggestedActions.push(canHealHere ? "heal" : safeTravelAction); }
-  if (cultivator.spiritStones < 120) {
-    priorities.push("需要基础材料：前往荒野采集（纯后台，不唤醒）。");
-    if (location?.nodeType === "wilderness") {
-      suggestedActions.push("mine-spirit-stones");
+  if (cultivator.injuryTicksRemaining > 0 && recoveryState !== "injured" && recoveryState !== "wounded") {
+    recoveryWarnings.push("伤势未愈，不宜冒险。");
+    recoveryPriorities.push("建议先养伤再进行高风险活动。");
+    recoveryActions.push(canHealHere ? "heal" : safeTravelAction);
+  }
+  if (hasEffect(cultivator, "poisoned")) {
+    recoveryWarnings.push("中毒状态持续消耗灵力，每刻都在损失气力。");
+    if (!isAtResidence(cultivator) && !canHealHere) {
+      recoveryWarnings.push("此地无法直接解毒，需先赶往安全地点。");
+    }
+    recoveryPriorities.push("中毒急需清除：可使用 heal 或 residence-heal 解毒。");
+    recoveryActions.unshift(canHealHere ? "heal" : isAtResidence(cultivator) ? "residence-heal" : safeTravelAction);
+  }
+  if (hasEffect(cultivator, "deviation")) {
+    recoveryWarnings.push("走火入魔，灵力运转紊乱，高风险修炼可能加重偏差。");
+    recoveryWarnings.push("偏差无法直接清除，只能通过低风险恢复行动等待自然消退。");
+    if (!isAtResidence(cultivator) && !canHealHere) {
+      recoveryWarnings.push("此地无法稳定偏差，需先赶往安全地点。");
+    }
+    recoveryPriorities.push("偏差活跃期间，应避免修炼，先稳定身心。");
+    recoveryActions.push(isAtResidence(cultivator) ? "residence-recover-qi" : canHealHere ? "heal" : safeTravelAction);
+  }
+
+  // Recovery safety net
+  const hasLowRiskSuggestion = recoveryActions.some((actionId) => isLowRiskAction(actionId));
+  if ((readiness === "poor" || recoveryState !== "healthy") && !hasLowRiskSuggestion) {
+    if (isAtResidence(cultivator)) {
+      recoveryActions.push("residence-recover-qi");
+    } else if (location?.kind === "safe") {
+      recoveryActions.push("take-mortal-task");
     } else {
-      suggestedActions.push(wildernessTravelAction);
+      recoveryActions.push(safeTravelAction);
     }
   }
-  if (cultivator.inventory["spirit-ore"] + cultivator.inventory["ruin-fragment"] + cultivator.inventory["beast-core"] > 0) priorities.push("You can sell materials in the market.");
-  if (hasEffect(cultivator, "insight")) priorities.push("Insight is active. Use it on cultivation or a major encounter.");
-  if (hasEffect(cultivator, "spirit-saturated")) priorities.push("Spirit saturation is active. Good time for cultivation.");
+
+  // ── Layer 2: 突破/材料层 ──
+  const breakthroughWarnings: string[] = [];
+  const breakthroughPriorities: string[] = [];
+  const breakthroughActions: ActionId[] = [];
+
+  if (cultivator.spiritStones < 120) {
+    breakthroughPriorities.push("灵石不足，建议前往荒野采集基础资源。");
+    breakthroughActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
+  }
+  if (cultivator.inventory["spirit-ore"] + cultivator.inventory["ruin-fragment"] + cultivator.inventory["beast-core"] > 0) {
+    breakthroughPriorities.push("持有可出售材料，可前往主城坊市交易变现。");
+  }
+  if (hasEffect(cultivator, "insight")) breakthroughPriorities.push("悟道状态活跃，适合修炼或挑战重大机遇，效果倍增。");
+  if (hasEffect(cultivator, "spirit-saturated")) breakthroughPriorities.push("灵气充盈状态，修炼效率提升，宜把握时机。");
   if (breakthrough?.readyByProgress) {
-    priorities.push("Realm progress is capped. Advance the breakthrough chain instead of grinding more progress.");
+    breakthroughPriorities.push("修为已至瓶颈，继续积累无益，应推进突破链。");
     if (!breakthrough.readyByMaterials) {
-      priorities.push("Collect the missing breakthrough materials from market or dungeons.");
+      breakthroughPriorities.push("突破材料尚未齐备，可通过市场购买或副本掉落获取。");
     }
     if (breakthrough.recommendedAction) {
-      suggestedActions.unshift(breakthrough.recommendedAction);
+      breakthroughActions.unshift(breakthrough.recommendedAction);
     }
   }
   const needsProgressionMaterials = !!breakthrough
     && !breakthrough.readyByMaterials
     && !breakthrough.marketBuyable;
   if (needsProgressionMaterials) {
-    priorities.push("需要进阶材料：挑战对应等阶副本（半托管，1-3次关键决策）。");
+    breakthroughPriorities.push("进阶材料无法购买，需挑战对应等阶副本获取。");
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
-    suggestedActions.push(
+    breakthroughActions.push(
       dungeonView && !dungeonView.lockReason
         ? startDungeonExpeditionActionIdOf(dungeonView.recommendedRank, "balanced")
         : dungeonTravelAction,
     );
   }
-
   const needsRareExpeditionRewards = meetsRealmRequirement(cultivator, REALM_CORE)
     && cultivator.inventory["ancient-artifact"] <= 0;
   if (needsRareExpeditionRewards) {
-    priorities.push("需要稀有奇物：进入八荒探索（独立远征，1-3次关键决策）。");
+    breakthroughPriorities.push("境界已高，需要稀有奇物，可进入八荒远征探索。");
     const canRunBahuangHere = canEnterBahuang(cultivator, cultivator.locationId).allowed;
-    suggestedActions.push(canRunBahuangHere ? "enter-bahuang:balanced" : bahuangTravelAction);
+    breakthroughActions.push(canRunBahuangHere ? "enter-bahuang:balanced" : bahuangTravelAction);
   }
+
+  // ── Layer 3: 地点/行程层 ──
+  const locationPriorities: string[] = [];
+  const locationActions: ActionId[] = [];
+
+  // Location-aware suggestions
+  if (location) {
+    if (isAtResidence(cultivator)) {
+      locationPriorities.push("身处居所，适宜修炼、疗伤和炼制。");
+    } else if (isMainCityNode(location.nodeType)) {
+      locationPriorities.push("身处主城，可进行交易、接取任务或领取宗门差事。");
+    } else if (location.nodeType === "wilderness") {
+      locationPriorities.push("身处荒野，适合采集灵石和狩猎矿兽。");
+    } else if (dungeonMetadataOf(location)) {
+      locationPriorities.push("身处秘境入口，可挑战副本获取进阶材料。");
+    } else if (EIGHT_WASTES_CONTENT.entryLocationIds.includes(location.id as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
+      locationPriorities.push("身处八荒入口，可发起远征探索稀有资源。");
+    }
+  }
+
+  // Registration-based suggestions (only when healthy)
   if (registration && cultivator.injuryTicksRemaining <= 0) {
-    if (registration.cultivateBonus >= 8) priorities.push("Registration favors longer cultivation sessions.");
-    if (registration.fortuneBonus >= 8) priorities.push("Registration favors scouting and flexible opportunity play.");
+    if (registration.cultivateBonus >= 8) locationPriorities.push("天赋偏向修炼，适合长时间闭关。");
+    if (registration.fortuneBonus >= 8) locationPriorities.push("天赋偏向探索，适合灵活寻宝和机遇。");
     if (registration.sectBonus >= 4) {
       if (cultivator.neutralSectId) {
         const neutralSect = getCultivatorNeutralSect(world, cultivator);
-        suggestedActions.push(
+        locationActions.push(
           neutralSect && cultivator.locationId === neutralSect.headquarters
             ? "take-neutral-duty"
             : neutralSect
@@ -3994,30 +4239,29 @@ function guidance(world: WorldState, cultivator: Cultivator) {
       } else if (cultivator.sectId) {
         const sect = getCultivatorSect(world, cultivator);
         if (sect && cultivator.locationId === sect.headquarters) {
-          // Suggest specific task types based on title — prefer higher value tasks
           const taskSeed = `${world.tick}:${cultivator.id}:suggest`;
           const preferredCategory: SectTaskCategory = registration.sectBonus >= 8 ? "patrol-suppress" : "sect-expedition";
           const suggested = pickRandomSectTask(cultivator.sectTitle, preferredCategory, taskSeed);
           const fallbackTask = pickRandomSectTask(cultivator.sectTitle, "resource-tribute", taskSeed);
-          suggestedActions.push(suggested ? `sect-task:${suggested.id}` : fallbackTask ? `sect-task:${fallbackTask.id}` : "take-mortal-task");
+          locationActions.push(suggested ? `sect-task:${suggested.id}` : fallbackTask ? `sect-task:${fallbackTask.id}` : "take-mortal-task");
         } else {
-          suggestedActions.push(sect ? travelActionIdOf(sect.headquarters) : mainCityTravelAction);
+          locationActions.push(sect ? travelActionIdOf(sect.headquarters) : mainCityTravelAction);
         }
       }
     }
     if (registration.fortuneBonus >= 8) {
       const dungeonView = dungeonViewForLocation(world, cultivator, location);
-      suggestedActions.push(
+      locationActions.push(
         dungeonView && !dungeonView.lockReason
           ? searchFortuneActionIdOf(dungeonView.recommendedRank)
           : dungeonTravelAction,
       );
     }
-    if (registration.mineBonus >= 6) suggestedActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
-    if (registration.cultivateBonus >= 8) suggestedActions.push("cultivate");
+    if (registration.mineBonus >= 6) locationActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
+    if (registration.cultivateBonus >= 8) locationActions.push("cultivate");
   }
 
-  // ---- Recommend unlock-loadout if player has unlockable items ----
+  // Unlock-loadout recommendations
   for (const [itemId, count] of Object.entries(cultivator.inventory) as Array<[ItemId, number]>) {
     if (count <= 0) continue;
     const def = ITEM_CATALOG[itemId];
@@ -4025,41 +4269,50 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     const wId = def.use.grantsWeaponLoadoutId;
     const sId = def.use.grantsSpellLoadoutId;
     if (wId && !cultivator.unlockedWeaponLoadoutIds.includes(wId)) {
-      suggestedActions.push(`unlock-loadout:${itemId}` as ActionId);
-      priorities.push(`You have ${def.name} — use it to permanently unlock a new weapon loadout. Does NOT auto-equip.`);
+      locationActions.push(`unlock-loadout:${itemId}` as ActionId);
+      locationPriorities.push(`持有${def.name}，可用于永久解锁新武器配装（不会自动装备）。`);
       break;
     }
     if (sId && !cultivator.unlockedSpellLoadoutIds.includes(sId)) {
-      suggestedActions.push(`unlock-loadout:${itemId}` as ActionId);
-      priorities.push(`You have ${def.name} — use it to permanently unlock a new spell loadout. Does NOT auto-equip.`);
+      locationActions.push(`unlock-loadout:${itemId}` as ActionId);
+      locationPriorities.push(`持有${def.name}，可用于永久解锁新法术配装（不会自动装备）。`);
       break;
     }
   }
 
-  // ---- Recommend residence crafting if player has source materials ----
+  // Residence crafting recommendations
   if (isAtResidence(cultivator)) {
     const craftable = getLiveCraftableRecipes(cultivator);
     for (const recipe of craftable) {
       if (recipe.id.startsWith("recipe-forge-") || recipe.id.startsWith("recipe-synthesize-")) {
-        suggestedActions.push(`residence-produce:${recipe.id}` as ActionId);
-        priorities.push(`Craftable at residence: ${recipe.outputItemId}. Costs ${recipe.spiritStoneCost} spirit stones.`);
+        locationActions.push(`residence-produce:${recipe.id}` as ActionId);
+        locationPriorities.push(`居所可炼制：${recipe.outputItemId}，消耗 ${recipe.spiritStoneCost} 灵石。`);
         break;
       }
     }
   }
 
-  const hasLowRiskSuggestion = suggestedActions.some((actionId) => isLowRiskAction(actionId));
-  if ((readiness === "poor" || recoveryState !== "healthy") && !hasLowRiskSuggestion) {
-    if (isAtResidence(cultivator)) {
-      suggestedActions.push("residence-recover-qi");
-    } else if (location?.kind === "safe") {
-      suggestedActions.push("take-mortal-task");
-    } else {
-      suggestedActions.push(safeTravelAction);
-    }
-  }
-  if (!suggestedActions.length) suggestedActions.push("cultivate");
-  return { warnings, priorities, suggestedActions: Array.from(new Set(suggestedActions)).slice(0, 4) as ActionId[] };
+  // ── Merge layers: recovery > breakthrough > location ──
+  const warnings = [...recoveryWarnings, ...breakthroughWarnings];
+  const priorities = [...recoveryPriorities, ...breakthroughPriorities, ...locationPriorities];
+  const allActions = [...recoveryActions, ...breakthroughActions, ...locationActions];
+  const suggestedActions = allActions.length > 0
+    ? Array.from(new Set(allActions)).slice(0, 4) as ActionId[]
+    : ["cultivate" as ActionId];
+  return { warnings, priorities, suggestedActions };
+}
+
+/**
+ * DECISION-SURFACE RULE: Every action recommended by any decision surface
+ * (onboarding, agentGuidance, strategySnapshot) MUST exist in the current
+ * availableActions set. When adding a new action to the game:
+ *   1. Register it in listAvailableActions() so it appears in the action list.
+ *   2. Only then may guidance/onboarding/strategy reference its ActionId.
+ * This function enforces the invariant at the boundary.
+ */
+function filterToAvailable(candidates: readonly ActionId[], available: ReadonlySet<ActionId>): ActionId[] {
+  const filtered = candidates.filter((id) => available.has(id));
+  return filtered.length > 0 ? filtered : [];
 }
 
 function hasDaoLogTag(world: WorldState, cultivatorId: string, tag: string): boolean {
@@ -4140,11 +4393,12 @@ function onboardingRecommendedActions(world: WorldState, stage: OnboardingStage,
   if (stage === "first-travel") {
     const activeBaseQuest = cultivator.activeQuests.find((quest) => quest.category === "base");
     if (activeBaseQuest) {
-      return [`execute-quest:${activeBaseQuest.id}`];
+      const activeBaseQuestIndex = cultivator.activeQuests.findIndex((quest) => quest.id === activeBaseQuest.id);
+      return [buildExecuteQuestActionId(activeBaseQuest.type, activeBaseQuestIndex) as ActionId];
     }
     const board = getQuestBoard(world, cultivator.locationId);
     const baseQuest = board?.quests.find((quest) => quest.category === "base");
-    return [baseQuest ? (`accept-quest:${baseQuest.id}` as ActionId) : "take-mortal-task"];
+    return [baseQuest ? (buildAcceptQuestActionId(baseQuest.type, baseQuest.boardIndex) as ActionId) : "take-mortal-task"];
   }
   if (stage === "first-quest") {
     return [cultivator.locationId === cultivator.residence.locationId
@@ -4207,6 +4461,7 @@ function computeOnboardingProgress(world: WorldState, cultivator: Cultivator): O
 export function getStrategySnapshot(world: WorldState, cultivatorId: string): StrategySnapshot {
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   const plan = guidance(world, cultivator);
+  const availableActionIds = new Set(listAvailableActions(world, cultivatorId).map((a) => a.actionId));
   const policy = decisionPolicy();
   const riskLevel =
     plan.warnings.length >= 2 || cultivator.injuryTicksRemaining > 0 || hasEffect(cultivator, "deviation")
@@ -4223,8 +4478,9 @@ export function getStrategySnapshot(world: WorldState, cultivatorId: string): St
       : cultivator.neutralSectId
         ? `Build toward the next realm while steadily contributing to ${world.neutralSects[cultivator.neutralSectId]?.name ?? "your organization"}.`
         : "Grow resources and stability until stronger quests, travel, and organization choices feel safe.";
+  const filtered = filterToAvailable(plan.suggestedActions, availableActionIds);
   const recommendedSequence: ActionId[] =
-    plan.suggestedActions.length > 0 ? plan.suggestedActions : ["cultivate"];
+    filtered.length > 0 ? filtered : ["cultivate"];
   const reason =
     plan.warnings.length > 0
       ? plan.warnings.join(" ")
@@ -4405,6 +4661,14 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   repairCultivatorRealm(cultivator);
   const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
+  const activeResidence = getActiveResidence(cultivator);
+  const recentResidenceAmbientEvents = activeResidence
+    ? getRecentResidenceAmbientEventsForResidence(
+        world.daoLogs.filter((entry) => entry.cultivatorId === cultivatorId),
+        activeResidence.id,
+        2,
+      )
+    : [];
   const sectView = buildSectStateView(world, cultivator);
   const policy = decisionPolicy();
   const allAvailableActions = listAvailableActions(world, cultivatorId);
@@ -4574,7 +4838,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       description: r.description,
       isActive: r.locationId === cultivator.locationId,
     })),
-    activeResidence: getActiveResidence(cultivator),
+    activeResidence,
+    residenceContext: activeResidence
+      ? buildResidenceContext(activeResidence, world.tick, recentResidenceAmbientEvents)
+      : null,
     productionQueue: (cultivator.productionQueue ?? []).map((e) => ({ slot: e.slot, recipeId: e.recipeId, ticksRemaining: e.ticksRemaining })),
     pendingGifts: (cultivator.pendingGifts ?? []).map((g) => ({
       messageId: g.messageId,
@@ -4596,14 +4863,20 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       guixuCompletedNodeIds: cultivator.guixuCompletedNodeIds ?? [],
       originHeartAwakened: (cultivator.guixuCompletedNodeIds ?? []).includes("guixu-origin-heart"),
     },
-    onboarding: computeOnboardingProgress(world, cultivator),
+    onboarding: (() => {
+      const raw = computeOnboardingProgress(world, cultivator);
+      return {
+        ...raw,
+        recommendedActions: filterToAvailable(raw.recommendedActions, availableActionIdSet),
+      };
+    })(),
     decisionPolicy: policy,
     agentGuidance: (() => {
       const raw = guidance(world, cultivator);
       return {
         warnings: raw.warnings,
         priorities: raw.priorities,
-        suggestedActions: raw.suggestedActions.filter((id) => availableActionIdSet.has(id)),
+        suggestedActions: filterToAvailable(raw.suggestedActions, availableActionIdSet),
       };
     })(),
   };
@@ -4664,6 +4937,7 @@ function ensureSafetyNetActions(
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
+  const activeResidence = getActiveResidence(cultivator);
   const activeDungeonExpedition = getActiveDungeonExpedition(world, cultivator.id);
   const activeBahuang = world.bahuangProgress[cultivator.id]?.status === "active"
     ? world.bahuangProgress[cultivator.id]
@@ -4695,10 +4969,12 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const joinedSect = getCultivatorSect(world, cultivator);
   const activeWilderness = getActiveWildernessProgress(world, cultivator.id);
   const wildernessLayer = getWildernessLayerForLocation(world, cultivator.locationId);
+  const residenceActionDescription = (baseDescription: string) =>
+    activeResidence ? describeResidenceAction(baseDescription, activeResidence, world.tick) : baseDescription;
   const recipeActions = getLiveCraftableRecipes(cultivator).map((recipe) => ({
     actionId: `residence-produce:${recipe.id}` as ActionId,
     label: `Residence produce (${recipe.outputItemId})`,
-    description: `Craft ${recipe.outputItemId} at residence.`,
+    description: residenceActionDescription(`Craft ${recipe.outputItemId} at residence.`),
     durationTicks: recipe.durationTicks,
     kind: "timed" as const,
     costs: {
@@ -4830,14 +5106,14 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         {
           actionId: "residence-heal",
           label: "Residence heal",
-          description: "Recover injuries at residence.",
+          description: residenceActionDescription("Recover injuries at residence."),
           durationTicks: DEFAULT_ACTION_DURATIONS["residence-heal"],
           kind: "timed",
         },
         {
           actionId: "residence-recover-qi",
           label: "Residence recover qi",
-          description: "Quickly recover qi at residence.",
+          description: residenceActionDescription("Quickly recover qi at residence."),
           durationTicks: DEFAULT_ACTION_DURATIONS["residence-recover-qi"],
           kind: "timed",
         },
@@ -4858,7 +5134,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         ? [{
             actionId: "residence-meditate" as const,
             label: "Residence meditate",
-            description: "Closed-door cultivation at residence.",
+          description: residenceActionDescription("Closed-door cultivation at residence."),
             durationTicks: DEFAULT_ACTION_DURATIONS["residence-meditate"],
             kind: "timed" as const,
           }]
@@ -4867,14 +5143,14 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       {
         actionId: "residence-heal",
         label: "Residence heal",
-        description: "Recover injuries at residence.",
+        description: residenceActionDescription("Recover injuries at residence."),
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-heal"],
         kind: "timed",
       },
       {
         actionId: "residence-recover-qi",
         label: "Residence recover qi",
-        description: "Quickly recover qi at residence.",
+        description: residenceActionDescription("Quickly recover qi at residence."),
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-recover-qi"],
         kind: "timed",
       },
@@ -4883,7 +5159,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       {
         actionId: "residence-socialize",
         label: "Residence socialize",
-        description: "Light social exchange at residence.",
+        description: residenceActionDescription("Light social exchange at residence."),
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-socialize"],
         kind: "timed",
       },
@@ -4979,7 +5255,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   if (board) {
     for (const quest of board.quests) {
       actions.push({
-        actionId: `accept-quest:${quest.id}` as ActionId,
+        actionId: buildAcceptQuestActionId(quest.type, quest.boardIndex) as ActionId,
         label: `Accept quest: ${quest.nameCn}`,
         description: `${quest.description} (奖励灵石 ${quest.reward.spiritStones})`,
         durationTicks: 0,
@@ -4987,9 +5263,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       });
     }
   }
-  for (const activeQuest of cultivator.activeQuests) {
+  for (const [activeIndex, activeQuest] of cultivator.activeQuests.entries()) {
     actions.push({
-      actionId: `execute-quest:${activeQuest.id}` as ActionId,
+      actionId: buildExecuteQuestActionId(activeQuest.type, activeIndex) as ActionId,
       label: `Execute quest: ${activeQuest.name}`,
       description: activeQuest.description,
       durationTicks: activeQuest.durationTicks,
@@ -5427,6 +5703,7 @@ function executeItemImmediateAction(
     }
     cultivator.spiritStones -= price;
     cultivator.inventory[firstMissing.itemId] += 1;
+    addResourceGainLog(world, cultivator.id, "坊市购买", `${cultivator.name}在坊市购入了1个${ITEM_CATALOG[firstMissing.itemId]?.name ?? firstMissing.itemId}，花费${price}灵石。`, ["market", "buy"], [{ itemId: firstMissing.itemId, count: 1 }]);
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
@@ -5456,6 +5733,7 @@ function executeItemImmediateAction(
     }
     cultivator.spiritStones -= price;
     cultivator.inventory[binding.itemId] += 1;
+    addResourceGainLog(world, cultivator.id, "坊市购买", `${cultivator.name}在坊市购入了1个${ITEM_CATALOG[binding.itemId]?.name ?? binding.itemId}，花费${price}灵石。`, ["market", "buy"], [{ itemId: binding.itemId, count: 1 }]);
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
@@ -5806,6 +6084,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const combatState = initializeCombatJobState(world, challenger, duelTemplate, 1, "pvp-city-duel");
     // Overwrite enemy snapshot with real cultivator snapshot
     combatState.enemySnapshot = opponentSnapshot;
+    combatState.initialEnemySnapshot = structuredClone(opponentSnapshot);
+    combatState.enemyStatusEffectsBefore = structuredClone(cultivator.statusEffects);
     combatState.pvpTargetCultivatorId = cultivator.id;
     combatState.pvpBattleKind = "city-duel";
     const result = startJob(world, challenger, "pvp-duel", "切磋对决");
@@ -6043,7 +6323,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
     const fromName = world.cultivators[gift.fromCultivatorId]?.name ?? "unknown";
     addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${gift.itemId}。`, { fromCultivatorId: cultivator.id });
-    addDaoLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${gift.itemId}。`, ["social", "gift"]);
+    addResourceGainLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${gift.itemId}。`, ["social", "gift"], [{ itemId: gift.itemId as ItemId, count: gift.count }]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted gift of ${gift.count} ${gift.itemId} from ${fromName}.` };
   }
 
@@ -6112,7 +6392,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addMutualAffinity(world, cultivator.id, commission.posterId, 25);
     const posterName = world.cultivators[commission.posterId]?.name ?? "unknown";
     addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commission.type === "gather" ? "采集" : "运送"}${commission.targetItemId}委托。`, { fromCultivatorId: cultivator.id });
-    addDaoLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commission.targetItemId}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
+    addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commission.targetItemId}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
     addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commission.targetItemId}委托。好感度+25。`, ["social", "commission"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} fulfilled ${posterName}'s commission for ${commission.targetItemId}. Reward: ${commission.rewardSpiritStones} stones. Affinity +25.` };
   }
@@ -6122,7 +6402,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
 function resolveJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId); cultivator.activeJobId = null;
   const registration = registrationModifiersOf(cultivator);
-  const executeQuestId = parseExecuteQuestId(job.actionId);
+  const questAction = parseQuestActionId(job.actionId);
+  const activeQuestId = typeof job.meta?.activeQuestId === "string" ? job.meta.activeQuestId : null;
   const guixuNodeId = parseExploreGuixuNode(job.actionId);
   const travelDestination = parseTravelDestination(job.actionId);
   if (travelDestination) {
@@ -6141,8 +6422,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     addDaoLog(world, cultivator.id, "Travel", `${cultivator.name} traveled to ${destination.name}.`, ["travel"]);
     return `${cultivator.name} arrived at ${destination.name}.`;
   }
-  if (executeQuestId) {
-    const resolved = resolveActiveQuest(world, cultivator, executeQuestId, `${world.tick}:${job.id}:${executeQuestId}`);
+  if (questAction?.phase === "execute" && activeQuestId) {
+    const resolved = resolveActiveQuest(world, cultivator, activeQuestId, `${world.tick}:${job.id}:${activeQuestId}`);
       if (resolved.success) {
         if (resolved.quest.category === "sect") {
           if (cultivator.sectId) {
@@ -6183,7 +6464,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       if (role === "initiator" && partnerId) {
         addMutualAffinity(world, cultivator.id, partnerId, task.affinityGain);
       }
-      addDaoLog(world, cultivator.id, "同行历练", `${cultivator.name}完成了双人荒野任务：${task.nameCn}，获得${task.spiritStoneReward}灵石。`, ["social", "dual-wilderness"]);
+      addSpiritStoneGainLog(world, cultivator.id, "同行历练", `${cultivator.name}完成了双人荒野任务：${task.nameCn}，获得${task.spiritStoneReward}灵石。`, ["social", "dual-wilderness"]);
       return `${cultivator.name} completed dual wilderness task: ${task.nameCn}.`;
     }
     return `${cultivator.name} completed a dual wilderness task.`;
@@ -6243,6 +6524,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} gained cultivation progress.`;
   }
   if (job.actionId === "residence-meditate") {
+    const residence = getActiveResidence(cultivator);
+    const { timeSense } = residence ? describeResidenceScene(residence, world.tick) : { timeSense: "此刻" };
     const fallback = job.meta?.residenceMeditateFallback === true;
     if (!fallback) {
       cultivator.spiritStones -= 80;
@@ -6277,12 +6560,15 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       world,
       cultivator.id,
       "闭关修炼",
-      `${cultivator.name} 在洞府闭关，消耗 ${fallback ? 0 : 80} 灵石，修为增加 ${gain}。`,
+      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}闭关修炼，消耗 ${fallback ? 0 : 80} 灵石，修为增加 ${gain}。`,
       ["cultivation", "residence"],
     );
+    addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     return `${cultivator.name} completed residence meditation.`;
   }
   if (job.actionId === "residence-heal") {
+    const residence = getActiveResidence(cultivator);
+    const { timeSense } = residence ? describeResidenceScene(residence, world.tick) : { timeSense: "此刻" };
     const usePill = job.meta?.residenceHealUsePill === true;
     if (usePill && cultivator.inventory["healing-pill"] > 0) {
       cultivator.inventory["healing-pill"] -= 1;
@@ -6290,17 +6576,21 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     const healed = (usePill ? 6 : 4) + Math.floor((registration?.healBonus ?? 0) / 4);
     cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - healed);
     cultivator.qi = clamp(cultivator.qi + (usePill ? 55 : 35) + (registration?.healBonus ?? 0), 0, cultivator.maxQi);
+    cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned");
     syncWounded(cultivator);
     addDaoLog(
       world,
       cultivator.id,
       "洞府疗伤",
-      `${cultivator.name} 在洞府疗伤${usePill ? "并服用疗伤丹" : ""}，伤势恢复 ${healed}。`,
+      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}疗伤${usePill ? "并服用疗伤丹" : ""}，伤势恢复 ${healed}。`,
       ["recovery", "residence"],
     );
+    addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     return `${cultivator.name} recovered at residence.`;
   }
   if (job.actionId === "residence-recover-qi") {
+    const residence = getActiveResidence(cultivator);
+    const { timeSense } = residence ? describeResidenceScene(residence, world.tick) : { timeSense: "此刻" };
     const usePill = job.meta?.residenceRecoverQiUsePill === true;
     if (usePill && cultivator.inventory["qi-pill"] > 0) {
       cultivator.inventory["qi-pill"] -= 1;
@@ -6319,15 +6609,18 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       world,
       cultivator.id,
       "洞府调息",
-      `${cultivator.name} 在洞府调息${usePill ? "并服用回气丹" : ""}，恢复气血 ${qiGain}。`,
+      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}调息${usePill ? "并服用回气丹" : ""}，恢复气血 ${qiGain}。`,
       ["recovery", "residence"],
     );
+    addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     return `${cultivator.name} recovered qi at residence.`;
   }
   if (job.actionId === "residence-breakthrough") {
     return resolveResidenceBreakthrough(world, cultivator, job);
   }
   if (job.actionId === "residence-produce") {
+    const residence = getActiveResidence(cultivator);
+    const { timeSense } = residence ? describeResidenceScene(residence, world.tick) : { timeSense: "此刻" };
     const recipe = job.meta?.residenceRecipeId ? getResidenceRecipeById(job.meta.residenceRecipeId) : null;
     if (!recipe) {
       throw new Error("Residence production recipe missing.");
@@ -6337,25 +6630,30 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     }
     consumeResidenceRecipeInputs(cultivator, recipe);
     cultivator.inventory[recipe.outputItemId] += recipe.outputCount;
-    addDaoLog(
+    addResourceGainLog(
       world,
       cultivator.id,
       "洞府生产",
-      `${cultivator.name} 在洞府生产了 ${recipe.outputCount} 个 ${recipe.outputItemId}。`,
+      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}完成了洞府生产，产出 ${recipe.outputCount} 个 ${recipe.outputItemId}。`,
       ["production", "residence"],
+      [{ itemId: recipe.outputItemId, count: recipe.outputCount }],
     );
+    addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     return `${cultivator.name} produced ${recipe.outputItemId} at residence.`;
   }
   if (job.actionId === "residence-socialize") {
+    const residence = getActiveResidence(cultivator);
+    const { timeSense } = residence ? describeResidenceScene(residence, world.tick) : { timeSense: "此刻" };
     // If there are other cultivators at the same location, grow affinity with one
     const socialTarget = pickChatUpTarget(world, cultivator.id, `${world.tick}:${job.id}:socialize`);
     if (socialTarget) {
       const { linkAB } = addMutualAffinity(world, cultivator.id, socialTarget.id, AFFINITY_GAINS.residenceSocialize);
       const level = getAffinityLevel(linkAB.affinity);
-      addDaoLog(world, cultivator.id, "洞府会友", `${cultivator.name}在洞府与${socialTarget.name}交流心法，好感度${linkAB.affinity}（${level}）。`, ["social", "residence"]);
+      addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}与${socialTarget.name}交流心法，好感度${linkAB.affinity}（${level}）。`, ["social", "residence"]);
     } else {
-      addDaoLog(world, cultivator.id, "洞府会友", `${cultivator.name}在洞府独自修习心法。`, ["social", "residence"]);
+      addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}独自整理心法与见闻。`, ["social", "residence"]);
     }
+    addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     return `${cultivator.name} socialized at residence.`;
   }
   if (job.actionId === "take-mortal-task") {
@@ -6458,7 +6756,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     }
     upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: taskTemplate.category === "patrol-suppress" ? 4 : 2, intensity: 1 });
     const logCategory = taskTemplate.category === "sect-expedition" ? "宗门专属游历" : "宗门任务";
-    addDaoLog(world, cultivator.id, logCategory, `${cultivator.name} 完成了宗门${taskTemplate.tier}级任务「${taskTemplate.nameCn}」，获得贡献 ${reward.contribution}，灵石 ${reward.spiritStones}。`, ["sect", `sect-task-${taskTemplate.category}`, `tier-${taskTemplate.tier}`, "sect-task-log", "sect-contribution-log"]);
+    addSpiritStoneGainLog(world, cultivator.id, logCategory, `${cultivator.name} 完成了宗门${taskTemplate.tier}级任务「${taskTemplate.nameCn}」，获得贡献 ${reward.contribution}，灵石 ${reward.spiritStones}。`, ["sect", `sect-task-${taskTemplate.category}`, `tier-${taskTemplate.tier}`, "sect-task-log", "sect-contribution-log"]);
     if (warProgress) {
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
@@ -6508,7 +6806,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     const sfSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
     const sfSourceDrop = pickLoadoutSourceDrop(sfSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:loadout-source`);
     cultivator.inventory[sfSourceDrop] = (cultivator.inventory[sfSourceDrop] ?? 0) + 1;
-    addDaoLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 在探索地宫时获得了${ITEM_CATALOG[sfSourceDrop]?.name ?? sfSourceDrop}。`, [sfSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"]);
+    addResourceGainLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 在探索地宫时获得了${ITEM_CATALOG[sfSourceDrop]?.name ?? sfSourceDrop}。`, [sfSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"], [{ itemId: sfSourceDrop as ItemId, count: 1 }]);
     return `${cultivator.name} searched the ruins.`;
   }
   if (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null) {
@@ -6572,8 +6870,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           encounterBuildId: combatState.encounterBuildId ?? encId,
           totalRounds,
           rounds: combatState.rounds,
-          playerSnapshot: combatState.playerSnapshot,
-          enemySnapshot: combatState.enemySnapshot,
+          playerSnapshot: combatState.initialPlayerSnapshot,
+          enemySnapshot: combatState.initialEnemySnapshot,
+          preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
+          finalPlayerHp: combatState.playerSnapshot.hp,
           retreated: true,
         });
         return `${cultivator.name} retreated from ${enemyDisplayName}.`;
@@ -6614,8 +6914,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           encounterBuildId: combatState.encounterBuildId ?? encId,
           totalRounds,
           rounds: combatState.rounds,
-          playerSnapshot: combatState.playerSnapshot,
-          enemySnapshot: combatState.enemySnapshot,
+          playerSnapshot: combatState.initialPlayerSnapshot,
+          enemySnapshot: combatState.initialEnemySnapshot,
+          preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
+          finalPlayerHp: combatState.playerSnapshot.hp,
         });
         return `${cultivator.name} defeated ${enemyDisplayName}.`;
       }
@@ -6644,8 +6946,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         encounterBuildId: combatState.encounterBuildId ?? encId,
         totalRounds,
         rounds: combatState.rounds,
-        playerSnapshot: combatState.playerSnapshot,
-        enemySnapshot: combatState.enemySnapshot,
+        playerSnapshot: combatState.initialPlayerSnapshot,
+        enemySnapshot: combatState.initialEnemySnapshot,
+        preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
+        finalPlayerHp: combatState.playerSnapshot.hp,
       });
       return `${cultivator.name} was defeated by ${enemyDisplayName}.`;
     }
@@ -6679,8 +6983,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           encounterBuildId: combatState.encounterBuildId ?? guardianEncId,
           totalRounds,
           rounds: combatState.rounds,
-          playerSnapshot: combatState.playerSnapshot,
-          enemySnapshot: combatState.enemySnapshot,
+          playerSnapshot: combatState.initialPlayerSnapshot,
+          enemySnapshot: combatState.initialEnemySnapshot,
+          preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
+          finalPlayerHp: combatState.playerSnapshot.hp,
           retreated: true,
         });
         return `${cultivator.name} retreated from the rank ${challengeGuardianRank} guardian of ${location.name}.`;
@@ -6700,7 +7006,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         const cgSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
         const cgSourceDrop = pickLoadoutSourceDrop(cgSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:guardian-loadout-source`);
         cultivator.inventory[cgSourceDrop] = (cultivator.inventory[cgSourceDrop] ?? 0) + 1;
-        addDaoLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 击败守关后获得了${ITEM_CATALOG[cgSourceDrop]?.name ?? cgSourceDrop}。`, [cgSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"]);
+        addResourceGainLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 击败守关后获得了${ITEM_CATALOG[cgSourceDrop]?.name ?? cgSourceDrop}。`, [cgSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"], [{ itemId: cgSourceDrop as ItemId, count: 1 }]);
         const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
         if (challengeGuardianRank === highestUnlockedRank) {
           ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(
@@ -6734,8 +7040,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           encounterBuildId: combatState.encounterBuildId ?? guardianEncId,
           totalRounds,
           rounds: combatState.rounds,
-          playerSnapshot: combatState.playerSnapshot,
-          enemySnapshot: combatState.enemySnapshot,
+          playerSnapshot: combatState.initialPlayerSnapshot,
+          enemySnapshot: combatState.initialEnemySnapshot,
+          preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
+          finalPlayerHp: combatState.playerSnapshot.hp,
         });
         addWorldEvent(world, {
           cultivatorId: cultivator.id,
@@ -6780,8 +7088,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         encounterBuildId: combatState.encounterBuildId ?? guardianEncId,
         totalRounds,
         rounds: combatState.rounds,
-        playerSnapshot: combatState.playerSnapshot,
-        enemySnapshot: combatState.enemySnapshot,
+        playerSnapshot: combatState.initialPlayerSnapshot,
+        enemySnapshot: combatState.initialEnemySnapshot,
+        preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
+        finalPlayerHp: combatState.playerSnapshot.hp,
       });
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
@@ -6819,6 +7129,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     // Helper to add combat log for both sides
     const pvpEncounterBuildId = combatState.encounterBuildId ?? "pvp-city-duel";
     const addPvpLog = (cId: string, locId: string, opp: string, oppId: string | undefined, result: "victory" | "defeat", dmg: number, lootMap: Partial<Record<ItemId, number>>, summary: string, isRetreated: boolean) => {
+      const isPlayerPerspective = cId === cultivator.id;
       addCombatLog(world, {
         cultivatorId: cId,
         locationId: locId,
@@ -6833,8 +7144,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         encounterBuildId: pvpEncounterBuildId,
         totalRounds,
         rounds: combatState.rounds,
-        playerSnapshot: combatState.playerSnapshot,
-        enemySnapshot: combatState.enemySnapshot,
+        playerSnapshot: isPlayerPerspective ? combatState.initialPlayerSnapshot : combatState.initialEnemySnapshot,
+        enemySnapshot: isPlayerPerspective ? combatState.initialEnemySnapshot : combatState.initialPlayerSnapshot,
+        preCultivatorStatusEffects: isPlayerPerspective ? combatState.playerStatusEffectsBefore : combatState.enemyStatusEffectsBefore,
+        finalPlayerHp: isPlayerPerspective ? combatState.playerSnapshot.hp : combatState.enemySnapshot.hp,
         retreated: isRetreated || undefined,
         pvpOpponentCultivatorId: oppId,
         pvpOpponentName: opp,
@@ -7035,6 +7348,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     const wBuildId = combatState.encounterBuildId ?? "pvp-wilderness-clash";
 
     const addWildPvpLog = (cId: string, locId: string, opp: string, oppId: string | undefined, result: "victory" | "defeat", dmg: number, lootMap: Partial<Record<ItemId, number>>, summary: string, isRetreated: boolean) => {
+      const isPlayerPerspective = cId === cultivator.id;
       addCombatLog(world, {
         cultivatorId: cId,
         locationId: locId,
@@ -7049,8 +7363,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         encounterBuildId: wBuildId,
         totalRounds,
         rounds: combatState.rounds,
-        playerSnapshot: combatState.playerSnapshot,
-        enemySnapshot: combatState.enemySnapshot,
+        playerSnapshot: isPlayerPerspective ? combatState.initialPlayerSnapshot : combatState.initialEnemySnapshot,
+        enemySnapshot: isPlayerPerspective ? combatState.initialEnemySnapshot : combatState.initialPlayerSnapshot,
+        preCultivatorStatusEffects: isPlayerPerspective ? combatState.playerStatusEffectsBefore : combatState.enemyStatusEffectsBefore,
+        finalPlayerHp: isPlayerPerspective ? combatState.playerSnapshot.hp : combatState.enemySnapshot.hp,
         retreated: isRetreated || undefined,
         pvpOpponentCultivatorId: oppId,
         pvpOpponentName: opp,
@@ -7215,9 +7531,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     addDaoLog(world, cultivator.id, "取消生产", `取消了${entry.recipeId}的生产，材料已归还。`, ["production", "cancel"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `Cancelled production of ${entry.recipeId}. Materials returned.` };
   }
-  const acceptQuestId = parseAcceptQuestId(actionId);
-  if (acceptQuestId) {
-    const acceptedQuest = acceptQuest(world, cultivator, acceptQuestId);
+  const parsedQuestAction = parseQuestActionId(actionId);
+  if (parsedQuestAction?.phase === "accept") {
+    const acceptedQuest = acceptQuest(world, cultivator, parsedQuestAction.questType, parsedQuestAction.index);
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
@@ -7323,13 +7639,13 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     return startJob(world, cultivator, actionId, actionId);
   }
   const travelDestination = parseTravelDestination(actionId);
-  const executeQuestId = parseExecuteQuestId(actionId);
+  const questAction = parseQuestActionId(actionId);
   const exploreGuixuNodeId = parseExploreGuixuNode(actionId);
   const startDungeonExpedition = parseStartDungeonExpeditionActionId(actionId);
   const enterDungeon = parseEnterDungeonActionId(actionId);
   const searchFortuneRank = parseSearchFortuneRank(actionId);
   const challengeGuardianRank = parseChallengeGuardianRank(actionId);
-  if (travelDestination || executeQuestId || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || parseSectTaskId(actionId) || TIMED_ACTION_IDS.has(actionId)) {
+  if (travelDestination || questAction?.phase === "execute" || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || parseSectTaskId(actionId) || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -7337,12 +7653,12 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!directNeighbor) throw new Error("Travel destination is not directly reachable from current location.");
       return startJob(world, cultivator, actionId as TimedActionId, `Travel to ${destination.name}`);
     }
-    if (executeQuestId) {
-      const quest = getActiveQuest(cultivator, executeQuestId);
-      if (!quest) throw new Error(`Active quest not found: ${executeQuestId}`);
-      markQuestInProgress(cultivator, executeQuestId);
+    if (questAction?.phase === "execute") {
+      const quest = getActiveQuestByReadableIndex(cultivator, questAction.questType, questAction.index);
+      if (!quest) throw new Error(`Active quest not found: ${questAction.questType}:${questAction.index}`);
+      markQuestInProgress(cultivator, quest.id);
       return startJob(world, cultivator, actionId as TimedActionId, `Execute quest ${quest.name}`, {
-        activeQuestId: executeQuestId,
+        activeQuestId: quest.id,
       });
     }
     if (actionId === "survey-wilderness") {
@@ -7390,6 +7706,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         };
         const pvpCombat = initializeCombatJobState(world, cultivator, pvpTemplate, 1, wildernessEvt.encounterBuildId!);
         pvpCombat.enemySnapshot = opponentSnapshot;
+        pvpCombat.initialEnemySnapshot = structuredClone(opponentSnapshot);
+        pvpCombat.enemyStatusEffectsBefore = structuredClone(opponent?.statusEffects ?? []);
         pvpCombat.pvpTargetCultivatorId = opponent?.id;
         pvpCombat.pvpBattleKind = "wilderness-clash";
         setCombatJobState(surveyResult.job, pvpCombat);
@@ -7641,7 +7959,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         front.ticksRemaining -= 1;
         if (front.ticksRemaining <= 0) {
           cultivator.inventory[front.outputItemId] = (cultivator.inventory[front.outputItemId] ?? 0) + front.outputCount;
-          addDaoLog(world, cultivator.id, "生产完成", `炼制完成：${front.outputItemId} x${front.outputCount}。`, ["production"]);
+          addResourceGainLog(world, cultivator.id, "生产完成", `炼制完成：${front.outputItemId} x${front.outputCount}。`, ["production"], [{ itemId: front.outputItemId as ItemId, count: front.outputCount }]);
           cultivator.productionQueue.shift();
           for (let s = 0; s < cultivator.productionQueue.length; s++) {
             cultivator.productionQueue[s]!.slot = s;
@@ -7727,14 +8045,27 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         if (cultivator) {
           const roll = hashString(`${world.tick}:${job.id}:${cultivator.id}:travel-event`) % 100;
           if (roll < 30) {
-            const events = triggerLocationEvent(
-              world,
-              cultivator,
-              "travel",
-              cultivator.locationId,
-              `${world.tick}:${cultivator.id}:${job.id}:travel`,
-            );
-            triggeredEvents.push(...events);
+            const seed = `${world.tick}:${cultivator.id}:${job.id}:travel`;
+            const flavorCount = job.meta?.travelFlavorEventCount ?? 0;
+            const flavorBudget = Math.max(0, 2 - flavorCount);
+            const preview = drawEvent(world, "travel", cultivator, cultivator.locationId, seed);
+            if (preview && preview.template.signalType === "flavor" && flavorBudget <= 0) {
+              // Flavor cap reached — skip this event
+            } else {
+              const events = triggerLocationEvent(
+                world,
+                cultivator,
+                "travel",
+                cultivator.locationId,
+                seed,
+                { flavorBudget },
+              );
+              const emittedFlavorCount = events.filter((event) => event.tags.includes("signal-type:flavor")).length;
+              if (emittedFlavorCount > 0) {
+                job.meta = { ...job.meta, travelFlavorEventCount: flavorCount + emittedFlavorCount };
+              }
+              triggeredEvents.push(...events);
+            }
           }
         }
       }

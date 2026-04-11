@@ -28,6 +28,7 @@ import {
   spellDefense,
   weaponAttack,
 } from "./attributes.js";
+import { parseQuestActionId } from "./quest.js";
 import {
   computeEscapeChance,
   createCultivator,
@@ -36,6 +37,7 @@ import {
   selectCombatRoute,
   starterStateFromRoll,
 } from "./engine.js";
+import { createResidenceForState } from "./residence.js";
 import { buildFullTopology } from "./topology.js";
 import { WEAPON_LOADOUT_DEFINITIONS, SPELL_LOADOUT_DEFINITIONS } from "./combat-loadouts.js";
 
@@ -518,6 +520,25 @@ test("cultivator state tolerates legacy worlds that are missing per-cultivator p
   assert.deepEqual(state.guixu?.unlockedNodeIds, []);
 });
 
+test("cultivator state exposes residence context only while at residence", () => {
+  const world = createSeedWorld();
+  const homeState = getCultivatorState(world, "yun-zhong-he");
+
+  assert.ok(homeState.activeResidence);
+  assert.ok(homeState.residenceContext);
+  assert.equal(homeState.residenceContext?.name, homeState.activeResidence?.name);
+  assert.equal(homeState.residenceContext?.description, homeState.activeResidence?.description);
+  assert.ok((homeState.residenceContext?.scene.length ?? 0) > 0);
+  assert.ok(["清晨", "午后", "薄暮", "深夜"].includes(homeState.residenceContext?.timeSense ?? ""));
+
+  const cultivator = world.cultivators["yun-zhong-he"];
+  cultivator.locationId = `${cultivator.locationId.split(":")[0]}:wilderness`;
+
+  const awayState = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(awayState.activeResidence, null);
+  assert.equal(awayState.residenceContext, null);
+});
+
 test("joining the sect updates sect state immediately", () => {
   const world = createSeedWorld();
   seedLegacyPlayerSect(world);
@@ -566,6 +587,103 @@ test("hydrateWorldState rebuilds topology while preserving canonical quest board
   assert.ok(hydrated.states.qingzhou?.locationIds.includes("qingzhou:main-city"));
 });
 
+test("hydrateWorldState backfills readable quest fields for legacy persisted quest data", () => {
+  const world = createSeedWorld();
+  const board = world.questBoards["qingzhou:main-city"]!;
+  const firstQuest = board.quests[0]!;
+
+  performAction(world, "yun-zhong-he", `quest:accept:${firstQuest.type}:${firstQuest.boardIndex}`);
+
+  const persisted = toPersistedWorldState(world) as any;
+  for (const quest of persisted.questBoards["qingzhou:main-city"].quests) {
+    delete quest.type;
+    delete quest.boardIndex;
+  }
+  for (const quest of persisted.cultivators["yun-zhong-he"].activeQuests) {
+    delete quest.type;
+    delete quest.boardIndex;
+  }
+
+  const hydrated = hydrateWorldState(persisted);
+  const actions = listAvailableActions(hydrated, "yun-zhong-he");
+  const acceptAction = actions.find((action) => action.actionId.startsWith("quest:accept:"));
+  const executeAction = actions.find((action) => action.actionId.startsWith("quest:execute:"));
+
+  assert.ok(acceptAction);
+  assert.ok(executeAction);
+  assert.equal(acceptAction!.actionId.includes("undefined"), false);
+  assert.equal(executeAction!.actionId.includes("undefined"), false);
+  assert.ok(parseQuestActionId(executeAction!.actionId));
+
+  const result = performAction(hydrated, "yun-zhong-he", executeAction!.actionId as any);
+  assert.equal(result.accepted, true);
+});
+
+test("quest action ids are readable and parseable from board and active quest surfaces", () => {
+  const world = createSeedWorld();
+  const boardActions = listAvailableActions(world, "yun-zhong-he").filter((action) => action.actionId.startsWith("quest:accept:"));
+
+  assert.ok(boardActions.length > 0);
+  const parsedAccept = parseQuestActionId(boardActions[0]!.actionId);
+  assert.equal(parsedAccept?.phase, "accept");
+  assert.ok((parsedAccept?.questType.length ?? 0) > 0);
+  assert.equal(Number.isInteger(parsedAccept?.index), true);
+
+  const board = world.questBoards[world.cultivators["yun-zhong-he"]!.locationId]!;
+  const firstQuest = board.quests[0]!;
+  performAction(world, "yun-zhong-he", `quest:accept:${firstQuest.type}:${firstQuest.boardIndex}`);
+
+  const executeActions = listAvailableActions(world, "yun-zhong-he").filter((action) => action.actionId.startsWith("quest:execute:"));
+  assert.ok(executeActions.length > 0);
+
+  const parsedExecute = parseQuestActionId(executeActions[0]!.actionId);
+  assert.equal(parsedExecute?.phase, "execute");
+  assert.equal(parsedExecute?.questType, world.cultivators["yun-zhong-he"]!.activeQuests[0]!.type);
+  assert.equal(parsedExecute?.index, 0);
+});
+
+test("remaining board quest action ids preserve boardIndex instead of collapsing to array position", () => {
+  const world = createSeedWorld();
+  const board = world.questBoards["qingzhou:main-city"]!;
+  const firstQuest = board.quests[0]!;
+  const secondQuest = board.quests[1]!;
+
+  performAction(world, "yun-zhong-he", `quest:accept:${firstQuest.type}:${firstQuest.boardIndex}`);
+
+  const acceptActions = listAvailableActions(world, "yun-zhong-he")
+    .filter((action) => action.actionId.startsWith("quest:accept:"))
+    .map((action) => parseQuestActionId(action.actionId));
+
+  assert.ok(acceptActions.some((parsed) => parsed?.phase === "accept" && parsed.questType === secondQuest.type && parsed.index === secondQuest.boardIndex));
+});
+
+test("stale execute quest ids become invalid after active quest list reindexes", () => {
+  const world = createSeedWorld();
+  const board = world.questBoards["qingzhou:main-city"]!;
+  const firstQuest = board.quests[0]!;
+  const secondQuest = board.quests[1]!;
+
+  performAction(world, "yun-zhong-he", `quest:accept:${firstQuest.type}:${firstQuest.boardIndex}`);
+  performAction(world, "yun-zhong-he", `quest:accept:${secondQuest.type}:${secondQuest.boardIndex}`);
+
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.activeQuests[0]!.successRate = 100;
+  const staleSecondExecuteId = `quest:execute:${cultivator.activeQuests[1]!.type}:1`;
+
+  performAction(world, "yun-zhong-he", `quest:execute:${cultivator.activeQuests[0]!.type}:0`);
+  runUntilIdle(world, "yun-zhong-he");
+
+  assert.throws(
+    () => performAction(world, "yun-zhong-he", staleSecondExecuteId as any),
+    /Active quest not found/,
+  );
+
+  const freshExecuteAction = listAvailableActions(world, "yun-zhong-he").find((action) => action.actionId.startsWith("quest:execute:"));
+  const parsedFresh = parseQuestActionId(freshExecuteAction!.actionId);
+  assert.equal(parsedFresh?.phase, "execute");
+  assert.equal(parsedFresh?.index, 0);
+});
+
 test("accepting and resolving a base quest updates local state reputation", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators["yun-zhong-he"] as typeof world.cultivators["yun-zhong-he"] & {
@@ -585,11 +703,11 @@ test("accepting and resolving a base quest updates local state reputation", () =
   const beforeQingzhouReputation = cultivator.stateReputation.qingzhou;
   const beforeYangzhouReputation = cultivator.stateReputation.yangzhou;
 
-  performAction(world, "yun-zhong-he", `accept-quest:${candidate.id}`);
+  performAction(world, "yun-zhong-he", `quest:accept:${candidate.type}:${candidate.boardIndex}`);
   const active = cultivator.activeQuests[0]!;
   active.successRate = 100;
 
-  performAction(world, "yun-zhong-he", `execute-quest:${active.id}`);
+  performAction(world, "yun-zhong-he", `quest:execute:${active.type}:0`);
   runUntilIdle(world, "yun-zhong-he");
 
   assert.equal(cultivator.activeQuests.length, 0);
@@ -1015,6 +1133,72 @@ test("residence-recover-qi supports base and qi-pill branches", () => {
   assert.ok(usePillCultivator.statusEffects.some((effect) => effect.id === "spirit-saturated"));
 });
 
+test("residence actions can emit at least two ambient event kinds and state surfaces recent ones", () => {
+  const seenKinds = new Set<string>();
+  let surfacedInState = false;
+
+  for (let seed = 1; seed <= 160 && (seenKinds.size < 2 || !surfacedInState); seed += 1) {
+    const world = createSeedWorld();
+    world.nextJobSequence = seed;
+    world.cultivators["yun-zhong-he"].spiritStones = 240;
+
+    performAction(world, "yun-zhong-he", "residence-meditate");
+    advanceWorld(world, 4);
+
+    const ambientLogs = world.daoLogs.filter((entry) => entry.cultivatorId === "yun-zhong-he" && entry.tags.includes("ambient-event"));
+    for (const entry of ambientLogs) {
+      const kindTag = entry.tags.find((tag) => tag.startsWith("ambient-kind:"));
+      if (kindTag) {
+        seenKinds.add(kindTag.slice("ambient-kind:".length));
+      }
+    }
+
+    const state = getCultivatorState(world, "yun-zhong-he");
+    if ((state.residenceContext?.recentAmbientEvents.length ?? 0) > 0) {
+      surfacedInState = true;
+    }
+  }
+
+  assert.ok(seenKinds.size >= 2, `expected at least 2 ambient kinds, got: ${Array.from(seenKinds).join(", ")}`);
+  assert.equal(surfacedInState, true);
+});
+
+test("residenceContext only surfaces ambient events from the currently active residence", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"];
+  const secondResidence = createResidenceForState("yangzhou", cultivator.id);
+  cultivator.residences = [...cultivator.residences, secondResidence];
+
+  let sawTaggedAmbient = false;
+  for (let seed = 1; seed <= 200 && !sawTaggedAmbient; seed += 1) {
+    const candidateWorld = createSeedWorld();
+    const candidateCultivator = candidateWorld.cultivators["yun-zhong-he"];
+    const candidateSecondResidence = createResidenceForState("yangzhou", candidateCultivator.id);
+    candidateCultivator.residences = [...candidateCultivator.residences, candidateSecondResidence];
+    candidateWorld.nextJobSequence = seed;
+    candidateCultivator.spiritStones = 240;
+
+    performAction(candidateWorld, "yun-zhong-he", "residence-meditate");
+    advanceWorld(candidateWorld, 4);
+
+    const firstAmbient = candidateWorld.daoLogs.find((entry) =>
+      entry.cultivatorId === "yun-zhong-he"
+      && entry.tags.includes("ambient-event")
+      && entry.tags.includes(`residence-id:${candidateCultivator.residences[0]!.id}`));
+    if (!firstAmbient) {
+      continue;
+    }
+
+    sawTaggedAmbient = true;
+    candidateCultivator.locationId = candidateSecondResidence.locationId;
+    const movedState = getCultivatorState(candidateWorld, "yun-zhong-he");
+    assert.equal(movedState.activeResidence?.id, candidateSecondResidence.id);
+    assert.deepEqual(movedState.residenceContext?.recentAmbientEvents ?? [], []);
+  }
+
+  assert.equal(sawTaggedAmbient, true);
+});
+
 test("residence-produce rejects unknown recipe id", () => {
   const world = createSeedWorld();
   assert.throws(
@@ -1435,7 +1619,7 @@ test("first travel onboarding step recommends a quest-board action when availabl
 
   assert.equal(state.onboarding.stage, "first-travel");
   assert.ok(state.onboarding.hint.includes("quest"));
-  assert.ok(state.onboarding.recommendedActions.some((a: string) => a.startsWith("accept-quest:")));
+  assert.ok(state.onboarding.recommendedActions.some((a: string) => a.startsWith("quest:accept:")));
 });
 
 test("only residence meditation advances the residence cultivation onboarding step", () => {
@@ -1497,6 +1681,226 @@ test("realm breakthrough immediately completes onboarding", () => {
 
   assert.equal(onboarding.stage, "completed");
   assert.ok(onboarding.completedStages.includes("first-breakthrough"));
+});
+
+// --- P0-1 Decision Surface Consistency ---
+
+test("all three decision surfaces only recommend actions present in availableActions", () => {
+  const world = createSeedWorld();
+  const state = getCultivatorState(world, "yun-zhong-he");
+  const available = listAvailableActions(world, "yun-zhong-he");
+  const availableIds = new Set(available.map((a) => a.actionId));
+
+  for (const id of state.onboarding.recommendedActions) {
+    assert.ok(availableIds.has(id), `onboarding recommended '${id}' which is not in availableActions`);
+  }
+  for (const id of state.agentGuidance.suggestedActions) {
+    assert.ok(availableIds.has(id), `agentGuidance suggested '${id}' which is not in availableActions`);
+  }
+});
+
+test("strategySnapshot.recommendedSequence only contains available actions", () => {
+  const world = createSeedWorld();
+  const strategy = getStrategySnapshot(world, "yun-zhong-he");
+  const available = listAvailableActions(world, "yun-zhong-he");
+  const availableIds = new Set(available.map((a) => a.actionId));
+
+  for (const id of strategy.recommendedSequence) {
+    assert.ok(availableIds.has(id), `strategySnapshot recommended '${id}' which is not in availableActions`);
+  }
+});
+
+test("onboarding does not recommend residence-meditate when character is not at residence", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  // Move to wilderness (away from residence)
+  const wildernessId = `${cultivator.locationId.split(":")[0]}:wilderness`;
+  if (world.locations[wildernessId]) {
+    cultivator.locationId = wildernessId;
+  }
+  // Force first-quest stage so onboarding would want to recommend residence-meditate
+  world.daoLogs.unshift(
+    { id: "t-action", cultivatorId: cultivator.id, tick: world.tick, title: "a", content: "a", tags: ["action-complete"] },
+    { id: "t-travel", cultivatorId: cultivator.id, tick: world.tick, title: "t", content: "t", tags: ["travel"] },
+    { id: "t-quest", cultivatorId: cultivator.id, tick: world.tick, title: "q", content: "q", tags: ["quest-complete"] },
+  );
+
+  const state = getCultivatorState(world, cultivator.id);
+  const available = listAvailableActions(world, cultivator.id);
+  const availableIds = new Set(available.map((a) => a.actionId));
+
+  for (const id of state.onboarding.recommendedActions) {
+    assert.ok(availableIds.has(id), `onboarding recommended '${id}' but it is not available at current location`);
+  }
+});
+
+test("decision surface consistency holds for injured cultivator", () => {
+  const world = createSeedWorld();
+  world.cultivators["yun-zhong-he"]!.injuryTicksRemaining = 5;
+
+  const state = getCultivatorState(world, "yun-zhong-he");
+  const available = listAvailableActions(world, "yun-zhong-he");
+  const availableIds = new Set(available.map((a) => a.actionId));
+
+  for (const id of state.onboarding.recommendedActions) {
+    assert.ok(availableIds.has(id), `onboarding recommended '${id}' for injured cultivator but not available`);
+  }
+  for (const id of state.agentGuidance.suggestedActions) {
+    assert.ok(availableIds.has(id), `agentGuidance suggested '${id}' for injured cultivator but not available`);
+  }
+
+  const strategy = getStrategySnapshot(world, "yun-zhong-he");
+  for (const id of strategy.recommendedSequence) {
+    assert.ok(availableIds.has(id), `strategy recommended '${id}' for injured cultivator but not available`);
+  }
+});
+
+// --- P0-4 Recovery path safety ---
+
+test("poisoned cultivator guidance recommends detox action as first priority", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.statusEffects.push({
+    id: "poisoned",
+    name: "Poisoned",
+    description: "Loses qi each tick.",
+    source: "test",
+    remainingTicks: 4,
+    intensity: 1,
+  });
+
+  const state = getCultivatorState(world, cultivator.id);
+
+  assert.ok(state.agentGuidance.warnings.some((w: string) => w.includes("中毒")), "should warn about poison");
+  assert.ok(state.agentGuidance.priorities.some((p: string) => p.includes("中毒")), "should include detox priority");
+  assert.ok(state.agentGuidance.suggestedActions.length > 0, "should suggest a recovery action");
+  // First suggested action should be a healing action (heal or residence-heal) or travel to safe
+  const first = state.agentGuidance.suggestedActions[0];
+  assert.ok(
+    first === "heal" || first === "residence-heal" || first?.startsWith("travel-to:"),
+    `first suggested action for poisoned should be heal/residence-heal/travel, got: ${first}`,
+  );
+  assert.ok(state.agentGuidance.warnings.some((w: string) => w.includes("消耗灵力")), "poison warning should describe qi loss");
+});
+
+test("poisoned cultivator outside safe locations gets an explicit transit warning", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.locationId = "qingzhou:wilderness";
+  cultivator.statusEffects.push({
+    id: "poisoned",
+    name: "Poisoned",
+    description: "Loses qi each tick.",
+    source: "test",
+    remainingTicks: 4,
+    intensity: 1,
+  });
+
+  const state = getCultivatorState(world, cultivator.id);
+
+  assert.ok(state.agentGuidance.warnings.some((w: string) => w.includes("无法直接解毒")));
+  assert.ok(state.agentGuidance.suggestedActions[0]?.startsWith("travel-to:"));
+});
+
+test("residence-heal removes poison status effect", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.injuryTicksRemaining = 3;
+  cultivator.statusEffects.push({
+    id: "poisoned",
+    name: "Poisoned",
+    description: "Loses qi each tick.",
+    source: "test",
+    remainingTicks: 4,
+    intensity: 1,
+  });
+
+  performAction(world, cultivator.id, "residence-heal");
+  runUntilIdle(world, cultivator.id);
+
+  assert.ok(!cultivator.statusEffects.some((e) => e.id === "poisoned"), "residence-heal should remove poisoned");
+});
+
+test("every negative status effect has a recovery path in guidance", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  const negativeEffects: Array<{ id: string; name: string }> = [
+    { id: "wounded", name: "Wounded" },
+    { id: "poisoned", name: "Poisoned" },
+    { id: "deviation", name: "Qi Deviation" },
+  ];
+
+  for (const effect of negativeEffects) {
+    // Reset
+    cultivator.statusEffects = [];
+    cultivator.injuryTicksRemaining = effect.id === "wounded" ? 3 : 0;
+
+    if (effect.id !== "wounded") {
+      cultivator.statusEffects.push({
+        id: effect.id as any,
+        name: effect.name,
+        description: "test",
+        source: "test",
+        remainingTicks: 4,
+        intensity: 1,
+      });
+    }
+
+    const state = getCultivatorState(world, cultivator.id);
+    assert.ok(
+      state.agentGuidance.warnings.length > 0,
+      `negative effect '${effect.id}' should produce at least one warning`,
+    );
+    assert.ok(
+      state.agentGuidance.suggestedActions.length > 0,
+      `negative effect '${effect.id}' should produce at least one suggested recovery action`,
+    );
+  }
+});
+
+test("depleted cultivator gets recovery action recommendation", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.qi = 1;
+
+  const state = getCultivatorState(world, cultivator.id);
+
+  assert.ok(state.agentGuidance.warnings.some((w: string) => w.includes("灵力枯竭")), "should warn about depletion");
+  assert.ok(state.agentGuidance.suggestedActions.length > 0, "should suggest recovery");
+});
+
+test("injured cultivator in a safe settlement gets direct heal instead of filtered residence-heal", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.injuryTicksRemaining = 4;
+  const nonResidenceSafeLocation = Object.keys(world.locations).find((locationId) =>
+    locationId !== cultivator.residence.locationId && world.locations[locationId]?.kind === "safe",
+  );
+  assert.ok(nonResidenceSafeLocation);
+  cultivator.locationId = nonResidenceSafeLocation;
+
+  const state = getCultivatorState(world, cultivator.id);
+
+  assert.equal(state.agentGuidance.suggestedActions[0], "heal");
+});
+
+test("qi deviation warns when only decay-safe recovery is available", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.locationId = "qingzhou:wilderness";
+  cultivator.statusEffects.push({
+    id: "deviation",
+    name: "Qi Deviation",
+    description: "Cultivation becomes unstable and risky.",
+    source: "test",
+    remainingTicks: 3,
+    intensity: 1,
+  });
+
+  const state = getCultivatorState(world, cultivator.id);
+
+  assert.ok(state.agentGuidance.warnings.some((w: string) => w.includes("无法直接清除")));
+  assert.ok(state.agentGuidance.warnings.some((w: string) => w.includes("无法稳定偏差")));
 });
 
 test("legacy player sect info is still returned through getSectInfo", () => {
@@ -1867,6 +2271,72 @@ test("combat outcomes are deterministic for same setup", () => {
   assert.equal(firstLog?.damageTaken, secondLog?.damageTaken);
   assert.equal(firstLog?.totalRounds, secondLog?.totalRounds);
   assert.deepEqual(firstLog?.rounds, secondLog?.rounds);
+});
+
+// --- P0-3 Combat log clarity ---
+
+test("combat log hpDelta reflects actual HP change across combat", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  if (log?.rounds && log.rounds.length > 0) {
+    const startHp = log.playerSnapshot?.hp ?? 0;
+    const endHp = log.rounds[log.rounds.length - 1]!.playerHpAfter;
+    assert.equal(log.hpDelta, endHp - startHp, "hpDelta should equal endHp - startHp");
+    assert.equal(log.totalDamageTaken, Math.max(0, startHp - endHp), "totalDamageTaken should be non-negative HP loss");
+  }
+});
+
+test("combat log totalSpiritSpent sums per-round spirit costs", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  if (log?.rounds && log.rounds.length > 0) {
+    const expectedSpirit = log.rounds.reduce((sum, r) => sum + (r.playerSpiritSpent ?? 0), 0);
+    assert.equal(log.totalSpiritSpent, expectedSpirit);
+  }
+});
+
+test("combat log statusChanges tracks all status transitions", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  if (log?.rounds && log.rounds.length > 0) {
+    assert.ok(Array.isArray(log.statusChanges), "statusChanges should be an array");
+    for (const change of log.statusChanges ?? []) {
+      assert.ok(typeof change.statusId === "string");
+      assert.ok(typeof change.statusName === "string");
+      assert.ok(typeof change.applied === "boolean");
+    }
+  }
+});
+
+test("combat log includes post-combat cultivator status effects added after round resolution", () => {
+  const world = createSeedWorld();
+  performAction(world, "yun-zhong-he", "travel-to:qingzhou:wilderness");
+  runUntilIdle(world, "yun-zhong-he");
+  performAction(world, "yun-zhong-he", "hunt-mine-beast");
+  runUntilIdle(world, "yun-zhong-he");
+
+  const log = world.combatLogs[0];
+  assert.ok(log);
+  assert.ok(log?.statusChanges?.some((change) => change.statusId === "qi-surge" && change.applied));
+  assert.ok(log?.statusEffectsRemaining?.some((status) => status.statusId === "qi-surge"));
 });
 
 test("cultivator state exposes combat profile with derived stats", () => {

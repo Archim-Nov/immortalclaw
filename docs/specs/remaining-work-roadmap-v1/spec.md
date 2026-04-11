@@ -87,24 +87,32 @@ P1 机制已实现，以下为体验层补全。
 - **问题**：居所感觉像功能菜单而非世界中的地方
 - **范围**：居所加入地点描述、环境事件、时间感知，使其有空间归属感
 - **验收**：居所状态视图包含地点描述；居所内可触发至少 2 种环境事件
+- **子 spec**：`residence-clarity-v1/`
+- **实现计划**：`docs/plans/2026-04-11-residence-clarity-v1.md`
 
 ### P1-R2 任务 ActionId 可读化
 
 - **问题**：任务行动 ID 为超长机器字符串，每次刷新变化
-- **范围**：任务 ActionId 改为 `quest:{questType}:{index}` 格式，稳定且可读
+- **范围**：任务 ActionId 改为 `quest:{phase}:{questType}:{index}` 格式，在当前 action 快照内稳定且可读
 - **验收**：所有 quest 类 ActionId 匹配 `quest:*` 模式，Agent 可按模式匹配选择
+- **子 spec**：`quest-actionid-legibility-v1/`
+- **实现计划**：`docs/plans/2026-04-11-quest-actionid-legibility-v1.md`
 
 ### P1-R3 引导系统上下文感知增强
 
 - **问题**：引导过于通用，不针对当前情境
 - **范围**：增加情境触发器（低血量、高价值物品、突破准备就绪等），引导内容动态化
 - **验收**：至少 5 种情境下 guidance 给出差异化建议
+- **子 spec**：`guidance-context-awareness-v1/`
+- **实现计划**：`docs/plans/2026-04-11-guidance-context-awareness-v1.md`
 
 ### P1-R4 事件信号质量提升
 
 - **问题**：旅行事件过于频繁，部分为无决策影响的噪音
 - **范围**：区分"风味事件"和"决策事件"，降低风味事件频率，提升决策事件比重
 - **验收**：决策事件占比 ≥ 40%；风味事件单次旅行不超过 2 条
+- **子 spec**：`event-signal-quality-v1/`
+- **实现计划**：`docs/plans/2026-04-11-event-signal-quality-v1.md`
 
 ### P1-R5 经济转化链可视化
 

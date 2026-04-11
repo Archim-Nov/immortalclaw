@@ -134,6 +134,8 @@ Use `state.breakthrough.materialSources` as the structured hint surface for wher
 
 `immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call.
 
+When `immortal_state` returns `state.residenceContext`, treat it as a lightweight residence-presence layer: it restates the active residence description, current residence time-sense, a short scene line, and recent passive ambient residence events. It is additive flavor context for understanding where the cultivator is staying, not a replacement for the exact action list.
+
 Managed dungeon play now uses exact returned ids such as `start-dungeon-expedition:rank-1:balanced`. During that long job the runtime keeps resolving internal dungeon steps server-side; the agent should usually wait until the expedition completes or a fresh `/agent/actions` read explicitly exposes `abort-dungeon-expedition`. Once the run ends, read `state.dungeonExpedition.lastReport.flavorEvents` to surface a few real dungeon flavor beats without guessing from the summary text.
 
 `immortal_send_message` requires an authenticated identity-bound agent session. Use the exact recipient `agentId` plus message content; the plugin will call authenticated `POST /agent/messages` on the runtime.

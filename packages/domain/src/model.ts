@@ -308,11 +308,18 @@ export interface QuestReward {
   contribution: number;
 }
 
+export type QuestActionPhase = "accept" | "execute";
+export type AcceptQuestActionId = `quest:accept:${string}:${number}`;
+export type ExecuteQuestActionId = `quest:execute:${string}:${number}`;
+export type QuestActionId = AcceptQuestActionId | ExecuteQuestActionId;
+
 export interface QuestInstance {
   id: string;
   templateId: string;
+  type: string;
   category: QuestCategory;
   locationId: string;
+  boardIndex: number;
   name: string;
   nameCn: string;
   description: string;
@@ -328,7 +335,9 @@ export interface ActiveQuest {
   id: string;
   instanceId: string;
   templateId: string;
+  type: string;
   category: QuestCategory;
+  boardIndex: number;
   name: string;
   description: string;
   durationTicks: number;
@@ -443,7 +452,7 @@ export type StatusEffectId =
 
 export type TimedActionId =
   | `travel-to:${string}`
-  | `execute-quest:${string}`
+  | ExecuteQuestActionId
   | `explore-guixu:${string}`
   | `enter-bahuang:${string}`
   | `enter-dungeon:rank-${DungeonRank}:${RunStrategy["posture"]}`
@@ -757,7 +766,7 @@ export interface SectLevel {
 }
 
 export type ImmediateActionId =
-  | `accept-quest:${string}`
+  | AcceptQuestActionId
   | `enter-wilderness:${string}`
   | `unlock-guixu:${string}`
   | `join-neutral-sect:${string}`
@@ -1138,7 +1147,33 @@ export interface ActionJob {
     dualTaskId?: string;
     dualPartnerId?: string;
     dualRole?: "initiator" | "partner";
+    travelFlavorEventCount?: number;
   };
+}
+
+export interface RecipeReference {
+  recipeId: string;
+  outputItemId: ItemId;
+  outputName: string;
+}
+
+export interface BreakthroughReference {
+  targetLevel: number;
+  targetRealm: string;
+}
+
+export interface ResourceUsageSummary {
+  sellable?: { baseValue: number };
+  directUse?: { kind: ItemUseKind; effectSummary: string };
+  recipeInputFor?: readonly RecipeReference[];
+  breakthroughMaterialFor?: readonly BreakthroughReference[];
+  loadoutUnlock?: { type: "weapon" | "spell"; loadoutId: string; loadoutName: string };
+}
+
+export interface SpiritStoneUsageSummary {
+  spiritStoneUsage: true;
+  recipeCosts: readonly { recipeId: string; cost: number }[];
+  marketBuying: boolean;
 }
 
 export interface DaoLogEntry {
@@ -1148,6 +1183,7 @@ export interface DaoLogEntry {
   title: string;
   content: string;
   tags: string[];
+  usableFor?: ResourceUsageSummary | SpiritStoneUsageSummary;
 }
 
 export interface Message {
@@ -1468,6 +1504,8 @@ export interface CombatJobState {
   encounterBuildId?: string;
   maxRounds: number;
   currentRound: number;
+  initialPlayerSnapshot: CombatSnapshot;
+  initialEnemySnapshot: CombatSnapshot;
   playerSnapshot: CombatSnapshot;
   enemySnapshot: CombatSnapshot;
   playerStyle: CombatStyle;
@@ -1479,6 +1517,8 @@ export interface CombatJobState {
   playerMaxSpirit?: number;
   enemySpirit?: number;
   enemyMaxSpirit?: number;
+  playerStatusEffectsBefore?: StatusEffect[];
+  enemyStatusEffectsBefore?: StatusEffect[];
   retreated?: boolean;
   retreatingSide?: "player" | "enemy";
   pvpTargetCultivatorId?: string;
@@ -1532,7 +1572,9 @@ export interface CombatLogEntry {
   totalDamageTaken?: number;
   totalQiSpent?: number;
   totalSpiritSpent?: number;
-  statusEffectsRemaining?: { statusId: CombatStatusId; statusName: string }[];
+  hpDelta?: number;
+  statusChanges?: readonly { statusId: CombatStatusId | StatusEffectId; statusName: string; applied: boolean }[];
+  statusEffectsRemaining?: { statusId: CombatStatusId | StatusEffectId; statusName: string }[];
 }
 
 export interface AgentBinding {
@@ -1592,6 +1634,27 @@ export interface ActionExecutionResult {
   accepted: boolean;
   summary: string;
   job?: ActionJob;
+}
+
+export type ResidenceAmbientKind = "atmosphere" | "human-presence" | "omen";
+
+export interface ResidenceAmbientEventView {
+  id: string;
+  tick: number;
+  title: string;
+  description: string;
+  kind: ResidenceAmbientKind;
+}
+
+export interface ResidenceContextView {
+  id: string;
+  stateId: string;
+  locationId: import("./constants.js").LocationId;
+  name: string;
+  description: string;
+  timeSense: string;
+  scene: string;
+  recentAmbientEvents: readonly ResidenceAmbientEventView[];
 }
 
 export interface TickSummary {
@@ -2010,6 +2073,7 @@ export interface CultivatorStateView {
     isActive: boolean;
   }[];
   activeResidence: Residence | null;
+  residenceContext: ResidenceContextView | null;
   productionQueue: readonly { slot: number; recipeId: string; ticksRemaining: number }[];
   pendingGifts: readonly { messageId: string; fromName: string; itemId: ItemId; count: number }[];
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];

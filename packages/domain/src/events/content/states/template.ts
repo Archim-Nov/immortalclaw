@@ -1,5 +1,6 @@
 import type { StateId } from "../../../constants.js";
 import type { EventTemplate } from "../../../events.js";
+import { deriveSignalType } from "../../../events.js";
 
 const STATE_EVENT_PREFIX: Record<StateId, string> = {
   qingzhou: "qz",
@@ -39,6 +40,7 @@ export function buildStateEventPack(
     source,
     semanticType: row.semanticType,
     resultType: row.resultType,
+    signalType: deriveSignalType(row.resultType, row.effects),
     name: row.title,
     nameCn: row.titleCn,
     description: row.description,

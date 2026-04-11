@@ -8,6 +8,13 @@ import type {
   WorldState,
 } from "./model.js";
 
+/**
+ * STATUS EFFECT REGISTRY RULE: When adding a new StatusEffectId:
+ *   1. Add it to NEGATIVE_EFFECTS or POSITIVE_EFFECTS below.
+ *   2. If negative: add a recovery path in guidance() (engine.ts) with priority + suggestedAction.
+ *   3. If negative: ensure at least one recovery action is always reachable (via ensureSafetyNetActions).
+ *   4. Add the new effect to the "recovery coverage" test in engine.test.ts.
+ */
 const NEGATIVE_EFFECTS = new Set(["wounded", "poisoned", "deviation"]);
 const POSITIVE_EFFECTS = new Set(["clear-mind", "qi-surge", "fortune-marked", "warded", "insight", "spirit-saturated"]);
 const RETREATING_ACTION_IDS = new Set(["residence-heal", "residence-recover-qi", "heal"]);
@@ -71,7 +78,7 @@ export function computeActivityContext(cultivator: Cultivator, world: WorldState
   if (
     job.actionId === "hunt-mine-beast"
     || job.actionId.startsWith("challenge-guardian:rank-")
-    || job.actionId.startsWith("execute-quest:")
+    || job.actionId.startsWith("quest:execute:")
   ) {
     return "encounter-resolving";
   }

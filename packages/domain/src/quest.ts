@@ -10,8 +10,12 @@ import {
 } from "./constants.js";
 import type {
   ActiveQuest,
+  AcceptQuestActionId,
   Cultivator,
+  ExecuteQuestActionId,
   QuestBoard,
+  QuestActionId,
+  QuestActionPhase,
   QuestInstance,
   QuestTemplate,
   SectTitle,
@@ -69,8 +73,10 @@ function instantiateQuest(template: QuestTemplate, locationId: string, tick: num
   return {
     id: instanceId,
     templateId: template.id,
+    type: template.type,
     category: template.category,
     locationId,
+    boardIndex: slotIndex,
     name: template.name,
     nameCn: template.nameCn,
     description: template.description,
@@ -85,6 +91,46 @@ function instantiateQuest(template: QuestTemplate, locationId: string, tick: num
     generatedAtTick: tick,
     expiresAtTick: tick + QUEST_BOARD_REFRESH_INTERVAL,
   };
+}
+
+export function buildQuestActionId(
+  phase: QuestActionPhase,
+  questType: string,
+  index: number,
+): QuestActionId {
+  return `quest:${phase}:${questType}:${index}`;
+}
+
+export function parseQuestActionId(actionId: string): {
+  phase: QuestActionPhase;
+  questType: string;
+  index: number;
+} | null {
+  if (!actionId.startsWith("quest:")) {
+    return null;
+  }
+  const [prefix, phase, ...rest] = actionId.split(":");
+  if (prefix !== "quest" || (phase !== "accept" && phase !== "execute") || rest.length < 2) {
+    return null;
+  }
+  const indexRaw = rest.at(-1) ?? "";
+  const index = Number.parseInt(indexRaw, 10);
+  if (!Number.isInteger(index) || index < 0) {
+    return null;
+  }
+  const questType = rest.slice(0, -1).join(":");
+  if (!questType) {
+    return null;
+  }
+  return { phase, questType, index };
+}
+
+export function buildAcceptQuestActionId(questType: string, boardIndex: number): AcceptQuestActionId {
+  return buildQuestActionId("accept", questType, boardIndex) as AcceptQuestActionId;
+}
+
+export function buildExecuteQuestActionId(questType: string, activeIndex: number): ExecuteQuestActionId {
+  return buildQuestActionId("execute", questType, activeIndex) as ExecuteQuestActionId;
 }
 
 export function refreshQuestBoard(world: WorldState, locationId: string): QuestBoard {
@@ -137,12 +183,12 @@ export function getQuestBoard(world: WorldState, locationId: string): QuestBoard
   return world.questBoards[locationId] ?? null;
 }
 
-export function acceptQuest(world: WorldState, cultivator: Cultivator, questInstanceId: string): ActiveQuest {
+export function acceptQuest(world: WorldState, cultivator: Cultivator, questType: string, boardIndex: number): ActiveQuest {
   const board = world.questBoards[cultivator.locationId];
   if (!board) throw new Error("No quest board available at current location.");
 
-  const instanceIndex = board.quests.findIndex((quest) => quest.id === questInstanceId);
-  if (instanceIndex < 0) throw new Error(`Quest instance not found on current board: ${questInstanceId}`);
+  const instanceIndex = board.quests.findIndex((quest) => quest.type === questType && quest.boardIndex === boardIndex);
+  if (instanceIndex < 0) throw new Error(`Quest instance not found on current board: ${questType}:${boardIndex}`);
 
   const instance = board.quests[instanceIndex]!;
   const baseCount = cultivator.activeQuests.filter((quest) => quest.category === "base").length;
@@ -161,7 +207,9 @@ export function acceptQuest(world: WorldState, cultivator: Cultivator, questInst
     id: `active:${cultivator.id}:${instance.id}:${world.tick}`,
     instanceId: instance.id,
     templateId: instance.templateId,
+    type: instance.type,
     category: instance.category,
+    boardIndex: instance.boardIndex,
     name: instance.name,
     description: instance.description,
     durationTicks: instance.durationTicks,
@@ -181,6 +229,14 @@ export function markQuestInProgress(cultivator: Cultivator, activeQuestId: strin
   const quest = cultivator.activeQuests.find((candidate) => candidate.id === activeQuestId);
   if (!quest) throw new Error(`Active quest not found: ${activeQuestId}`);
   quest.status = "in-progress";
+  return quest;
+}
+
+export function getActiveQuestByReadableIndex(cultivator: Cultivator, questType: string, activeIndex: number): ActiveQuest | null {
+  const quest = cultivator.activeQuests[activeIndex] ?? null;
+  if (!quest || quest.type !== questType) {
+    return null;
+  }
   return quest;
 }
 

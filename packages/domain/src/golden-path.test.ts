@@ -47,10 +47,10 @@ test("golden path onboarding reaches completed within 36 ticks", () => {
   assert.ok(questBoard);
   const baseQuest = questBoard.quests.find((quest) => quest.category === "base");
   assert.ok(baseQuest);
-  performAction(world, cultivatorId, `accept-quest:${baseQuest!.id}`);
+  performAction(world, cultivatorId, `quest:accept:${baseQuest!.type}:${baseQuest!.boardIndex}`);
   const activeQuest = world.cultivators[cultivatorId]!.activeQuests[0]!;
   activeQuest.successRate = 100;
-  performAction(world, cultivatorId, `execute-quest:${activeQuest.id}`);
+  performAction(world, cultivatorId, `quest:execute:${activeQuest.type}:0`);
   runUntilIdle(world, cultivatorId);
   checkpoints.push(readStage());
   assert.equal(readStage(), "first-quest");

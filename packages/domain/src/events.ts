@@ -13,6 +13,7 @@ export type EventSourceType = "exploration" | "travel";
 export type EventSemanticType = "fortune" | "training" | "human";
 export type EventResultType = "resource" | "progression" | "status" | "combat" | "story";
 export type EventPoolLayer = "global-common" | "state-specific" | "node-specific" | "special-overlay";
+export type EventSignalType = "flavor" | "decision";
 
 export interface EventEffect {
   readonly spiritStones?: number;
@@ -31,6 +32,7 @@ export interface EventTemplate {
   readonly source: EventSourceType;
   readonly semanticType: EventSemanticType;
   readonly resultType: EventResultType;
+  readonly signalType: EventSignalType;
   readonly name: string;
   readonly nameCn: string;
   readonly description: string;
@@ -60,6 +62,15 @@ export interface DrawnEvent {
   readonly subEvent: EventTemplate | null;
   readonly locationId: string;
   readonly tick: number;
+}
+
+export function deriveSignalType(resultType: EventResultType, effects: EventEffect): EventSignalType {
+  if (resultType === "resource" || resultType === "combat" || resultType === "progression") return "decision";
+  if (resultType === "story") return "flavor";
+  // resultType === "status": decision if negative effects, flavor if positive-only or empty
+  if (effects.qi && effects.qi < 0) return "decision";
+  if (effects.injuryTicksRemaining && effects.injuryTicksRemaining > 0) return "decision";
+  return "flavor";
 }
 
 export { createEventPools } from "./events/catalog.js";
