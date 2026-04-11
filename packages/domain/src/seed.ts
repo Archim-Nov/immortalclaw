@@ -16,7 +16,10 @@
   WorldState,
 } from "./model.js";
 import {
+  BASE_QUEST_TEMPLATES,
+  HIGH_RISK_QUEST_TEMPLATES,
   NODE_META,
+  SECT_QUEST_TEMPLATES,
   STATE_IDS,
   type LocationId,
   type BaseNodeType,
@@ -37,6 +40,22 @@ import { seedQuestBoards } from "./quest.js";
 import { buildFullTopology, toLocationId, toSectOutpostLocationId } from "./topology.js";
 
 const sects: Record<string, Sect> = {};
+const QUEST_TEMPLATE_TYPE_BY_ID = new Map(
+  [...BASE_QUEST_TEMPLATES, ...HIGH_RISK_QUEST_TEMPLATES, ...SECT_QUEST_TEMPLATES].map((template) => [template.id, template.type]),
+);
+
+function backfillQuestType(templateId?: string, fallbackId?: string): string {
+  if (templateId && QUEST_TEMPLATE_TYPE_BY_ID.has(templateId)) {
+    return QUEST_TEMPLATE_TYPE_BY_ID.get(templateId)!;
+  }
+  if (fallbackId) {
+    const guessedTemplateId = fallbackId.split(":").at(-1);
+    if (guessedTemplateId && QUEST_TEMPLATE_TYPE_BY_ID.has(guessedTemplateId)) {
+      return QUEST_TEMPLATE_TYPE_BY_ID.get(guessedTemplateId)!;
+    }
+  }
+  return "quest";
+}
 
 function buildNeutralSects(geographyRegistry: GeographyRegistryDefinition): Record<string, NeutralSect> {
   const neutralSects: Record<string, NeutralSect> = {};
@@ -703,6 +722,20 @@ export function hydrateWorldState(
       (cultivator.residence as any).stateId = stateId;
       (cultivator.residence as any).description = (cultivator.residence as any).description ?? "";
     }
+
+    cultivator.activeQuests = (cultivator.activeQuests ?? []).map((quest, index) => ({
+      ...quest,
+      type: quest.type ?? backfillQuestType(quest.templateId, quest.instanceId ?? quest.id),
+      boardIndex: Number.isInteger(quest.boardIndex) ? quest.boardIndex : index,
+    }));
+  }
+
+  for (const board of Object.values(hydrated.questBoards ?? {})) {
+    board.quests = (board.quests ?? []).map((quest, index) => ({
+      ...quest,
+      type: quest.type ?? backfillQuestType(quest.templateId, quest.id),
+      boardIndex: Number.isInteger(quest.boardIndex) ? quest.boardIndex : index,
+    }));
   }
 
   return hydrated;
