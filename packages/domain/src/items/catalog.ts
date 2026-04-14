@@ -12,8 +12,8 @@ import { BREAKTHROUGH_ITEMS } from "./breakthrough-items.js";
 import { SPECIAL_ITEMS } from "./special-items.js";
 import { LOADOUT_SOURCE_ITEMS } from "./loadout-source-items.js";
 
-type BuyActionId = "buy-healing-pill" | "buy-qi-pill" | "buy-ward-talisman";
-type SellActionId = "sell-spirit-ore" | "sell-ruin-fragment" | "sell-beast-core";
+type BuyActionId = "buy-healing-pill" | "buy-qi-pill" | "buy-ward-talisman" | "buy-eight-wastes-pass";
+type SellActionId = "sell-spirit-ore" | "sell-ruin-fragment" | "sell-beast-core" | "sell-ancient-artifact" | "sell-bahuang-spirit-essence" | "sell-legendary-artifact";
 
 export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
   ...LEGACY_CONSUMABLES,
@@ -30,12 +30,16 @@ const BUY_ACTION_TO_ITEM: Record<BuyActionId, ItemId> = {
   "buy-healing-pill": "healing-pill",
   "buy-qi-pill": "qi-pill",
   "buy-ward-talisman": "ward-talisman",
+  "buy-eight-wastes-pass": "eight-wastes-pass",
 };
 
 const SELL_ACTION_TO_ITEM: Record<SellActionId, ItemId> = {
   "sell-spirit-ore": "spirit-ore",
   "sell-ruin-fragment": "ruin-fragment",
   "sell-beast-core": "beast-core",
+  "sell-ancient-artifact": "ancient-artifact",
+  "sell-bahuang-spirit-essence": "bahuang-spirit-essence",
+  "sell-legendary-artifact": "legendary-artifact",
 };
 
 const ITEM_OPERATION_ACTION_IDS: Record<ItemId, Partial<Record<ItemActionOperation, ActionId>>> = ITEM_IDS.reduce(

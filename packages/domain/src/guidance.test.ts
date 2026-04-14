@@ -57,6 +57,8 @@ test("high-realm rare-reward needs route guidance to bahuang", () => {
   cultivator.inventory["eight-wastes-pass"] = 1;
   cultivator.inventory["ancient-artifact"] = 0;
   cultivator.injuryTicksRemaining = 0;
+  world.guixuProgress.wildernessAttunement[cultivator.id] = 80;
+  world.tick = 10;
 
   const state = getCultivatorState(world, CULTIVATOR_ID);
 

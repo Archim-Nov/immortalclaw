@@ -4,6 +4,14 @@
 
 This spec replaces the current auto-upgrade breakpoint with an explicit residence breakthrough flow.
 Realm progress now caps at `100`, breakthroughs consume authored materials, and major breakthrough success rate depends only on temporary status effects rather than registration-derived aptitude.
+Breakthrough-side growth grants are defined in `docs/specs/breakthrough-growth-v1/spec.md`; this spec continues to own the action, gating, record, and success-rate contract, while exact live material ids and authored source tables follow the current runtime definitions.
+
+## Status
+
+- The `Problem` section below is historical background from before explicit breakthroughs shipped.
+- The live runtime already uses explicit `residence-breakthrough` behavior.
+- Read this document as the contract for breakthrough flow shape, state legibility, persistence, and success-rate rules.
+- Read `docs/specs/breakthrough-growth-v1/spec.md` for authored breakthrough growth grants.
 
 ## Problem
 
@@ -49,6 +57,7 @@ Agents should be able to inspect:
 - which items are still missing
 - whether the attempt must happen at residence
 - the exact current major breakthrough success rate and its status-only breakdown
+- which main-attribute and five-element growth packages the current breakthrough slot would grant on success
 - one concrete recommended next action for the breakthrough chain
 
 This information belongs in `state.breakthrough`.
@@ -146,7 +155,7 @@ This information belongs in `state.breakthrough`.
 - update `realm` when crossing `3 -> 4` or `6 -> 7`
 - reset `realmProgress` to `0`
 - refill `qi` and `spiritualPower`
-- apply the existing live max-stat and lifespan growth
+- apply the authored breakthrough growth contract, including main-attribute growth, five-element growth, and the live resource / lifespan updates
 - write a success breakthrough record, dao log entry, and world event
 
 ## Data Contract
@@ -167,6 +176,8 @@ Add `breakthroughRecords: BreakthroughRecord[]` to `Cultivator`.
 - `consumedItems`
 - `successRate` for major attempts
 - `rateBreakdown` for major attempts
+- `grantedMainAttributeGrowth`
+- `grantedFiveElementGrowth`
 
 ### State View
 
@@ -183,6 +194,8 @@ Add `state.breakthrough` with:
 - `missingItems`
 - `majorSuccessRate`
 - `rateBreakdown`
+- `previewMainAttributeGrowth`
+- `previewFiveElementGrowth`
 - `recommendedAction`
 
 ### Action View
@@ -204,5 +217,6 @@ It must not expose registration- or aptitude-based modifiers because none are va
 - special breakthrough materials are residence-crafted only.
 - safe beginner loops can reliably reach the first breakthrough through material collection plus one residence craft.
 - major breakthrough rates change only with the approved temporary statuses.
+- successful breakthroughs grant the authored growth preview reported in `state.breakthrough`.
 - breakthrough attempts are persisted in `breakthroughRecords`.
 - public agent docs describe the new “progress cap -> collect -> craft -> breakthrough” loop.

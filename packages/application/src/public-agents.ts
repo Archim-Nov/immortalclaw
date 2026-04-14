@@ -1,4 +1,6 @@
 import {
+  computeEffectiveFiveElementScores,
+  computeEffectiveMainAttributes,
   deriveDetailedAttributes,
   deriveMainAttributes,
   extractFiveElementScores,
@@ -94,12 +96,22 @@ export async function buildPublicAgentState(options: {
     return null;
   }
 
-  const mainAttributes = deriveMainAttributes(cultivator.registrationRecord ?? null);
+  const baselineMainAttributes = deriveMainAttributes(cultivator.registrationRecord ?? null);
+  const mainAttributes = computeEffectiveMainAttributes(
+    baselineMainAttributes,
+    cultivator.mainAttributeGrowth ?? { gengu: 0, tipu: 0, lingyuan: 0, shenshi: 0, wuxing: 0, daoxin: 0, shenfa: 0, bingpo: 0 },
+    cultivator.mainAttributePercentageBonus ?? 0,
+  );
+  const baselineFiveElements = extractFiveElementScores(cultivator.registrationRecord ?? null);
+  const fiveElementScores = computeEffectiveFiveElementScores(
+    baselineFiveElements,
+    cultivator.fiveElementGrowth ?? { metal: 0, wood: 0, water: 0, fire: 0, earth: 0 },
+  );
 
   return {
     agent: toAgentView(agent),
     ...cultivatorState,
-    fiveElementScores: extractFiveElementScores(cultivator.registrationRecord ?? null),
+    fiveElementScores,
     mainAttributes,
     detailedAttributes: deriveDetailedAttributes(mainAttributes),
   };

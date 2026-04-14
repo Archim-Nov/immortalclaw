@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BREAKTHROUGH_GROWTH_TABLE,
+  computeEffectiveFiveElementScores,
+  computeEffectiveMainAttributes,
   deriveDetailedAttributes,
   deriveMainAttributes,
+  distributeFiveElementGrowth,
+  distributeMainAttributeGrowth,
   extractFiveElementScores,
   physicalDefense,
   spellAttack,
@@ -168,4 +173,125 @@ test("extractFiveElementScores returns scores from registration record", () => {
 test("extractFiveElementScores returns defaults when record is null", () => {
   const scores = extractFiveElementScores(null);
   assert.deepEqual(scores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
+});
+
+// ---- Breakthrough Growth Helpers ----
+
+test("distributeMainAttributeGrowth — single-root metal, minor budget=50: bingpo gets most", () => {
+  const result = distributeMainAttributeGrowth(50, "single-root", ["metal"]);
+  const total = Object.values(result).reduce((s, v) => s + v, 0);
+  assert.strictEqual(total, 50);
+  // metal cores: bingpo(3), shenshi(2), daoxin(1) — bingpo should be highest
+  assert.ok(result.bingpo > result.shenshi, "bingpo > shenshi");
+  assert.ok(result.shenshi > result.daoxin, "shenshi > daoxin");
+  // core budget = round(50*0.7) = 35, non-core budget = 15
+  // non-core attrs should each get 3 (15 / 5)
+  assert.strictEqual(result.gengu, 3);
+  assert.strictEqual(result.tipu, 3);
+  assert.strictEqual(result.lingyuan, 3);
+  assert.strictEqual(result.wuxing, 3);
+  assert.strictEqual(result.shenfa, 3);
+});
+
+test("distributeMainAttributeGrowth — single-root metal, major budget=100: same shape, bigger numbers", () => {
+  const result = distributeMainAttributeGrowth(100, "single-root", ["metal"]);
+  const total = Object.values(result).reduce((s, v) => s + v, 0);
+  assert.strictEqual(total, 100);
+  assert.ok(result.bingpo > result.shenshi);
+  assert.ok(result.shenshi > result.daoxin);
+});
+
+test("distributeMainAttributeGrowth — dual-root water-fire, major budget=100: overlapping attrs accumulate", () => {
+  const result = distributeMainAttributeGrowth(100, "dual-root", ["water", "fire"]);
+  const total = Object.values(result).reduce((s, v) => s + v, 0);
+  assert.strictEqual(total, 100);
+  // Both water and fire have shenfa as core → should be boosted
+  // Water cores: daoxin(3), shenshi(2), shenfa(1)
+  // Fire cores: lingyuan(2), shenfa(2), bingpo(2)
+  // Combined core set: daoxin, shenshi, shenfa, lingyuan, bingpo
+  // Non-core: gengu, tipu, wuxing (only 3 non-core attrs)
+  const coreSum = result.daoxin + result.shenshi + result.shenfa + result.lingyuan + result.bingpo;
+  const nonCoreSum = result.gengu + result.tipu + result.wuxing;
+  assert.strictEqual(coreSum + nonCoreSum, 100);
+});
+
+test("distributeMainAttributeGrowth — zero budget returns all zeros", () => {
+  const result = distributeMainAttributeGrowth(0, "single-root", ["metal"]);
+  assert.deepStrictEqual(Object.values(result).every(v => v === 0), true);
+});
+
+test("distributeFiveElementGrowth — single-root metal budget=5: 80% metal, 20% to 生我 (earth)", () => {
+  const result = distributeFiveElementGrowth(5, "single-root", ["metal"]);
+  assert.strictEqual(result.metal, 4); // round(5*0.8) = 4
+  assert.strictEqual(result.earth, 1); // 5 - 4 = 1 (earth generates metal)
+  assert.strictEqual(result.wood, 0);
+  assert.strictEqual(result.water, 0);
+  assert.strictEqual(result.fire, 0);
+});
+
+test("distributeFiveElementGrowth — dual-root water-fire budget=10: 5 each", () => {
+  const result = distributeFiveElementGrowth(10, "dual-root", ["water", "fire"]);
+  assert.strictEqual(result.water, 5);
+  assert.strictEqual(result.fire, 5);
+});
+
+test("distributeFiveElementGrowth — dual-root odd budget=5: first anchor gets ceil", () => {
+  const result = distributeFiveElementGrowth(5, "dual-root", ["wood", "fire"]);
+  assert.strictEqual(result.wood, 3);
+  assert.strictEqual(result.fire, 2);
+});
+
+test("distributeFiveElementGrowth — zero budget returns all zeros", () => {
+  const result = distributeFiveElementGrowth(0, "single-root", ["metal"]);
+  assert.deepStrictEqual(result, { metal: 0, wood: 0, water: 0, fire: 0, earth: 0 });
+});
+
+test("computeEffectiveMainAttributes — applies floor((baseline + growth) × (1 + bonus/100))", () => {
+  const baseline = { gengu: 50, tipu: 50, lingyuan: 50, shenshi: 50, wuxing: 50, daoxin: 50, shenfa: 50, bingpo: 50 };
+  const growth = { gengu: 10, tipu: 0, lingyuan: 0, shenshi: 0, wuxing: 0, daoxin: 0, shenfa: 0, bingpo: 20 };
+  const result = computeEffectiveMainAttributes(baseline, growth, 10);
+  // gengu: floor((50+10) * 1.1) = floor(66) = 66
+  assert.strictEqual(result.gengu, 66);
+  // bingpo: floor((50+20) * 1.1) = floor(77) = 77
+  assert.strictEqual(result.bingpo, 77);
+  // tipu: floor(50 * 1.1) = floor(55) = 55
+  assert.strictEqual(result.tipu, 55);
+});
+
+test("computeEffectiveMainAttributes — with 0% bonus returns baseline + growth", () => {
+  const baseline = { gengu: 50, tipu: 50, lingyuan: 50, shenshi: 50, wuxing: 50, daoxin: 50, shenfa: 50, bingpo: 50 };
+  const growth = { gengu: 5, tipu: 0, lingyuan: 0, shenshi: 0, wuxing: 0, daoxin: 0, shenfa: 0, bingpo: 0 };
+  const result = computeEffectiveMainAttributes(baseline, growth, 0);
+  assert.strictEqual(result.gengu, 55);
+  assert.strictEqual(result.tipu, 50);
+});
+
+test("computeEffectiveFiveElementScores — adds growth to baseline", () => {
+  const baseline = { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 };
+  const growth = { metal: 4, wood: 0, water: 0, fire: 0, earth: 1 };
+  const result = computeEffectiveFiveElementScores(baseline, growth);
+  assert.strictEqual(result.metal, 54);
+  assert.strictEqual(result.earth, 51);
+  assert.strictEqual(result.wood, 50);
+});
+
+test("BREAKTHROUGH_GROWTH_TABLE has 8 entries for slots 1-8", () => {
+  assert.strictEqual(BREAKTHROUGH_GROWTH_TABLE.length, 8);
+  for (let i = 0; i < 8; i++) {
+    assert.strictEqual(BREAKTHROUGH_GROWTH_TABLE[i]!.slot, i + 1);
+  }
+});
+
+test("BREAKTHROUGH_GROWTH_TABLE — minor slots have 50/5/2, major slots have 100/10/5", () => {
+  for (const entry of BREAKTHROUGH_GROWTH_TABLE) {
+    if (entry.category === "minor") {
+      assert.strictEqual(entry.mainAttributeTotal, 50);
+      assert.strictEqual(entry.fiveElementTotal, 5);
+      assert.strictEqual(entry.percentageBonus, 2);
+    } else {
+      assert.strictEqual(entry.mainAttributeTotal, 100);
+      assert.strictEqual(entry.fiveElementTotal, 10);
+      assert.strictEqual(entry.percentageBonus, 5);
+    }
+  }
 });

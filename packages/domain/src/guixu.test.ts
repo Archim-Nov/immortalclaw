@@ -21,11 +21,13 @@ function prepareGuixuCandidate() {
 
   cultivator.locationId = "qingzhou:dungeon-a";
   cultivator.realm = "閲戜腹" as typeof cultivator.realm;
-  cultivator.realmLevel = 2;
+  cultivator.realmLevel = 5;
   cultivator.totalContribution = 260;
   cultivator.qi = cultivator.maxQi = 160;
   cultivator.spiritualPower = cultivator.maxSpiritualPower = 150;
   inventory["eight-wastes-pass"] = 1;
+  world.guixuProgress.wildernessAttunement[cultivator.id] = 80;
+  world.tick = 10;
 
   return { world, cultivator, inventory };
 }

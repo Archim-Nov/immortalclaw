@@ -377,8 +377,12 @@ export const BAHUANG_EXPEDITIONS = {
     entryLocationIds: ["qingzhou:dungeon-a"] as const,
     entryRequirement: {
       minRealm: "绛戝熀" as Cultivator["realm"],
+      minRealmLevel: 5,
+      minWildernessAttunement: 60,
       minContribution: 180,
       entryTicket: "eight-wastes-pass" as const,
+      entryWindowCycle: 720,
+      entryWindowDuration: 120,
     },
     expedition: {
       maxDepth: 8,
@@ -398,6 +402,17 @@ export const BAHUANG_EXPEDITIONS = {
       rareItemDropRate: 35,
       guaranteedItems: ["beast-core"] as const,
       rareItems: ["ancient-artifact"] as const,
+      deepRunItems: ["bahuang-spirit-essence"] as const,
+      deepRunMinDepth: 5,
+      deepRunDropRate: 20,
+      legendaryItems: ["legendary-artifact"] as const,
+      legendaryMinDepth: 7,
+      legendaryDropRate: 15,
+      completionBonus: {
+        spiritStones: 200,
+        realmProgress: 10,
+        guaranteedItems: ["ancient-artifact"] as const,
+      },
     },
   },
 } as const;

@@ -118,7 +118,7 @@ function hasCjk(input: string) {
   return /[\u3400-\u9fff]/.test(input);
 }
 
-function sortedElementEntries(
+export function sortedElementEntries(
   scores: Record<FiveElementId, number>,
   preferredElement: FiveElementId | null = null,
 ) {

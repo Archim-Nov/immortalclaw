@@ -18,12 +18,16 @@ function prepareBahuangCandidate() {
 
   cultivator.locationId = "qingzhou:dungeon-a";
   cultivator.realm = "金丹" as typeof cultivator.realm;
-  cultivator.realmLevel = 1;
+  cultivator.realmLevel = 5;
   cultivator.totalContribution = 220;
   cultivator.injuryTicksRemaining = 0;
   cultivator.qi = cultivator.maxQi = 160;
   cultivator.spiritualPower = cultivator.maxSpiritualPower = 150;
   inventory["eight-wastes-pass"] = 1;
+  // Meet wildernessAttunement requirement
+  world.guixuProgress.wildernessAttunement[cultivator.id] = 80;
+  // Ensure tick is inside entry window (cycle=720, window=120 → tick 0..119 is open)
+  world.tick = 10;
 
   return { world, cultivator, inventory };
 }
@@ -106,4 +110,60 @@ test("retreat-from-bahuang immediately ends the expedition", () => {
   assert.equal(retreatResult.accepted, true);
   assert.equal(world.bahuangProgress[cultivator.id], undefined);
   assert.equal(state.bahuang, null);
+});
+
+test("entry denied when tick is outside the entry time window", () => {
+  const { world, cultivator } = prepareBahuangCandidate();
+  // Move tick outside the 120-tick window
+  world.tick = 200;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
+});
+
+test("entry denied when realmLevel is below 5", () => {
+  const { world, cultivator } = prepareBahuangCandidate();
+  cultivator.realmLevel = 4;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
+});
+
+test("entry denied when wildernessAttunement is below 60", () => {
+  const { world, cultivator } = prepareBahuangCandidate();
+  world.guixuProgress.wildernessAttunement[cultivator.id] = 30;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
+});
+
+test("eight-wastes-pass can be purchased at market", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+  cultivator.locationId = "qingzhou:main-city";
+  cultivator.spiritStones = 2000;
+  world.tick = 5;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  assert.ok(actions.some((action) => action.actionId === "buy-eight-wastes-pass"));
+});
+
+test("completed bahuang expedition awards completion bonus", () => {
+  const { world, cultivator } = prepareBahuangCandidate();
+  cultivator.qi = cultivator.maxQi = 5000;
+  cultivator.spiritualPower = cultivator.maxSpiritualPower = 5000;
+
+  performAction(world, cultivator.id, "enter-bahuang:conservative" as never);
+  const stonesBefore = cultivator.spiritStones;
+
+  let safety = 0;
+  while (world.bahuangProgress[cultivator.id]?.status === "active" && safety < 30) {
+    advanceWorld(world, 1);
+    safety += 1;
+  }
+
+  // Should have gained at least the completion bonus of 200 spirit stones
+  assert.ok(cultivator.spiritStones - stonesBefore >= 200);
+  // Should have received an ancient-artifact from completion bonus
+  assert.ok((cultivator.inventory["ancient-artifact"] ?? 0) >= 1);
 });

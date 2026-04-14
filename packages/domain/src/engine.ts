@@ -27,6 +27,14 @@ import {
   physicalDefense,
   spellAttack,
   spellDefense,
+  BREAKTHROUGH_GROWTH_TABLE,
+  computeEffectiveFiveElementScores,
+  computeEffectiveMainAttributes,
+  createEmptyMainAttributeGrowth,
+  distributeMainAttributeGrowth,
+  distributeFiveElementGrowth,
+  extractFiveElementScores,
+  MAIN_ATTRIBUTE_ORDER,
 } from "./attributes.js";
 import {
   DEFAULT_ACTION_DURATIONS,
@@ -144,6 +152,8 @@ import {
   resolveCultivationMotiveId,
   resolveSpiritRootKindId,
   resolveTemperamentId,
+  deriveSpiritRootKindId,
+  sortedElementEntries,
 } from "./registration-taxonomy.js";
 import { getItemActionBinding, getItemOperationActionId, ITEM_CATALOG } from "./items/catalog.js";
 import {
@@ -914,7 +924,12 @@ export const buildCultivatorCombatSnapshot = (
   cultivator: Cultivator,
   escapeAllowed: boolean,
 ): CombatSnapshot => {
-  const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const baselineMainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const mainAttrs = computeEffectiveMainAttributes(
+    baselineMainAttrs,
+    cultivator.mainAttributeGrowth ?? createEmptyMainAttributeGrowth(),
+    cultivator.mainAttributePercentageBonus ?? 0,
+  );
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
   const maxHp = Math.max(60, Math.round(80 + (mainAttrs.gengu * 2) + (mainAttrs.tipu * 0.5)));
   const spirit = cultivator.spiritualPower;
@@ -3055,6 +3070,15 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
     unlockedSpellLoadoutIds: [...spellLoadouts.unlockedLoadoutIds],
     // Production Queue
     productionQueue: [],
+    // Social Verbs
+    pendingGifts: [],
+    lastGiftTick: 0,
+    // Endgame
+    guixuCompletedNodeIds: [],
+    // Breakthrough Growth
+    mainAttributeGrowth: {},
+    fiveElementGrowth: {},
+    mainAttributePercentageBonus: 0,
   };
 
   world.cultivators[cultivator.id] = cultivator;
@@ -3872,7 +3896,7 @@ function breakthroughViewOf(
     .filter((item) => item.missing > 0);
   const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
 
-  return {
+  const view: BreakthroughStateView = {
     targetRealm: definition.targetRealm,
     targetLevel: definition.targetLevel,
     category: definition.category,
@@ -3887,7 +3911,29 @@ function breakthroughViewOf(
     majorSuccessRate: rateInfo.successRate,
     rateBreakdown: rateInfo.rateBreakdown,
     recommendedAction: breakthroughRecommendedActionOf(world, cultivator, definition),
+    previewMainAttributeGrowth: null,
+    previewFiveElementGrowth: null,
+    previewPercentageBonus: null,
   };
+
+  // Growth preview
+  const growthEntry = BREAKTHROUGH_GROWTH_TABLE.find(e => e.slot === cultivator.realmLevel);
+  if (growthEntry) {
+    const baselineScores = extractFiveElementScores(cultivator.registrationRecord);
+    const fiveElGrowth = cultivator.fiveElementGrowth ?? {};
+    const effectiveScores = computeEffectiveFiveElementScores(baselineScores, fiveElGrowth);
+    const rootKind = cultivator.registrationRecord?.result?.spirit_root_kind_id
+      ?? deriveSpiritRootKindId(effectiveScores);
+    const sorted = sortedElementEntries(effectiveScores);
+    const anchorElements: FiveElementId[] = rootKind === "single-root"
+      ? [sorted[0]![0]]
+      : [sorted[0]![0], sorted[1]![0]];
+    view.previewMainAttributeGrowth = distributeMainAttributeGrowth(growthEntry.mainAttributeTotal, rootKind, anchorElements);
+    view.previewFiveElementGrowth = distributeFiveElementGrowth(growthEntry.fiveElementTotal, rootKind, anchorElements);
+    view.previewPercentageBonus = growthEntry.percentageBonus;
+  }
+
+  return view;
 }
 
 function buildBreakthroughAction(cultivator: Cultivator): AvailableAction | null {
@@ -3984,6 +4030,42 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
   cultivator.qi = cultivator.maxQi;
   cultivator.spiritualPower = cultivator.maxSpiritualPower;
   cultivator.lifespan += 12;
+
+  // ---- Breakthrough Growth Package ----
+  const growthEntry = BREAKTHROUGH_GROWTH_TABLE.find(e => e.slot === fromLevel);
+  const baselineScores = extractFiveElementScores(cultivator.registrationRecord);
+  const fiveElGrowth = cultivator.fiveElementGrowth ?? {};
+  const effectiveScores = computeEffectiveFiveElementScores(baselineScores, fiveElGrowth);
+  const rootKind = cultivator.registrationRecord?.result?.spirit_root_kind_id
+    ?? deriveSpiritRootKindId(effectiveScores);
+  const sorted = sortedElementEntries(effectiveScores);
+  const anchorElements: FiveElementId[] = rootKind === "single-root"
+    ? [sorted[0]![0]]
+    : [sorted[0]![0], sorted[1]![0]];
+
+  let mainGrowthPackage: Record<string, number> | undefined;
+  let elementGrowthPackage: Record<string, number> | undefined;
+  if (growthEntry) {
+    mainGrowthPackage = distributeMainAttributeGrowth(
+      growthEntry.mainAttributeTotal, rootKind, anchorElements,
+    );
+    elementGrowthPackage = distributeFiveElementGrowth(
+      growthEntry.fiveElementTotal, rootKind, anchorElements,
+    );
+
+    // Accumulate growth on cultivator
+    if (!cultivator.mainAttributeGrowth) cultivator.mainAttributeGrowth = {};
+    for (const attr of MAIN_ATTRIBUTE_ORDER) {
+      cultivator.mainAttributeGrowth[attr] = (cultivator.mainAttributeGrowth[attr] ?? 0) + mainGrowthPackage[attr];
+    }
+    if (!cultivator.fiveElementGrowth) cultivator.fiveElementGrowth = {};
+    const FIVE_ELEMENT_IDS: FiveElementId[] = ["metal", "wood", "water", "fire", "earth"];
+    for (const elem of FIVE_ELEMENT_IDS) {
+      cultivator.fiveElementGrowth[elem] = (cultivator.fiveElementGrowth[elem] ?? 0) + elementGrowthPackage[elem];
+    }
+    cultivator.mainAttributePercentageBonus = (cultivator.mainAttributePercentageBonus ?? 0) + growthEntry.percentageBonus;
+  }
+
   recordBreakthrough(cultivator, {
     tick: world.tick,
     fromRealm,
@@ -3995,6 +4077,9 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
     consumedItems,
     successRate: successRate ?? undefined,
     rateBreakdown,
+    grantedMainAttributeGrowth: mainGrowthPackage,
+    grantedFiveElementGrowth: elementGrowthPackage,
+    grantedPercentageBonus: growthEntry?.percentageBonus,
   });
   addDaoLog(
     world,
@@ -4199,7 +4284,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     && cultivator.inventory["ancient-artifact"] <= 0;
   if (needsRareExpeditionRewards) {
     breakthroughPriorities.push("境界已高，需要稀有奇物，可进入八荒远征探索。");
-    const canRunBahuangHere = canEnterBahuang(cultivator, cultivator.locationId).allowed;
+    const canRunBahuangHere = canEnterBahuang(cultivator, cultivator.locationId, world).allowed;
     breakthroughActions.push(canRunBahuangHere ? "enter-bahuang:balanced" : bahuangTravelAction);
   }
 
@@ -4689,7 +4774,12 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     activityContext: computeActivityContext(cultivator, world),
     daoPotential: computeDaoPotential(cultivator),
   };
-  const mainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const baselineMainAttrs = deriveMainAttributes(cultivator.registrationRecord);
+  const mainAttrs = computeEffectiveMainAttributes(
+    baselineMainAttrs,
+    cultivator.mainAttributeGrowth ?? createEmptyMainAttributeGrowth(),
+    cultivator.mainAttributePercentageBonus ?? 0,
+  );
   const detailedAttrs = deriveDetailedAttributes(mainAttrs);
   const combatProfile: CultivatorStateView["combatProfile"] = {
     battleReadiness: computeReadiness(cultivator),
@@ -5186,7 +5276,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         });
       }
     }
-    for (const itemId of ["healing-pill", "qi-pill", "ward-talisman"] as const) {
+    for (const itemId of ["healing-pill", "qi-pill", "ward-talisman", "eight-wastes-pass"] as const) {
       const actionId = getItemOperationActionId(itemId, "buy");
       if (actionId) {
         actions.push(buildItemAction(world, cultivator, actionId, registration));
@@ -5317,7 +5407,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
   }
   if (!activeWilderness && !activeBahuang && highRiskAllowed && EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
-    const gate = canEnterBahuang(cultivator, cultivator.locationId);
+    const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
     if (gate.allowed) {
       for (const posture of ["conservative", "balanced", "aggressive"] as const) {
         actions.push({

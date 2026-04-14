@@ -222,6 +222,13 @@ export function hydrateMigratedP3WorldState(
       ? cultivator.breakthroughRecords
       : [];
     cultivator.dungeonProgress = mergeRecordDefaults(createDungeonProgress(), cultivator.dungeonProgress);
+    cultivator.mainAttributeGrowth = cultivator.mainAttributeGrowth ?? {
+      gengu: 0, tipu: 0, lingyuan: 0, shenshi: 0, wuxing: 0, daoxin: 0, shenfa: 0, bingpo: 0,
+    };
+    cultivator.fiveElementGrowth = cultivator.fiveElementGrowth ?? {
+      metal: 0, wood: 0, water: 0, fire: 0, earth: 0,
+    };
+    cultivator.mainAttributePercentageBonus = cultivator.mainAttributePercentageBonus ?? 0;
     cultivator.pendingSectApplicationId = cultivator.pendingSectApplicationId ?? null;
     cultivator.realmProgress =
       typeof cultivator.realmProgress === "number" && Number.isFinite(cultivator.realmProgress)

@@ -120,6 +120,14 @@ P1 机制已实现，以下为体验层补全。
 - **范围**：获取资源时日志展示该资源的用途和转化路径
 - **验收**：每种可转化资源的获取日志包含 `usableFor` 字段
 
+### P1-R6 升阶成长与灵根演进对齐
+
+- **问题**：显式突破已经落地，但成功后只涨资源上限，不涨主属性、五行和当前灵根，偏离修仙成长的核心目标
+- **范围**：为每个突破槽位定义主属性成长包和五行成长包；将当前灵根改为基于最终五行的运行时视图，同时保留登记灵根作为 origin profile
+- **验收**：突破成功后 `state.mainAttributes`、`state.fiveElementScores`、`state.detailedAttributes` 立即更新；运行时可查看当前灵根；`breakthroughRecords` 记录本次成长包
+- **子 spec**：`breakthrough-growth-v1/`
+- **实现计划**：`docs/plans/2026-04-15-breakthrough-growth-v1.md`
+
 ---
 
 ## Phase 2：高风险深度循环（P1 收尾后启动）

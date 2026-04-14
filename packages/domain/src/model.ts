@@ -423,6 +423,7 @@ export type LegacyItemId =
   | "dragon-radiance-crystal"
   | "nine-turn-golden-marrow"
   | "eight-wastes-pass"
+  | "bahuang-spirit-essence"
   | "ancient-artifact"
   | "legendary-artifact";
 
@@ -920,6 +921,10 @@ export interface BreakthroughRecord {
   consumedItems: Array<{ itemId: ItemId; count: number }>;
   successRate?: number;
   rateBreakdown?: BreakthroughRateModifier[];
+  // ---- Breakthrough Growth ----
+  grantedMainAttributeGrowth?: Record<string, number>;
+  grantedFiveElementGrowth?: Record<string, number>;
+  grantedPercentageBonus?: number;
 }
 
 export interface DungeonGradeProgress {
@@ -992,6 +997,10 @@ export interface Cultivator {
   lastGiftTick: number;
   // ---- Endgame ----
   guixuCompletedNodeIds: string[];
+  // ---- Breakthrough Growth ----
+  mainAttributeGrowth: Record<string, number>;
+  fiveElementGrowth: Record<string, number>;
+  mainAttributePercentageBonus: number;
 }
 
 export interface CultivationRegistrationResult {
@@ -1734,6 +1743,10 @@ export interface BreakthroughStateView {
   majorSuccessRate: number | null;
   rateBreakdown: BreakthroughRateModifier[];
   recommendedAction: ActionId | null;
+  // ---- Growth Preview ----
+  previewMainAttributeGrowth: Record<string, number> | null;
+  previewFiveElementGrowth: Record<string, number> | null;
+  previewPercentageBonus: number | null;
 }
 
 export interface DungeonStateView {

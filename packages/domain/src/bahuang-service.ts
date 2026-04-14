@@ -116,6 +116,7 @@ function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number):
 export function canEnterBahuang(
   cultivator: Cultivator,
   locationId: string,
+  world: WorldState,
 ): { allowed: boolean; reason?: string } {
   if (!EIGHT_WASTES_CONTENT.entryLocationIds.includes(locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
     return { allowed: false, reason: "Current location does not connect to 八荒入口." };
@@ -126,11 +127,23 @@ export function canEnterBahuang(
   if (realmScore < requiredScore) {
     return { allowed: false, reason: "Realm requirement not met." };
   }
+  if (cultivator.realmLevel < EIGHT_WASTES_CONTENT.entryRequirement.minRealmLevel) {
+    return { allowed: false, reason: `需要境界等级 ≥ ${EIGHT_WASTES_CONTENT.entryRequirement.minRealmLevel}，当前 ${cultivator.realmLevel}。` };
+  }
+  const attunement = world.guixuProgress.wildernessAttunement[cultivator.id] ?? 0;
+  if (attunement < EIGHT_WASTES_CONTENT.entryRequirement.minWildernessAttunement) {
+    return { allowed: false, reason: `需要荒野适性 ≥ ${EIGHT_WASTES_CONTENT.entryRequirement.minWildernessAttunement}，当前 ${attunement}。` };
+  }
   if (cultivator.totalContribution < EIGHT_WASTES_CONTENT.entryRequirement.minContribution) {
     return { allowed: false, reason: "Sect contribution requirement not met." };
   }
   if ((cultivator.inventory[EIGHT_WASTES_CONTENT.entryRequirement.entryTicket] ?? 0) <= 0) {
     return { allowed: false, reason: "Entry ticket missing." };
+  }
+  const { entryWindowCycle, entryWindowDuration } = EIGHT_WASTES_CONTENT.entryRequirement;
+  if (world.tick % entryWindowCycle >= entryWindowDuration) {
+    const ticksUntilOpen = entryWindowCycle - (world.tick % entryWindowCycle);
+    return { allowed: false, reason: `八荒入口目前关闭，将在 ${ticksUntilOpen} ticks 后开放。` };
   }
 
   return { allowed: true };
@@ -145,7 +158,7 @@ export function enterBahuangExpedition(
     throw new Error("Bahuang expedition already active.");
   }
 
-  const gate = canEnterBahuang(cultivator, cultivator.locationId);
+  const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
   if (!gate.allowed) {
     throw new Error(gate.reason ?? "Cannot enter bahuang.");
   }
@@ -253,8 +266,9 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
   cultivator.spiritualPower = clamp(cultivator.spiritualPower - spiritualDamage, 0, cultivator.maxSpiritualPower);
 
   const rewardRoll = hashString(`${cultivator.id}:${world.tick}:${progress.depth}:bahuang-reward`);
-  const spiritStoneGain = EIGHT_WASTES_CONTENT.rewardTable.spiritStones.min
-    + (rewardRoll % (EIGHT_WASTES_CONTENT.rewardTable.spiritStones.max - EIGHT_WASTES_CONTENT.rewardTable.spiritStones.min + 1));
+  const depthScaling = 1 + Math.floor(progress.depth / 3) * 0.25;
+  const spiritStoneGain = Math.floor((EIGHT_WASTES_CONTENT.rewardTable.spiritStones.min
+    + (rewardRoll % (EIGHT_WASTES_CONTENT.rewardTable.spiritStones.max - EIGHT_WASTES_CONTENT.rewardTable.spiritStones.min + 1))) * depthScaling);
   const realmProgressGain = EIGHT_WASTES_CONTENT.rewardTable.realmProgress.min
     + (rewardRoll % (EIGHT_WASTES_CONTENT.rewardTable.realmProgress.max - EIGHT_WASTES_CONTENT.rewardTable.realmProgress.min + 1));
 
@@ -272,6 +286,22 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
     const rareItem = EIGHT_WASTES_CONTENT.rewardTable.rareItems[0];
     progress.rewards.items[rareItem] = (progress.rewards.items[rareItem] ?? 0) + 1;
     cultivator.inventory[rareItem] += 1;
+  }
+  if (progress.depth >= EIGHT_WASTES_CONTENT.rewardTable.deepRunMinDepth) {
+    const deepRoll = hashString(`${cultivator.id}:${world.tick}:${progress.depth}:deep-run`) % 100;
+    if (deepRoll < EIGHT_WASTES_CONTENT.rewardTable.deepRunDropRate) {
+      const deepItem = EIGHT_WASTES_CONTENT.rewardTable.deepRunItems[0];
+      progress.rewards.items[deepItem] = (progress.rewards.items[deepItem] ?? 0) + 1;
+      cultivator.inventory[deepItem] += 1;
+    }
+  }
+  if (progress.depth >= EIGHT_WASTES_CONTENT.rewardTable.legendaryMinDepth) {
+    const legendaryRoll = hashString(`${cultivator.id}:${world.tick}:${progress.depth}:legendary`) % 100;
+    if (legendaryRoll < EIGHT_WASTES_CONTENT.rewardTable.legendaryDropRate) {
+      const legendaryItem = EIGHT_WASTES_CONTENT.rewardTable.legendaryItems[0];
+      progress.rewards.items[legendaryItem] = (progress.rewards.items[legendaryItem] ?? 0) + 1;
+      cultivator.inventory[legendaryItem] += 1;
+    }
   }
 
   recordWildernessAttunement(world, cultivator.id, 1);
@@ -292,11 +322,20 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
   ) {
     if (progress.depth >= EIGHT_WASTES_CONTENT.expedition.maxDepth && cultivator.qi > 0 && cultivator.spiritualPower > 0) {
       progress.status = "completed";
+      const bonus = EIGHT_WASTES_CONTENT.rewardTable.completionBonus;
+      progress.rewards.spiritStones += bonus.spiritStones;
+      progress.rewards.realmProgress += bonus.realmProgress;
+      cultivator.spiritStones += bonus.spiritStones;
+      cultivator.realmProgress = clamp(cultivator.realmProgress + bonus.realmProgress, 0, 100);
+      for (const itemId of bonus.guaranteedItems) {
+        progress.rewards.items[itemId] = (progress.rewards.items[itemId] ?? 0) + 1;
+        cultivator.inventory[itemId] += 1;
+      }
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
         locationId: cultivator.locationId,
-        title: "Bahuang Completion",
-        content: `${cultivator.name} completed an 八荒 run at depth ${progress.depth}.`,
+        title: "八荒远征完成",
+        content: `${cultivator.name} 完成了深度 ${progress.depth} 的八荒远征，获得 ${bonus.spiritStones} 灵石奖励。`,
         severity: "medium",
         tags: ["bahuang", "completed"],
       });

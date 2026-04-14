@@ -19,7 +19,7 @@ export type DetailedAttributeId =
   | "renxing" | "kongzhi_qiangdu" | "kongzhi_kangxing" | "tupo_wending"
   | "huixin" | "baoshang" | "huxin";
 
-const MAIN_ATTRIBUTE_ORDER: MainAttributeId[] = [
+export const MAIN_ATTRIBUTE_ORDER: MainAttributeId[] = [
   "gengu",
   "tipu",
   "lingyuan",
@@ -301,4 +301,213 @@ function distributeOverflow(
 
 function roundToTwo(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+// ---- Breakthrough Growth System ----
+
+/** Wuxing generation cycle: 木→火→土→金→水→木 */
+const WUXING_GENERATION_CYCLE: Record<FiveElementId, FiveElementId> = {
+  wood: "fire",
+  fire: "earth",
+  earth: "metal",
+  metal: "water",
+  water: "wood",
+};
+
+/** Inverse: given element, which element generates it ("生我") */
+export const WUXING_GENERATES_ME: Record<FiveElementId, FiveElementId> = {
+  fire: "wood",
+  earth: "fire",
+  metal: "earth",
+  water: "metal",
+  wood: "water",
+};
+
+/**
+ * Core attributes per element, derived from positive weights in ELEMENT_ATTRIBUTE_DELTAS.
+ * Each element has exactly 3 core attributes with their affinity weights.
+ */
+export const ELEMENT_CORE_ATTRIBUTES: Record<FiveElementId, Array<{ attr: MainAttributeId; weight: number }>> = {
+  metal: [{ attr: "bingpo", weight: 3 }, { attr: "shenshi", weight: 2 }, { attr: "daoxin", weight: 1 }],
+  wood: [{ attr: "wuxing", weight: 3 }, { attr: "gengu", weight: 2 }, { attr: "lingyuan", weight: 1 }],
+  water: [{ attr: "daoxin", weight: 3 }, { attr: "shenshi", weight: 2 }, { attr: "shenfa", weight: 1 }],
+  fire: [{ attr: "lingyuan", weight: 2 }, { attr: "shenfa", weight: 2 }, { attr: "bingpo", weight: 2 }],
+  earth: [{ attr: "gengu", weight: 2 }, { attr: "tipu", weight: 2 }, { attr: "daoxin", weight: 2 }],
+};
+
+export type BreakthroughGrowthEntry = {
+  readonly slot: number;
+  readonly category: "minor" | "major";
+  readonly mainAttributeTotal: number;
+  readonly fiveElementTotal: number;
+  readonly percentageBonus: number;
+};
+
+export const BREAKTHROUGH_GROWTH_TABLE: readonly BreakthroughGrowthEntry[] = [
+  { slot: 1, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+  { slot: 2, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+  { slot: 3, category: "major", mainAttributeTotal: 100, fiveElementTotal: 10, percentageBonus: 5 },
+  { slot: 4, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+  { slot: 5, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+  { slot: 6, category: "major", mainAttributeTotal: 100, fiveElementTotal: 10, percentageBonus: 5 },
+  { slot: 7, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+  { slot: 8, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+];
+
+/**
+ * Distribute main-attribute growth budget according to spec Section 2.
+ * 70% to core attributes (weighted), 30% equally among non-core.
+ * For dual-root: core budget split 50/50 between two anchor elements.
+ * Remainder goes to highest-weight core attribute.
+ */
+export function distributeMainAttributeGrowth(
+  totalBudget: number,
+  spiritRootKind: "single-root" | "dual-root",
+  anchorElements: readonly FiveElementId[],
+): Record<MainAttributeId, number> {
+  const result = emptyMainAttributes();
+  if (totalBudget <= 0 || anchorElements.length === 0) return result;
+
+  const coreBudget = Math.round(totalBudget * 0.7);
+  const nonCoreBudget = totalBudget - coreBudget;
+
+  // Collect core attributes from anchor elements
+  const coreContributions = new Map<MainAttributeId, number>();
+  const elementCount = spiritRootKind === "dual-root" && anchorElements.length >= 2 ? 2 : 1;
+  const perElementCoreBudget = elementCount === 2 ? Math.floor(coreBudget / 2) : coreBudget;
+
+  for (let i = 0; i < elementCount; i++) {
+    const element = anchorElements[i]!;
+    const cores = ELEMENT_CORE_ATTRIBUTES[element];
+    const totalWeight = cores.reduce((s, c) => s + c.weight, 0);
+    const budget = i === 0 && elementCount === 2
+      ? coreBudget - Math.floor(coreBudget / 2) // first element gets remainder
+      : perElementCoreBudget;
+
+    let allocated = 0;
+    const shares: Array<{ attr: MainAttributeId; amount: number; weight: number }> = [];
+    for (const core of cores) {
+      const share = Math.floor(budget * core.weight / totalWeight);
+      shares.push({ attr: core.attr, amount: share, weight: core.weight });
+      allocated += share;
+    }
+    // Distribute remainder to highest weight
+    let leftover = budget - allocated;
+    const sortedShares = [...shares].sort((a, b) => b.weight - a.weight);
+    for (const s of sortedShares) {
+      if (leftover <= 0) break;
+      s.amount += 1;
+      leftover -= 1;
+    }
+    for (const s of shares) {
+      coreContributions.set(s.attr, (coreContributions.get(s.attr) ?? 0) + s.amount);
+    }
+  }
+
+  // Apply core contributions to result
+  const coreAttributeSet = new Set(coreContributions.keys());
+  for (const [attr, amount] of coreContributions) {
+    result[attr] += amount;
+  }
+
+  // Non-core: attributes NOT in core set, distribute equally
+  const nonCoreAttributes = MAIN_ATTRIBUTE_ORDER.filter(a => !coreAttributeSet.has(a));
+  if (nonCoreAttributes.length > 0) {
+    const perNonCore = Math.floor(nonCoreBudget / nonCoreAttributes.length);
+    let nonCoreLeftover = nonCoreBudget - perNonCore * nonCoreAttributes.length;
+    for (const attr of nonCoreAttributes) {
+      result[attr] += perNonCore;
+    }
+    // Remainder to first non-core attributes
+    for (const attr of nonCoreAttributes) {
+      if (nonCoreLeftover <= 0) break;
+      result[attr] += 1;
+      nonCoreLeftover -= 1;
+    }
+  }
+
+  // Final check: total must equal totalBudget
+  const actualTotal = MAIN_ATTRIBUTE_ORDER.reduce((s, a) => s + result[a], 0);
+  const diff = totalBudget - actualTotal;
+  if (diff !== 0) {
+    // Adjust highest-weight core attribute
+    const topCore = [...coreContributions.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (topCore) {
+      result[topCore[0]] += diff;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Distribute five-element growth budget according to spec Section 3.
+ * Single-root: 80% main element, 20% "生我" element.
+ * Dual-root: 50/50 split (odd remainder to first anchor).
+ */
+export function distributeFiveElementGrowth(
+  totalBudget: number,
+  spiritRootKind: "single-root" | "dual-root",
+  anchorElements: readonly FiveElementId[],
+): Record<FiveElementId, number> {
+  const result: Record<FiveElementId, number> = { metal: 0, wood: 0, water: 0, fire: 0, earth: 0 };
+  if (totalBudget <= 0 || anchorElements.length === 0) return result;
+
+  if (spiritRootKind === "single-root" || anchorElements.length < 2) {
+    const mainElement = anchorElements[0]!;
+    const mainShare = Math.round(totalBudget * 0.8);
+    const auxShare = totalBudget - mainShare;
+    result[mainElement] += mainShare;
+    result[WUXING_GENERATES_ME[mainElement]] += auxShare;
+  } else {
+    // Dual-root: split between two anchor elements
+    const firstShare = Math.ceil(totalBudget / 2);
+    const secondShare = totalBudget - firstShare;
+    result[anchorElements[0]!] += firstShare;
+    result[anchorElements[1]!] += secondShare;
+  }
+
+  return result;
+}
+
+/**
+ * Compute effective main attributes: floor((baseline + growth) × (1 + percentageBonus / 100))
+ */
+export function computeEffectiveMainAttributes(
+  baseline: Record<MainAttributeId, number>,
+  growth: Record<MainAttributeId, number>,
+  percentageBonus: number,
+): Record<MainAttributeId, number> {
+  const result = emptyMainAttributes();
+  for (const attr of MAIN_ATTRIBUTE_ORDER) {
+    const flat = baseline[attr] + (growth[attr] ?? 0);
+    result[attr] = Math.floor(flat * (1 + percentageBonus / 100));
+  }
+  return result;
+}
+
+/**
+ * Compute effective five-element scores: baseline + growth
+ */
+export function computeEffectiveFiveElementScores(
+  baseline: Record<FiveElementId, number>,
+  growth: Record<FiveElementId, number>,
+): Record<FiveElementId, number> {
+  return {
+    metal: baseline.metal + (growth.metal ?? 0),
+    wood: baseline.wood + (growth.wood ?? 0),
+    water: baseline.water + (growth.water ?? 0),
+    fire: baseline.fire + (growth.fire ?? 0),
+    earth: baseline.earth + (growth.earth ?? 0),
+  };
+}
+
+/** Zero-value main attribute growth map for initialization */
+export function createEmptyMainAttributeGrowth(): Record<MainAttributeId, number> {
+  return emptyMainAttributes();
+}
+
+/** Zero-value five-element growth map for initialization */
+export function createEmptyFiveElementGrowth(): Record<FiveElementId, number> {
+  return { metal: 0, wood: 0, water: 0, fire: 0, earth: 0 };
 }
