@@ -419,3 +419,60 @@ test("seeded world helper stays available for lifecycle tests", () => {
   const world = createSeedWorld();
   assert.ok(Object.keys(world.cultivators).length > 0);
 });
+
+test("POST /agent/webhook binds a webhook for an authenticated agent", async () => {
+  const app = createTestApp();
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Su Mingyue" })),
+  });
+  const registerPayload = await registerResponse.json() as RegistrationResponse;
+
+  const webhookResponse = await app.request("https://runtime.test/agent/webhook", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ webhookUrl: "https://example.com/hooks/immortal-realm" }),
+  });
+  const webhookPayload = await webhookResponse.json() as { ok: boolean; webhookUrl: string; webhookSecret: string };
+
+  assert.equal(webhookResponse.status, 200);
+  assert.equal(webhookPayload.ok, true);
+  assert.equal(webhookPayload.webhookUrl, "https://example.com/hooks/immortal-realm");
+  assert.ok(webhookPayload.webhookSecret.startsWith("whsec_"));
+});
+
+test("POST /agent/webhook rejects unauthenticated requests", async () => {
+  const app = createTestApp();
+  const response = await app.request("https://runtime.test/agent/webhook", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ webhookUrl: "https://example.com/hooks/immortal-realm" }),
+  });
+
+  assert.equal(response.status, 401);
+});
+
+test("POST /agent/webhook rejects empty webhookUrl", async () => {
+  const app = createTestApp();
+  const registerResponse = await app.request("https://runtime.test/agent/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(createQuestionnaireRegistrationBody({ name: "Su Mingyue" })),
+  });
+  const registerPayload = await registerResponse.json() as RegistrationResponse;
+
+  const webhookResponse = await app.request("https://runtime.test/agent/webhook", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ webhookUrl: "" }),
+  });
+
+  assert.ok(webhookResponse.status >= 400);
+});

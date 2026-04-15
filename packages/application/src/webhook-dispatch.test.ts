@@ -4,6 +4,7 @@ import { createSeedWorld, syncCultivatorFromPersona } from "../../domain/src/run
 import type { TickSummary } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
 import {
+  deduplicateWebhookTargets,
   dispatchWebhooks,
   resolveMessageWebhookTarget,
   resolveWebhookTargets,
@@ -275,4 +276,63 @@ test("resolveMessageWebhookTarget returns null when recipient has no webhook", (
 
   const target = resolveMessageWebhookTarget(world, sync.selectedCultivatorId, "Someone", 5, profiles);
   assert.equal(target, null);
+});
+
+test("deduplicateWebhookTargets returns empty array for empty input", () => {
+  assert.deepEqual(deduplicateWebhookTargets([]), []);
+});
+
+test("deduplicateWebhookTargets returns single target unchanged", () => {
+  const target = {
+    agentId: "agent-1",
+    webhookUrl: "https://example.com/hook",
+    webhookSecret: "whsec_test",
+    payload: { event: "tick" as const, tick: 10, reason: "Meditation done." },
+  };
+  const result = deduplicateWebhookTargets([target]);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0], target);
+});
+
+test("deduplicateWebhookTargets merges multiple targets for the same agent", () => {
+  const targets = [
+    {
+      agentId: "agent-1",
+      webhookUrl: "https://example.com/hook",
+      webhookSecret: "whsec_test",
+      payload: { event: "tick" as const, tick: 10, reason: "Meditation done." },
+    },
+    {
+      agentId: "agent-1",
+      webhookUrl: "https://example.com/hook",
+      webhookSecret: "whsec_test",
+      payload: { event: "tick" as const, tick: 10, reason: "Cultivation done." },
+    },
+  ];
+  const result = deduplicateWebhookTargets(targets);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].agentId, "agent-1");
+  assert.equal(result[0].payload.reason, "Meditation done. Cultivation done.");
+  assert.equal(result[0].payload.tick, 10);
+});
+
+test("deduplicateWebhookTargets keeps different agents separate", () => {
+  const targets = [
+    {
+      agentId: "agent-1",
+      webhookUrl: "https://a.com/hook",
+      webhookSecret: "whsec_a",
+      payload: { event: "tick" as const, tick: 10, reason: "Meditation done." },
+    },
+    {
+      agentId: "agent-2",
+      webhookUrl: "https://b.com/hook",
+      webhookSecret: "whsec_b",
+      payload: { event: "tick" as const, tick: 10, reason: "Cultivation done." },
+    },
+  ];
+  const result = deduplicateWebhookTargets(targets);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].agentId, "agent-1");
+  assert.equal(result[1].agentId, "agent-2");
 });

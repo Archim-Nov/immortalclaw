@@ -15,6 +15,7 @@ export interface WorldDoRuntimeOptions {
   env: WorldDOEnv;
   storage: WorldDoRuntimeStorage;
   world: WorldDoRuntimeWorld;
+  dispatchAfterAdvance?: (tickResult: unknown) => void;
 }
 
 export function createWorldDoRuntime(options: WorldDoRuntimeOptions) {
@@ -28,7 +29,8 @@ export function createWorldDoRuntime(options: WorldDoRuntimeOptions) {
 
     async alarm(): Promise<void> {
       await options.storage.setAlarm(Date.now() + 60_000);
-      await options.world.advanceWorld(readTickSteps(options.env), "scheduled");
+      const result = await options.world.advanceWorld(readTickSteps(options.env), "scheduled");
+      options.dispatchAfterAdvance?.(result);
     },
 
     async resetForRollout(): Promise<void> {

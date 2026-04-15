@@ -141,10 +141,10 @@ test("plugin registers expected tools and prompt hook", async () => {
   assert.equal(hooks.length, 1);
   assert.equal(hooks[0]?.event, "before_prompt_build");
   const result = await hooks[0]?.handler({}, {});
-  assert.match(
-    String((result as { prependSystemContext?: string }).prependSystemContext),
-    /Credential cache:/,
-  );
+  const guidance = String((result as { prependSystemContext?: string }).prependSystemContext);
+  assert.match(guidance, /Credential cache:/);
+  assert.match(guidance, /continuous autonomous action/i);
+  assert.match(guidance, /routine actions/i);
 });
 
 test("webhook receipt triggers heartbeat wake with the signed payload reason", async () => {

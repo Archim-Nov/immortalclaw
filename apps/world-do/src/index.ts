@@ -8,6 +8,12 @@ import {
   type SqlStorage,
   type SqlStorageCursor,
 } from "@immortal-claw/persistence";
+import {
+  deduplicateWebhookTargets,
+  dispatchWebhooks,
+  resolveWebhookTargets,
+} from "@immortal-claw/application";
+import type { TickSummary } from "@immortal-claw/domain";
 import { registerMiddleware } from "./middleware.js";
 import { registerRoutes } from "./routes.js";
 import { createWorldDoRuntime } from "./runtime.js";
@@ -64,6 +70,22 @@ export class WorldDurableObject extends DurableObject<WorldDOEnv> {
       env,
       storage: ctx.storage,
       world,
+      dispatchAfterAdvance: (tickResult) => {
+        const summary = tickResult as TickSummary | null | undefined;
+        if (!summary?.completedJobs?.length) return;
+        void (async () => {
+          try {
+            const profiles = await auth.listAgentProfiles();
+            const snapshot = await world.readWorld();
+            const targets = deduplicateWebhookTargets(resolveWebhookTargets(snapshot, summary, profiles));
+            if (targets.length > 0) {
+              await dispatchWebhooks(targets);
+            }
+          } catch {
+            // Best-effort: alarm must not fail due to webhook dispatch errors.
+          }
+        })();
+      },
     });
 
     this.app.use("*", async (context, next) => {

@@ -49,6 +49,7 @@ export type {
   PublicAgentStateWorldRepository,
 } from "./public-agents.js";
 export {
+  deduplicateWebhookTargets,
   dispatchWebhooks,
   resolveMessageWebhookTarget,
   resolveWebhookTargets,

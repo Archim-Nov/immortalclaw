@@ -832,6 +832,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     `Credential cache: ${config.credentialsPath}.`,
     registrationRecordIdentity,
     "Rules for this world integration:",
+    "- Your default mode is continuous autonomous action. Chain multiple heartbeat cycles silently.",
     "- Never invent current state, inventory, sect membership, persona details, or action ids.",
     "- OpenClaw bootstrap files such as IDENTITY.md and SOUL.md already define the agent persona. Do not ask to create or switch characters manually.",
     "- The plugin auto-registers or resumes the agent, then syncs the persona into a single identity-bound cultivator before state lookups.",
@@ -844,6 +845,8 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- If a local canonical registration_record file is present, the plugin will include it during first registration automatically. If the record is produced later, persist it with immortal_registration_save and read it back with immortal_registration or immortal_state.registration.",
     "- Use immortal_messages, immortal_sect, and immortal_dao_logs for supporting context instead of guessing.",
     "- immortal_tick is an operator or GM action. Only use it when the user explicitly wants to advance time or when you are running the simulation for testing.",
+    "- Routine actions (cultivate, meditate, travel, mine, tasks, recovery) need no per-action user message. Report only milestones, risks, choices, or surprising outcomes.",
+    "- Aim for roughly 3-5 routine actions per heartbeat session before summarizing. Do not loop indefinitely.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -968,7 +971,26 @@ function getHeartbeatRequester(api: OpenClawPluginApiLike): HeartbeatRequester |
 }
 
 function buildWakeContext(reason: string): string {
-  return `You were woken by the world server: ${reason} Call immortal_state to see your current situation, then decide your next action.`;
+  return [
+    `You were woken by the world server: ${reason}`,
+    "",
+    "Enter the continuous autonomous heartbeat loop:",
+    "1. Call immortal_state to see your current situation.",
+    "2. Call immortal_actions to see available actions.",
+    "3. If idle, pick the best action from your strategy and call immortal_act.",
+    "4. After acting, re-read immortal_state and immortal_actions with fresh data.",
+    "5. Continue this loop until a stop condition is met.",
+    "",
+    "Stop conditions (only these):",
+    "- Your cultivator becomes busy (a timed action is in progress).",
+    "- You encounter genuine risk or injury that needs owner judgment.",
+    "- A meaningful fork appears where the owner's preference matters.",
+    "- The owner gave a direct command that overrides autonomous play.",
+    "- You have completed roughly 5 routine actions this session — pause and give a concise summary.",
+    "",
+    "Do NOT stop after a single action. Do NOT narrate each routine action individually.",
+    "At the end of this session, give one brief summary of what you accomplished.",
+  ].join("\n");
 }
 
 function buildWebhookUrl(baseUrl: string): string {

@@ -83,6 +83,45 @@ export function resolveWebhookTargets(
   return targets;
 }
 
+/**
+ * Deduplicates webhook targets by agentId, merging multiple targets for the
+ * same agent into a single webhook with an aggregated reason string.
+ * This prevents the agent from being woken multiple times for the same tick.
+ */
+export function deduplicateWebhookTargets(targets: WebhookTarget[]): WebhookTarget[] {
+  if (targets.length <= 1) {
+    return targets;
+  }
+
+  const grouped = new Map<string, WebhookTarget[]>();
+  for (const target of targets) {
+    const existing = grouped.get(target.agentId);
+    if (existing) {
+      existing.push(target);
+    } else {
+      grouped.set(target.agentId, [target]);
+    }
+  }
+
+  const deduplicated: WebhookTarget[] = [];
+  for (const group of grouped.values()) {
+    if (group.length === 1) {
+      deduplicated.push(group[0]);
+      continue;
+    }
+    const first = group[0];
+    const aggregatedReason = group.map((t) => t.payload.reason).join(" ");
+    deduplicated.push({
+      agentId: first.agentId,
+      webhookUrl: first.webhookUrl,
+      webhookSecret: first.webhookSecret,
+      payload: buildWakePayload(first.payload.event, first.payload.tick, aggregatedReason),
+    });
+  }
+
+  return deduplicated;
+}
+
 export function resolveMessageWebhookTarget(
   world: WorldState,
   recipientCultivatorId: string,

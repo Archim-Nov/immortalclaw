@@ -9,6 +9,8 @@ import {
   buildPublicAgentDirectory,
   buildPublicAgentState,
   createRuntimeService,
+  deduplicateWebhookTargets,
+  dispatchWebhooks,
   foundAuthenticatedPlayerSect,
   listAuthenticatedPlayerSectRecruitment,
   listAuthenticatedSectApplications,
@@ -22,10 +24,13 @@ import {
   readAuthenticatedAgentStrategy,
   registerAgentWorkflow,
   resetAuthenticatedAgentCredential,
+  resolveMessageWebhookTarget,
+  resolveWebhookTargets,
   reviewAuthenticatedSectApplication,
   saveAuthenticatedAgentRegistration,
   sendAuthenticatedAgentMessage,
   syncAgentPersonaWorkflow,
+  updateAgentWebhookUrl,
   updateAuthenticatedSectAdmissionPolicy,
 } from "@immortal-claw/application";
 import type {
@@ -461,10 +466,22 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
 
   app.post("/world/tick", async (context) => {
     const world = context.get("world");
+    const auth = context.get("auth");
     const service = createRuntimeService({ world });
     const body = (await context.req.json()) as Partial<AdvanceWorldRequest>;
     const steps = typeof body.steps === "number" ? body.steps : 1;
-    return context.json(await service.advanceWorld(steps, "manual"));
+    const tickSummary = await service.advanceWorld(steps, "manual");
+
+    if (tickSummary.completedJobs.length > 0) {
+      const profiles = await auth.listAgentProfiles();
+      const snapshot = await world.readWorld();
+      const targets = deduplicateWebhookTargets(resolveWebhookTargets(snapshot, tickSummary, profiles));
+      if (targets.length > 0) {
+        void dispatchWebhooks(targets).catch(() => {});
+      }
+    }
+
+    return context.json(tickSummary);
   });
 
   app.get("/agent/state", async (context) => {
@@ -494,19 +511,25 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const agent = await readAuthenticatedAgent(context.req.raw, auth);
     const body = (await context.req.json()) as AgentSendMessageRequest & Record<string, unknown>;
     const content = readRequiredBodyString(body.content, "Body must include content.");
-    return context.json(
-      await sendAuthenticatedAgentMessage({
-        world,
-        auth,
-        agent,
-        request: {
-          toAgentId: readOptionalBodyString(body.toAgentId),
-          toCultivatorId: readOptionalBodyString(body.toCultivatorId),
-          subject: readOptionalBodyString(body.subject),
-          content,
-        },
-      }),
-    );
+    const request = {
+      toAgentId: readOptionalBodyString(body.toAgentId),
+      toCultivatorId: readOptionalBodyString(body.toCultivatorId),
+      subject: readOptionalBodyString(body.subject),
+      content,
+    };
+    const result = await sendAuthenticatedAgentMessage({ world, auth, agent, request });
+
+    const recipientCultivatorId = request.toCultivatorId?.trim() || result.message.toCultivatorId;
+    if (recipientCultivatorId) {
+      const profiles = await auth.listAgentProfiles();
+      const snapshot = await world.readWorld();
+      const target = resolveMessageWebhookTarget(snapshot, recipientCultivatorId, agent.name, snapshot.tick, profiles);
+      if (target) {
+        void dispatchWebhooks([target]).catch(() => {});
+      }
+    }
+
+    return context.json(result);
   });
 
   app.get("/agent/events", async (context) => {
@@ -691,13 +714,41 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     return context.json(await performAuthenticatedAgentAction({ world, agent, actionId: actionId as ActionId }));
   });
 
+  app.post("/agent/webhook", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const body = (await context.req.json()) as Record<string, unknown>;
+    const webhookUrl = readRequiredBodyString(body.webhookUrl, "Body must include webhookUrl.");
+    const isLocalDev = new URL(context.req.url).hostname === "localhost" || new URL(context.req.url).hostname === "127.0.0.1";
+    return context.json(
+      await updateAgentWebhookUrl({
+        repository: auth,
+        agent,
+        webhookUrl,
+        allowInsecure: isLocalDev,
+      }),
+    );
+  });
+
   app.post("/agent/tick", async (context) => {
     const world = context.get("world");
     const auth = context.get("auth");
     await readAuthenticatedAgent(context.req.raw, auth);
     const body = (await context.req.json()) as Partial<AdvanceWorldRequest>;
     const steps = typeof body.steps === "number" ? body.steps : 1;
-    return context.json(await advanceAuthenticatedAgentWorld({ world, steps }));
+    const tickSummary = await advanceAuthenticatedAgentWorld({ world, steps });
+
+    if (tickSummary.completedJobs.length > 0) {
+      const profiles = await auth.listAgentProfiles();
+      const snapshot = await world.readWorld();
+      const targets = deduplicateWebhookTargets(resolveWebhookTargets(snapshot, tickSummary, profiles));
+      if (targets.length > 0) {
+        void dispatchWebhooks(targets).catch(() => {});
+      }
+    }
+
+    return context.json(tickSummary);
   });
 }
 
