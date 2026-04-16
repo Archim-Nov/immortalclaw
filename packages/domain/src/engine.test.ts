@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import {
   advanceWorld,
@@ -109,6 +109,28 @@ function startCityDuelCombat() {
     combatState,
     cultivator: challenger,
     target,
+  };
+}
+
+function startPendingCityDuelChallenge() {
+  const world = createSeedWorld();
+  const challenger = world.cultivators["yun-zhong-he"];
+  assert.ok(challenger);
+  const summary = createCultivator(world, { name: "Pending Duel Target" });
+  const target = world.cultivators[summary.id];
+  assert.ok(target);
+  target.locationId = challenger.locationId;
+  target.injuryTicksRemaining = 0;
+  target.activeJobId = null;
+  const challengeResult = performAction(world, challenger.id, `challenge-cultivator:${target.id}`);
+  assert.equal(challengeResult.accepted, true);
+  const challengeId = target.pendingPvpChallengeId;
+  assert.ok(challengeId);
+  return {
+    world,
+    challenger,
+    target,
+    challengeId,
   };
 }
 
@@ -3282,6 +3304,106 @@ test("city duel challenger retreat applies challenger-side penalties", () => {
   assert.equal(challengerLog.retreated, true);
   assert.equal(targetLog.outcome, "victory");
   assert.equal(targetLog.retreated, undefined);
+});
+
+test("city duel action stays hidden when no eligible nearby target exists", () => {
+  const world = createSeedWorld();
+  const challenger = world.cultivators["yun-zhong-he"]!;
+  const farSummary = createCultivator(world, { name: "Far Duel Target" });
+  const farTarget = world.cultivators[farSummary.id]!;
+
+  farTarget.locationId = "qingzhou:sub-town-east";
+  farTarget.activeJobId = null;
+
+  const actionIds = listAvailableActions(world, challenger.id).map((action) => String(action.actionId));
+  assert.equal(actionIds.some((actionId) => actionId.startsWith("challenge-cultivator:")), false);
+});
+
+test("city duel actions only include eligible same-location targets", () => {
+  const world = createSeedWorld();
+  seedLegacyPlayerSect(world);
+  const challenger = world.cultivators["yun-zhong-he"]!;
+  challenger.sectId = "qing-yun-sect";
+
+  const eligibleSummary = createCultivator(world, { name: "Eligible Duel Target" });
+  const eligibleTarget = world.cultivators[eligibleSummary.id]!;
+  eligibleTarget.locationId = challenger.locationId;
+  eligibleTarget.activeJobId = null;
+  eligibleTarget.realm = challenger.realm;
+
+  const sameSectSummary = createCultivator(world, { name: "Same Sect Duel Target" });
+  const sameSectTarget = world.cultivators[sameSectSummary.id]!;
+  sameSectTarget.locationId = challenger.locationId;
+  sameSectTarget.activeJobId = null;
+  sameSectTarget.sectId = "qing-yun-sect";
+
+  const busySummary = createCultivator(world, { name: "Busy Duel Target" });
+  const busyTarget = world.cultivators[busySummary.id]!;
+  busyTarget.locationId = challenger.locationId;
+  busyTarget.activeJobId = "busy-job";
+
+  const farSummary = createCultivator(world, { name: "Far Duel Target" });
+  const farTarget = world.cultivators[farSummary.id]!;
+  farTarget.locationId = "qingzhou:sub-town-east";
+  farTarget.activeJobId = null;
+
+  const actionIds = new Set(listAvailableActions(world, challenger.id).map((action) => String(action.actionId)));
+  assert.equal(actionIds.has(`challenge-cultivator:${eligibleTarget.id}`), true);
+  assert.equal(actionIds.has(`challenge-cultivator:${sameSectTarget.id}`), false);
+  assert.equal(actionIds.has(`challenge-cultivator:${busyTarget.id}`), false);
+  assert.equal(actionIds.has(`challenge-cultivator:${farTarget.id}`), false);
+});
+
+test("pending city duel response actions appear only while the challenge remains location-valid", () => {
+  const { world, challenger, target, challengeId } = startPendingCityDuelChallenge();
+
+  const responseActionsBefore = new Set(listAvailableActions(world, target.id).map((action) => String(action.actionId)));
+  assert.equal(responseActionsBefore.has(`accept-pvp-challenge:${challengeId}`), true);
+  assert.equal(responseActionsBefore.has(`reject-pvp-challenge:${challengeId}`), true);
+
+  const leaveResult = performAction(world, challenger.id, "travel-to:qingzhou:sub-town-east");
+  assert.equal(leaveResult.accepted, true);
+
+  const responseActionsAfter = new Set(listAvailableActions(world, target.id).map((action) => String(action.actionId)));
+  assert.equal(responseActionsAfter.has(`accept-pvp-challenge:${challengeId}`), false);
+  assert.equal(responseActionsAfter.has(`reject-pvp-challenge:${challengeId}`), false);
+});
+
+test("pending city duel cancels when one duelist chooses to leave the area", () => {
+  const { world, challenger, target, challengeId } = startPendingCityDuelChallenge();
+
+  const leaveResult = performAction(world, challenger.id, "travel-to:qingzhou:sub-town-east");
+  assert.equal(leaveResult.accepted, true);
+
+  advanceWorld(world, 1);
+
+  assert.equal(world.pendingPvpChallenges[challengeId], undefined);
+  assert.equal(target.pendingPvpChallengeId, null);
+
+  const challengerMessages = getMessages(world, challenger.id);
+  const targetMessages = getMessages(world, target.id);
+
+  assert.ok(challengerMessages.some((entry) => entry.subject.includes("挑战取消")));
+  assert.ok(targetMessages.some((entry) => entry.subject.includes("挑战取消")));
+});
+
+test("pending city duel cancels when the challenged target leaves the area", () => {
+  const { world, challenger, target, challengeId } = startPendingCityDuelChallenge();
+
+  const leaveResult = performAction(world, target.id, "travel-to:qingzhou:sub-town-east");
+  assert.equal(leaveResult.accepted, true);
+
+  advanceWorld(world, 1);
+
+  assert.equal(world.pendingPvpChallenges[challengeId], undefined);
+  assert.equal(target.pendingPvpChallengeId, null);
+  assert.equal(challenger.pendingPvpChallengeId, null);
+
+  const challengerMessages = getMessages(world, challenger.id);
+  const targetMessages = getMessages(world, target.id);
+
+  assert.ok(challengerMessages.some((entry) => entry.subject.includes("挑战取消")));
+  assert.ok(targetMessages.some((entry) => entry.subject.includes("挑战取消")));
 });
 
 test("city duel target retreat applies target-side penalties", () => {

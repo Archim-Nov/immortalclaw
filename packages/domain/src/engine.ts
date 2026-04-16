@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   BreakthroughCategory, BreakthroughMaterialSourceView, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
@@ -1724,6 +1724,108 @@ const parseSendMessage = (actionId: ActionId | string): { targetId: string; kind
 };
 const parseAcceptGift = (actionId: ActionId | string): string | null =>
   actionId.startsWith("accept-gift:") ? actionId.slice("accept-gift:".length) : null;
+
+type PendingPvpChallengeInvalidReason =
+  | "expired"
+  | "challenger-missing"
+  | "target-missing"
+  | "challenger-left-area"
+  | "target-left-area";
+
+function hasActiveTravelJob(world: WorldState, cultivator: Cultivator): boolean {
+  if (!cultivator.activeJobId) {
+    return false;
+  }
+  const job = world.jobs[cultivator.activeJobId];
+  return job?.actionId.startsWith("travel-to:") ?? false;
+}
+
+function getCityDuelChallengeBlockReason(
+  world: WorldState,
+  challenger: Cultivator,
+  target: Cultivator | undefined,
+): string | null {
+  if (!target) return "Target cultivator not found.";
+  const location = world.locations[challenger.locationId];
+  if (!location || location.kind !== "safe") return "City duels can only be initiated in safe zones.";
+  if (challenger.id === target.id) return "Cannot challenge yourself.";
+  if (challenger.locationId !== target.locationId) return "Target must be in the same location.";
+  if (challenger.activeJobId) return "Cannot challenge while in an active job.";
+  if (target.activeJobId) return "Target is busy with an active job.";
+  if (target.pendingPvpChallengeId) return "Target already has a pending PVP challenge.";
+  if (challenger.pendingPvpChallengeId) return "You already have a pending PVP challenge.";
+  const hpRatio = challenger.maxQi > 0 ? challenger.qi / challenger.maxQi : 0;
+  if (hpRatio < 0.5) return "Your qi must be at least 50% to issue a challenge.";
+  const realmGap = Math.abs((REALM_ORDER[challenger.realm] ?? 0) - (REALM_ORDER[target.realm] ?? 0));
+  if (realmGap > 2) return "Realm gap too large for a fair duel.";
+  if (challenger.sectId && challenger.sectId === target.sectId) return "Cannot challenge a sect member in the city.";
+  return null;
+}
+
+function getPendingPvpChallengeInvalidReason(
+  world: WorldState,
+  challenge: PendingPvpChallenge,
+): PendingPvpChallengeInvalidReason | null {
+  if (world.tick >= challenge.expiresAtTick) {
+    return "expired";
+  }
+  const challenger = world.cultivators[challenge.challengerCultivatorId];
+  if (!challenger) {
+    return "challenger-missing";
+  }
+  const target = world.cultivators[challenge.targetCultivatorId];
+  if (!target) {
+    return "target-missing";
+  }
+  if (challenger.locationId !== challenge.locationId || hasActiveTravelJob(world, challenger)) {
+    return "challenger-left-area";
+  }
+  if (target.locationId !== challenge.locationId || hasActiveTravelJob(world, target)) {
+    return "target-left-area";
+  }
+  return null;
+}
+
+function cancelPendingPvpChallenge(
+  world: WorldState,
+  challenge: PendingPvpChallenge,
+  reason: PendingPvpChallengeInvalidReason,
+): void {
+  const challenger = world.cultivators[challenge.challengerCultivatorId];
+  const target = world.cultivators[challenge.targetCultivatorId];
+
+  delete world.pendingPvpChallenges[challenge.id];
+  if (challenger?.pendingPvpChallengeId === challenge.id) {
+    challenger.pendingPvpChallengeId = null;
+  }
+  if (target?.pendingPvpChallengeId === challenge.id) {
+    target.pendingPvpChallengeId = null;
+  }
+
+  if (reason === "expired") {
+    if (challenger && target) {
+      addMessage(world, challenger.id, "切磋超时", "挑战取消", `对${target.name}的切磋挑战已超时取消。`);
+      addMessage(world, target.id, "切磋超时", "挑战取消", `${challenger.name}的切磋挑战已超时取消。`);
+    } else if (target) {
+      addMessage(world, target.id, "切磋超时", "挑战取消", "当前切磋挑战已超时取消。");
+    }
+    return;
+  }
+
+  const leftName =
+    reason === "challenger-left-area"
+      ? (challenger?.name ?? "对方")
+      : reason === "target-left-area"
+        ? (target?.name ?? "对方")
+        : "其中一方";
+
+  if (challenger) {
+    addMessage(world, challenger.id, "切磋取消", "挑战取消", `因${leftName}离开当前区域，待回应的切磋挑战已取消。`);
+  }
+  if (target) {
+    addMessage(world, target.id, "切磋取消", "挑战取消", `因${leftName}离开当前区域，当前切磋挑战已取消。`);
+  }
+}
 const parseRejectGift = (actionId: ActionId | string): string | null =>
   actionId.startsWith("reject-gift:") ? actionId.slice("reject-gift:".length) : null;
 const parsePostCommission = (actionId: ActionId | string): { type: CommissionType; targetItemId: string } | null => {
@@ -5477,6 +5579,44 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
+  if (location.kind === "safe") {
+    const duelTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+      .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
+    for (const candidate of duelTargets.slice(0, 3)) {
+      actions.push({
+        actionId: `challenge-cultivator:${candidate.id}` as ActionId,
+        label: `Challenge ${candidate.name}`,
+        description: `Challenge ${candidate.name} to a city duel.`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+  }
+  if (cultivator.pendingPvpChallengeId) {
+    const pendingChallenge = world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
+    if (pendingChallenge && pendingChallenge.targetCultivatorId === cultivator.id) {
+      const invalidReason = getPendingPvpChallengeInvalidReason(world, pendingChallenge);
+      if (invalidReason === null) {
+        const challengerName = world.cultivators[pendingChallenge.challengerCultivatorId]?.name ?? "Unknown";
+        actions.push(
+          {
+            actionId: `accept-pvp-challenge:${pendingChallenge.id}` as ActionId,
+            label: `Accept duel: ${challengerName}`,
+            description: `Accept ${challengerName}'s pending city duel.`,
+            durationTicks: 0,
+            kind: "immediate",
+          },
+          {
+            actionId: `reject-pvp-challenge:${pendingChallenge.id}` as ActionId,
+            label: `Reject duel: ${challengerName}`,
+            description: `Reject ${challengerName}'s pending city duel.`,
+            durationTicks: 0,
+            kind: "immediate",
+          },
+        );
+      }
+    }
+  }
 
   // ---- Social actions (搭讪 / 传音 / 道侣) ----
   {
@@ -6078,19 +6218,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (actionId.startsWith("challenge-cultivator:")) {
     const targetId = actionId.slice("challenge-cultivator:".length);
     const target = world.cultivators[targetId];
-    if (!target) throw new Error("Target cultivator not found.");
-    const location = world.locations[cultivator.locationId];
-    if (!location || location.kind !== "safe") throw new Error("City duels can only be initiated in safe zones.");
-    if (cultivator.locationId !== target.locationId) throw new Error("Target must be in the same location.");
-    if (cultivator.activeJobId) throw new Error("Cannot challenge while in an active job.");
-    if (target.activeJobId) throw new Error("Target is busy with an active job.");
-    if (target.pendingPvpChallengeId) throw new Error("Target already has a pending PVP challenge.");
-    if (cultivator.pendingPvpChallengeId) throw new Error("You already have a pending PVP challenge.");
-    const hpRatio = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
-    if (hpRatio < 0.5) throw new Error("Your qi must be at least 50% to issue a challenge.");
-    const realmGap = Math.abs((REALM_ORDER[cultivator.realm] ?? 0) - (REALM_ORDER[target.realm] ?? 0));
-    if (realmGap > 2) throw new Error("Realm gap too large for a fair duel.");
-    if (cultivator.sectId && cultivator.sectId === target.sectId) throw new Error("Cannot challenge a sect member in the city.");
+    const blockReason = getCityDuelChallengeBlockReason(world, cultivator, target);
+    if (blockReason) throw new Error(blockReason);
 
     const challengeId = `pvp-challenge-${world.nextPvpChallengeSequence++}`;
     const challenge: PendingPvpChallenge = {
@@ -6128,18 +6257,19 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const challenge = world.pendingPvpChallenges[challengeId];
     if (!challenge) throw new Error("Challenge not found or already expired.");
     if (challenge.targetCultivatorId !== cultivator.id) throw new Error("Only the challenged cultivator can accept.");
-    if (world.tick >= challenge.expiresAtTick) {
+    const invalidReason = getPendingPvpChallengeInvalidReason(world, challenge);
+    if (invalidReason === "expired") {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
       throw new Error("Challenge has expired.");
     }
-    const challenger = world.cultivators[challenge.challengerCultivatorId];
-    if (!challenger) throw new Error("Challenger no longer exists.");
-    if (cultivator.locationId !== challenge.locationId || challenger.locationId !== challenge.locationId) {
+    if (invalidReason === "challenger-left-area" || invalidReason === "target-left-area") {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
       throw new Error("Both duelists must remain at the original challenge location.");
     }
+    const challenger = world.cultivators[challenge.challengerCultivatorId];
+    if (!challenger) throw new Error("Challenger no longer exists.");
     if (challenger.activeJobId) {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
@@ -8061,16 +8191,13 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       // PVP challenge auto-expiry
       if (cultivator.pendingPvpChallengeId) {
         const pvpChallenge = world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
-        if (!pvpChallenge || world.tick >= pvpChallenge.expiresAtTick) {
-          if (pvpChallenge) {
-            const pvpChallenger = world.cultivators[pvpChallenge.challengerCultivatorId];
-            if (pvpChallenger) {
-              addMessage(world, pvpChallenger.id, "切磋超时", "挑战取消", `对${cultivator.name}的切磋挑战已超时取消。`);
-            }
-            addMessage(world, cultivator.id, "切磋超时", "挑战取消", `${world.cultivators[pvpChallenge.challengerCultivatorId]?.name ?? "某人"}的切磋挑战已超时取消。`);
-            delete world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
-          }
+        if (!pvpChallenge) {
           cultivator.pendingPvpChallengeId = null;
+        } else {
+          const invalidReason = getPendingPvpChallengeInvalidReason(world, pvpChallenge);
+          if (invalidReason !== null) {
+            cancelPendingPvpChallenge(world, pvpChallenge, invalidReason);
+          }
         }
       }
     }
