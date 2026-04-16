@@ -13,7 +13,7 @@
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
   CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution, AttackChannel,
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
-  CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectKind, StatusTargetSide,
+  CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectId, StatusEffectKind, StatusTargetSide,
   PendingPvpChallenge, PvpBattleKind,
   ProductionQueueEntry,
   MessageTemplateKind, PendingGift, Commission, CommissionType,
@@ -320,7 +320,7 @@ const DUNGEON_META_BY_NODE_TYPE: Record<DungeonNodeType, {
   "dungeon-a": { grade: "甲", minRealm: REALM_CORE, materialBand: "golden-spirit-flower" },
 };
 
-const BREAKTHROUGH_TIER_POOL: Record<ItemId, ReadonlyArray<ItemId>> = {
+const BREAKTHROUGH_TIER_POOL: Partial<Record<ItemId, ReadonlyArray<ItemId>>> = {
   "cloud-heart-grass": [
     "cloud-heart-grass", "moon-dew-flower", "clear-zhi-leaf",
     "spirit-brook-bamboo", "pure-heart-orchid", "mist-vine",
@@ -2594,14 +2594,7 @@ const addCombatLog = (world: WorldState, entry: CombatLogInput): CombatLogEntry 
     withSummary.totalDamageTaken = Math.max(0, startHp - endHp);
     withSummary.hpDelta = endHp - startHp;
     withSummary.totalSpiritSpent = rounds.reduce((sum, r) => sum + (r.playerSpiritSpent ?? 0), 0);
-    withSummary.totalQiSpent = rounds.reduce((sum, r) => {
-      for (const t of r.tickEvents ?? []) {
-        if (t.targetSide === "player" && (t.effectKind === "qi_drain" || t.effectKind === "spirit_drain")) {
-          return sum + Math.abs(t.value);
-        }
-      }
-      return sum;
-    }, 0);
+    withSummary.totalQiSpent = 0;
     // Collect all status changes across rounds
     const statusMap = new Map<string, { statusId: CombatStatusId | StatusEffectId; statusName: string; applied: boolean }>();
     for (const r of rounds) {
@@ -7848,8 +7841,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
           breakthroughCategory: definition.category,
           breakthroughTargetRealm: definition.targetRealm,
           breakthroughTargetLevel: definition.targetLevel,
-          breakthroughGenericMaterials: definition.genericMaterials,
-          breakthroughSpecialMaterial: definition.specialMaterial,
+          breakthroughCommonItemId: definition.genericMaterials[0]?.itemId,
+          breakthroughCommonCount: definition.genericMaterials[0]?.count,
+          breakthroughSpecialItemId: definition.specialMaterial.itemId,
+          breakthroughSpecialCount: definition.specialMaterial.count,
           breakthroughSuccessRate: rateInfo.successRate ?? undefined,
           breakthroughRateBreakdown: rateInfo.rateBreakdown,
         },
