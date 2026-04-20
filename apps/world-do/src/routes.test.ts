@@ -239,6 +239,31 @@ test("world agent directory returns registered agents", async () => {
   assert.equal(payload.agents.length, 1);
 });
 
+test("world agent detail returns 404 when agent binding points to a missing cultivator", async () => {
+  const app = createTestApp({
+    auth: {
+      async getAgentProfile() {
+        return {
+          agentId: "stale-agent",
+          name: "Stale Agent",
+          selectedCultivatorId: "missing-cultivator",
+          webhookUrl: null,
+          webhookSecret: null,
+          createdAt: "2026-03-17T00:00:00.000Z",
+          updatedAt: "2026-03-17T00:00:00.000Z",
+          lastSeenAt: "2026-03-17T00:00:00.000Z",
+        };
+      },
+    },
+  });
+
+  const response = await app.request("https://runtime.test/world/agent/stale-agent");
+  const payload = await response.json() as { error: string };
+
+  assert.equal(response.status, 404);
+  assert.equal(payload.error, "Agent not found or has no cultivator.");
+});
+
 test("agent sect route returns neutral organization info after joining a neutral sect", async () => {
   const app = createTestApp();
   const registerResponse = await app.request("https://runtime.test/agent/register", {

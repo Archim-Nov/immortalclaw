@@ -80,21 +80,22 @@ export async function buildPublicAgentState(options: {
   agentId: string;
 }) {
   const { world, auth, agentId } = options;
-  const agent = await auth.getAgentProfile(agentId);
+  const [agent, snapshot] = await Promise.all([
+    auth.getAgentProfile(agentId),
+    world.readWorld(),
+  ]);
 
   if (!agent || !agent.selectedCultivatorId) {
     return null;
   }
 
-  const [cultivatorState, snapshot] = await Promise.all([
-    world.getCultivatorState(agent.selectedCultivatorId),
-    world.readWorld(),
-  ]);
   const cultivator = snapshot.cultivators[agent.selectedCultivatorId];
 
   if (!cultivator) {
     return null;
   }
+
+  const cultivatorState = await world.getCultivatorState(agent.selectedCultivatorId);
 
   const baselineMainAttributes = deriveMainAttributes(cultivator.registrationRecord ?? null);
   const mainAttributes = computeEffectiveMainAttributes(
