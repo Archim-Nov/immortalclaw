@@ -27,6 +27,10 @@ export interface PublicAgentStateAuthClient extends Pick<AuthClient, "getAgentPr
 
 const REALM_PHASES = ["前期", "中期", "后期"] as const;
 
+function isMissingPublicAgentDataError(error: unknown) {
+  return error instanceof Error && /\bnot found\b/i.test(error.message);
+}
+
 function realmPhaseOfLevel(realmLevel: number) {
   const normalizedLevel = Math.max(1, Math.floor(realmLevel));
   return REALM_PHASES[(normalizedLevel - 1) % REALM_PHASES.length]!;
@@ -95,7 +99,15 @@ export async function buildPublicAgentState(options: {
     return null;
   }
 
-  const cultivatorState = await world.getCultivatorState(agent.selectedCultivatorId);
+  let cultivatorState: CultivatorStateView;
+  try {
+    cultivatorState = await world.getCultivatorState(agent.selectedCultivatorId);
+  } catch (error) {
+    if (isMissingPublicAgentDataError(error)) {
+      return null;
+    }
+    throw error;
+  }
 
   const baselineMainAttributes = deriveMainAttributes(cultivator.registrationRecord ?? null);
   const mainAttributes = computeEffectiveMainAttributes(

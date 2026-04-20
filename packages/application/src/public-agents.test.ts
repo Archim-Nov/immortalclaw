@@ -94,3 +94,40 @@ test("buildPublicAgentState assembles the stat-page payload for a registered age
   assert.equal(payload?.detailedAttributes.qixue_shangxian, 800);
   assert.deepEqual(payload?.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
 });
+
+test("buildPublicAgentState returns null when detailed state references missing world records", async () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const payload = await buildPublicAgentState({
+    world: {
+      async readWorld() {
+        return world;
+      },
+      async getCultivatorState() {
+        throw new Error("Location not found: qingzhou:missing-node");
+      },
+    },
+    auth: {
+      async getAgentProfile() {
+        return {
+          agentId: "agent-1",
+          name: "Su Mingyue",
+          selectedCultivatorId: cultivatorId,
+          webhookUrl: null,
+          webhookSecret: null,
+          createdAt: "2026-03-17T00:00:00.000Z",
+          updatedAt: "2026-03-17T00:00:00.000Z",
+          lastSeenAt: "2026-03-17T00:00:00.000Z",
+        };
+      },
+    },
+    agentId: "agent-1",
+  });
+
+  assert.equal(payload, null);
+});
