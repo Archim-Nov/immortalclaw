@@ -5,6 +5,7 @@ import { STATE_IDS } from "../../domain/src/constants.js";
 import { createGeographyRegistryForTest } from "../../domain/src/geography-registry.js";
 import {
   createSeedWorld,
+  getCultivatorState,
   saveCultivationRegistration,
   toPersistedWorldState,
   type CultivationRegistrationRecord,
@@ -438,6 +439,25 @@ test("deserializeStoredWorld hydrates migrated P3 structures into legacy snapsho
   assert.equal("sword-manual" in (normalized.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
   assert.equal("alchemy-manual" in (normalized.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
   assert.equal("array-manual" in (normalized.cultivators[cultivatorId]!.inventory as Record<string, number>), false);
+});
+
+test("deserializeStoredWorld restores canonical item trade data from stale persisted snapshots", () => {
+  const world = createSeedWorld();
+  const cultivatorId = Object.keys(world.cultivators)[0];
+
+  if (!cultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+
+  const persisted = toPersistedWorldState(world);
+  persisted.itemDefinitions["eight-wastes-pass"].trade.buyBasePrice = null;
+  persisted.itemDefinitions["eight-wastes-pass"].trade.sellBasePrice = null;
+
+  const normalized = deserializeStoredWorld(persisted as never);
+
+  assert.equal(normalized.itemDefinitions["eight-wastes-pass"].trade.buyBasePrice, 800);
+  assert.equal(normalized.itemDefinitions["eight-wastes-pass"].trade.sellBasePrice, 200);
+  assert.doesNotThrow(() => getCultivatorState(normalized, cultivatorId));
 });
 
 test("deserializeStoredWorld backfills dungeon expedition flavor arrays in legacy snapshots", () => {

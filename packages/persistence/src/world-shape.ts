@@ -6,7 +6,7 @@ import {
 import type { PersistedWorldState, WorldState } from "../../domain/src/runtime.js";
 import { createDungeonProgress, createEmptyInventory, createFactionReputation } from "../../domain/src/seed.js";
 import type { GeographyRegistryOverrides } from "../../domain/src/geography-registry.js";
-import type { Location } from "../../domain/src/model.js";
+import type { ItemDefinition, ItemId, Location } from "../../domain/src/model.js";
 import type { LocationId, StateId } from "../../domain/src/constants.js";
 
 const REMOVED_LEGACY_MANUAL_IDS = ["sword-manual", "alchemy-manual", "array-manual"] as const;
@@ -142,7 +142,14 @@ export function hydrateMigratedP3WorldState(
         : structuredClone(seedWorld.guixuProgress.lastResolvedEventIds),
   };
   copy.factionWars = mergeRecordDefaults(seedWorld.factionWars, copy.factionWars);
-  copy.itemDefinitions = mergeRecordDefaults(seedWorld.itemDefinitions, copy.itemDefinitions);
+  const existingItemDefinitions: Partial<Record<ItemId, ItemDefinition>> =
+    copy.itemDefinitions && typeof copy.itemDefinitions === "object" && !Array.isArray(copy.itemDefinitions)
+      ? copy.itemDefinitions
+      : {};
+  copy.itemDefinitions = mergeRecordDefaults(
+    existingItemDefinitions,
+    seedWorld.itemDefinitions,
+  ) as Record<ItemId, ItemDefinition>;
   for (const itemId of REMOVED_LEGACY_MANUAL_IDS) {
     delete (copy.itemDefinitions as Record<string, unknown>)[itemId];
   }
