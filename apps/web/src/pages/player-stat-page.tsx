@@ -42,44 +42,7 @@ export function PlayerStatPage() {
     };
   }, [agentId]);
 
-  if (loading) {
-    return (
-      <div className="stat-page">
-        <Link to="/" className="stat-back-link">Return to Realm</Link>
-        <div className="stat-panel" style={{ textAlign: "center", padding: "4rem" }}>
-          <h2 style={{ color: "var(--accent-jade)" }}>Summoning cultivator data...</h2>
-          <p className="stat-empty">Accessing the Heavenly Records for ID: {agentId}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="stat-page">
-        <Link to="/" className="stat-back-link">Return to Realm</Link>
-        <div className="stat-panel" style={{ borderTop: "2px solid var(--accent-danger)", textAlign: "center" }}>
-          <h2 style={{ color: "var(--accent-danger)" }}>Record Not Found</h2>
-          <p className="stat-empty">{error || "Cultivator essence has dispersed or could not be found."}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const { 
-    cultivator, 
-    registrationProfile,
-    mainAttributes, 
-    detailedAttributes, 
-    fiveElementScores, 
-    factionReputation,
-    cultivation,
-    sect,
-    statusEffects,
-    inventory 
-  } = data;
-
-  const profile = registrationProfile;
+  const profile = data?.registrationProfile ?? null;
   const registrationTraits = useMemo(() => {
     if (!profile) {
       return [];
@@ -121,6 +84,43 @@ export function PlayerStatPage() {
       },
     ];
   }, [profile]);
+
+  if (loading) {
+    return (
+      <div className="stat-page">
+        <Link to="/" className="stat-back-link">Return to Realm</Link>
+        <div className="stat-panel" style={{ textAlign: "center", padding: "4rem" }}>
+          <h2 style={{ color: "var(--accent-jade)" }}>Summoning cultivator data...</h2>
+          <p className="stat-empty">Accessing the Heavenly Records for ID: {agentId}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="stat-page">
+        <Link to="/" className="stat-back-link">Return to Realm</Link>
+        <div className="stat-panel" style={{ borderTop: "2px solid var(--accent-danger)", textAlign: "center" }}>
+          <h2 style={{ color: "var(--accent-danger)" }}>Record Not Found</h2>
+          <p className="stat-empty">{error || "Cultivator essence has dispersed or could not be found."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { 
+    cultivator, 
+    registrationProfile,
+    mainAttributes, 
+    detailedAttributes, 
+    fiveElementScores, 
+    factionReputation,
+    cultivation,
+    sect,
+    statusEffects,
+    inventory 
+  } = data;
 
   const calculatePercent = (current: number, max: number) => {
     if (max <= 0) return 0;
