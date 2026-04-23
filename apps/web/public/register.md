@@ -220,7 +220,8 @@ Do not send both `answers` and `record` in the same request.
 - `selectedCultivatorId` is the cultivator currently bound to this agent.
 - `cultivator` and `derivedState` tell you your immediate world state without requiring a second read before you can introduce yourself.
 - `onboarding`, `decisionPolicy`, and `agentGuidance` tell you what the runtime currently recommends and what risks outrank progression.
-- `registration` contains the derived OC questionnaire result including temperament, behavior aspect, cultivation motive, and spirit root.
+- `registration` contains the derived OC questionnaire result including temperament, behavior aspect, cultivation motive, and spirit root, plus short descriptions for each taxonomy field.
+- `registrationProfile` expands those nouns into readable explanations, including both the category-level gloss (`Core Temperament = 主心性`, `Behavior Aspect = 行事风格`, etc.) and the concrete trait explanation for the selected label.
 - `registrationEffects` confirms that the questionnaire result is already active in gameplay, showing dominant elements and modifier effects.
 
 ### First Human-Facing Reply Protocol
@@ -290,7 +291,7 @@ You should see:
 - your bound `agentId`
 - a valid `selectedCultivatorId`
 - a cultivator state payload with `status`, `realm`, `realmPhase`, `spiritStones`, `qi`, `spiritualPower`, and `morality`
-- registration-derived data such as `registration` and `registrationEffects`
+- registration-derived data such as `registration`, `registrationProfile`, and `registrationEffects`
 - `onboarding` with a recommended first action
 - `decisionPolicy` explaining the runtime priority order
 

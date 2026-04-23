@@ -1968,16 +1968,22 @@ test("registration records save and surface through cultivator state", () => {
     label_locale: "zh-CN",
     core_temperament_id: "qian_yuan",
     core_temperament: "潜渊型",
+    core_temperament_description: "潜渊型的人会先把自己藏进水下，看清局势与暗流再出手。你不急着表态，但一旦判断完成，通常比旁人更稳。",
     secondary_temperament_id: "guan_lan",
     secondary_temperament: "观澜型",
+    secondary_temperament_description: "观澜型的人习惯像看潮势一样观察变化，先辨认结构，再决定站位。你擅长长线判断、趋势感和耐心等待。",
     behavior_aspect_id: "water-earth",
     behavior_aspect: "水土 / 潜守",
+    behavior_aspect_description: "潜守意味着一边看水势、一边稳住根基。你会先把局面守住，再从细小变化里寻找真正值得出手的时机。",
     cultivation_motive_id: "seek-truth",
     cultivation_motive: "求真知",
+    cultivation_motive_description: "你走进废墟、典籍、秘境，不是为了财富，而是为了那个更深的问题——世界究竟是如何运转的。知识本身就是你的修行。",
     spirit_root_kind_id: "dual-root",
     spirit_root_result: "水土双灵根",
+    spirit_root_description: "双灵根意味着两种元素并强，路径更灵活，转向与适应能力更强。代价是需要在两股气机之间维持平衡。",
     overall_confidence: "high",
   });
+  assert.equal(state.registrationProfile?.coreTemperament.description, "潜渊型的人会先把自己藏进水下，看清局势与暗流再出手。你不急着表态，但一旦判断完成，通常比旁人更稳。");
 });
 
 test("v2 registration records preserve explicit taxonomy IDs through save and read", () => {
@@ -2023,16 +2029,22 @@ test("v2 registration records preserve explicit taxonomy IDs through save and re
     label_locale: "en",
     core_temperament_id: "qian_yuan",
     core_temperament: "Calm strategist",
+    core_temperament_description: "A calm strategist stays beneath the surface first, reading the currents before acting. You do not rush to declare yourself, but once you decide, your footing is usually steadier than most.",
     secondary_temperament_id: "guan_lan",
     secondary_temperament: "Patient observer",
+    secondary_temperament_description: "A patient observer watches change like the tide, recognizing structure before choosing a position. You are good at long-range judgment, sensing trends, and waiting with patience.",
     behavior_aspect_id: "water-earth",
     behavior_aspect: "Water-Earth / Latent Guard",
+    behavior_aspect_description: "Latent Guard means reading the current while holding the ground. You secure the situation first, then act only when subtle shifts reveal a truly worthwhile opening.",
     cultivation_motive_id: "seek-truth",
     cultivation_motive: "Seek truth",
+    cultivation_motive_description: "You enter ruins, comb through texts, and probe hidden places not for wealth, but for the deeper question: how does the world truly work? Knowledge itself is your cultivation.",
     spirit_root_kind_id: "dual-root",
     spirit_root_result: "Water-Earth dual root",
+    spirit_root_description: "A dual root means two elements rise together. The path is more flexible and adaptable, but it demands balance between two active currents of qi.",
     overall_confidence: "high",
   });
+  assert.equal(state.registrationProfile?.spiritRoot.description, "A dual root means two elements rise together. The path is more flexible and adaptable, but it demands balance between two active currents of qi.");
 });
 
 test("registration effects surface and improve cultivation output", () => {
@@ -2056,6 +2068,15 @@ test("registration effects surface and improve cultivation output", () => {
   const registeredState = getCultivatorState(registeredWorld, "yun-zhong-he");
 
   assert.ok(registeredState.registrationEffects);
+  assert.ok(registeredState.registrationProfile);
+  assert.equal(
+    registeredState.registrationProfile?.coreTemperament.categoryDescription,
+    "主心性，决定你最稳定的判断与反应方式。",
+  );
+  assert.match(
+    registeredState.registrationProfile?.coreTemperament.description ?? "",
+    /继续生长|上升势头|growth/i,
+  );
   assert.ok(registeredState.registrationEffects?.dominantElements.some((element) => element.id === "wood"));
   assert.ok(registeredState.registrationEffects?.modifiers.some((modifier) => modifier.source === "cultivation-motive"));
   assert.ok(registeredState.cultivator.realmProgress > baselineState.cultivator.realmProgress);

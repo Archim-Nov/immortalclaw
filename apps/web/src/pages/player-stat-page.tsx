@@ -1,45 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import type { PublicAgentStateResponse } from "../../../../packages/contracts/src/runtime-api.js";
+import { requestPublicAgentState } from "../lib/runtime-api";
 import "../styles/player-stat-page.css";
-
-// --- Types based on API response ---
-
-interface StatResponse {
-  agent: { agentId: string; name: string; selectedCultivatorId: string; createdAt: string; updatedAt: string; lastSeenAt: string | null };
-  tick: number;
-  cultivator: {
-    id: string; name: string; realm: string; realmLevel: number; realmPhase?: string; realmProgress: number;
-    status: "idle" | "busy" | "injured"; location: string;
-    spiritStones: number; qi: number; maxQi: number;
-    spiritualPower: number; maxSpiritualPower: number;
-    reputation: number; lifespan: number; age: number;
-    genderPresentation: string; pronouns: string; origin: string; temperament: string;
-  };
-  cultivation: { mainTechnique: string; techniques: string[] };
-  sect: { id: string; name: string; role: string; treasury: number; memberCount: number } | null;
-  inventory: Record<string, number>;
-  inventoryDetails: Array<{ id: string; name: string; count: number; kind: string; description: string }>;
-  currentJob: { id: string; cultivatorId: string; actionId: string; label: string; remainingTicks: number; totalTicks: number } | null;
-  nearbyOpportunities: string[];
-  statusEffects: Array<{ id: string; name: string; description: string; remainingTicks: number; source: string }>;
-  factionReputation: Array<{ factionId: string; name: string; value: number; standing: "hostile" | "cold" | "neutral" | "trusted" | "favored" }>;
-  recentEvents: Array<unknown>;
-  recentCombats: Array<unknown>;
-  registration: { saved_at: string | null; label_locale: string; core_temperament_id: string; core_temperament: string; secondary_temperament_id: string; secondary_temperament: string; behavior_aspect_id: string; behavior_aspect: string; cultivation_motive_id: string; cultivation_motive: string; spirit_root_kind_id: string; spirit_root_result: string; overall_confidence: string } | null;
-  registrationEffects: unknown | null;
-  agentGuidance: { warnings: string[]; priorities: string[]; suggestedActions: string[] };
-  fiveElementScores: { metal: number; wood: number; water: number; fire: number; earth: number };
-  mainAttributes: { gengu: number; tipu: number; lingyuan: number; shenshi: number; wuxing: number; daoxin: number; shenfa: number; bingpo: number };
-  detailedAttributes: { 
-    qixue_shangxian: number; lingli_shangxian: number; lingli_huifu: number; waigong_shanghai_beilv: number; shufa_shanghai_beilv: number;
-    mingzhong: number; shanbi: number; sudu: number; renxing: number;
-    kongzhi_qiangdu: number; kongzhi_kangxing: number; tupo_wending: number; huixin: number; baoshang: number; huxin: number;
-  };
-}
 
 export function PlayerStatPage() {
   const { agentId } = useParams<{ agentId: string }>();
-  const [data, setData] = useState<StatResponse | null>(null);
+  const [data, setData] = useState<PublicAgentStateResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,13 +17,8 @@ export function PlayerStatPage() {
       try {
         setLoading(true);
         setError(null);
-        
-        const res = await fetch(`/world/agent/${agentId}`);
-        if (!res.ok) {
-          throw new Error(`Failed to load data (Status ${res.status})`);
-        }
-        
-        const json = await res.json();
+
+        const json = await requestPublicAgentState(agentId!);
         if (isMounted) {
           setData(json);
         }
@@ -106,7 +68,7 @@ export function PlayerStatPage() {
 
   const { 
     cultivator, 
-    registration, 
+    registrationProfile,
     mainAttributes, 
     detailedAttributes, 
     fiveElementScores, 
@@ -116,6 +78,49 @@ export function PlayerStatPage() {
     statusEffects,
     inventory 
   } = data;
+
+  const profile = registrationProfile;
+  const registrationTraits = useMemo(() => {
+    if (!profile) {
+      return [];
+    }
+
+    return [
+      {
+        label: "Core Temperament",
+        categoryDescription: profile.coreTemperament.categoryDescription,
+        value: profile.coreTemperament.label,
+        description: profile.coreTemperament.description,
+        meta: `Confidence: ${profile.coreTemperament.confidence}`,
+      },
+      {
+        label: "Secondary Temperament",
+        categoryDescription: profile.secondaryTemperament.categoryDescription,
+        value: profile.secondaryTemperament.label,
+        description: profile.secondaryTemperament.description,
+      },
+      {
+        label: "Behavior Aspect",
+        categoryDescription: profile.behaviorAspect.categoryDescription,
+        value: profile.behaviorAspect.label,
+        description: profile.behaviorAspect.description,
+        meta: `Confidence: ${profile.behaviorAspect.confidence}`,
+      },
+      {
+        label: "Motive",
+        categoryDescription: profile.cultivationMotive.categoryDescription,
+        value: profile.cultivationMotive.label,
+        description: profile.cultivationMotive.description,
+        meta: `Confidence: ${profile.cultivationMotive.confidence}`,
+      },
+      {
+        label: "Spirit Root",
+        categoryDescription: profile.spiritRoot.categoryDescription,
+        value: profile.spiritRoot.label,
+        description: profile.spiritRoot.description,
+      },
+    ];
+  }, [profile]);
 
   const calculatePercent = (current: number, max: number) => {
     if (max <= 0) return 0;
@@ -282,15 +287,24 @@ export function PlayerStatPage() {
         </section>
 
         {/* 8. Registration Profile */}
-        <section className="stat-panel">
+        <section className="stat-panel full-width">
           <h3 className="stat-panel-title">Registration Profile</h3>
-          {registration ? (
+          {profile ? (
             <>
-              <div className="stat-info-row"><span className="stat-info-label">Core Temperament</span><span className="stat-info-value">{registration.core_temperament || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Secondary</span><span className="stat-info-value">{registration.secondary_temperament || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Behavior Aspect</span><span className="stat-info-value">{registration.behavior_aspect || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Motive</span><span className="stat-info-value">{registration.cultivation_motive || "N/A"}</span></div>
-              <div className="stat-info-row"><span className="stat-info-label">Spirit Root</span><span className="stat-info-value">{registration.spirit_root_result || "N/A"}</span></div>
+              <p className="stat-registration-summary">{profile.summary}</p>
+              <div className="stat-registration-grid">
+                {registrationTraits.map((trait) => (
+                  <article key={trait.label} className="stat-registration-card">
+                    <div className="stat-registration-header">
+                      <span className="stat-registration-label">{trait.label}</span>
+                      {trait.meta ? <span className="stat-registration-meta">{trait.meta}</span> : null}
+                    </div>
+                    <p className="stat-registration-category">{trait.categoryDescription}</p>
+                    <div className="stat-registration-value">{trait.value}</div>
+                    <p className="stat-registration-description">{trait.description}</p>
+                  </article>
+                ))}
+              </div>
             </>
           ) : (
             <p className="stat-empty">Not registered in Heavenly Records</p>

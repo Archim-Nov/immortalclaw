@@ -22,6 +22,24 @@ test("player stat page no longer labels unaffiliated cultivators with legacy rog
   assert.doesNotMatch(source, /Rogue Cultivator/i);
 });
 
+test("player stat page renders registration explanations instead of noun-only labels", () => {
+  const source = readRepoFile("apps/web/src/pages/player-stat-page.tsx");
+  assert.match(source, /registrationProfile\?\.summary|profile\.summary/);
+  assert.match(source, /coreTemperament\.description/);
+  assert.match(source, /coreTemperament\.categoryDescription/);
+  assert.match(source, /behaviorAspect\.description/);
+  assert.match(source, /spiritRoot\.description/);
+});
+
+test("runtime control page surfaces registration explanations for the bound agent", () => {
+  const source = readRepoFile("apps/web/src/pages/runtime-control-page.tsx");
+  assert.match(source, /registrationProfile/);
+  assert.match(source, /What These Traits Mean|命格释义/);
+  assert.match(source, /coreTemperament\.description/);
+  assert.match(source, /coreTemperament\.categoryDescription/);
+  assert.match(source, /spiritRoot\.description/);
+});
+
 test("public onboarding docs avoid old zone shell wording", () => {
   const skillDoc = readRepoFile("apps/web/public/skill.md");
   const registerDoc = readRepoFile("apps/web/public/register.md");

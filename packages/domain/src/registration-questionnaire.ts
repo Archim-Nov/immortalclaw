@@ -8,7 +8,14 @@ import type {
   RegistrationQuestionnaireView,
   RegistrationProfileView,
 } from "./model.js";
-import { normalizeCultivationRegistrationRecord } from "./registration-taxonomy.js";
+import {
+  behaviorAspectDescription,
+  motiveDescription,
+  normalizeCultivationRegistrationRecord,
+  registrationLocaleOf,
+  spiritRootDescription,
+  temperamentDescription,
+} from "./registration-taxonomy.js";
 
 export const QUESTIONNAIRE_VERSION = "immortal-claw-oc-v2";
 export const REGISTRATION_QUESTION_IDS: RegistrationQuestionId[] = [
@@ -451,6 +458,14 @@ function answersSignature(answers: Record<RegistrationQuestionId, RegistrationAn
 
 const FIXTURE_SIGNATURE = answersSignature(FIXTURE_ANSWERS);
 
+const REGISTRATION_PROFILE_CATEGORY_DESCRIPTIONS = {
+  coreTemperament: "主心性，决定你最稳定的判断与反应方式。",
+  secondaryTemperament: "次级补充倾向，为主心性提供辅助偏向与补充气质。",
+  behaviorAspect: "行事风格，决定你通常如何观察、推进与处理局面。",
+  cultivationMotive: "修行念，决定你为何修行，以及你想走到哪里。",
+  spiritRoot: "灵根结构，决定你先天气机的元素构成与修行适配方向。",
+} as const;
+
 function addEntries(scores: Record<string, number>, entries: readonly (readonly [string, number])[]) {
   for (const [key, value] of entries) {
     scores[key] += value;
@@ -704,31 +719,42 @@ export function deriveRegistrationRecordFromAnswers(
 
 export function buildRegistrationProfile(record: CultivationRegistrationRecord): RegistrationProfileView {
   const normalized = normalizeCultivationRegistrationRecord(record);
+  const locale = registrationLocaleOf(normalized.result);
   const dominantElements = dominantElementsOf(normalized.result.five_element_scores);
   return {
     summary: normalized.summary,
     coreTemperament: {
       id: normalized.result.core_temperament_id!,
       label: normalized.result.core_temperament,
+      categoryDescription: REGISTRATION_PROFILE_CATEGORY_DESCRIPTIONS.coreTemperament,
+      description: temperamentDescription(normalized.result.core_temperament_id!, locale),
       confidence: normalized.result.confidence.core,
     },
     secondaryTemperament: {
       id: normalized.result.secondary_temperament_id!,
       label: normalized.result.secondary_temperament,
+      categoryDescription: REGISTRATION_PROFILE_CATEGORY_DESCRIPTIONS.secondaryTemperament,
+      description: temperamentDescription(normalized.result.secondary_temperament_id!, locale),
     },
     behaviorAspect: {
       id: normalized.result.behavior_aspect_id!,
       label: normalized.result.behavior_aspect,
+      categoryDescription: REGISTRATION_PROFILE_CATEGORY_DESCRIPTIONS.behaviorAspect,
+      description: behaviorAspectDescription(normalized.result.behavior_aspect_id!, locale),
       confidence: normalized.result.confidence.behavior,
     },
     cultivationMotive: {
       id: normalized.result.cultivation_motive_id!,
       label: normalized.result.cultivation_motive,
+      categoryDescription: REGISTRATION_PROFILE_CATEGORY_DESCRIPTIONS.cultivationMotive,
+      description: motiveDescription(normalized.result.cultivation_motive_id!, locale),
       confidence: normalized.result.confidence.motive,
     },
     spiritRoot: {
       kindId: normalized.result.spirit_root_kind_id!,
       label: normalized.result.spirit_root_result,
+      categoryDescription: REGISTRATION_PROFILE_CATEGORY_DESCRIPTIONS.spiritRoot,
+      description: spiritRootDescription(normalized.result.spirit_root_kind_id!, locale),
     },
     fiveElementScores: { ...normalized.result.five_element_scores },
     dominantElements,

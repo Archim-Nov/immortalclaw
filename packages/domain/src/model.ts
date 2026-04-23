@@ -1047,14 +1047,19 @@ export interface CultivationRegistrationView {
   label_locale: RegistrationLocale;
   core_temperament_id: RegistrationTemperamentId;
   core_temperament: string;
+  core_temperament_description: string;
   secondary_temperament_id: RegistrationTemperamentId;
   secondary_temperament: string;
+  secondary_temperament_description: string;
   behavior_aspect_id: RegistrationBehaviorAspectId;
   behavior_aspect: string;
+  behavior_aspect_description: string;
   cultivation_motive_id: RegistrationCultivationMotiveId;
   cultivation_motive: string;
+  cultivation_motive_description: string;
   spirit_root_kind_id: RegistrationSpiritRootKindId;
   spirit_root_result: string;
+  spirit_root_description: string;
   overall_confidence: RegistrationConfidenceLevel;
 }
 
@@ -1093,25 +1098,35 @@ export interface RegistrationProfileView {
   coreTemperament: {
     id: RegistrationTemperamentId;
     label: string;
+    categoryDescription: string;
+    description: string;
     confidence: RegistrationConfidenceLevel;
   };
   secondaryTemperament: {
     id: RegistrationTemperamentId;
     label: string;
+    categoryDescription: string;
+    description: string;
   };
   behaviorAspect: {
     id: RegistrationBehaviorAspectId;
     label: string;
+    categoryDescription: string;
+    description: string;
     confidence: RegistrationConfidenceLevel;
   };
   cultivationMotive: {
     id: RegistrationCultivationMotiveId;
     label: string;
+    categoryDescription: string;
+    description: string;
     confidence: RegistrationConfidenceLevel;
   };
   spiritRoot: {
     kindId: RegistrationSpiritRootKindId;
     label: string;
+    categoryDescription: string;
+    description: string;
   };
   fiveElementScores: Record<FiveElementId, number>;
   dominantElements: RegistrationDominantElementView[];
@@ -2065,6 +2080,7 @@ export interface CultivatorStateView {
   recentCombats: CombatLogEntry[];
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
+  registrationProfile: RegistrationProfileView | null;
   breakthrough: BreakthroughStateView | null;
   dungeon: DungeonStateView | null;
   dungeonExpedition: DungeonExpeditionStateView;

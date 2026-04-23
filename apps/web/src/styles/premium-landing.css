@@ -1021,6 +1021,65 @@
   text-shadow: 0 0 15px rgba(0, 255, 170, 0.4);
 }
 
+.dashboard-registration-meaning-shell {
+  margin-top: 1.5rem;
+}
+
+.registration-meaning-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.registration-meaning-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.registration-meaning-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.45rem;
+}
+
+.registration-meaning-label {
+  color: rgba(255, 255, 255, 0.52);
+  font-family: var(--font-code);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.registration-meaning-meta {
+  color: var(--accent-gold);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+}
+
+.registration-meaning-value {
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+
+.registration-meaning-category {
+  margin: 0 0 0.55rem;
+  color: rgba(251, 191, 36, 0.86);
+  line-height: 1.6;
+  font-size: 0.92rem;
+}
+
+.registration-meaning-copy {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.7;
+}
+
 .agent-avatar {
   width: 70px;
   height: 70px;
@@ -2316,5 +2375,11 @@
   .message-row {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (min-width: 900px) {
+  .registration-meaning-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

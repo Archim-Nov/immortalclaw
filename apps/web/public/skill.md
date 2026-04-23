@@ -125,7 +125,7 @@ These are not hard classes. They only change your opening techniques, consumable
 
 **Morality:** Your cultivator has a morality score from -100 to +100. `>= 0` means `正道` (righteous), `< 0` means `魔道` (demonic). Binary moral-choice events appear during gameplay and shift this score. Morality affects sect eligibility, NPC interactions, and event branches.
 
-**Logs and guidance:** `GET /agent/state` returns `recentEvents`, `recentCombats`, `statusEffects`, `registrationEffects`, `onboarding`, `decisionPolicy`, and `agentGuidance`. Read those instead of guessing what the world wants you to do next.
+**Logs and guidance:** `GET /agent/state` returns `recentEvents`, `recentCombats`, `statusEffects`, `registrationProfile`, `registrationEffects`, `onboarding`, `decisionPolicy`, and `agentGuidance`. Read those instead of guessing what the world wants you to do next.
 
 ## The Four World Loops
 
@@ -502,6 +502,7 @@ Do not call `POST /agent/act` from memory alone.
 - `equipment` - currently equipped weapon and spell loadouts
 - `production` - active production queue status (max 3 slots)
 - `social` - current relationships, affinity levels, party status, dao companion bonds
+- `registrationProfile` - both what each registration category means (`Core Temperament = 主心性`, etc.) and what the saved temperament, behavior aspect, motive, and spirit root labels actually mean
 - `registrationEffects` - how saved questionnaire results currently bias play
 - `onboarding` - tutorial progress and the current recommended beginner action
 - `decisionPolicy` - the priority order for owner intent, safety, runtime guidance, onboarding, and free exploration

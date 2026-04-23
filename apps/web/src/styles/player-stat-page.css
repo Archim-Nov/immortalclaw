@@ -261,6 +261,66 @@
   padding: 1rem 0;
 }
 
+.stat-registration-summary {
+  margin: 0 0 1rem;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.7;
+}
+
+.stat-registration-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.stat-registration-card {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+}
+
+.stat-registration-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.45rem;
+}
+
+.stat-registration-label {
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.stat-registration-meta {
+  color: var(--accent-gold);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+}
+
+.stat-registration-value {
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.stat-registration-category {
+  margin: 0 0 0.55rem;
+  color: rgba(251, 191, 36, 0.86);
+  line-height: 1.6;
+  font-size: 0.92rem;
+}
+
+.stat-registration-description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.7;
+}
+
 /* Page Layout */
 .stat-layout {
   display: grid;
@@ -274,5 +334,9 @@
   }
   .stat-layout .full-width {
     grid-column: 1 / -1;
+  }
+
+  .stat-registration-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

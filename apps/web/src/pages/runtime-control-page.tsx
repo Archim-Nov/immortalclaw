@@ -12,6 +12,7 @@ import type {
   PendingMoralityChoiceResponseBody,
   PlayerSectRecruitmentResponse,
   PublicAgentDirectoryEntry,
+  RegistrationProfileView,
   ResolveMoralityChoiceRequest,
   ReviewSectApplicationRequest,
   RuntimeHealthResponse,
@@ -430,6 +431,65 @@ function CompactInfoRows({
   );
 }
 
+function RegistrationMeaningPanel({ profile }: { profile: RegistrationProfileView }) {
+  const traits = [
+    {
+      label: "Core Temperament",
+      categoryDescription: profile.coreTemperament.categoryDescription,
+      value: profile.coreTemperament.label,
+      description: profile.coreTemperament.description,
+      meta: `confidence: ${profile.coreTemperament.confidence}`,
+    },
+    {
+      label: "Secondary Temperament",
+      categoryDescription: profile.secondaryTemperament.categoryDescription,
+      value: profile.secondaryTemperament.label,
+      description: profile.secondaryTemperament.description,
+    },
+    {
+      label: "Behavior Aspect",
+      categoryDescription: profile.behaviorAspect.categoryDescription,
+      value: profile.behaviorAspect.label,
+      description: profile.behaviorAspect.description,
+      meta: `confidence: ${profile.behaviorAspect.confidence}`,
+    },
+    {
+      label: "Cultivation Motive",
+      categoryDescription: profile.cultivationMotive.categoryDescription,
+      value: profile.cultivationMotive.label,
+      description: profile.cultivationMotive.description,
+      meta: `confidence: ${profile.cultivationMotive.confidence}`,
+    },
+    {
+      label: "Spirit Root",
+      categoryDescription: profile.spiritRoot.categoryDescription,
+      value: profile.spiritRoot.label,
+      description: profile.spiritRoot.description,
+    },
+  ];
+
+  return (
+    <section className="glass-panel dashboard-registration-meaning-shell">
+      <div className="dashboard-support-kicker">命格释义</div>
+      <h3 className="dashboard-support-title">What These Traits Mean</h3>
+      <p className="dashboard-support-copy">{profile.summary}</p>
+      <div className="registration-meaning-grid">
+        {traits.map((trait) => (
+          <article key={trait.label} className="registration-meaning-card">
+            <div className="registration-meaning-head">
+              <span className="registration-meaning-label">{trait.label}</span>
+              {trait.meta ? <span className="registration-meaning-meta">{trait.meta}</span> : null}
+            </div>
+            <p className="registration-meaning-category">{trait.categoryDescription}</p>
+            <div className="registration-meaning-value">{trait.value}</div>
+            <p className="registration-meaning-copy">{trait.description}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DashboardTab() {
   const session = useRuntimeSession();
   const [guidePreview, setGuidePreview] = useState<string>("");
@@ -499,6 +559,7 @@ function DashboardTab() {
     boundCredential: session.credential,
     latestCredential: session.lastRegistrationResult?.credential,
   });
+  const registrationProfile = session.agentState?.registrationProfile ?? session.lastRegistrationResult?.registrationProfile ?? null;
 
   async function handleRegisterSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -929,6 +990,8 @@ function DashboardTab() {
           </p>
         </div>
       </div>
+
+      {registrationProfile && <RegistrationMeaningPanel profile={registrationProfile} />}
     </section>
   );
 }

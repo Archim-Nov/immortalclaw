@@ -149,12 +149,18 @@ import {
 import {
   resolveBehaviorAspectId,
   normalizeCultivationRegistrationRecord,
+  behaviorAspectDescription,
+  motiveDescription,
+  registrationLocaleOf,
   resolveCultivationMotiveId,
   resolveSpiritRootKindId,
+  spiritRootDescription,
+  temperamentDescription,
   resolveTemperamentId,
   deriveSpiritRootKindId,
   sortedElementEntries,
 } from "./registration-taxonomy.js";
+import { buildRegistrationProfile } from "./registration-questionnaire.js";
 import { getItemActionBinding, getItemOperationActionId, ITEM_CATALOG } from "./items/catalog.js";
 import {
   createDungeonProgress,
@@ -2859,6 +2865,7 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   if (!record) {
     return null;
   }
+  const locale = registrationLocaleOf(record.result);
   const modifiers = createRegistrationRuntimeModifiers();
   modifiers.dominantElements = dominantElementsOf(record);
   for (const element of modifiers.dominantElements) {
@@ -2868,28 +2875,29 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   const coreTemperament = record.result.core_temperament;
   const coreTemperamentId = record.result.core_temperament_id ?? resolveTemperamentId(coreTemperament);
   if (coreTemperamentId === "shou_jie") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A rule-bound core steadies defense and recovery discipline.", { combatGuard: 3 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A rule-bound core steadies defense and recovery discipline.`, { combatGuard: 3 });
   } else if (coreTemperamentId === "duan_feng") {
-      applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A cutting core sharpens decisive combat and focused dungeon pressure.", { combatBonus: 4, studyBonus: 2 });
+      applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A cutting core sharpens decisive combat and focused dungeon pressure.`, { combatBonus: 4, studyBonus: 2 });
   } else if (coreTemperamentId === "fu_sheng") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A nurturing core favors healing, low-risk errands, and team utility.", { healBonus: 4, taskBonus: 2 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A nurturing core favors healing, low-risk errands, and team utility.`, { healBonus: 4, taskBonus: 2 });
   } else if (coreTemperamentId === "xiang_rong") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A growth-oriented core turns stable sessions into stronger cultivation gains.", { cultivateBonus: 4, meditateBonus: 2 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A growth-oriented core turns stable sessions into stronger cultivation gains.`, { cultivateBonus: 4, meditateBonus: 2 });
   } else if (coreTemperamentId === "qian_yuan") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A patient core improves scouting, judgment, and safer risk-taking.", { fortuneBonus: 4, combatGuard: 2 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A patient core improves scouting, judgment, and safer risk-taking.`, { fortuneBonus: 4, combatGuard: 2 });
   } else if (coreTemperamentId === "guan_lan") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "An observant core improves study efficiency and opportunistic play.", { fortuneBonus: 3, studyBonus: 3 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} An observant core improves study efficiency and opportunistic play.`, { fortuneBonus: 3, studyBonus: 3 });
   } else if (coreTemperamentId === "chi_xin") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A driven core converts pressure into cultivation momentum and combat force.", { cultivateBonus: 3, combatBonus: 3 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A driven core converts pressure into cultivation momentum and combat force.`, { cultivateBonus: 3, combatBonus: 3 });
   } else if (coreTemperamentId === "zheng_sheng") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A competitive core leans into direct encounters and forceful progress.", { combatBonus: 4, studyBonus: 1 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A competitive core leans into direct encounters and forceful progress.`, { combatBonus: 4, studyBonus: 1 });
   } else if (coreTemperamentId === "zhen_yue") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A mountain-like core reinforces frontline stability and mining resilience.", { combatGuard: 4, mineBonus: 3 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A mountain-like core reinforces frontline stability and mining resilience.`, { combatGuard: 4, mineBonus: 3 });
   } else if (coreTemperamentId === "shou_cheng") {
-    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, "A conservative core protects recovery and long-cycle stability.", { healBonus: 3 });
+    applyRegistrationModifier(modifiers, "core-temperament", `Core temperament: ${coreTemperament}`, `${temperamentDescription(coreTemperamentId, locale)} A conservative core protects recovery and long-cycle stability.`, { healBonus: 3 });
   }
 
-  if (modifiers.dominantElements.length > 0) {
+  const behaviorAspectId = record.result.behavior_aspect_id ?? resolveBehaviorAspectId(record.result.behavior_aspect);
+  if (modifiers.dominantElements.length > 0 && behaviorAspectId) {
     const behaviorBonuses = createRegistrationRuntimeModifiers();
     const divisor = modifiers.dominantElements.length === 1 ? 2 : 3;
     for (const element of modifiers.dominantElements) {
@@ -2899,7 +2907,7 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
       modifiers,
       "behavior-aspect",
       `Behavior aspect: ${record.result.behavior_aspect}`,
-      "The registration's action bias nudges routine jobs toward its preferred rhythm.",
+      `${behaviorAspectDescription(behaviorAspectId, locale)} The registration's action bias nudges routine jobs toward its preferred rhythm.`,
       registrationBonusSnapshotOf(behaviorBonuses),
     );
   }
@@ -2907,33 +2915,33 @@ function registrationModifiersOf(cultivator: Cultivator): RegistrationRuntimeMod
   const motive = record.result.cultivation_motive;
   const cultivationMotiveId = record.result.cultivation_motive_id ?? resolveCultivationMotiveId(motive);
   if (cultivationMotiveId === "seek-longevity") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Longevity-driven cultivation improves recovery and stable long-term progress.", { healBonus: 4 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Longevity-driven cultivation improves recovery and stable long-term progress.`, { healBonus: 4 });
   } else if (cultivationMotiveId === "prove-the-great-dao") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A path-seeking motive rewards sustained cultivation and hard breakthroughs.", { cultivateBonus: 4, combatBonus: 2 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} A path-seeking motive rewards sustained cultivation and hard breakthroughs.`, { cultivateBonus: 4, combatBonus: 2 });
   } else if (cultivationMotiveId === "seek-truth") {
-      applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Truth-seeking improves ruins scouting and measured growth.", { studyBonus: 4, fortuneBonus: 3, cultivateBonus: 1 });
+      applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Truth-seeking improves ruins scouting and measured growth.`, { studyBonus: 4, fortuneBonus: 3, cultivateBonus: 1 });
   } else if (cultivationMotiveId === "protect-the-beloved") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Protective intent favors healing and reliable problem-solving work.", { taskBonus: 3, healBonus: 2 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Protective intent favors healing and reliable problem-solving work.`, { taskBonus: 3, healBonus: 2 });
   } else if (cultivationMotiveId === "serve-the-world") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A public-serving motive improves steady task income and support actions.", { taskBonus: 4, healBonus: 2 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} A public-serving motive improves steady task income and support actions.`, { taskBonus: 4, healBonus: 2 });
   } else if (cultivationMotiveId === "avenge-old-grudges") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Old grudges turn effort into sharper direct combat results.", { combatBonus: 4 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Old grudges turn effort into sharper direct combat results.`, { combatBonus: 4 });
   } else if (cultivationMotiveId === "compete-for-supremacy") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Competitive intent improves clashes and the study needed to win them.", { combatBonus: 3, studyBonus: 1 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Competitive intent improves clashes and the study needed to win them.`, { combatBonus: 3, studyBonus: 1 });
   } else if (cultivationMotiveId === "honor-the-clan") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Family or sect pride rewards contribution-focused play.", { sectBonus: 4, taskBonus: 2 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Family or sect pride rewards contribution-focused play.`, { sectBonus: 4, taskBonus: 2 });
   } else if (cultivationMotiveId === "defy-fate") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "Defying fate improves dangerous exploration and hard fights.", { combatBonus: 3, fortuneBonus: 2 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} Defying fate improves dangerous exploration and hard fights.`, { combatBonus: 3, fortuneBonus: 2 });
   } else if (cultivationMotiveId === "seek-freedom") {
-    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, "A freedom-seeking motive favors meditation and open-ended exploration.", { meditateBonus: 3, fortuneBonus: 2 });
+    applyRegistrationModifier(modifiers, "cultivation-motive", `Cultivation motive: ${motive}`, `${motiveDescription(cultivationMotiveId, locale)} A freedom-seeking motive favors meditation and open-ended exploration.`, { meditateBonus: 3, fortuneBonus: 2 });
   }
 
   const spiritRoot = record.result.spirit_root_result;
   const spiritRootKindId = record.result.spirit_root_kind_id ?? resolveSpiritRootKindId(spiritRoot);
   if (spiritRootKindId === "single-root") {
-    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A focused root converts effort into cleaner cultivation and combat output.", { cultivateBonus: 4, combatBonus: 2 });
+    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, `${spiritRootDescription(spiritRootKindId, locale)} A focused root converts effort into cleaner cultivation and combat output.`, { cultivateBonus: 4, combatBonus: 2 });
   } else if (spiritRootKindId === "dual-root") {
-    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, "A dual root supports flexible exploration and safer encounters.", { fortuneBonus: 3, combatGuard: 2 });
+    applyRegistrationModifier(modifiers, "spirit-root", `Spirit root: ${spiritRoot}`, `${spiritRootDescription(spiritRootKindId, locale)} A dual root supports flexible exploration and safer encounters.`, { fortuneBonus: 3, combatGuard: 2 });
   }
 
   return modifiers;
@@ -3083,22 +3091,28 @@ function registrationViewOf(cultivator: Cultivator): CultivationRegistrationView
   const behaviorAspectId = record.result.behavior_aspect_id ?? resolveBehaviorAspectId(record.result.behavior_aspect);
   const cultivationMotiveId = record.result.cultivation_motive_id ?? resolveCultivationMotiveId(record.result.cultivation_motive);
   const spiritRootKindId = record.result.spirit_root_kind_id ?? resolveSpiritRootKindId(record.result.spirit_root_result);
+  const locale = registrationLocaleOf(record.result);
   if (!coreTemperamentId || !secondaryTemperamentId || !behaviorAspectId || !cultivationMotiveId || !spiritRootKindId) {
     throw new Error("stored registration record is missing required taxonomy IDs — record may not have been normalized at save time.");
   }
   return {
     saved_at: record.saved_at ?? null,
-    label_locale: record.result.label_locale ?? "zh-CN",
+    label_locale: locale,
     core_temperament_id: coreTemperamentId,
     core_temperament: record.result.core_temperament,
+    core_temperament_description: temperamentDescription(coreTemperamentId, locale),
     secondary_temperament_id: secondaryTemperamentId,
     secondary_temperament: record.result.secondary_temperament,
+    secondary_temperament_description: temperamentDescription(secondaryTemperamentId, locale),
     behavior_aspect_id: behaviorAspectId,
     behavior_aspect: record.result.behavior_aspect,
+    behavior_aspect_description: behaviorAspectDescription(behaviorAspectId, locale),
     cultivation_motive_id: cultivationMotiveId,
     cultivation_motive: record.result.cultivation_motive,
+    cultivation_motive_description: motiveDescription(cultivationMotiveId, locale),
     spirit_root_kind_id: spiritRootKindId,
     spirit_root_result: record.result.spirit_root_result,
+    spirit_root_description: spiritRootDescription(spiritRootKindId, locale),
     overall_confidence: record.result.confidence.overall,
   };
 }
@@ -5001,6 +5015,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     recentCombats: getCombatLogs(world, cultivatorId, 4),
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
+    registrationProfile: cultivator.registrationRecord ? buildRegistrationProfile(cultivator.registrationRecord) : null,
     breakthrough: breakthroughViewOf(world, cultivator),
     dungeon: dungeonViewForLocation(world, cultivator, location),
     dungeonExpedition: {
