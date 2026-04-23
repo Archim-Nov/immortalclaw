@@ -179,6 +179,7 @@ export interface EventTemplate {
   source: "exploration" | "travel";
   semanticType: "fortune" | "training" | "human";
   resultType: "resource" | "progression" | "status" | "combat" | "story";
+  signalType: "flavor" | "decision";
   name: string;
   nameCn: string;
   description: string;
@@ -191,6 +192,8 @@ export interface EventTemplate {
   maxDungeonRank?: DungeonRank | null;
   effects: EventEffect;
   moralityChoice?: MoralityChoiceTemplate;
+  encounterBuildId?: import("./encounters/catalog.js").EncounterBuildId | null;
+  combatMode?: "light" | "full" | null;
 }
 
 export interface EventPools {
@@ -783,6 +786,7 @@ export type ImmediateActionId =
   | "buy-healing-pill"
   | "buy-qi-pill"
   | "buy-ward-talisman"
+  | "buy-eight-wastes-pass"
   | "buy-current-breakthrough-material"
   | "use-healing-pill"
   | "use-qi-pill"
@@ -790,6 +794,9 @@ export type ImmediateActionId =
   | "sell-spirit-ore"
   | "sell-ruin-fragment"
   | "sell-beast-core"
+  | "sell-ancient-artifact"
+  | "sell-bahuang-spirit-essence"
+  | "sell-legendary-artifact"
   | "join-sect"
   | "leave-neutral-sect"
   | "withdraw-from-wilderness"
@@ -816,7 +823,7 @@ export type ImmediateActionId =
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
-export type ItemTradeScope = "settlement" | "none";
+export type ItemTradeScope = "settlement" | "market" | "none";
 export type ItemUseKind = "consume" | "study" | "ticket" | "material" | "unlock-loadout";
 export type ItemActionOperation = "buy" | "sell" | "use" | "study";
 

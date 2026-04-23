@@ -30,6 +30,7 @@ test("web app vite config stays buildable for the pages workspace", async () => 
     path.join(sourceRoot, "public", "register.md"),
     path.join(sourceRoot, "public", "heartbeat.md"),
   ];
+  const redirectsPath = path.join(sourceRoot, "public", "_redirects");
   const proxyFiles = [
     path.join(sourceRoot, "functions", "_runtime-proxy.js"),
     path.join(sourceRoot, "functions", "[[path]].js"),
@@ -87,6 +88,14 @@ test("web app vite config stays buildable for the pages workspace", async () => 
   for (const publicDoc of publicDocs) {
     assert.equal(fs.existsSync(publicDoc), true, `expected public markdown at ${publicDoc}`);
   }
+
+  assert.equal(fs.existsSync(redirectsPath), true, `expected SPA redirects file at ${redirectsPath}`);
+  const redirects = fs.readFileSync(redirectsPath, "utf8");
+  assert.match(redirects, /^\/health\s+\/health\s+200/m);
+  assert.match(redirects, /^\/agent\/\*\s+\/agent\/:splat\s+200/m);
+  assert.match(redirects, /^\/cultivator\/\*\s+\/cultivator\/:splat\s+200/m);
+  assert.match(redirects, /^\/world\/\*\s+\/world\/:splat\s+200/m);
+  assert.match(redirects, /^\/\*\s+\/index\.html\s+200/m);
 
   for (const proxyFile of proxyFiles) {
     assert.equal(fs.existsSync(proxyFile), true, `expected proxy file at ${proxyFile}`);

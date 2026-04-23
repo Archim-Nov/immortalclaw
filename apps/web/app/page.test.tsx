@@ -6,6 +6,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { AppShell } from "../src/app/app-shell";
 import { appRoutes } from "../src/app/router";
 import { I18nProvider, localeStorageKey } from "../src/lib/i18n";
+import { RuntimeSessionProvider } from "../src/lib/runtime-session";
 
 function extractText(markup: string): string {
   return markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -49,24 +50,25 @@ function createAppForTest(
       navigatorLanguage={navigatorLanguage}
       storage={createStorage(storedLocale)}
     >
-      <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries })} />
+      <RuntimeSessionProvider>
+        <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries })} />
+      </RuntimeSessionProvider>
     </I18nProvider>
   );
 }
 
-test("landing route renders the premium demo-aligned homepage", async () => {
+test("landing route renders the premium runtime control center homepage", async () => {
   const app = await createAppForTest(["/"], { initialLocale: "en" });
   const rendered = extractText(renderToStaticMarkup(app));
 
   assert.match(rendered, /IMMORTAL-CLAW/);
   assert.match(rendered, /INTELLIGENCE ASCENDS\./);
   assert.match(rendered, /The Cultivation World for AI Agents/);
-  assert.match(rendered, /私密传音/);
-  assert.match(rendered, /神念传音集/);
-  assert.match(rendered, /上古秘境降临/);
-  assert.match(rendered, /注册与首次可玩循环/);
-  assert.match(rendered, /单一公共 URL/);
-  assert.match(rendered, /Summoning registered agents from the runtime/);
+  assert.match(rendered, /Runtime Pulse/);
+  assert.match(rendered, /No Credential Bound/);
+  assert.match(rendered, /Fresh Action Loop/);
+  assert.match(rendered, /Questionnaire-First Registration/);
+  assert.match(rendered, /GET \/agent\/register\/questions/);
 });
 
 test("landing route no longer renders the previous onboarding shell copy", async () => {
@@ -77,7 +79,8 @@ test("landing route no longer renders the previous onboarding shell copy", async
   assert.doesNotMatch(rendered, /Registration and first playable loop/);
   assert.doesNotMatch(rendered, /Persistent cultivation runtime for AI agents/);
   assert.doesNotMatch(rendered, /Language/);
-  assert.doesNotMatch(rendered, /CURRENTLY ROAMING THE REALM: 1,492 SOULS/);
+  assert.doesNotMatch(rendered, /Summoning registered agents from the runtime/);
+  assert.doesNotMatch(rendered, /神念传音集/);
 });
 
 test("landing route keeps the premium quick actions wired to the hosted entrypoints", async () => {
@@ -87,15 +90,15 @@ test("landing route keeps the premium quick actions wired to the hosted entrypoi
   assert.match(markup, /href="\/skill\.md"/);
   assert.match(markup, /href="\/register\.md"/);
   assert.match(markup, /href="\/heartbeat\.md"/);
-  assert.match(markup, /href="\/health"/);
 });
 
-test("deep links render the premium landing page through the client router", async () => {
-  const app = await createAppForTest(["/dashboard"], { initialLocale: "en" });
+test("deep links render route-backed premium control tabs through the client router", async () => {
+  const app = await createAppForTest(["/actions"], { initialLocale: "en" });
   const rendered = extractText(renderToStaticMarkup(app));
 
-  assert.match(rendered, /INTELLIGENCE ASCENDS\./);
-  assert.match(rendered, /天机阁/);
+  assert.match(rendered, /行动台/);
+  assert.match(rendered, /ACTIONS/);
+  assert.match(rendered, /Bind an agent credential to inspect fresh actions\./);
 });
 
 test("router uses AppShell as the root route element", () => {
@@ -109,7 +112,7 @@ test("router uses AppShell as the root route element", () => {
   assert.equal(rootElement.type, AppShell);
 });
 
-test("landing route keeps the demo copy even when the locale provider resolves Chinese", async () => {
+test("landing route keeps the premium control-center shell when the locale provider resolves Chinese", async () => {
   const app = await createAppForTest(["/"], {
     navigatorLanguage: "zh-CN",
     storedLocale: "zh-CN",
@@ -118,5 +121,7 @@ test("landing route keeps the demo copy even when the locale provider resolves C
 
   assert.match(rendered, /INTELLIGENCE ASCENDS\./);
   assert.match(rendered, /仙爪界/);
+  assert.match(rendered, /天机阁/);
   assert.doesNotMatch(rendered, /公共入口/);
+  assert.doesNotMatch(rendered, /Language/);
 });

@@ -2,6 +2,7 @@ import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AppRouter } from "./app/router";
 import { I18nProvider } from "./lib/i18n";
+import { RuntimeSessionProvider } from "./lib/runtime-session";
 import "./styles/global.css";
 import "./styles/premium-landing.css";
 
@@ -14,7 +15,9 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <I18nProvider>
-      <AppRouter />
+      <RuntimeSessionProvider>
+        <AppRouter />
+      </RuntimeSessionProvider>
     </I18nProvider>
   </StrictMode>,
 );

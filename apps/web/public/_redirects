@@ -1,0 +1,15 @@
+/health /health 200
+/agent/* /agent/:splat 200
+/cultivator/* /cultivator/:splat 200
+/world/* /world/:splat 200
+/stat/* /index.html 200
+/dashboard /index.html 200
+/agents /index.html 200
+/actions /index.html 200
+/messages /index.html 200
+/events /index.html 200
+/sects /index.html 200
+/world /index.html 200
+/records /index.html 200
+/settings /index.html 200
+/* /index.html 200

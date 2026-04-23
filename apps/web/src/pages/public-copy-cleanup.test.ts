@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { premiumLandingMarkup } from "./premium-landing-markup";
+import { premiumControlRoutes } from "./premium-landing-markup";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../../..");
 
@@ -11,7 +11,10 @@ function readRepoFile(relativePath: string) {
 }
 
 test("premium landing sect copy no longer uses retired sword-sect marketing language", () => {
-  assert.doesNotMatch(premiumLandingMarkup, /剑修大宗/);
+  const routeCopy = premiumControlRoutes
+    .flatMap((route) => [route.labelZh, route.labelEn, route.description])
+    .join(" ");
+  assert.doesNotMatch(routeCopy, /剑修大宗/);
 });
 
 test("player stat page no longer labels unaffiliated cultivators with legacy rogue-cultivator wording", () => {

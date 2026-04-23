@@ -35,6 +35,7 @@ import {
   type GeographyRegistryOverrides,
   validateGeographyRegistry,
 } from "./geography-registry.js";
+import { createEmptyFiveElementGrowth, createEmptyMainAttributeGrowth } from "./attributes.js";
 import { ITEM_CATALOG, ITEM_IDS } from "./items/catalog.js";
 import { seedQuestBoards } from "./quest.js";
 import { buildFullTopology, toLocationId, toSectOutpostLocationId } from "./topology.js";
@@ -297,8 +298,19 @@ function createStatusEffects(...effects: StatusEffect[]): StatusEffect[] {
   return effects;
 }
 
+function withDefaultGrowthFields(
+  cultivator: Omit<Cultivator, "mainAttributeGrowth" | "fiveElementGrowth" | "mainAttributePercentageBonus">,
+): Cultivator {
+  return {
+    ...cultivator,
+    mainAttributeGrowth: createEmptyMainAttributeGrowth(),
+    fiveElementGrowth: createEmptyFiveElementGrowth(),
+    mainAttributePercentageBonus: 0,
+  };
+}
+
 const cultivators: Record<string, Cultivator> = {
-  "yun-zhong-he": {
+  "yun-zhong-he": withDefaultGrowthFields({
     id: "yun-zhong-he",
     name: "云中鹤",
     genderPresentation: "male",
@@ -369,7 +381,7 @@ const cultivators: Record<string, Cultivator> = {
     pendingGifts: [],
     lastGiftTick: -1,
     guixuCompletedNodeIds: [],
-  },
+  }),
 };
 
 export const BAHUANG_EXPEDITIONS = {

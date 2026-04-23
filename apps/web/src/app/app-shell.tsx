@@ -1,13 +1,14 @@
 import React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useI18n, type Locale } from "../lib/i18n";
+import { isPremiumControlPath } from "../pages/premium-landing-markup";
 
 const localeButtons: Locale[] = ["en", "zh-CN"];
 
 export function AppShell() {
   const location = useLocation();
   const { locale, setLocale, t } = useI18n();
-  const isPremiumLanding = location.pathname === "/" || location.pathname === "/dashboard";
+  const isPremiumLanding = location.pathname === "/" || isPremiumControlPath(location.pathname);
 
   return (
     <div className={`app-shell${isPremiumLanding ? " is-premium-landing" : ""}`}>

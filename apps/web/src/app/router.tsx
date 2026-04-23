@@ -12,18 +12,27 @@ const PlayerStatPage = lazy(() =>
   import("../pages/player-stat-page").then((m) => ({ default: m.PlayerStatPage })),
 );
 
+const premiumControlPaths = [
+  "/",
+  "/dashboard",
+  "/agents",
+  "/actions",
+  "/messages",
+  "/events",
+  "/sects",
+  "/world",
+  "/records",
+  "/settings",
+] as const;
+
 export const appRoutes: RouteObject[] = [
   {
     element: <AppShell />,
     children: [
-      {
-        path: "/",
+      ...premiumControlPaths.map((path) => ({
+        path,
         element: <HomePage />,
-      },
-      {
-        path: "/dashboard",
-        element: <HomePage />,
-      },
+      })),
       {
         path: "/stat/:agentId",
         element: (

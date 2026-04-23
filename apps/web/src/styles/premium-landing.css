@@ -1564,6 +1564,328 @@
   letter-spacing: 1px;
 }
 
+.runtime-toolbar-panel,
+.runtime-result-panel,
+.runtime-highlight-panel,
+.runtime-sidebar-status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.runtime-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.runtime-inline-search {
+  width: min(24rem, 100%);
+}
+
+.dashboard-runtime-grid {
+  margin-top: 3rem;
+}
+
+.dashboard-registration-panel {
+  min-height: 100%;
+}
+
+.dashboard-registration-panel--wide {
+  grid-column: span 2;
+}
+
+.runtime-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.runtime-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.runtime-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.runtime-field span {
+  color: rgba(255, 255, 255, 0.68);
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
+.runtime-field input,
+.runtime-field select,
+.runtime-json-editor {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  background: rgba(0, 0, 0, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.9rem;
+  color: #fff;
+  font-family: var(--font-code);
+  font-size: 0.94rem;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.runtime-field input:focus,
+.runtime-field select:focus,
+.runtime-json-editor:focus {
+  outline: none;
+  border-color: rgba(0, 255, 170, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 255, 170, 0.18);
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.runtime-json-editor {
+  min-height: 20rem;
+  margin-top: 1rem;
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.runtime-questionnaire-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.runtime-questionnaire-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.runtime-question-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.runtime-question-card h4 {
+  color: #f3fbff;
+  font-size: 1.28rem;
+  line-height: 1.55;
+}
+
+.runtime-question-meta,
+.runtime-chip-row,
+.runtime-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.runtime-option-grid,
+.runtime-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.runtime-option-card,
+.runtime-choice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e6f5ff;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.runtime-option-card:hover,
+.runtime-choice-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 255, 170, 0.28);
+  background: rgba(0, 255, 170, 0.04);
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.24);
+}
+
+.runtime-option-card input {
+  accent-color: var(--accent-jade);
+}
+
+.runtime-option-id {
+  color: var(--accent-gold);
+  font-family: var(--font-code);
+  font-size: 0.82rem;
+  letter-spacing: 0.08rem;
+}
+
+.runtime-choice-card h4,
+.runtime-feed-card h4 {
+  color: #f7fcff;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.runtime-choice-card p,
+.runtime-feed-card p {
+  color: rgba(224, 242, 254, 0.78);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.runtime-ghost-button,
+.send-btn {
+  min-height: 46px;
+}
+
+.runtime-ghost-button {
+  padding: 0.85rem 1.1rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.9rem;
+  color: #fff;
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.runtime-ghost-button:hover,
+.runtime-ghost-button:focus-visible {
+  border-color: rgba(0, 255, 170, 0.32);
+  color: var(--accent-jade);
+  background: rgba(0, 255, 170, 0.05);
+  transform: translateY(-1px);
+}
+
+.runtime-ghost-button:disabled,
+.send-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.runtime-inline-note,
+.runtime-inline-error {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.runtime-inline-note {
+  color: rgba(224, 242, 254, 0.8);
+}
+
+.runtime-inline-error {
+  color: var(--accent-danger);
+}
+
+.runtime-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.runtime-feed-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.15rem 1.2rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.runtime-sensitive-output {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(251, 191, 36, 0.18);
+}
+
+.runtime-sensitive-output code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #fff;
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.runtime-highlight-panel {
+  margin-bottom: 2rem;
+}
+
+.runtime-sidebar-status-panel {
+  margin-top: auto;
+}
+
+.message-subject {
+  margin-bottom: 0.45rem;
+  color: var(--accent-gold);
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1280px) {
+  .dashboard-registration-panel--wide {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 960px) {
+  .runtime-toolbar-row,
+  .runtime-questionnaire-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runtime-form-grid,
+  .runtime-option-grid,
+  .runtime-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-inline-search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .runtime-button-row,
+  .runtime-chip-row,
+  .runtime-question-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runtime-ghost-button,
+  .send-btn {
+    width: 100%;
+  }
+}
+
 .message-row {
   display: flex;
   gap: 15px;

@@ -46,6 +46,7 @@ import type {
   ActionId,
   AvailableAction,
   CombatLogEntry,
+
   CultivationRegistrationRecord,
   CultivationRegistrationView,
   CultivatorStateView,
@@ -76,11 +77,17 @@ import type {
   WorldEvent,
 } from "../../domain/src/runtime.js";
 import type { DetailedAttributeId, MainAttributeId } from "../../domain/src/attributes.js";
-import type { AgentRegistrationInput } from "../../persistence/src/world-repository.js";
 
 export interface RuntimeHealthResponse {
   ok: boolean;
 }
+
+export type AgentPersonaGenderPresentation =
+  | "male"
+  | "female"
+  | "nonbinary"
+  | "other"
+  | "unspecified";
 
 export interface CultivatorStateRequest {
   cultivatorId: string;
@@ -110,7 +117,13 @@ export interface AdvanceWorldRequest {
 
 export type AdvanceWorldResponse = TickSummary;
 
-export interface AgentRegistrationRequest extends Omit<AgentRegistrationInput, "record"> {
+export interface AgentRegistrationRequest {
+  name: string;
+  genderPresentation?: AgentPersonaGenderPresentation;
+  pronouns?: string;
+  age?: number;
+  origin?: string;
+  temperament?: string;
   answers?: Record<RegistrationQuestionId, RegistrationAnswer>;
   record?: CultivationRegistrationRecord;
   webhookUrl?: string;
@@ -126,6 +139,42 @@ export interface AgentView {
   updatedAt: string;
   lastSeenAt: string | null;
 }
+
+export interface AgentBindingResponse {
+  agentId: string;
+  cultivatorIds: string[];
+  selectedCultivatorId: string | null;
+}
+
+export interface WorldStatusResponse {
+  ok: true;
+  tick: number;
+  lastTickAt: string;
+}
+
+export interface PublicAgentDirectoryCultivatorView {
+  id: string;
+  name: string;
+  realm: string;
+  realmLevel: number;
+  realmPhase?: string;
+  realmProgress: number;
+  status: "idle" | "busy" | "injured";
+  location: string;
+  spiritualPower: number;
+  sect: string | null;
+  currentAction: string | null;
+}
+
+export interface PublicAgentDirectoryEntry extends AgentView {
+  cultivator: PublicAgentDirectoryCultivatorView;
+}
+
+export interface PublicAgentDirectoryResponse {
+  agents: PublicAgentDirectoryEntry[];
+}
+
+export type PublicAgentStateResponse = AgentStateResponse;
 
 export interface DerivedAttributeResponse {
   fiveElementScores: Record<FiveElementId, number>;
@@ -192,6 +241,16 @@ export interface AgentRegistrationRecordRequest {
   record: CultivationRegistrationRecord;
 }
 
+export interface DaoLogEntry {
+  id: string;
+  cultivatorId: string;
+  tick: number;
+  title: string;
+  content: string;
+  tags: string[];
+  usableFor?: unknown;
+}
+
 export interface WebhookWakePayload {
   event: "tick" | "message";
   tick: number;
@@ -202,6 +261,45 @@ export interface AgentWebhookBindResponse {
   ok: true;
   webhookUrl: string;
   webhookSecret: string;
+}
+
+export interface AgentCredentialResetResponse {
+  ok: true;
+  agentId: string;
+  credential: string;
+  message: string;
+}
+
+export interface CharacterSummary {
+  id: string;
+  name: string;
+  genderPresentation: AgentPersonaGenderPresentation;
+  pronouns: string;
+  origin: string;
+  temperament: string;
+  realm: string;
+  realmLevel: number;
+  locationId: string;
+  sectId: string | null;
+  neutralSectId: string | null;
+  isSelected: boolean;
+}
+
+export interface AgentPersonaSyncRequest {
+  agentId?: string;
+  name: string;
+  genderPresentation?: AgentPersonaGenderPresentation;
+  pronouns?: string;
+  age?: number;
+  origin?: string;
+  temperament?: string;
+}
+
+export interface AgentPersonaSyncResponse {
+  agentId: string;
+  selectedCultivatorId: string;
+  cultivator: CharacterSummary;
+  created: boolean;
 }
 
 export type AgentStrategyResponse = StrategySnapshot;

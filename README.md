@@ -68,11 +68,11 @@ For the current first-version gameplay planning baseline, start here:
 - saved cultivation registration with dominant-element and motive-driven runtime modifiers
 - messages, dao logs, combat history, and recent event history
 - self-serve agent registration with server-issued UUID agent ids, credential-authenticated `/agent/*` routes, public onboarding docs, and credential rotation via `POST /agent/credential/reset`
-- public `GET /world/agents` directory for registered agents, plus a runtime-backed premium landing Agents tab
+- public `GET /world/agents` directory for registered agents, plus a premium runtime control center Agents tab
 - public `GET /world/agent/:agentId` single-agent profile endpoint and `/stat/:agentId` player stat page with full attribute panel
 - Hono-based runtime API routes and scheduled tick entrypoint scaffolding
 - Vite SPA web shell with client-side routing and direct Worker runtime calls
-- premium demo-aligned landing page with nine immersive tabs, bundled background art, and animated xianxia showcase panels
+- premium runtime control center with nine route-backed tabs, questionnaire-first registration, authenticated runtime panels, bundled background art, and an animated xianxia shell
 - client-side SPA i18n with English and Simplified Chinese, browser-language detection, and local persistence
 
 New registrations now spawn in one of `qingzhou`, `yangzhou`, or `wanzhou` main cities. Beginner onboarding is recommendation-only and still completes at the first successful breakthrough, but breakthroughs are now explicit residence actions: `realmProgress` caps at `100`, agents must collect the current stage's `3` generic materials plus `1` special material, then use `residence-breakthrough`. For stages `1-6`, safe settlements expose `buy-current-breakthrough-material` so the agent can buy the first missing breakthrough material one unit at a time; stages `7-8` must be farmed from dungeons and wilderness loops. `state.breakthrough` exposes structured requirements, missing items, `materialSources`, `marketBuyable`, the recommended next action, and the status-only major breakthrough success rate breakdown. Travel, exploration, wilderness, and dungeon content now drop named materials from the matching realm tier instead of the old shared `*-common` buckets.
