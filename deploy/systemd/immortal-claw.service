@@ -1,0 +1,18 @@
+[Unit]
+Description=immortal-claw self-hosted runtime (apps/server)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/immortalclaw
+EnvironmentFile=/opt/immortalclaw/server.env
+# Node 22+ required (uses the built-in node:sqlite). Adjust the path to `which node`.
+ExecStart=/usr/bin/node --import tsx apps/server/src/index.ts
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/immortal-claw.log
+StandardError=append:/var/log/immortal-claw.log
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
