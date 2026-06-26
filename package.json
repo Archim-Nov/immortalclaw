@@ -13,8 +13,11 @@
     "build:web": "npm run build --workspace @immortal-claw/web",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
+    "dev:server": "npm run dev --workspace @immortal-claw/server",
+    "start:server": "npm run start --workspace @immortal-claw/server",
     "smoke:onboarding": "node --import tsx scripts/smoke-onboarding.mjs",
     "smoke:questionnaire-to-register": "node --import tsx scripts/smoke-questionnaire-to-register.mjs",
+    "smoke:self-host": "node --import tsx scripts/smoke-self-host.mjs",
     "test": "node --import tsx --test \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"packages/**/*.test.ts\" \"packages/**/*.test.tsx\"",
     "verify:worker": "node ./scripts/verify-worker.mjs"
   },

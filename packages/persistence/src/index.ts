@@ -1,7 +1,16 @@
 export { createInMemoryWorldRepository, InMemoryWorldRepository } from "./in-memory-world-repository.js";
 export type { InMemoryWorldRepositoryOptions } from "./in-memory-world-repository.js";
 export type { AuthClient } from "./auth-client.js";
+export { hashCredential, issueCredential, normalizeAgentId } from "./credential-utils.js";
 export { createSchema } from "./sqlite-schema.js";
+export type { SqliteDatabaseLike, SqliteDatabaseStatement } from "./sqlite-schema.js";
+export {
+  createAuthSchema,
+  createSqliteAuthClient,
+  SqliteAuthClient,
+  SQLITE_AUTH_SCHEMA,
+} from "./sqlite-auth-client.js";
+export type { SqliteAuthClientOptions } from "./sqlite-auth-client.js";
 export {
   createSqliteWorldRepository,
   SqliteWorldRepository,

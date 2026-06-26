@@ -4,6 +4,7 @@ import type {
   AgentProfileWriteInput,
 } from "./world-repository.js";
 import type { AuthClient } from "./auth-client.js";
+import { hashCredential, issueCredential, normalizeAgentId } from "./credential-utils.js";
 
 export interface SupabaseAuthClientOptions {
   url: string;
@@ -33,20 +34,6 @@ interface AgentCredentialRow {
   created_at: string;
   last_seen_at: string | null;
   revoked_at?: string | null;
-}
-
-function normalizeAgentId(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
-}
-
-function issueCredential(): string {
-  return `immortal_sk_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-async function hashCredential(credential: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential.trim()));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export class SupabaseAuthClient implements AuthClient {

@@ -12,3 +12,5 @@ data/
 .mcp.json
 supabase/.temp/
 .claude/
+.env.local
+.env*.local
