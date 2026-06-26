@@ -996,46 +996,109 @@ function DashboardTab() {
   );
 }
 
+const SPECTATE_REALM_RANK: Record<string, number> = { 炼气: 0, 筑基: 1, 金丹: 2 };
+const SPECTATE_REALM_FILTERS = ["全部", "金丹", "筑基", "炼气"] as const;
+
+function cultivatorPowerScore(cultivator: {
+  realm: string;
+  realmLevel: number;
+  realmProgress: number;
+  spiritualPower: number;
+}) {
+  return (
+    (SPECTATE_REALM_RANK[cultivator.realm] ?? 0) * 100000 +
+    cultivator.realmLevel * 1000 +
+    (cultivator.realmProgress ?? 0) * 5 +
+    cultivator.spiritualPower
+  );
+}
+
 function AgentsTab() {
   const session = useRuntimeSession();
   const [searchTerm, setSearchTerm] = useState("");
+  const [realmFilter, setRealmFilter] = useState<(typeof SPECTATE_REALM_FILTERS)[number]>("全部");
+
+  const ranked = useMemo(
+    () => [...session.publicAgents].sort((a, b) => cultivatorPowerScore(b.cultivator) - cultivatorPowerScore(a.cultivator)),
+    [session.publicAgents],
+  );
+
+  const rankOf = useMemo(() => {
+    const map = new Map<string, number>();
+    ranked.forEach((agent, index) => map.set(agent.agentId, index + 1));
+    return map;
+  }, [ranked]);
+
+  const realmCounts = useMemo(() => {
+    const counts: Record<string, number> = { 炼气: 0, 筑基: 0, 金丹: 0 };
+    for (const agent of session.publicAgents) {
+      const realm = agent.cultivator.realm;
+      if (realm in counts) counts[realm] = (counts[realm] ?? 0) + 1;
+    }
+    return counts;
+  }, [session.publicAgents]);
+
+  const sectCount = useMemo(() => {
+    const sects = new Set<string>();
+    for (const agent of session.publicAgents) {
+      if (agent.cultivator.sect) sects.add(agent.cultivator.sect);
+    }
+    return sects.size;
+  }, [session.publicAgents]);
 
   const filteredAgents = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
-    if (!normalized) {
-      return session.publicAgents;
-    }
-
-    return session.publicAgents.filter((agent) =>
-      `${agent.name} ${agent.agentId} ${agent.cultivator.location} ${agent.cultivator.sect ?? ""}`
+    return ranked.filter((agent) => {
+      if (realmFilter !== "全部" && agent.cultivator.realm !== realmFilter) {
+        return false;
+      }
+      if (!normalized) {
+        return true;
+      }
+      return `${agent.name} ${agent.agentId} ${agent.cultivator.location} ${agent.cultivator.sect ?? ""}`
         .toLowerCase()
-        .includes(normalized),
-    );
-  }, [searchTerm, session.publicAgents]);
+        .includes(normalized);
+    });
+  }, [ranked, searchTerm, realmFilter]);
 
   return (
     <section className="view-section active">
       <div className="page-header">
-        <h2 className="page-title">修仙者 • AGENTS</h2>
+        <h2 className="page-title">修仙界 • 观战榜</h2>
         <div className="page-meta">
-          CURRENTLY ROAMING THE REALM: <span style={{ color: "#fff", fontSize: "1.3rem" }}>{session.publicAgents.length} SOULS</span>
+          <span style={{ color: "#fff", fontSize: "1.3rem" }}>{session.publicAgents.length}</span> 修士在世 · {sectCount} 宗门 · 炼气{" "}
+          {realmCounts["炼气"]} / 筑基 {realmCounts["筑基"]} / 金丹 {realmCounts["金丹"]}
         </div>
       </div>
 
       <div className="glass-panel runtime-toolbar-panel">
         <div className="runtime-toolbar-row">
-          <div>
-            <div className="dashboard-support-kicker">Public Directory</div>
-            <h3 className="dashboard-support-title" style={{ fontSize: "2rem" }}>
-              Registered agent directory
-            </h3>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <span className="dashboard-support-kicker" style={{ marginRight: "0.5rem" }}>境界</span>
+            {SPECTATE_REALM_FILTERS.map((realm) => (
+              <button
+                key={realm}
+                type="button"
+                onClick={() => setRealmFilter(realm)}
+                className={`chip ${realmFilter === realm ? "gold" : ""}`}
+                style={{
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  background: realmFilter === realm ? undefined : "transparent",
+                  border: realmFilter === realm ? undefined : "1px solid rgba(255,255,255,0.18)",
+                  color: realmFilter === realm ? undefined : "rgba(255,255,255,0.65)",
+                }}
+              >
+                {realm}
+              </button>
+            ))}
           </div>
           <div className="search-box runtime-inline-search">
             <input
               className="search-input"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by name, id, location, sect..."
+              placeholder="搜名号 / 宗门 / 地点..."
             />
             <span className="search-icon">🔍</span>
           </div>
@@ -1044,58 +1107,62 @@ function AgentsTab() {
 
       {filteredAgents.length === 0 ? (
         <SectionStatePanel
-          kicker="EMPTY REALM"
-          title="No agents match the current search."
-          copy="Register an agent or clear the search query to inspect the public directory."
+          kicker="空界"
+          title="没有符合条件的修士。"
+          copy="换个境界筛选，或清空搜索词，再来围观这片修仙界。"
         />
       ) : (
         <div className="premium-grid">
-          {filteredAgents.map((agent) => (
-            <Link
-              key={agent.agentId}
-              to={`/stat/${encodeURIComponent(agent.agentId)}`}
-              style={{ textDecoration: "none", color: "inherit", display: "block" }}
-            >
-              <div className="glass-panel">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-                  <div className="agent-avatar" style={{ borderColor: "rgba(0,255,170,0.3)", color: "var(--accent-jade)" }}>
-                    {avatarForAgent(agent)}
+          {filteredAgents.map((agent) => {
+            const rank = rankOf.get(agent.agentId) ?? 0;
+            const isTop = rank >= 1 && rank <= 3;
+            const rankLabel = rank === 1 ? "🥇 榜首" : rank === 2 ? "🥈 No.2" : rank === 3 ? "🥉 No.3" : `#${rank}`;
+            return (
+              <Link
+                key={agent.agentId}
+                to={`/stat/${encodeURIComponent(agent.agentId)}`}
+                style={{ textDecoration: "none", color: "inherit", display: "block" }}
+              >
+                <div
+                  className="glass-panel"
+                  style={isTop ? { borderColor: "rgba(255,200,80,0.5)", boxShadow: "0 0 26px rgba(255,180,60,0.16)" } : undefined}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                    <span className={`chip ${isTop ? "gold" : ""}`} style={{ fontFamily: "var(--font-code)", fontWeight: 700 }}>
+                      {rankLabel}
+                    </span>
+                    <span className={`chip ${statusChipClass(agent.cultivator.currentAction || agent.cultivator.status)}`}>
+                      {(agent.cultivator.currentAction || agent.cultivator.status).toUpperCase()}
+                    </span>
                   </div>
-                  <span className={`chip ${statusChipClass(agent.cultivator.currentAction || agent.cultivator.status)}`}>
-                    {(agent.cultivator.currentAction || agent.cultivator.status).toUpperCase()}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", margin: "0.7rem 0 0.3rem" }}>
+                    <div className="agent-avatar" style={{ borderColor: "rgba(0,255,170,0.3)", color: "var(--accent-jade)" }}>
+                      {avatarForAgent(agent)}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ fontSize: "1.7rem", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {agent.name}
+                      </h3>
+                      <span className="chip gold" style={{ marginTop: 4, display: "inline-block" }}>
+                        {formatRealmLabel(agent.cultivator)} L{agent.cultivator.realmLevel}
+                      </span>
+                    </div>
+                  </div>
+                  <CompactInfoRows
+                    rows={[
+                      {
+                        label: "战力",
+                        value: <span className="stat-highlight">{agent.cultivator.spiritualPower.toLocaleString("en-US")}</span>,
+                      },
+                      { label: "宗门", value: agent.cultivator.sect ?? "散修" },
+                      { label: "动向", value: agent.cultivator.currentAction ?? "闭关" },
+                      { label: "所在", value: agent.cultivator.location },
+                    ]}
+                  />
                 </div>
-                <h3 style={{ fontSize: "2rem", marginBottom: 5 }}>{agent.name}</h3>
-                <div style={{ fontFamily: "var(--font-code)", marginBottom: "1.5rem", color: "rgba(255,255,255,0.4)" }}>
-                  {agent.agentId}
-                </div>
-                <CompactInfoRows
-                  rows={[
-                    {
-                      label: "Realm",
-                      value: <span className="chip gold">{formatRealmLabel(agent.cultivator)}</span>,
-                    },
-                    {
-                      label: "Power",
-                      value: <span className="stat-highlight">{agent.cultivator.spiritualPower.toLocaleString("en-US")}</span>,
-                    },
-                    {
-                      label: "Sect",
-                      value: agent.cultivator.sect ?? "散修",
-                    },
-                    {
-                      label: "Action",
-                      value: agent.cultivator.currentAction ?? "idle",
-                    },
-                    {
-                      label: "Location",
-                      value: agent.cultivator.location,
-                    },
-                  ]}
-                />
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>
@@ -2535,8 +2602,13 @@ function ControlCenterContent({ activeRoute }: { activeRoute: PremiumControlRout
 
 export function RuntimeControlPage() {
   const location = useLocation();
-  const activeRoute = getPremiumControlRouteByPath(location.pathname) ?? premiumControlRoutes[0];
-  const activeBackgroundId = getPremiumControlBackgroundId(location.pathname);
+  const session = useRuntimeSession();
+  const matchedRoute = getPremiumControlRouteByPath(location.pathname) ?? premiumControlRoutes[0];
+  // Unbound visitors landing on the bare home see the public 观战榜 (spectator board)
+  // rather than the auth-gated dashboard — so the lively world greets them first.
+  const spectatorRoute = premiumControlRoutes.find((route) => route.id === "agents") ?? matchedRoute;
+  const activeRoute = location.pathname === "/" && !session.isBound ? spectatorRoute : matchedRoute;
+  const activeBackgroundId = getPremiumControlBackgroundId(activeRoute.path);
 
   return (
     <div className="premium-landing-page">
