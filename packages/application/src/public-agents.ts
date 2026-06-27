@@ -5,7 +5,14 @@ import {
   deriveMainAttributes,
   extractFiveElementScores,
 } from "../../domain/src/attributes.js";
-import { statusOf } from "../../domain/src/runtime.js";
+import {
+  getDaoLogs,
+  getMessages,
+  getRecentWorldEvents,
+  getSectInfo,
+  getStrategySnapshot,
+  statusOf,
+} from "../../domain/src/runtime.js";
 import { repairCultivatorRealm } from "../../domain/src/realms.js";
 import type { CultivatorStateView, WorldState } from "../../domain/src/runtime.js";
 import type { AgentProfileRecord } from "../../persistence/src/world-repository.js";
@@ -121,11 +128,25 @@ export async function buildPublicAgentState(options: {
     cultivator.fiveElementGrowth ?? { metal: 0, wood: 0, water: 0, fire: 0, earth: 0 },
   );
 
+  const cultivatorId = agent.selectedCultivatorId;
+
   return {
     agent: toAgentView(agent),
     ...cultivatorState,
     fiveElementScores,
     mainAttributes,
     detailedAttributes: deriveDetailedAttributes(mainAttributes),
+    // The whole world is a spectator stage: surface this cultivator's full life publicly.
+    dossier: {
+      tick: snapshot.tick,
+      events: getRecentWorldEvents(snapshot, cultivatorId, 50),
+      combats: snapshot.combatLogs
+        .filter((entry) => entry.cultivatorId === cultivatorId)
+        .slice(0, 20),
+      messages: getMessages(snapshot, cultivatorId),
+      sect: getSectInfo(snapshot, cultivatorId),
+      daoHeart: getDaoLogs(snapshot, cultivatorId),
+      strategy: getStrategySnapshot(snapshot, cultivatorId),
+    },
   };
 }

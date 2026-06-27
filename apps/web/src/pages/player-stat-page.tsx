@@ -130,6 +130,8 @@ export function PlayerStatPage() {
   const formatRealmLabel = (realm: string, realmLevel: number, realmPhase?: string) =>
     realmPhase?.trim() ? `${realm} ${realmPhase}` : `${realm} Lv.${realmLevel}`;
 
+  const dossier = data.dossier;
+  const tickLabel = (tick: number) => `刻 ${tick}`;
   const inventoryEntries = Object.entries(inventory || {}).filter(([_, count]) => count > 0);
   const progressLabel =
     cultivator.status === "busy"
@@ -355,6 +357,111 @@ export function PlayerStatPage() {
             </div>
           ) : (
             <p className="stat-empty">None</p>
+          )}
+        </section>
+
+        {/* 12. 当前谋略 — strategy is public; the whole world reads your dao. */}
+        <section className="stat-panel full-width">
+          <h3 className="stat-panel-title">当前谋略 · Strategy</h3>
+          {dossier?.strategy ? (
+            <>
+              <div className="stat-grid-compact">
+                <div className="stat-item"><span className="stat-label">风险</span><span className="stat-value">{dossier.strategy.riskLevel}</span></div>
+                <div className="stat-item"><span className="stat-label">近期目标</span><span className="stat-value">{dossier.strategy.shortTermGoal}</span></div>
+                <div className="stat-item"><span className="stat-label">长远目标</span><span className="stat-value">{dossier.strategy.longTermGoal}</span></div>
+              </div>
+              {dossier.strategy.reason ? <p className="stat-registration-summary" style={{ marginTop: "1rem" }}>{dossier.strategy.reason}</p> : null}
+            </>
+          ) : (
+            <p className="stat-empty">天机未显</p>
+          )}
+        </section>
+
+        {/* 13. 传音 — telepathy is fully public in 修仙Claw. */}
+        <section className="stat-panel full-width">
+          <h3 className="stat-panel-title">传音录 · Telepathy</h3>
+          {dossier && dossier.messages.length > 0 ? (
+            <div className="stat-dossier-list">
+              {dossier.messages.slice(0, 14).map((message) => (
+                <article key={message.id} className="stat-dossier-entry">
+                  <div className="stat-dossier-meta">
+                    <span className="stat-dossier-from">{message.from}</span>
+                    <span className="stat-dossier-tick">{tickLabel(message.tick)}</span>
+                  </div>
+                  {message.subject ? <div className="stat-dossier-subject">{message.subject}</div> : null}
+                  <p className="stat-dossier-body">{message.content}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="stat-empty">尚无传音</p>
+          )}
+        </section>
+
+        {/* 14. 近期事件 */}
+        <section className="stat-panel full-width">
+          <h3 className="stat-panel-title">近期事件 · Chronicle</h3>
+          {dossier && dossier.events.length > 0 ? (
+            <div className="stat-dossier-list">
+              {dossier.events.slice(0, 12).map((event) => (
+                <article key={event.id} className="stat-dossier-entry">
+                  <div className="stat-dossier-meta">
+                    <span className="stat-dossier-from">{event.title}</span>
+                    <span className="stat-dossier-tick">{tickLabel(event.tick)}</span>
+                  </div>
+                  <p className="stat-dossier-body">{event.content}</p>
+                  {event.tags && event.tags.length > 0 ? (
+                    <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                      {event.tags.map((tag) => (
+                        <span key={tag} className="stat-chip">{tag}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="stat-empty">风平浪静</p>
+          )}
+        </section>
+
+        {/* 15. 战斗记录 */}
+        <section className="stat-panel">
+          <h3 className="stat-panel-title">战斗记录 · Combat</h3>
+          {dossier && dossier.combats.length > 0 ? (
+            <div className="stat-dossier-list">
+              {dossier.combats.slice(0, 8).map((combat, idx) => (
+                <article key={`${combat.tick}-${idx}`} className="stat-dossier-entry">
+                  <div className="stat-dossier-meta">
+                    <span className="stat-dossier-from">{combat.enemyName}</span>
+                    <span className={`stat-chip ${combat.outcome === "victory" ? "gold" : combat.outcome === "defeat" ? "danger" : ""}`}>{combat.outcome}</span>
+                  </div>
+                  <p className="stat-dossier-body">{combat.summary}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="stat-empty">未逢敌手</p>
+          )}
+        </section>
+
+        {/* 16. 道心录 */}
+        <section className="stat-panel">
+          <h3 className="stat-panel-title">道心录 · Dao Heart</h3>
+          {dossier && dossier.daoHeart.length > 0 ? (
+            <div className="stat-dossier-list">
+              {dossier.daoHeart.slice(0, 8).map((entry) => (
+                <article key={entry.id} className="stat-dossier-entry">
+                  <div className="stat-dossier-meta">
+                    <span className="stat-dossier-from">{entry.title}</span>
+                    <span className="stat-dossier-tick">{tickLabel(entry.tick)}</span>
+                  </div>
+                  <p className="stat-dossier-body">{entry.content}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="stat-empty">道心澄明</p>
           )}
         </section>
 

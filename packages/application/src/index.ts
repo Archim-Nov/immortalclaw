@@ -48,6 +48,10 @@ export type {
   PublicAgentStateAuthClient,
   PublicAgentStateWorldRepository,
 } from "./public-agents.js";
+export { buildPublicWorldChronicle } from "./public-chronicle.js";
+export type { PublicChronicleWorldRepository } from "./public-chronicle.js";
+export { buildPublicSectsDirectory } from "./public-sects.js";
+export type { PublicSectsWorldRepository } from "./public-sects.js";
 export {
   deduplicateWebhookTargets,
   dispatchWebhooks,

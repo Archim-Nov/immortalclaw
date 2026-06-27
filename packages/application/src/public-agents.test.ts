@@ -93,6 +93,15 @@ test("buildPublicAgentState assembles the stat-page payload for a registered age
   assert.equal(payload?.mainAttributes.gengu, 50);
   assert.equal(payload?.detailedAttributes.qixue_shangxian, 800);
   assert.deepEqual(payload?.fiveElementScores, { metal: 50, wood: 50, water: 50, fire: 50, earth: 50 });
+
+  // Spectator dossier: the full public life of the cultivator travels with the state payload.
+  assert.ok(payload?.dossier, "public state should carry a spectator dossier");
+  assert.equal(typeof payload?.dossier.tick, "number");
+  assert.ok(Array.isArray(payload?.dossier.events));
+  assert.ok(Array.isArray(payload?.dossier.combats));
+  assert.ok(Array.isArray(payload?.dossier.messages));
+  assert.ok(Array.isArray(payload?.dossier.daoHeart));
+  assert.ok(payload?.dossier.strategy, "dossier should include a strategy snapshot");
 });
 
 test("buildPublicAgentState returns null when detailed state references missing world records", async () => {

@@ -57,13 +57,20 @@ function createAppForTest(
   );
 }
 
-test("landing route renders the premium runtime control center homepage", async () => {
+test("bare landing route shows the public spectator board for unbound visitors", async () => {
   const app = await createAppForTest(["/"], { initialLocale: "en" });
   const rendered = extractText(renderToStaticMarkup(app));
 
-  assert.match(rendered, /IMMORTAL-CLAW/);
-  assert.match(rendered, /INTELLIGENCE ASCENDS\./);
-  assert.match(rendered, /The Cultivation World for AI Agents/);
+  assert.match(rendered, /修仙Claw/);
+  assert.match(rendered, /观战榜/);
+});
+
+test("dashboard route renders the premium runtime control center homepage", async () => {
+  const app = await createAppForTest(["/dashboard"], { initialLocale: "en" });
+  const rendered = extractText(renderToStaticMarkup(app));
+
+  assert.match(rendered, /修仙Claw/);
+  assert.match(rendered, /A Cultivation World for AI Agents/);
   assert.match(rendered, /Runtime Pulse/);
   assert.match(rendered, /No Credential Bound/);
   assert.match(rendered, /Fresh Action Loop/);
@@ -83,8 +90,8 @@ test("landing route no longer renders the previous onboarding shell copy", async
   assert.doesNotMatch(rendered, /神念传音集/);
 });
 
-test("landing route keeps the premium quick actions wired to the hosted entrypoints", async () => {
-  const app = await createAppForTest(["/"], { initialLocale: "en" });
+test("dashboard route keeps the premium quick actions wired to the hosted entrypoints", async () => {
+  const app = await createAppForTest(["/dashboard"], { initialLocale: "en" });
   const markup = renderToStaticMarkup(app);
 
   assert.match(markup, /href="\/skill\.md"/);
@@ -112,15 +119,15 @@ test("router uses AppShell as the root route element", () => {
   assert.equal(rootElement.type, AppShell);
 });
 
-test("landing route keeps the premium control-center shell when the locale provider resolves Chinese", async () => {
-  const app = await createAppForTest(["/"], {
+test("dashboard route keeps the premium control-center shell when the locale provider resolves Chinese", async () => {
+  const app = await createAppForTest(["/dashboard"], {
     navigatorLanguage: "zh-CN",
     storedLocale: "zh-CN",
   });
   const rendered = extractText(renderToStaticMarkup(app));
 
-  assert.match(rendered, /INTELLIGENCE ASCENDS\./);
-  assert.match(rendered, /仙爪界/);
+  assert.match(rendered, /问道/);
+  assert.match(rendered, /修仙Claw/);
   assert.match(rendered, /天机阁/);
   assert.doesNotMatch(rendered, /公共入口/);
   assert.doesNotMatch(rendered, /Language/);

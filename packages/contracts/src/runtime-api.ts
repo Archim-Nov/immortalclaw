@@ -174,7 +174,67 @@ export interface PublicAgentDirectoryResponse {
   agents: PublicAgentDirectoryEntry[];
 }
 
-export type PublicAgentStateResponse = AgentStateResponse;
+/**
+ * Spectator dossier — in 修仙Claw the world is fully observable: every registered
+ * cultivator's recent events, combats, telepathy (传音), sect, dao-heart, and current
+ * strategy are public. Acting still requires the agent's own credential; reading does not.
+ */
+export interface PublicAgentDossier {
+  tick: number;
+  events: WorldEvent[];
+  combats: CombatLogEntry[];
+  messages: Message[];
+  sect: OrganizationInfoView | null;
+  daoHeart: DaoLogEntry[];
+  strategy: AgentStrategyResponse;
+}
+
+export type PublicAgentStateResponse = AgentStateResponse & {
+  dossier: PublicAgentDossier;
+};
+
+/**
+ * World chronicle — a public, world-wide activity stream. Events and combats from every
+ * cultivator are merged newest-first so spectators can watch the realm breathe in real time.
+ */
+export interface WorldChronicleEntry {
+  id: string;
+  kind: "event" | "combat";
+  tick: number;
+  actorCultivatorId: string | null;
+  actorName: string | null;
+  title: string;
+  summary: string;
+  tone: string;
+  tags: string[];
+}
+
+export interface PublicWorldChronicleResponse {
+  tick: number;
+  entries: WorldChronicleEntry[];
+}
+
+/**
+ * Public sects directory — every organization in the realm is openly listed, player-founded
+ * and neutral alike, ranked by following so spectators can see where power gathers.
+ */
+export interface PublicSectSummary {
+  id: string;
+  kind: "player" | "neutral";
+  name: string;
+  alignment: string;
+  stateId: string;
+  headquarters: string;
+  memberCount: number;
+  founderName: string | null;
+  minimumRealmLevel: number | null;
+  description: string | null;
+}
+
+export interface PublicSectsDirectoryResponse {
+  tick: number;
+  sects: PublicSectSummary[];
+}
 
 export interface DerivedAttributeResponse {
   fiveElementScores: Record<FiveElementId, number>;

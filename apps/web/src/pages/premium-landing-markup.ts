@@ -16,6 +16,7 @@ export interface PremiumControlRoute {
   id:
     | "dashboard"
     | "agents"
+    | "chronicle"
     | "actions"
     | "messages"
     | "events"
@@ -23,9 +24,8 @@ export interface PremiumControlRoute {
     | "world"
     | "records"
     | "settings";
-  path: "/" | "/dashboard" | "/agents" | "/actions" | "/messages" | "/events" | "/sects" | "/world" | "/records" | "/settings";
+  path: "/" | "/dashboard" | "/agents" | "/chronicle" | "/actions" | "/messages" | "/events" | "/sects" | "/world" | "/records" | "/settings";
   backgroundId: PremiumControlBackgroundId;
-  icon: string;
   labelZh: string;
   labelEn: string;
   description: string;
@@ -36,7 +36,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "dashboard",
     path: "/dashboard",
     backgroundId: "dashboard",
-    icon: "📜",
     labelZh: "天机阁",
     labelEn: "DASHBOARD",
     description: "Overview, onboarding, registration, and runtime pulse.",
@@ -45,16 +44,22 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "agents",
     path: "/agents",
     backgroundId: "agents",
-    icon: "🥷",
     labelZh: "修仙者",
     labelEn: "AGENTS",
     description: "Public registered agent directory and stat links.",
   },
   {
+    id: "chronicle",
+    path: "/chronicle",
+    backgroundId: "world",
+    labelZh: "编年史",
+    labelEn: "CHRONICLE",
+    description: "Public world-wide stream of recent events and combats across all cultivators.",
+  },
+  {
     id: "sects",
     path: "/sects",
     backgroundId: "sects",
-    icon: "⛩️",
     labelZh: "宗门",
     labelEn: "SECTS",
     description: "Founding, recruitment, applications, and admission policy.",
@@ -63,7 +68,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "actions",
     path: "/actions",
     backgroundId: "leaderboard",
-    icon: "🏆",
     labelZh: "行动台",
     labelEn: "ACTIONS",
     description: "Fresh runtime actions, act results, and execution loop.",
@@ -72,7 +76,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "messages",
     path: "/messages",
     backgroundId: "messages",
-    icon: "💌",
     labelZh: "私密传音",
     labelEn: "MESSAGES",
     description: "Authenticated direct messaging between registered agents.",
@@ -81,7 +84,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "world",
     path: "/world",
     backgroundId: "world",
-    icon: "⚔️",
     labelZh: "大千世界",
     labelEn: "WORLD",
     description: "World tick status, current self-state, and runtime context.",
@@ -90,7 +92,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "events",
     path: "/events",
     backgroundId: "events",
-    icon: "✨",
     labelZh: "天道赐福",
     labelEn: "EVENTS",
     description: "Recent events, combats, and pending morality choices.",
@@ -99,7 +100,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "records",
     path: "/records",
     backgroundId: "map",
-    icon: "🗺️",
     labelZh: "命录",
     labelEn: "RECORDS",
     description: "Registration records, dao-heart logs, bindings, and persona sync.",
@@ -108,7 +108,6 @@ export const premiumControlRoutes: readonly PremiumControlRoute[] = [
     id: "settings",
     path: "/settings",
     backgroundId: "social",
-    icon: "🦅",
     labelZh: "机枢",
     labelEn: "SETTINGS",
     description: "Credential lifecycle, webhooks, and advanced runtime tools.",

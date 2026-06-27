@@ -8,6 +8,8 @@ import {
   chooseAuthenticatedMoralityChoice,
   buildPublicAgentDirectory,
   buildPublicAgentState,
+  buildPublicSectsDirectory,
+  buildPublicWorldChronicle,
   createRuntimeService,
   deduplicateWebhookTargets,
   dispatchWebhooks,
@@ -450,6 +452,21 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const world = context.get("world");
     const auth = context.get("auth");
     return context.json(await buildPublicAgentDirectory({ world, auth }));
+  });
+
+  app.get("/world/sects", async (context) => {
+    const world = context.get("world");
+    return context.json(await buildPublicSectsDirectory({ world }));
+  });
+
+  app.get("/world/chronicle", async (context) => {
+    const world = context.get("world");
+    return context.json(
+      await buildPublicWorldChronicle({
+        world,
+        limit: readOptionalPageLimit(context.req.query("limit")),
+      }),
+    );
   });
 
   app.get("/world/agent/:agentId", async (context) => {

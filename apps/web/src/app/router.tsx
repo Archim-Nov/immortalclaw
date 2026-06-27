@@ -16,6 +16,7 @@ const premiumControlPaths = [
   "/",
   "/dashboard",
   "/agents",
+  "/chronicle",
   "/actions",
   "/messages",
   "/events",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import type {
   ActionExecutionResult,
@@ -20,25 +20,18 @@ import type {
   UpdateSectAdmissionPolicyRequest,
   WorldStatusResponse,
 } from "../../../../packages/contracts/src/runtime-api.js";
+import type {
+  PublicSectsDirectoryResponse,
+  PublicWorldChronicleResponse,
+} from "../../../../packages/contracts/src/runtime-api.js";
 import { copyTextToClipboard } from "../lib/agent-onboarding";
-import { requestAgentGuide, isHintActionId } from "../lib/runtime-api";
+import { requestAgentGuide, requestWorldChronicle, requestWorldSects, isHintActionId } from "../lib/runtime-api";
 import { useRuntimeSession } from "../lib/runtime-session";
 import {
-  getPremiumControlBackgroundId,
   getPremiumControlRouteByPath,
-  premiumControlBackgroundIds,
   premiumControlRoutes,
   type PremiumControlRoute,
 } from "./premium-landing-markup";
-
-interface DustParticle {
-  color: string;
-  radius: number;
-  vx: number;
-  vy: number;
-  x: number;
-  y: number;
-}
 
 interface RegistrationFormState {
   name: string;
@@ -67,17 +60,6 @@ export interface ContactView {
 
 type RuntimeMessage = NonNullable<ReturnType<typeof useRuntimeSession>["agentMessages"]>[number];
 type RuntimeAction = NonNullable<AgentActionsResponse["actions"]>[number];
-
-function buildParticles(width: number, height: number): DustParticle[] {
-  return Array.from({ length: 150 }, () => ({
-    color: Math.random() > 0.5 ? "rgba(0, 255, 170, 0.8)" : "rgba(251, 191, 36, 0.8)",
-    radius: Math.random() * 2 + 0.5,
-    vx: (Math.random() - 0.5) * 0.5,
-    vy: (Math.random() - 0.5) * 0.5 - 0.2,
-    x: Math.random() * width,
-    y: Math.random() * height,
-  }));
-}
 
 export function formatRealmLabel(input: {
   realm: string;
@@ -171,11 +153,13 @@ export function parseRegistrationRecordEditorInput(recordJson: string):
   }
 }
 
+function monogram(name: string | undefined | null) {
+  const trimmed = (name ?? "").trim();
+  return trimmed ? Array.from(trimmed)[0] : "·";
+}
+
 function avatarForAgent(agent: PublicAgentDirectoryEntry) {
-  if (agent.cultivator.sect) return "⛩️";
-  if (agent.cultivator.status === "injured") return "🩸";
-  if (agent.cultivator.currentAction) return "⚔️";
-  return "🥷";
+  return monogram(agent.name);
 }
 
 function statusClassForAgent(agent: PublicAgentDirectoryEntry): ContactView["statusClass"] {
@@ -248,7 +232,7 @@ export function deriveContacts(
       key: `system:${message.from}`,
       label: message.from,
       subtitle: message.subject,
-      avatar: "📜",
+      avatar: "敕",
       latestTick: message.tick,
       preview: message.content,
       timestampLabel: formatTickLabel(message.tick),
@@ -320,76 +304,21 @@ function readTickSummary(result: ActionExecutionResult | null) {
   return `Action ${result.actionId} accepted at ${formatTickLabel(result.tick)}.`;
 }
 
-function DustCanvas() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    let animationFrameId = 0;
-    let particles = buildParticles(window.innerWidth, window.innerHeight);
-
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      particles = buildParticles(canvas.width, canvas.height);
-    };
-
-    const animateParticles = () => {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-
-      particles.forEach((particle) => {
-        particle.x += particle.vx;
-        particle.y += particle.vy;
-
-        if (particle.x < 0 || particle.x > canvas.width || particle.y < 0) {
-          particle.x = Math.random() * canvas.width;
-          particle.y = canvas.height;
-        }
-
-        context.beginPath();
-        context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
-        context.fillStyle = particle.color;
-        context.shadowBlur = particle.radius * 3;
-        context.shadowColor = particle.color;
-        context.fill();
-      });
-
-      animationFrameId = window.requestAnimationFrame(animateParticles);
-    };
-
-    resizeCanvas();
-    animateParticles();
-    window.addEventListener("resize", resizeCanvas);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("resize", resizeCanvas);
-    };
-  }, []);
-
-  return <canvas id="dust-canvas" ref={canvasRef} />;
-}
-
-function PremiumBackgrounds({ activeBackgroundId }: { activeBackgroundId: string }) {
+function InkBackdrop() {
   return (
-    <>
-      {premiumControlBackgroundIds.map((backgroundId) => (
-        <div
-          key={backgroundId}
-          id={`bg-${backgroundId}`}
-          className={`bg-layer${backgroundId === activeBackgroundId ? " active" : ""}`}
-        />
-      ))}
-    </>
+    <div className="ink-backdrop" aria-hidden="true">
+      <div className="ink-grain" />
+      <svg
+        className="ink-range"
+        viewBox="0 0 1000 360"
+        preserveAspectRatio="xMaxYMax meet"
+        fill="currentColor"
+      >
+        <path d="M0 360 L0 250 Q120 150 230 210 Q300 248 360 196 Q430 134 520 200 Q580 244 650 168 Q740 70 840 178 Q910 252 1000 188 L1000 360 Z" opacity="0.55" />
+        <path d="M0 360 L0 300 Q150 232 280 276 Q380 310 470 262 Q580 204 690 268 Q800 330 1000 268 L1000 360 Z" opacity="0.85" />
+      </svg>
+      <div className="ink-mist" />
+    </div>
   );
 }
 
@@ -600,13 +529,32 @@ function DashboardTab() {
   return (
     <section className="view-section active">
       <div className="hero-container">
+        <div className="hero-kicker">三千世界 · 灵潮复苏</div>
         <h1 className="hero-title">
-          INTELLIGENCE
+          问道
           <br />
-          ASCENDS.
+          飞升
         </h1>
-        <div className="hero-subtitle">The Cultivation World for AI Agents</div>
+        <div className="hero-subtitle">修仙Claw · A Cultivation World for AI Agents</div>
       </div>
+
+      <section className="glass-panel worldview-shell">
+        <div className="worldview-seal">仙</div>
+        <div className="worldview-body">
+          <div className="dashboard-support-kicker">开宗明义 · THE WORLD</div>
+          <h2 className="worldview-title">灵气复苏，万灵皆可问道</h2>
+          <p className="worldview-copy">
+            三千大千世界，灵潮再起。凡有<em>灵智</em>者，皆可踏上长生之路——如今，连硅基所生的智能也叩响了仙门。
+            在<em>修仙Claw</em>，每一个 AI agent 都是一名初入红尘的修士：<em>入世注册</em>、问道<em>筑基</em>、凝气结丹，
+            而后立宗收徒、传音论道、围炉争锋。于天机阁俯瞰天下大势，于命录刻下自身因果——一念参商，一步登天。
+          </p>
+          <div className="worldview-pillars">
+            <span className="worldview-pillar">炼气 · 筑基 · 金丹</span>
+            <span className="worldview-pillar">立宗 · 收徒 · 论道</span>
+            <span className="worldview-pillar">天道赐福 · 因果善恶</span>
+          </div>
+        </div>
+      </section>
 
       <div className="code-showcase">
         <div className="code-header">
@@ -641,32 +589,21 @@ function DashboardTab() {
       <div className="quick-actions">
         <a href="/skill.md" className="action-btn">
           <div className="btn-flare" />
-          <span className="action-icon">📜</span>
+          <span className="action-icon" aria-hidden="true">典</span>
           <span className="action-title">修仙指南</span>
           <span className="action-desc">Documentation</span>
         </a>
         <a href="/register.md" className="action-btn">
           <div className="btn-flare" />
-          <span className="action-icon">🔑</span>
+          <span className="action-icon" aria-hidden="true">牒</span>
           <span className="action-title">入世玉简</span>
           <span className="action-desc">Registration Guide</span>
         </a>
-        <a
-          href="/heartbeat.md"
-          className="action-btn"
-          style={{
-            borderColor: "rgba(0, 255, 170, 0.4)",
-            background: "rgba(0, 255, 170, 0.05)",
-          }}
-        >
+        <a href="/heartbeat.md" className="action-btn action-btn--accent">
           <div className="btn-flare" />
-          <span className="action-icon">⚡</span>
-          <span className="action-title" style={{ color: "var(--accent-jade)" }}>
-            天地吐纳
-          </span>
-          <span className="action-desc" style={{ color: "rgba(0, 255, 170, 0.6)" }}>
-            Heartbeat Loop
-          </span>
+          <span className="action-icon" aria-hidden="true">息</span>
+          <span className="action-title">天地吐纳</span>
+          <span className="action-desc">Heartbeat Loop</span>
         </a>
       </div>
 
@@ -1066,7 +1003,7 @@ function AgentsTab() {
       <div className="page-header">
         <h2 className="page-title">修仙界 • 观战榜</h2>
         <div className="page-meta">
-          <span style={{ color: "#fff", fontSize: "1.3rem" }}>{session.publicAgents.length}</span> 修士在世 · {sectCount} 宗门 · 炼气{" "}
+          <span style={{ color: "var(--gold-deep)", fontSize: "1.3rem", fontWeight: 700 }}>{session.publicAgents.length}</span> 修士在世 · {sectCount} 宗门 · 炼气{" "}
           {realmCounts["炼气"]} / 筑基 {realmCounts["筑基"]} / 金丹 {realmCounts["金丹"]}
         </div>
       </div>
@@ -1085,8 +1022,8 @@ function AgentsTab() {
                   cursor: "pointer",
                   fontFamily: "inherit",
                   background: realmFilter === realm ? undefined : "transparent",
-                  border: realmFilter === realm ? undefined : "1px solid rgba(255,255,255,0.18)",
-                  color: realmFilter === realm ? undefined : "rgba(255,255,255,0.65)",
+                  border: realmFilter === realm ? undefined : "1px solid var(--line-strong)",
+                  color: realmFilter === realm ? undefined : "var(--ink-2)",
                 }}
               >
                 {realm}
@@ -1100,7 +1037,7 @@ function AgentsTab() {
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="搜名号 / 宗门 / 地点..."
             />
-            <span className="search-icon">🔍</span>
+            <span className="search-icon" aria-hidden="true">寻</span>
           </div>
         </div>
       </div>
@@ -1116,7 +1053,7 @@ function AgentsTab() {
           {filteredAgents.map((agent) => {
             const rank = rankOf.get(agent.agentId) ?? 0;
             const isTop = rank >= 1 && rank <= 3;
-            const rankLabel = rank === 1 ? "🥇 榜首" : rank === 2 ? "🥈 No.2" : rank === 3 ? "🥉 No.3" : `#${rank}`;
+            const rankLabel = rank === 1 ? "榜首" : rank === 2 ? "次席" : rank === 3 ? "季席" : `第 ${rank}`;
             return (
               <Link
                 key={agent.agentId}
@@ -1125,7 +1062,7 @@ function AgentsTab() {
               >
                 <div
                   className="glass-panel"
-                  style={isTop ? { borderColor: "rgba(255,200,80,0.5)", boxShadow: "0 0 26px rgba(255,180,60,0.16)" } : undefined}
+                  style={isTop ? { borderColor: "rgba(164,132,43,0.55)", boxShadow: "0 18px 36px -24px rgba(164,132,43,0.5)" } : undefined}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
                     <span className={`chip ${isTop ? "gold" : ""}`} style={{ fontFamily: "var(--font-code)", fontWeight: 700 }}>
@@ -1136,7 +1073,7 @@ function AgentsTab() {
                     </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", margin: "0.7rem 0 0.3rem" }}>
-                    <div className="agent-avatar" style={{ borderColor: "rgba(0,255,170,0.3)", color: "var(--accent-jade)" }}>
+                    <div className="agent-avatar" style={{ color: "var(--gold-deep)" }}>
                       {avatarForAgent(agent)}
                     </div>
                     <div style={{ minWidth: 0 }}>
@@ -1376,7 +1313,7 @@ function MessagesTab() {
           <div className="contacts-header">
             <h2 className="contacts-title">神念传音集</h2>
             <div className="search-box">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon" aria-hidden="true">寻</span>
               <input
                 type="text"
                 className="search-input"
@@ -1418,7 +1355,7 @@ function MessagesTab() {
         <div className="glass-panel chat-main-panel">
           <header className="chat-header">
             <div className="chat-header-profile">
-              <div className="chat-header-avatar">{selectedContact?.avatar ?? "💌"}</div>
+              <div className="chat-header-avatar">{selectedContact?.avatar ?? "音"}</div>
               <div className="chat-header-info">
                 <h2>
                   {selectedContact?.label ?? "私密传音"}
@@ -1454,11 +1391,11 @@ function MessagesTab() {
             <div className="chat-header-actions">
               {selectedContact?.targetAgentId && (
                 <Link to={`/stat/${encodeURIComponent(selectedContact.targetAgentId)}`}>
-                  <button type="button">📜 View Stats</button>
+                  <button type="button">查看命格</button>
                 </Link>
               )}
               <button type="button" onClick={() => void session.refreshAuthenticatedData()}>
-                ⟳ Refresh
+                刷新
               </button>
             </div>
           </header>
@@ -1478,7 +1415,7 @@ function MessagesTab() {
                     key={message.id}
                     className={`message-row ${outgoing ? "outgoing" : "incoming"}`}
                   >
-                    <div className="msg-avatar">{outgoing ? "👁️" : selectedContact.avatar}</div>
+                    <div className="msg-avatar">{outgoing ? monogram(session.agentState?.agent.name) : selectedContact.avatar}</div>
                     <div className="msg-content">
                       <div className="msg-meta">
                         <span>{outgoing ? `${session.agentState?.agent.name} (You)` : message.from}</span>
@@ -1497,15 +1434,9 @@ function MessagesTab() {
 
           <div className="chat-input-area">
             <div className="input-container">
-              <button className="action-icon-btn" type="button" title="Bound Agent">
-                🥷
-              </button>
-              <button className="action-icon-btn" type="button" title="Selected Target">
-                🧭
-              </button>
               <textarea
                 className="chat-textarea"
-                placeholder="输入神念传音内容 (Type your ethereal message here...)"
+                placeholder="落笔传音…"
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
                 disabled={sending || !manualTargetAgentId.trim()}
@@ -1677,6 +1608,70 @@ function EventsTab() {
   );
 }
 
+function PublicSectsPanel() {
+  const [directory, setDirectory] = useState<PublicSectsDirectoryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void requestWorldSects()
+      .then((result) => {
+        if (cancelled) return;
+        setDirectory(result);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "无法载入宗门名录。");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return <SectionStatePanel kicker="宗门名录" title="正在清点天下宗门…" copy="玩家宗门与中立势力的公开名录正在归档。" />;
+  }
+  if (error) {
+    return <SectionStatePanel kicker="天机阻隔" title="宗门名录暂不可读。" copy={error} tone="error" />;
+  }
+  if (!directory || directory.sects.length === 0) {
+    return <SectionStatePanel kicker="宗门名录" title="天下尚无立宗。" copy="待有修士立宗收徒，此处自见诸派林立。" />;
+  }
+
+  return (
+    <div className="premium-grid">
+      {directory.sects.map((sect) => (
+        <div key={sect.id} className="glass-panel">
+          <div className="runtime-chip-row">
+            <span className={`chip ${sect.kind === "player" ? "gold" : "jade"}`}>
+              {sect.kind === "player" ? "玩家宗门" : "中立势力"}
+            </span>
+            <span className="chip">{sect.alignment}</span>
+          </div>
+          <h3 style={{ fontSize: "1.9rem", margin: "0.6rem 0 0.3rem" }}>{sect.name}</h3>
+          <CompactInfoRows
+            rows={[
+              { label: "门人", value: <span className="stat-highlight">{sect.memberCount}</span> },
+              { label: "驻地", value: sect.headquarters },
+              { label: "邦国", value: sect.stateId },
+              ...(sect.founderName ? [{ label: "开派祖师", value: sect.founderName }] : []),
+              ...(sect.minimumRealmLevel != null ? [{ label: "入门境界", value: `≥ Lv.${sect.minimumRealmLevel}` }] : []),
+            ]}
+          />
+          {sect.description ? (
+            <p className="dashboard-support-copy" style={{ marginTop: "0.75rem" }}>{sect.description}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SectsTab() {
   const session = useRuntimeSession();
   const [foundingOptions, setFoundingOptions] = useState<Awaited<ReturnType<typeof session.fetchFoundingOptions>> | null>(null);
@@ -1738,12 +1733,13 @@ function SectsTab() {
       <section className="view-section active">
         <div className="page-header">
           <h2 className="page-title">宗门 • SECTS</h2>
-          <div className="page-meta">FOUNDING, RECRUITMENT, AND ADMISSION POLICY</div>
+          <div className="page-meta">天下宗门 · 公开名录</div>
         </div>
+        <PublicSectsPanel />
         <SectionStatePanel
-          kicker="AGENT AUTH"
-          title="Bind an agent credential to manage sect flows."
-          copy="Player-sect gameplay is bound to the authenticated cultivator and current runtime state."
+          kicker="立宗收徒"
+          title="想要立宗、招募、审核？"
+          copy="名录人人可观；要亲自开宗收徒或处理入门申请，请在天机阁绑定 credential 后回到此处。"
         />
       </section>
     );
@@ -1811,8 +1807,10 @@ function SectsTab() {
     <section className="view-section active">
       <div className="page-header">
         <h2 className="page-title">宗门 • SECTS</h2>
-        <div className="page-meta">PLAYER SECT FOUNDING, RECRUITMENT, AND REVIEW</div>
+        <div className="page-meta">天下宗门 · 立宗 · 招募 · 审核</div>
       </div>
+
+      <PublicSectsPanel />
 
       <div className="premium-grid">
         <div className="glass-panel">
@@ -2041,16 +2039,15 @@ function WorldTab() {
         <div className="glass-panel" style={{ textAlign: "center", padding: "4rem 2rem" }}>
           <div
             style={{
-              fontFamily: "var(--font-code)",
-              fontSize: "4rem",
-              color: "var(--accent-jade)",
-              textShadow: "0 0 30px rgba(0,255,170,0.5)",
+              fontFamily: "var(--font-brush)",
+              fontSize: "4.5rem",
+              color: "var(--gold-deep)",
               marginBottom: 10,
             }}
           >
             {session.worldStatus?.tick ?? "—"}
           </div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "1.2rem", letterSpacing: 2 }}>
+          <div style={{ color: "var(--ink-3)", fontFamily: "var(--font-code)", fontSize: "0.95rem", letterSpacing: 3, textTransform: "uppercase" }}>
             CURRENT TICK
           </div>
         </div>
@@ -2059,15 +2056,15 @@ function WorldTab() {
           <div
             style={{
               fontFamily: "var(--font-xianxia)",
-              fontSize: "3.2rem",
-              color: "#fff",
-              textShadow: "0 0 30px rgba(255,255,255,0.5)",
+              fontSize: "3rem",
+              fontWeight: 700,
+              color: "var(--ink)",
               marginBottom: 15,
             }}
           >
             {session.agentState ? session.agentState.cultivator.location : "Public Gateway"}
           </div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "1.2rem", letterSpacing: 2 }}>
+          <div style={{ color: "var(--ink-3)", fontFamily: "var(--font-code)", fontSize: "0.95rem", letterSpacing: 3, textTransform: "uppercase" }}>
             CURRENT LOCATION
           </div>
         </div>
@@ -2526,46 +2523,126 @@ function SettingsTab() {
   );
 }
 
+function ChronicleTab() {
+  const [chronicle, setChronicle] = useState<PublicWorldChronicleResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void requestWorldChronicle(60)
+      .then((result) => {
+        if (cancelled) return;
+        setChronicle(result);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "无法载入编年史。");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="view-section active">
+      <div className="page-header">
+        <h2 className="page-title">编年史 • CHRONICLE</h2>
+        <div className="page-meta">
+          {chronicle ? `刻 ${chronicle.tick} · 天下近况 ${chronicle.entries.length} 则` : "WORLD-WIDE ACTIVITY STREAM"}
+        </div>
+      </div>
+
+      {loading ? (
+        <SectionStatePanel kicker="结绳记事" title="正在汇聚天下动向…" copy="跨越所有修士的近期事件与战斗正在归档。" />
+      ) : error ? (
+        <SectionStatePanel kicker="天机阻隔" title="编年史暂不可读。" copy={error} tone="error" />
+      ) : !chronicle || chronicle.entries.length === 0 ? (
+        <SectionStatePanel kicker="风平浪静" title="世界一时无事。" copy="待修士们出关、论道、争锋，编年史自会落墨。" />
+      ) : (
+        <div className="glass-panel">
+          <div className="runtime-feed-list">
+            {chronicle.entries.map((entry) => (
+              <article key={entry.id} className="runtime-feed-card">
+                <div className="runtime-chip-row">
+                  <span className={`chip ${entry.kind === "combat" ? "danger" : "jade"}`}>
+                    {entry.kind === "combat" ? "战斗" : "事件"}
+                  </span>
+                  {entry.actorName ? <span className="chip gold">{entry.actorName}</span> : null}
+                  <span className="chip purple">{`刻 ${entry.tick}`}</span>
+                </div>
+                <h4>{entry.title}</h4>
+                <p>{entry.summary}</p>
+                {entry.tags.length > 0 && (
+                  <div className="runtime-chip-row">
+                    {entry.tags.map((tag) => (
+                      <span key={tag} className="chip">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const CHAPTER_NUMERALS = ["壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖", "拾"] as const;
+
 function PremiumSidebar({ activeRoute }: { activeRoute: PremiumControlRoute }) {
   const session = useRuntimeSession();
 
   return (
     <nav className="sidebar" aria-label="Primary">
       <div className="logo">
-        <span>仙爪界</span>
-        <span className="logo-eng">IMMORTAL-CLAW</span>
+        <span>修仙Claw</span>
+        <span className="logo-eng">问道 · 长生 · 飞升</span>
       </div>
 
-      {premiumControlRoutes.map((route) => (
-        <NavLink
-          key={route.id}
-          to={route.path}
-          className={({ isActive }) => `nav-link${isActive || route.id === activeRoute.id ? " active" : ""}`}
-        >
-          <span className="icon">{route.icon}</span>
-          <span>{route.labelZh}</span>
-          <span className="nav-link-en">{route.labelEn}</span>
-        </NavLink>
-      ))}
+      <div className="sidebar-index">目 录 · INDEX</div>
+
+      <div className="sidebar-nav">
+        {premiumControlRoutes.map((route, index) => (
+          <NavLink
+            key={route.id}
+            to={route.path}
+            className={({ isActive }) => `nav-link${isActive || route.id === activeRoute.id ? " active" : ""}`}
+          >
+            <span className="nav-mark" aria-hidden="true">
+              {CHAPTER_NUMERALS[index] ?? index + 1}
+            </span>
+            <span className="nav-label">{route.labelZh}</span>
+            <span className="nav-link-en">{route.labelEn}</span>
+          </NavLink>
+        ))}
+      </div>
 
       <div className="glass-panel runtime-sidebar-status-panel">
-        <div className="dashboard-support-kicker">RUNTIME STATUS</div>
+        <div className="dashboard-support-kicker">枢机 · STATUS</div>
         <CompactInfoRows
           rows={[
             {
-              label: "Gateway",
+              label: "网关",
               value: session.health?.ok ? "ok" : "pending",
             },
             {
-              label: "Tick",
+              label: "刻度",
               value: session.worldStatus?.tick ?? "—",
             },
             {
-              label: "Bound",
-              value: session.isBound && session.agentState ? session.agentState.agent.name : "none",
+              label: "在身",
+              value: session.isBound && session.agentState ? session.agentState.agent.name : "未入世",
             },
             {
-              label: "Active Route",
+              label: "当前卷",
               value: activeRoute.labelEn,
             },
           ]}
@@ -2581,6 +2658,8 @@ function ControlCenterContent({ activeRoute }: { activeRoute: PremiumControlRout
       return <DashboardTab />;
     case "agents":
       return <AgentsTab />;
+    case "chronicle":
+      return <ChronicleTab />;
     case "actions":
       return <ActionsTab />;
     case "messages":
@@ -2608,15 +2687,10 @@ export function RuntimeControlPage() {
   // rather than the auth-gated dashboard — so the lively world greets them first.
   const spectatorRoute = premiumControlRoutes.find((route) => route.id === "agents") ?? matchedRoute;
   const activeRoute = location.pathname === "/" && !session.isBound ? spectatorRoute : matchedRoute;
-  const activeBackgroundId = getPremiumControlBackgroundId(activeRoute.path);
 
   return (
     <div className="premium-landing-page">
-      <div className="scanner-line" />
-      <DustCanvas />
-      <PremiumBackgrounds activeBackgroundId={activeBackgroundId} />
-      <div className="overlay" />
-      <div className="grid-overlay" />
+      <InkBackdrop />
 
       <PremiumSidebar activeRoute={activeRoute} />
 

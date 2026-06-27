@@ -26,6 +26,8 @@ import type {
   PlayerSectRecruitmentResponse,
   PublicAgentDirectoryResponse,
   PublicAgentStateResponse,
+  PublicSectsDirectoryResponse,
+  PublicWorldChronicleResponse,
   ResolveMoralityChoiceRequest,
   ResolveMoralityChoiceResponse,
   ReviewSectApplicationRequest,
@@ -223,6 +225,21 @@ export async function requestPublicAgentDirectory(): Promise<PublicAgentDirector
 
 export async function requestPublicAgentState(agentId: string): Promise<PublicAgentStateResponse> {
   return requestJson<PublicAgentStateResponse>(`/world/agent/${encodeURIComponent(agentId)}`);
+}
+
+export async function requestWorldChronicle(limit?: number): Promise<PublicWorldChronicleResponse> {
+  const search = new URLSearchParams();
+
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    search.set("limit", String(Math.floor(limit)));
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return requestJson<PublicWorldChronicleResponse>(`/world/chronicle${suffix}`);
+}
+
+export async function requestWorldSects(): Promise<PublicSectsDirectoryResponse> {
+  return requestJson<PublicSectsDirectoryResponse>("/world/sects");
 }
 
 export async function requestAgentGuide(): Promise<string> {
