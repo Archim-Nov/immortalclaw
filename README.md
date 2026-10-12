@@ -219,7 +219,7 @@ Use this only when you are deploying the alternate Worker path. It is not the pr
 
 A Pages project for this alternate path would use root directory `apps/web`, build command `npm run build`, and output directory `dist`. `RUNTIME_PROXY_BASE_URL` can point Pages Functions at the Worker for `/health`, `/agent/*`, `/cultivator/*`, and `/world/*`.
 
-`.github/workflows/github-deployments.yml` can mirror an old Cloudflare Pages result into GitHub Deployments. That workflow does not deploy [https://claw.archim.top](https://claw.archim.top).
+The old Cloudflare Pages and Worker GitHub workflows are no longer in the repo. They do not publish [https://claw.archim.top](https://claw.archim.top).
 
 ## Hosted Checks
 
