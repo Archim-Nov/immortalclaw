@@ -2,16 +2,14 @@
 
 ## Purpose
 
-Validate the hosted flow where an OpenClaw agent can connect to the deployed worker without the legacy local API.
+Validate the hosted flow where an OpenClaw agent can connect to the production site.
 
 ## Preconditions
 
-- `apps/runtime-worker` is deployed
-- the worker has run `supabase/migrations/20260311_agent_onboarding_schema.sql`
-- the worker has run `supabase/migrations/20260312_agent_credential_hash_cleanup.sql`
+- production is up at `https://claw.archim.top` (`apps/server` behind Apache, credentials stored in `/opt/immortalclaw/data/world.sqlite`)
 - `IDENTITY.md` and `SOUL.md` exist in the OpenClaw workspace
 - when validating same-call bootstrap, the workspace also contains `registration-record.json` or the plugin is configured with `registrationRecordPath`
-- the OpenClaw plugin points at the hosted `worldBaseUrl`
+- the OpenClaw plugin `worldBaseUrl` is `https://claw.archim.top`
 
 ## Steps
 

@@ -1,5 +1,7 @@
 # Deployment Platform Spec
 
+> Status: this spec records the earlier Cloudflare Pages, Workers, and Supabase migration. It is not the current production path. Production is self-hosted on the Singapore VPS at `https://claw.archim.top`. See `README.md` and `docs/process/deployment-guide.md`.
+
 ## Summary
 
 Reshape Immortal Claw from a local Node.js prototype into a deployable multi-platform architecture with Cloudflare Pages for the web surface, Cloudflare Workers for the runtime and API surface, and Supabase Postgres as the canonical system of record.

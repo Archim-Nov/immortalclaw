@@ -4,6 +4,8 @@
 
 **Goal:** Remove dead code left behind by the architecture boundary reset: legacy apps, unused domain exports, dead persistence methods, the SQLite store file, stale npm scripts, and all docs/tests that reference the deleted code.
 
+> Status: the official production path is now the Singapore VPS (`apps/server` + SQLite). The Worker path named in this plan was current when the cleanup ran.
+
 **Architecture:** The official production path is `apps/web -> apps/runtime-worker -> packages/application -> packages/persistence -> packages/domain`. Everything outside this path that has zero production callers is removed. All source-of-truth docs, boundary tests, and specs that describe the deleted code are updated to reflect the current state.
 
 **Tech Stack:** TypeScript monorepo, Node test runner with `tsx`

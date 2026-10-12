@@ -18,7 +18,10 @@ After reading this file, check for `AGENTS.local.md` in the repo root. This file
 - `docs/templates/`: reusable templates for specs, plans, and harness checklists
 - `harness/README.md`: future home for scenarios, fixtures, and evals
 - `AGENTS.local.md` (gitignored): optional per-developer agent preferences
-- `apps/runtime-worker` and `packages/domain`: current runnable runtime
+- `deploy/README.md` and `docs/process/deployment-guide.md`: production deploy for the Singapore VPS
+- `apps/server`: production runtime. systemd runs it on `https://claw.archim.top` (`127.0.0.1:8788`, SQLite at `/opt/immortalclaw/data/world.sqlite`)
+- `apps/runtime-worker` and `apps/world-do`: alternate Cloudflare Worker and Durable Object path. Production does not run them
+- `packages/domain`: simulation rules shared by both runtimes
 
 ## Default Workflow
 

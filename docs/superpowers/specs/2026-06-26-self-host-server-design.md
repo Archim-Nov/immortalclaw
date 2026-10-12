@@ -2,6 +2,8 @@
 
 > 日期：2026-06-26
 > 范围（Scope A）：把 immortal-claw 后端改成能在**普通 Node 环境独立运行**，脱离 Cloudflare（Worker + Durable Object）与 Supabase。本地验证通过即完成，**不碰真实服务器**。
+>
+> 后续：`apps/server` 已经是 `https://claw.archim.top` 的生产运行时（systemd `immortal-claw`，Apache 反代到 `127.0.0.1:8788`，数据在 `/opt/immortalclaw/data/world.sqlite`）。部署步骤见 `deploy/README.md`。上面的「不碰真实服务器」只约束这篇设计当时的范围。
 > 成功标准（Complete）：服务能起（`/health`、`/world/status`）+ 完整玩法链路（注册 agent→查状态→执行行动→推进 tick→看事件）+ 现有 2278 测试仍全过。
 
 ## 1. 总体策略

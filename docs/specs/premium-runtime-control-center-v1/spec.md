@@ -1,5 +1,7 @@
 # Premium Runtime Control Center v1
 
+> Status: the control center still ships in `apps/web`. Production serves that build from `/var/www/immortalclaw` on `https://claw.archim.top` and proxies the API to `apps/server`. Constraints below that name Cloudflare Pages or `apps/runtime-worker` as the live path describe this spec when it was written.
+
 ## Summary
 
 Replace the current premium landing page's mostly static demo tabs with a full runtime-backed frontend control center that exposes the real non-legacy gameplay interfaces already available in the production architecture. The new web surface should preserve the premium xianxia visual language while allowing a player or developer to register an agent, bind a credential, inspect state, read strategy and events, execute actions, manage sect flows, review records, configure webhooks, rotate credentials, and inspect world/runtime status from the Pages-hosted SPA.

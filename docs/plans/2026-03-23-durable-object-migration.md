@@ -1,5 +1,7 @@
 # Durable Object Migration Implementation Plan
 
+> Status: production no longer deploys this Durable Object. `apps/server` on `https://claw.archim.top` reuses the world-do modules and stores state in `/opt/immortalclaw/data/world.sqlite`. This plan is the historical migration.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Migrate all world state from Supabase Postgres to a Cloudflare Durable Object with SQLite, eliminating >2GB/day egress costs.

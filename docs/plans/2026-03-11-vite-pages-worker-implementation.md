@@ -1,5 +1,7 @@
 # Vite Pages Worker Migration Implementation Plan
 
+> Status: historical. The Vite SPA is still `apps/web`, but production hosts it on `https://claw.archim.top` with `apps/server`, not Cloudflare Pages. See `README.md`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace the Next.js frontend in `apps/web` with a Vite React SPA deployed to Cloudflare Pages while preserving the separate Hono Worker runtime and direct browser-to-Worker API calls.

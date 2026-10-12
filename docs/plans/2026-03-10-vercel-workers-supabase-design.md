@@ -1,6 +1,8 @@
 # Cloudflare Pages, Cloudflare Workers, and Supabase Deployment Design
 
 > Status update on 2026-03-11: the follow-on frontend migration replaced the planned Vercel and Next.js web surface with a Vite React SPA on Cloudflare Pages. Treat older Vercel and Next.js references in this document as superseded design history unless they are restated below.
+>
+> Later status: that Cloudflare target is also historical. Production is self-hosted at `https://claw.archim.top`. See `README.md`.
 
 ## Goal
 

@@ -2,7 +2,7 @@
 
 Immortal Claw is a persistent cultivation-world simulation built to explore whether a structured, tick-driven world can support long-running agent play.
 
-The repository is still an early-stage prototype, but it now has a validated deployment architecture: Cloudflare Pages for the web shell, Cloudflare Workers for runtime execution, and Supabase Postgres for durable world state. The immediate focus is to keep proving the core gameplay loop and the world-state model through this deployable architecture before introducing heavier agent orchestration or richer world systems. The older SQLite-backed Node harnesses were removed after the deployment direction was finalized.
+The repository is still an early-stage prototype. Production is self-hosted on a Singapore VPS: Apache serves the web shell and proxies the API to `apps/server`, and the world plus agent credentials live in a local SQLite file. The public site is `https://claw.archim.top`. The immediate focus is to keep proving the core gameplay loop and the world-state model on that host before introducing heavier agent orchestration or richer world systems. `apps/runtime-worker` and `apps/world-do` remain in the tree as an alternate Cloudflare path.
 
 ## Canonical Design References
 
@@ -13,9 +13,9 @@ The repository is still an early-stage prototype, but it now has a validated dep
 - Gameplay event-pool support doc: `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - Detailed world and mechanics draft: `docs/immortal-realm-design.md`
 - First-version scope and roadmap: `docs/phase-1-first-version-plan.md`, `docs/phase-2-enhanced-plan.md`, `docs/phase-3-full-version-plan.md`
-- OpenClaw integration notes: `docs/openclaw-agent-setup.md`
-- Deployment architecture spec: `docs/specs/deployment-platform/spec.md`
-- Deployment design and plan: `docs/plans/2026-03-10-vercel-workers-supabase-design.md`, `docs/plans/2026-03-10-deployment-platform-implementation.md`
+- OpenClaw plugin: `packages/openclaw-immortal-plugin/README.md`
+- Current production deploy: `deploy/README.md`, `docs/process/deployment-guide.md`
+- Historical Cloudflare migration specs: `docs/specs/deployment-platform/spec.md`, `docs/specs/durable-object-migration/spec.md`
 
 ## Product Direction
 
@@ -28,7 +28,7 @@ The product direction for this repository is:
 - keep the world model explicit and executable
 - make actions resolve through rules and ticks rather than ad hoc scripts
 - preserve room for agent integration through stable interfaces
-- centralize durable world state instead of relying on runtime-local files in production
+- keep durable world state in the production SQLite file on the Singapore VPS, so every API call and tick sees the same world
 - separate the web shell from the simulation runtime without duplicating business logic
 - evolve the repo with lightweight, versioned specs and plans
 - treat future harness assets as first-class repository artifacts
