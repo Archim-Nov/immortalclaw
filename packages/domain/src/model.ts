@@ -83,6 +83,7 @@ export type MoralityAlignment = SectAlignment;
 export type DungeonGrade = "丙" | "乙" | "甲";
 export type DungeonRank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export type DungeonExpeditionPolicy = "conservative" | "balanced" | "aggressive";
+export type PartyRoleId = "dps" | "breaker" | "guard" | "support" | "control";
 export type RunStrategy = {
   posture: "conservative" | "balanced" | "aggressive";
   bias: "reward-first" | "survival-first";
@@ -619,6 +620,39 @@ export interface DungeonRankYieldHint {
   notableSecondaryDrops: ItemId[];
 }
 
+export interface CombatSkillView {
+  id: string;
+  name: string;
+  role: PartyRoleId;
+  roleLabel: string;
+  channel: AttackChannel;
+  spiritCost: number;
+  qiCost: number;
+  cooldown: number;
+  target: "enemy" | "all-enemies" | "ally" | "self" | "all-allies";
+  power: number;
+  summary: string;
+}
+
+export interface DungeonCombatHighlight {
+  round: number;
+  actorName: string;
+  roleLabel: string;
+  skillName: string;
+  targetName: string;
+  result: "hit" | "miss" | "crit" | "guard" | "heal" | "ward" | "flee" | "drain";
+  note: string;
+}
+
+export interface DungeonCombatSummary {
+  enemyName: string;
+  outcome: "win" | "loss" | "withdraw";
+  rounds: number;
+  party: Array<{ name: string; roleLabel: string; skills: string[] }>;
+  beats: string[];
+  highlights: DungeonCombatHighlight[];
+}
+
 export interface DungeonExpeditionProgress {
   cultivatorId: string;
   jobId: string;
@@ -656,6 +690,8 @@ export interface DungeonExpeditionProgress {
   companionId?: string | null;
   /** Every idle party member sharing this run, up to four beside the leader. */
   companionIds?: string[];
+  /** Compact fight logs from guardian steps. Missing on expeditions saved before turn combat. */
+  combatRounds?: DungeonCombatSummary[];
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -685,6 +721,8 @@ export interface DungeonExpeditionReport {
   spiritualPowerSpent?: number;
   injuryTicksGained?: number;
   stonesLost?: number;
+  /** Guardian fights from this run, newest last, at most three. */
+  combatRounds?: DungeonCombatSummary[];
 }
 
 export type TravelNoteKind =
@@ -2162,6 +2200,13 @@ export interface CultivatorStateView {
       name: string;
       spellBranchId: SpellBranchId;
     }>;
+    /** Auto role from weapon, spell, and spirit root. Omitted by older view fixtures. */
+    partyRole?: {
+      id: PartyRoleId;
+      label: string;
+    };
+    /** Skills this loadout and spirit root can actually cast. Omitted by older view fixtures. */
+    availableSkills?: CombatSkillView[];
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;

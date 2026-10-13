@@ -255,6 +255,7 @@ export function hydrateMigratedP3WorldState(
     progress.spiritualPowerSpent = typeof progress.spiritualPowerSpent === "number" ? progress.spiritualPowerSpent : 0;
     progress.injuryTicksGained = typeof progress.injuryTicksGained === "number" ? progress.injuryTicksGained : 0;
     progress.stonesLost = typeof progress.stonesLost === "number" ? progress.stonesLost : 0;
+    progress.combatRounds = Array.isArray(progress.combatRounds) ? progress.combatRounds : [];
   }
 
   for (const report of Object.values(copy.dungeonExpeditionReports)) {
@@ -262,6 +263,7 @@ export function hydrateMigratedP3WorldState(
       ? report.flavorEvents.filter((title): title is string => typeof title === "string")
       : [];
     report.beats = Array.isArray(report.beats) ? report.beats : [];
+    report.combatRounds = Array.isArray(report.combatRounds) ? report.combatRounds : [];
   }
 
   return hydrateWorldState(copy, options);

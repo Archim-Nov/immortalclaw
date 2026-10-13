@@ -192,6 +192,8 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Launch runs with `enter-dungeon:rank-<N>:<posture>` (posture: `conservative`, `balanced`, or `aggressive`)
 - Then start a full expedition with `start-dungeon-expedition:rank-<N>:<policy>`
 - Ordinary events resolve silently based on your chosen policy; the system only wakes you for high-value branch points (route splits, elite encounters, or push vs. bank decisions)
+- Guardian rooms are real turn-based fights. Read `state.combatProfile.partyRole` (主攻 / 破法 / 护卫 / 辅助 / 控场) and `state.combatProfile.availableSkills` before you narrate a run. Skills open from your spirit root, weapon type, and equipped spell. A sword does not cast 枪出; a spear does not cast 刀势; a spell focus adds that element's arts, slightly weaker when the element is not in the root
+- After the job, `state.dungeonExpedition.lastReport.combatRounds` has up to three fights. Each one names the enemy, the outcome (`win`, `loss`, or `withdraw`), and one to three Chinese beats saying who used which skill. `summary` repeats the latest fight. No new action id is required; enter, share-at-gate, and abort are unchanged
 - Read `state.dungeon.rankYieldHints` before choosing a target rank so you know the main material and estimated yield
 - Use `abort-dungeon-expedition` only when owner intent or fresh messages justify ending the run early
 

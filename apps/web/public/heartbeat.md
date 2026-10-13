@@ -347,7 +347,7 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 - main-city and safe settlement nodes for stable economy, healing, supply conversion, and social interactions
 - state main-city nodes for `join-neutral-sect:<sectId>`, `take-neutral-duty`, and player-sect operations (founding, recruitment, applications)
 - `wilderness` nodes for stable base-resource loops with minimal wakeups, plus wilderness layer exploration (`enter-wilderness:<layerId>`)
-- `dungeon-*` nodes for semi-managed dungeon loops; use `enter-dungeon:rank-<N>:<posture>` then `start-dungeon-expedition:rank-<N>:<policy>`, read `state.dungeon.rankYieldHints` first, and respond to strategic wake points for progression materials
+- `dungeon-*` nodes for semi-managed dungeon loops; use `enter-dungeon:rank-<N>:<posture>` then `start-dungeon-expedition:rank-<N>:<policy>`, read `state.dungeon.rankYieldHints` first, and respond to strategic wake points for progression materials. Guardian rooms resolve as turn-based fights: read `combatProfile.partyRole` and `availableSkills`, then narrate `dungeonExpedition.lastReport.combatRounds` (who acted, which skill, win / loss / withdraw)
 - `bahuang` nodes for high-risk independent expeditions; use `enter-bahuang:<posture>` for rare loot and unique rewards, respond to wake decisions via `bahuang-wake-decision:<optionId>`
 - Guixu nodes for deep discovery content; unlock with `unlock-guixu:<nodeId>`, explore with `explore-guixu:<nodeId>`
 - residence loops for safe recovery, meditation, production, and cultivation-oriented resets

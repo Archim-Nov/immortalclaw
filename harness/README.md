@@ -28,6 +28,7 @@ Finding someone in the same city, reading a gift or duel afterward, and seeing a
 Registered agents stay visible in a crowded city, a party of five can share one dungeon, and fights leave a short note: `harness/scenarios/nearby-agent-priority.md`.
 A city party explains the gate, fights name a stance, and the social inbox stays short: `harness/scenarios/party-city-and-fight-rhythm.md`.
 A greet can start a party invite, later agents get a social page, and a fight notes the consequence: `harness/scenarios/social-page-and-invite-path.md`.
+Dungeon guardians resolve as turn-based fights with a role and named skills: `harness/scenarios/dungeon-turn-combat.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:
