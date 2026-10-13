@@ -16,7 +16,7 @@
   CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectId, StatusEffectKind, StatusTargetSide,
   PendingPvpChallenge, PvpBattleKind,
   ProductionQueueEntry,
-  MessageTemplateKind, PendingGift, Commission, CommissionType,
+  MessageTemplateKind, PendingGift, PendingHelpRequest, Commission, CommissionType, LocationBoardNote,
   ResourceUsageSummary, SpiritStoneUsageSummary,
 } from "./model.js";
 import { PRODUCTION_QUEUE_MAX_LENGTH } from "./model.js";
@@ -198,6 +198,12 @@ import {
   PARTY_INVITE_MIN_LEVEL,
   VOICE_TRANSMIT_MIN_LEVEL,
   addMutualAffinity,
+  adjustFavor,
+  forgiveOneFavor,
+  markRival,
+  HELP_STONE_GIFT,
+  PENDING_HELP_LIMIT,
+  BOARD_NOTE_LIMIT,
   disbandParty,
   getAffinityLevel,
   getCultivatorsAtLocation,
@@ -252,11 +258,12 @@ import {
   isAbortDungeonExpeditionAction,
   dangerousDungeonExit,
   maybeCreateDungeonWakeNode,
+  chooseDefaultDungeonWakeOptionId,
+  settleDungeonWakeNode,
   parseEnterDungeonActionId,
   parseStartDungeonExpeditionActionId,
   recordDungeonExpeditionStep,
   expeditionPressureFor,
-  resolveDungeonWakeNodeByDefault,
   shouldRetreatDungeonExpedition,
   strategyFromPolicy,
   startDungeonExpeditionActionIdOf,
@@ -1693,6 +1700,10 @@ const parseResidenceOption = (actionId: ActionId, prefix: string) => actionId.st
 const parseBuyResidenceStateId = (actionId: ActionId) => actionId.startsWith("buy-residence:") ? actionId.slice("buy-residence:".length) : null;
 const parseBahuangWakeDecision = (actionId: ActionId | string): string | null =>
   actionId.startsWith("bahuang-wake-decision:") ? actionId.slice("bahuang-wake-decision:".length) : null;
+const parseDungeonWakeDecision = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("dungeon-wake-decision:") ? actionId.slice("dungeon-wake-decision:".length) : null;
+const parseAnswerHelp = (actionId: ActionId | string): string | null =>
+  actionId.startsWith("answer-help:") ? actionId.slice("answer-help:".length) : null;
 const parseDungeonRank = (actionId: ActionId, prefix: "search-fortune:rank-" | "challenge-guardian:rank-"): DungeonRank | null => {
   if (!actionId.startsWith(prefix)) {
     return null;
@@ -3729,6 +3740,88 @@ function extractDungeonFlavorEventTitles(
     .filter((title) => title.length > 0);
 }
 
+function applyDungeonWakeSettlement(
+  world: WorldState,
+  cultivator: Cultivator,
+  settlement: ReturnType<typeof settleDungeonWakeNode>,
+): void {
+  if (settlement.stoneDelta !== 0) {
+    cultivator.spiritStones = Math.max(0, cultivator.spiritStones + settlement.stoneDelta);
+  }
+  if (settlement.moralityDelta !== 0) {
+    applyMoralityDelta(world, cultivator, settlement.moralityDelta, "dungeon-wake");
+  }
+  if (settlement.beat) {
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: settlement.beat.kind,
+      title: settlement.beat.title,
+      detail: settlement.beat.detail,
+      locationId: cultivator.locationId,
+      mood: settlement.beat.mood,
+    }));
+  }
+}
+
+function noteCityRivalry(world: WorldState, left: Cultivator, right: Cultivator, detail: string): void {
+  markRival(world, left.id, right.id);
+  pushTravelNote(left, travelNote({
+    tick: world.tick,
+    kind: "person",
+    title: `与${right.name}结了对手`,
+    detail,
+    locationId: left.locationId,
+    mood: "这一架会记住",
+  }));
+  pushTravelNote(right, travelNote({
+    tick: world.tick,
+    kind: "person",
+    title: `与${left.name}结了对手`,
+    detail,
+    locationId: right.locationId,
+    mood: "这一架会记住",
+  }));
+}
+
+function noteSectLife(world: WorldState, cultivator: Cultivator, taskName: string): void {
+  const sect = getCultivatorSect(world, cultivator);
+  const step = Math.min(3, (cultivator.sectDiaryStep ?? 0) + 1);
+  const place = sect?.name ?? "宗门";
+  let detail = `${cultivator.name}在${place}做完「${taskName}」。`;
+  let title = "在宗门报了名";
+  let mood = "名字落在册上了";
+  let kind: "person" | "insight" = "person";
+  if (step === 1) {
+    detail += "执事把名字记下了。";
+  } else if (step === 2) {
+    title = "执事留了话";
+    mood = "被记住了";
+    detail += "执事说，下次可以走远一点。";
+  } else {
+    title = "长老点了名";
+    mood = "这一趟算数";
+    kind = "insight";
+    detail += "长老在名册上点了你的名字。";
+    addRealmProgress(cultivator, 4);
+  }
+  const peers = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+    .filter((peer) => peer.sectId !== null && peer.sectId === cultivator.sectId && !peer.activeJobId);
+  const peer = peers[0];
+  if (peer) {
+    detail += `${peer.name}也在山门里，算是同门照应。`;
+    addMutualAffinity(world, cultivator.id, peer.id, 2);
+  }
+  cultivator.sectDiaryStep = step >= 3 ? 0 : step;
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind,
+    title,
+    detail,
+    locationId: cultivator.locationId,
+    mood,
+  }));
+}
+
 function finalizeDungeonExpedition(
   world: WorldState,
   cultivator: Cultivator,
@@ -3781,7 +3874,10 @@ function resolveDungeonExpeditionStepIfDue(
       effectiveProgress.pendingWakeNodeDeadlineTick !== null
       && world.tick >= effectiveProgress.pendingWakeNodeDeadlineTick
     ) {
-      effectiveProgress = resolveDungeonWakeNodeByDefault(effectiveProgress);
+      const chosen = chooseDefaultDungeonWakeOptionId(effectiveProgress);
+      const settlement = settleDungeonWakeNode(effectiveProgress, chosen);
+      applyDungeonWakeSettlement(world, cultivator, settlement);
+      effectiveProgress = settlement.progress;
       world.dungeonExpeditions[cultivator.id] = effectiveProgress;
     } else {
       job.remainingTicks += 1;
@@ -5252,6 +5348,11 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         targetCount: c.targetCount,
         rewardSpiritStones: c.rewardSpiritStones,
       })),
+    localBoard: (world.locationBoards?.[cultivator.locationId] ?? []).map((note) => ({
+      authorName: note.authorName,
+      tick: note.tick,
+      text: note.text,
+    })),
     endgame: {
       guixuCompletedNodeIds: cultivator.guixuCompletedNodeIds ?? [],
       originHeartAwakened: (cultivator.guixuCompletedNodeIds ?? []).includes("guixu-origin-heart"),
@@ -5338,15 +5439,29 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const readinessLevel = computeReadiness(cultivator);
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
   if (cultivator.activeJobId) {
-    return activeDungeonExpedition
-      ? [{
-          actionId: "abort-dungeon-expedition",
-          label: "Abort dungeon expedition",
-          description: "Stop the managed run, return to the nearest safe location, and settle the report now.",
+    if (!activeDungeonExpedition) {
+      return [];
+    }
+    const busyActions: AvailableAction[] = [{
+      actionId: "abort-dungeon-expedition",
+      label: "Abort dungeon expedition",
+      description: "Stop the managed run, return to the nearest safe location, and settle the report now.",
+      durationTicks: 0,
+      kind: "immediate",
+    }];
+    const wake = activeDungeonExpedition.pendingWakeNode;
+    if (wake) {
+      for (const option of wake.options) {
+        busyActions.push({
+          actionId: `dungeon-wake-decision:${option.optionId}` as ActionId,
+          label: `地宫抉择：${option.label}`,
+          description: `${wake.context} ${option.description}`,
           durationTicks: 0,
           kind: "immediate",
-        }]
-      : [];
+        });
+      }
+    }
+    return busyActions;
   }
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
@@ -5991,6 +6106,25 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         actionId: "read-messages" as ActionId,
         label: `阅读消息（${unreadMessages.length}条未读）`,
         description: "批量确认所有已收到的消息。",
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+    for (const request of cultivator.pendingHelpRequests ?? []) {
+      const fromName = world.cultivators[request.fromCultivatorId]?.name ?? "某人";
+      actions.push({
+        actionId: `answer-help:${request.fromCultivatorId}` as ActionId,
+        label: `回应求助：${fromName}`,
+        description: `帮${fromName}一把。有灵石就分出${HELP_STONE_GIFT}枚，没有就陪一段路。对方会欠一份人情。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+    if (location.kind === "safe") {
+      actions.push({
+        actionId: "post-board-note",
+        label: "在告示上留话",
+        description: "把最近的见闻贴在此地，后来的人能读到。",
         durationTicks: 0,
         kind: "immediate",
       });
@@ -6701,6 +6835,28 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addMessage(world, invitation.fromCultivatorId, "组队", "组队成功", `${cultivator.name}接受了你的组队邀请。`);
     addDaoLog(world, cultivator.id, "组队成功", `${cultivator.name}与${leaderName}组成了队伍。`, ["social", "party"]);
     addDaoLog(world, invitation.fromCultivatorId, "组队成功", `${leaderName}与${cultivator.name}组成了队伍。`, ["social", "party"]);
+    const sameSect = Boolean(leader?.sectId && leader.sectId === cultivator.sectId);
+    const partyDetail = sameSect
+      ? `${cultivator.name}与${leaderName}同门结伴，路上有人照应。`
+      : `${cultivator.name}与${leaderName}把名字写在同一张路上。`;
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `与${leaderName}结伴`,
+      detail: partyDetail,
+      locationId: cultivator.locationId,
+      mood: sameSect ? "同门在身边" : "路上不剩自己一个",
+    }));
+    if (leader) {
+      pushTravelNote(leader, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `与${cultivator.name}结伴`,
+        detail: partyDetail,
+        locationId: leader.locationId,
+        mood: sameSect ? "同门在身边" : "路上不剩自己一个",
+      }));
+    }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${leaderName}'s party.` };
   }
 
@@ -6751,6 +6907,22 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       addMutualAffinity(world, cultivator.id, target.id, 15);
       addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftItemId}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
       addDaoLog(world, cultivator.id, "赠礼", `${cultivator.name}向${target.name}赠送了1个${giftItemId}。好感度+15。`, ["social", "gift"]);
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `把东西递给${target.name}`,
+        detail: `${cultivator.name}把1个${giftItemId}塞进${target.name}手里。还没说收不收。`,
+        locationId: cultivator.locationId,
+        mood: "东西先离开了自己",
+      }));
+      pushTravelNote(target, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}递来一份礼`,
+        detail: `${cultivator.name}递来1个${giftItemId}。收或不收，都得回一句话。`,
+        locationId: target.locationId,
+        mood: "手里多了别人的东西",
+      }));
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} gifted 1 ${giftItemId} to ${target.name}. Affinity +15.` };
     }
     // Non-gift message: greet / share-info / request-help
@@ -6759,6 +6931,54 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const msgSubject = kindLabels[kind] ?? kind;
     addMessage(world, target.id, "消息", msgSubject, `${cultivator.name}向你发送了${msgSubject}。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
     addDaoLog(world, cultivator.id, "消息", `${cultivator.name}向${target.name}发送了${msgSubject}。好感度+3。`, ["social", "message"]);
+    if (kind === "request-help") {
+      const existing = (target.pendingHelpRequests ?? []).filter((request) => request.fromCultivatorId !== cultivator.id);
+      const request: PendingHelpRequest = {
+        id: `help-${cultivator.id}-${world.tick}`,
+        fromCultivatorId: cultivator.id,
+        tick: world.tick,
+      };
+      target.pendingHelpRequests = [...existing, request].slice(-PENDING_HELP_LIMIT);
+    }
+    const messageNotes: Record<string, { title: string; detail: string; replyTitle: string; replyDetail: string }> = {
+      greet: {
+        title: `向${target.name}问了好`,
+        detail: `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "这里"}跟${target.name}点了下头。`,
+        replyTitle: `${cultivator.name}打了招呼`,
+        replyDetail: `${cultivator.name}跟你问了好。人就在眼前。`,
+      },
+      "share-info": {
+        title: `把见闻说给${target.name}`,
+        detail: `${cultivator.name}把路上的事说给${target.name}听。对方听完，没有立刻走开。`,
+        replyTitle: `${cultivator.name}说了路上的事`,
+        replyDetail: `${cultivator.name}分享了一段见闻。值得记下来。`,
+      },
+      "request-help": {
+        title: `向${target.name}求了一手`,
+        detail: `${cultivator.name}向${target.name}开口求助。人情还没落地，话已经说出去了。`,
+        replyTitle: `${cultivator.name}来求助`,
+        replyDetail: `${cultivator.name}向你求了一手。帮或不帮，都会被记住。`,
+      },
+    };
+    const note = messageNotes[kind];
+    if (note) {
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: note.title,
+        detail: note.detail,
+        locationId: cultivator.locationId,
+        mood: "多了一句能回给主人的话",
+      }));
+      pushTravelNote(target, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: note.replyTitle,
+        detail: note.replyDetail,
+        locationId: target.locationId,
+        mood: "有人找上门了",
+      }));
+    }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}. Affinity +3.` };
   }
 
@@ -6781,9 +7001,32 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const gift = gifts[giftIdx];
     cultivator.inventory[gift.itemId] = (cultivator.inventory[gift.itemId] ?? 0) + gift.count;
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
-    const fromName = world.cultivators[gift.fromCultivatorId]?.name ?? "unknown";
+    const giver = world.cultivators[gift.fromCultivatorId];
+    const fromName = giver?.name ?? "unknown";
+    const forgiven = forgiveOneFavor(world, cultivator.id, gift.fromCultivatorId);
     addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${gift.itemId}。`, { fromCultivatorId: cultivator.id });
     addResourceGainLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${gift.itemId}。`, ["social", "gift"], [{ itemId: gift.itemId as ItemId, count: gift.count }]);
+    const giftDetail = forgiven
+      ? `${cultivator.name}收下了${fromName}的${gift.itemId}，并勾掉了一份对方欠下的人情。`
+      : `${cultivator.name}收下了${fromName}送来的${gift.count}个${gift.itemId}。`;
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `收下了${fromName}的礼`,
+      detail: giftDetail,
+      locationId: cultivator.locationId,
+      mood: forgiven ? "人情轻了一点" : "手里多了一样东西",
+    }));
+    if (giver) {
+      pushTravelNote(giver, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}收下了礼`,
+        detail: giftDetail,
+        locationId: giver.locationId,
+        mood: forgiven ? "欠的那一份消了" : "东西送到了",
+      }));
+    }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted gift of ${gift.count} ${gift.itemId} from ${fromName}.` };
   }
 
@@ -6856,7 +7099,96 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commission.type === "gather" ? "采集" : "运送"}${commission.targetItemId}委托。`, { fromCultivatorId: cultivator.id });
     addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commission.targetItemId}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
     addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commission.targetItemId}委托。好感度+25。`, ["social", "commission"]);
+    adjustFavor(world, cultivator.id, commission.posterId, 1);
+    const poster = world.cultivators[commission.posterId];
+    const commissionDetail = `${cultivator.name}办完了${posterName}贴出的${commission.targetItemId}委托。灵石进了口袋，${posterName}还欠着一份人情。`;
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `办完${posterName}的委托`,
+      detail: commissionDetail,
+      locationId: cultivator.locationId,
+      mood: "差事落地了",
+    }));
+    if (poster) {
+      pushTravelNote(poster, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}办完了委托`,
+        detail: commissionDetail,
+        locationId: poster.locationId,
+        mood: "告示上的事有人接了",
+      }));
+    }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} fulfilled ${posterName}'s commission for ${commission.targetItemId}. Reward: ${commission.rewardSpiritStones} stones. Affinity +25.` };
+  }
+
+  const answerHelpRequesterId = parseAnswerHelp(actionId);
+  if (answerHelpRequesterId) {
+    const requests = cultivator.pendingHelpRequests ?? [];
+    const request = requests.find((entry) => entry.fromCultivatorId === answerHelpRequesterId);
+    if (!request) {
+      throw new GameplayRejection("没有这份求助。");
+    }
+    const asker = getCultivatorOrThrow(world, answerHelpRequesterId);
+    cultivator.pendingHelpRequests = requests.filter((entry) => entry.fromCultivatorId !== answerHelpRequesterId);
+    const paid = cultivator.spiritStones >= HELP_STONE_GIFT;
+    if (paid) {
+      cultivator.spiritStones -= HELP_STONE_GIFT;
+      asker.spiritStones += HELP_STONE_GIFT;
+    }
+    adjustFavor(world, cultivator.id, asker.id, 1);
+    const helpDetail = paid
+      ? `${cultivator.name}应了${asker.name}的求助，递出${HELP_STONE_GIFT}枚灵石。${asker.name}欠下一份人情。`
+      : `${cultivator.name}应了${asker.name}的求助。灵石不够，只能陪着走了一段路。人情还是记下了。`;
+    addMessage(world, asker.id, "求助", "有人应了", helpDetail, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "应援", helpDetail, ["social", "help"]);
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `帮了${asker.name}一把`,
+      detail: helpDetail,
+      locationId: cultivator.locationId,
+      mood: paid ? "口袋轻了，人情重了" : "人送到了，东西没送到",
+    }));
+    pushTravelNote(asker, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `${cultivator.name}应了求助`,
+      detail: helpDetail,
+      locationId: asker.locationId,
+      mood: "有人肯伸手",
+    }));
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: helpDetail };
+  }
+
+  if (actionId === "post-board-note") {
+    const boardLocation = world.locations[cultivator.locationId];
+    if (!boardLocation || boardLocation.kind !== "safe") {
+      throw new GameplayRejection("只有安全的地方才有告示板。");
+    }
+    const latest = cultivator.travelNotes?.[0];
+    const text = latest?.detail ?? `${cultivator.name}路过此地，留了一句话。`;
+    const note: LocationBoardNote = {
+      authorId: cultivator.id,
+      authorName: cultivator.name,
+      tick: world.tick,
+      text,
+    };
+    const existing = world.locationBoards?.[cultivator.locationId] ?? [];
+    world.locationBoards = {
+      ...(world.locationBoards ?? {}),
+      [cultivator.locationId]: [note, ...existing].slice(0, BOARD_NOTE_LIMIT),
+    };
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "mood",
+      title: "在告示上留了话",
+      detail: `${cultivator.name}把一句见闻钉在${boardLocation.name}的告示上。后来的人能读到。`,
+      locationId: cultivator.locationId,
+      mood: "话留在了原地",
+    }));
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left a note on the board at ${boardLocation.name}.` };
   }
 
   throw new Error(`Unsupported action: ${actionId}`);
@@ -7204,6 +7536,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     const warProgress = recordFactionWarContribution(world, cultivator, Math.max(20, contributionDelta));
     upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 });
     addDaoLog(world, cultivator.id, "Sect Duty", `${cultivator.name} completed a sect errand.`, ["sect", "sect-quest-complete"]);
+    noteSectLife(world, cultivator, "宗门差事");
     if (warProgress) {
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
@@ -7266,6 +7599,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
         tags: ["sect", "faction-war", warProgress.faction],
       });
     }
+    noteSectLife(world, cultivator, taskTemplate.nameCn);
     return `${cultivator.name} completed sect task: ${taskTemplate.nameCn} (${taskTemplate.tier}).`;
   }
   if (job.actionId === "mine-spirit-stones") {
@@ -7679,6 +8013,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         }
         addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, {}, `${cultivator.name} won — ${targetName} retreated from the duel.`, false);
         if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} retreated from the duel with ${cultivator.name}.`, true);
+        if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${targetName}从与${cultivator.name}的城中切磋里退了下去。这一架记成了对手。`);
         return `${targetName} retreated from the duel with ${cultivator.name}.`;
       }
       if (isCityDuel) {
@@ -7688,6 +8023,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       }
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} retreated from the duel with ${targetName}.`, true);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, isCityDuel ? { "spirit-stone-reward": 5 } as Partial<Record<ItemId, number>> : {}, `${targetName} won — ${cultivator.name} retreated.`, false);
+      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}从与${targetName}的城中切磋里退了下去。这一架记成了对手。`);
       return `${cultivator.name} retreated from the duel with ${targetName}.`;
     }
 
@@ -7701,6 +8037,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, isCityDuel ? {} : {}, `${cultivator.name} defeated ${targetName} in a duel (${totalRounds} rounds).`, false);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} was defeated by ${cultivator.name} in a duel.`, false);
       if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
+      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}在城里赢了${targetName}。这一架记成了对手。`);
       return `${cultivator.name} defeated ${targetName} in a duel.`;
     }
 
@@ -7716,6 +8053,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} was defeated by ${targetName} in a duel (${totalRounds} rounds).`, false);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, {}, `${targetName} defeated ${cultivator.name} in a duel.`, false);
       if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
+      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}在城里输给了${targetName}。这一架记成了对手。`);
       return `${cultivator.name} was defeated by ${targetName} in a duel.`;
     }
 
@@ -7724,6 +8062,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} fought ${cultivator.name} to a draw.`, false);
     // PVP duel grows mutual affinity regardless of outcome
     if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
+    if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}与${targetName}在城里打成平手。这一架记成了对手。`);
     return `${cultivator.name} fought ${targetName} to a draw.`;
   }
   if (parseStartDungeonExpeditionActionId(job.actionId) || parseEnterDungeonActionId(job.actionId)) {
@@ -8000,6 +8339,23 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       accepted: true,
       summary: report.summary,
     };
+  }
+  const dungeonWakeOptionId = parseDungeonWakeDecision(actionId);
+  if (dungeonWakeOptionId) {
+    const progress = getActiveDungeonExpedition(world, cultivator.id);
+    if (!progress?.pendingWakeNode) {
+      throw new GameplayRejection("地宫里没有待决的岔路。");
+    }
+    if (!progress.pendingWakeNode.options.some((option) => option.optionId === dungeonWakeOptionId)) {
+      throw new GameplayRejection("这个选择不在当前岔路上。");
+    }
+    const settlement = settleDungeonWakeNode(progress, dungeonWakeOptionId);
+    applyDungeonWakeSettlement(world, cultivator, settlement);
+    world.dungeonExpeditions[cultivator.id] = settlement.progress;
+    const summary = settlement.beat
+      ? `${cultivator.name}在地宫里选择了${settlement.beat.title}。`
+      : `${cultivator.name}在地宫岔路做出了选择。`;
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
   requireIdle(cultivator);
   requireSafeIfInjured(cultivator, actionId);
@@ -8378,6 +8734,29 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         strategy: parsedExpedition.strategy,
         startedAtTick: world.tick,
       });
+      const partyPartner = getPartyPartner(world, cultivator.id);
+      if (partyPartner && partyPartner.locationId === cultivator.locationId) {
+        addMutualAffinity(world, cultivator.id, partyPartner.id, AFFINITY_GAINS.sharedWilderness);
+        const placeName = location.name;
+        const inviteDetail = `${cultivator.name}在${placeName}开始了${parsedExpedition.rank}阶探索。${partyPartner.name}就在门口。想进去的话，自己也能进。`;
+        addMessage(world, partyPartner.id, "地宫", "同行的人进了地宫", inviteDetail, { fromCultivatorId: cultivator.id });
+        pushTravelNote(cultivator, travelNote({
+          tick: world.tick,
+          kind: "person",
+          title: `邀${partyPartner.name}一起下地宫`,
+          detail: inviteDetail,
+          locationId: cultivator.locationId,
+          mood: "门口还有一个自己人",
+        }));
+        pushTravelNote(partyPartner, travelNote({
+          tick: world.tick,
+          kind: "person",
+          title: `${cultivator.name}进了地宫`,
+          detail: inviteDetail,
+          locationId: partyPartner.locationId,
+          mood: "同伴先走了进去",
+        }));
+      }
       return started;
     }
     if (searchFortuneRank || challengeGuardianRank) {

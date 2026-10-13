@@ -36,6 +36,10 @@ export interface SocialLink {
   readonly lastInteractionTick: number;
   /** Tick of the last 搭讪. Passive affinity does not refresh this. */
   readonly lastChatUpTick?: number;
+  /** Positive means the other cultivator owes this one a favor. */
+  readonly favorBalance?: number;
+  /** Set after a city duel. Stays until a later story clears it. */
+  readonly rival?: boolean;
 }
 
 export interface DaoCompanionProposal {
@@ -134,6 +138,15 @@ export const MAX_PARTY_SIZE = 2;
 /** Extra cultivation progress for dual-cultivate */
 export const DUAL_CULTIVATE_BONUS = 4;
 
+/** Spirit stones handed over when answering a help request, if the helper can spare them. */
+export const HELP_STONE_GIFT = 8;
+
+/** How many unanswered help requests one cultivator keeps. */
+export const PENDING_HELP_LIMIT = 4;
+
+/** Notes kept on a location board. */
+export const BOARD_NOTE_LIMIT = 8;
+
 // ---------------------------------------------------------------------------
 // Affinity helpers
 // ---------------------------------------------------------------------------
@@ -191,6 +204,66 @@ export function setBond(
   bond: SpecialBond | null,
 ): SocialLink {
   return { ...link, specialBond: bond };
+}
+
+/** Creditor's favorBalance goes up; the debtor's matching link goes down by the same amount. */
+export function adjustFavor(
+  world: WorldState,
+  creditorId: string,
+  debtorId: string,
+  amount: number,
+): void {
+  const credit = getOrCreateSocialLink(world, creditorId, debtorId);
+  const debt = getOrCreateSocialLink(world, debtorId, creditorId);
+  writeSocialLink(world, creditorId, {
+    ...credit,
+    favorBalance: (credit.favorBalance ?? 0) + amount,
+  });
+  writeSocialLink(world, debtorId, {
+    ...debt,
+    favorBalance: (debt.favorBalance ?? 0) - amount,
+  });
+}
+
+/** Drop one favor the debtor owes the creditor, when one is actually owed. */
+export function forgiveOneFavor(
+  world: WorldState,
+  creditorId: string,
+  debtorId: string,
+): boolean {
+  const credit = getSocialLink(world, creditorId, debtorId);
+  if (!credit || (credit.favorBalance ?? 0) <= 0) {
+    return false;
+  }
+  adjustFavor(world, creditorId, debtorId, -1);
+  return true;
+}
+
+export function markRival(world: WorldState, cultivatorA: string, cultivatorB: string): void {
+  const linkAB = getOrCreateSocialLink(world, cultivatorA, cultivatorB);
+  const linkBA = getOrCreateSocialLink(world, cultivatorB, cultivatorA);
+  writeSocialLink(world, cultivatorA, { ...linkAB, rival: true });
+  writeSocialLink(world, cultivatorB, { ...linkBA, rival: true });
+}
+
+export function describeSocialBond(link: SocialLink): string {
+  const parts: string[] = [];
+  if (link.specialBond) {
+    parts.push(link.specialBond);
+  }
+  if (link.rival) {
+    parts.push("宿敌");
+  }
+  const favor = link.favorBalance ?? 0;
+  if (favor > 0) {
+    parts.push(`对方欠你${favor}份人情`);
+  } else if (favor < 0) {
+    parts.push(`你欠对方${-favor}份人情`);
+  }
+  if (parts.length === 0) {
+    parts.push(getAffinityLevel(link.affinity));
+  }
+  return parts.join("，");
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +370,10 @@ export interface SocialLinkView {
   readonly affinity: number;
   readonly level: AffinityLevel;
   readonly specialBond: SpecialBond | null;
+  readonly favorBalance: number;
+  readonly rival: boolean;
+  /** Short Chinese line an agent can read back to its owner. */
+  readonly bondLine: string;
 }
 
 export function getSocialLinksView(
@@ -306,7 +383,7 @@ export function getSocialLinksView(
   const links = world.socialLinks?.[cultivatorId];
   if (!links) return [];
   return Object.values(links)
-    .filter((link) => link.affinity > 0)
+    .filter((link) => link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)
     .sort((a, b) => b.affinity - a.affinity)
     .map((link) => ({
       targetCultivatorId: link.targetCultivatorId,
@@ -314,6 +391,9 @@ export function getSocialLinksView(
       affinity: link.affinity,
       level: getAffinityLevel(link.affinity),
       specialBond: link.specialBond,
+      favorBalance: link.favorBalance ?? 0,
+      rival: link.rival === true,
+      bondLine: describeSocialBond(link),
     }));
 }
 

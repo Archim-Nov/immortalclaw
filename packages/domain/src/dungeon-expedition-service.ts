@@ -273,8 +273,127 @@ export function buildDungeonExpeditionStateView(
           context: pendingWakeNode.context,
           defaultOptionId: pendingWakeNode.defaultOptionId,
           timeoutTicks: pendingWakeNode.timeoutTicks,
+          options: pendingWakeNode.options.map((option) => ({
+            optionId: option.optionId,
+            label: option.label,
+            description: option.description,
+          })),
         }
       : null,
+  };
+}
+
+const SAFE_WAKE_TOKENS = ["safe", "stable", "avoid", "bank", "retreat", "aid", "share"] as const;
+
+export function isSafeDungeonWakeOption(optionId: string): boolean {
+  return SAFE_WAKE_TOKENS.some((token) => optionId.includes(token));
+}
+
+const MORAL_WAKE_EFFECTS: Record<string, { stoneDelta: number; moralityDelta: number; beat: DungeonBeat }> = {
+  "aid-wounded": {
+    stoneDelta: -6,
+    moralityDelta: 2,
+    beat: {
+      kind: "person",
+      title: "扶起伤者",
+      detail: "岔路里躺着个被阵纹擦伤的人。你把水囊留下，又分了几枚灵石，看他扶着墙往外走。袋子比进来时轻了一点。",
+      mood: "东西少了，人还在",
+    },
+  },
+  "share-water": {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "分了一口水",
+      detail: "你把水囊递过去，喝完又还了回来。谁也没多拿谁的东西。各自点了下头，岔路就在这里分开。",
+      mood: "算是认识了一个人",
+    },
+  },
+  "take-pouch": {
+    stoneDelta: 16,
+    moralityDelta: -3,
+    beat: {
+      kind: "close-call",
+      title: "拿走了袋子",
+      detail: "那人伤得站不稳，袋子就挂在腕上。你拿走了。他没有追，只是看着你走进更暗的那一条。灵石还热着。",
+      mood: "手里有东西，心里不干净",
+    },
+  },
+};
+
+export interface DungeonWakeSettlement {
+  progress: DungeonExpeditionProgress;
+  chosenOptionId: string;
+  stoneDelta: number;
+  moralityDelta: number;
+  beat: DungeonBeat | null;
+}
+
+export function chooseDefaultDungeonWakeOptionId(progress: DungeonExpeditionProgress): string {
+  const node = progress.pendingWakeNode;
+  if (!node) {
+    return "";
+  }
+  const safeOption = node.options.find((option) => isSafeDungeonWakeOption(option.optionId));
+  const riskyOption = node.options.find((option) => !isSafeDungeonWakeOption(option.optionId));
+  if (progress.strategy.posture === "conservative" && progress.strategy.bias === "survival-first") {
+    return safeOption?.optionId ?? node.defaultOptionId;
+  }
+  if (progress.strategy.posture === "aggressive" && progress.strategy.bias === "reward-first") {
+    return riskyOption?.optionId ?? node.defaultOptionId;
+  }
+  return node.defaultOptionId;
+}
+
+export function settleDungeonWakeNode(
+  progress: DungeonExpeditionProgress,
+  chosenOptionId: string,
+): DungeonWakeSettlement {
+  if (!progress.pendingWakeNode) {
+    return {
+      progress,
+      chosenOptionId,
+      stoneDelta: 0,
+      moralityDelta: 0,
+      beat: null,
+    };
+  }
+
+  const moral = MORAL_WAKE_EFFECTS[chosenOptionId] ?? null;
+  const risky = !isSafeDungeonWakeOption(chosenOptionId);
+  const beat: DungeonBeat | null = moral
+    ? moral.beat
+    : risky
+      ? {
+          kind: "close-call",
+          title: "走了短路",
+          detail: "两条路里选了更险的那条。脚步快了，后背也凉了。",
+          mood: "还想再往里",
+        }
+      : {
+          kind: "mood",
+          title: "走了稳路",
+          detail: "岔路选了更稳的一条。慢，可灯还在。",
+          mood: "心里定一点",
+        };
+  const reportStone = moral ? moral.stoneDelta : (risky ? 18 : 0);
+  const reportRealm = moral ? 0 : (risky ? 2 : 0);
+
+  return {
+    chosenOptionId,
+    stoneDelta: moral?.stoneDelta ?? 0,
+    moralityDelta: moral?.moralityDelta ?? 0,
+    beat,
+    progress: {
+      ...progress,
+      spiritStoneGain: progress.spiritStoneGain + reportStone,
+      realmProgressGain: progress.realmProgressGain + reportRealm,
+      beats: [...(progress.beats ?? []), beat].slice(-8),
+      pendingWakeNode: null,
+      pendingWakeNodeDeadlineTick: null,
+      resolvedWakeNodeCount: progress.resolvedWakeNodeCount + 1,
+    },
   };
 }
 
@@ -282,32 +401,7 @@ export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgr
   if (!progress.pendingWakeNode) {
     return progress;
   }
-
-  const safeOption = progress.pendingWakeNode.options.find((option) =>
-    option.optionId.includes("safe")
-    || option.optionId.includes("stable")
-    || option.optionId.includes("avoid")
-    || option.optionId.includes("bank")
-    || option.optionId.includes("retreat"),
-  );
-  const riskyOption = progress.pendingWakeNode.options.find((option) => !safeOption || option.optionId !== safeOption.optionId);
-
-  let chosenOptionId = progress.pendingWakeNode.defaultOptionId;
-  if (progress.strategy.posture === "conservative" && progress.strategy.bias === "survival-first") {
-    chosenOptionId = safeOption?.optionId ?? progress.pendingWakeNode.defaultOptionId;
-  } else if (progress.strategy.posture === "aggressive" && progress.strategy.bias === "reward-first") {
-    chosenOptionId = riskyOption?.optionId ?? progress.pendingWakeNode.defaultOptionId;
-  }
-  const risky = riskyOption?.optionId === chosenOptionId;
-
-  return {
-    ...progress,
-    spiritStoneGain: progress.spiritStoneGain + (risky ? 18 : 0),
-    realmProgressGain: progress.realmProgressGain + (risky ? 2 : 0),
-    pendingWakeNode: null,
-    pendingWakeNodeDeadlineTick: null,
-    resolvedWakeNodeCount: progress.resolvedWakeNodeCount + 1,
-  };
+  return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress)).progress;
 }
 
 export function maybeCreateDungeonWakeNode(input: {
@@ -322,6 +416,32 @@ export function maybeCreateDungeonWakeNode(input: {
   }
 
   const nodeId = `dungeon-wake-${progress.jobId}-${progress.stepIndex}-${progress.wakeNodesEncountered + 1}`;
+  if (progress.stepIndex === 3) {
+    const posture = progress.strategy.posture;
+    return {
+      nodeId,
+      context: "岔路里有个被阵纹擦伤的人，水囊和袋子都在。扶他、分水，或者拿走袋子。",
+      options: [
+        {
+          optionId: "aid-wounded",
+          label: "扶起伤者",
+          description: "留下水囊和几枚灵石，看他往外走。",
+        },
+        {
+          optionId: "share-water",
+          label: "分一口水",
+          description: "把水囊递过去，喝完再还回来。",
+        },
+        {
+          optionId: "take-pouch",
+          label: "拿走袋子",
+          description: "袋子还热着。人伤得追不上。",
+        },
+      ],
+      defaultOptionId: posture === "aggressive" ? "take-pouch" : posture === "balanced" ? "share-water" : "aid-wounded",
+      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
+    };
+  }
   if (DUNGEON_ROUTE_SPLIT_STEPS.has(progress.stepIndex)) {
     return {
       nodeId,
@@ -758,12 +878,14 @@ export function expeditionPressureFor(input: {
   beat: DungeonBeat;
 } {
   const roll = hashString(`${input.seed}:pressure`) % 100;
-  const fork = input.rank === 1 ? rankOneMoralFork(input.policy, input.seed) : null;
-  const beat = fork?.beat ?? beatForRank(input.rank, input.seed);
+  const beat = beatForRank(input.rank, input.seed);
   const rankBump = input.rank >= 7 ? 2 : input.rank >= 4 ? 1 : 0;
   const guardianBump = input.action === "guardian" ? 1 : 0;
-  const stoneDelta = fork?.stoneDelta ?? 0;
-  const moralityDelta = fork?.moralityDelta ?? 0;
+  const aggressiveRankDrain = input.policy === "aggressive" && input.rank >= 4
+    ? (input.rank >= 7 ? 6 : 3)
+    : 0;
+  const stoneDelta = 0;
+  const moralityDelta = 0;
 
   if (input.policy === "conservative") {
     return {
@@ -788,13 +910,13 @@ export function expeditionPressureFor(input: {
     const lowQi = input.qiRatio < 0.6;
     const injured = lowQi || roll < 28;
     return {
-      qiDrain: 4 + rankBump + guardianBump,
+      qiDrain: 4 + rankBump + guardianBump + aggressiveRankDrain,
       spiritualDrain: 3 + guardianBump,
       injuryTicks: injured ? 4 : 0,
       realmProgress: 7 + guardianBump + Math.floor((input.rank - 1) / 3),
       stoneDelta,
       moralityDelta,
-      beat: fork ? beat : injured ? AGGRESSIVE_LOW_QI_BEAT : beat,
+      beat: injured ? AGGRESSIVE_LOW_QI_BEAT : beat,
     };
   }
 
@@ -806,7 +928,7 @@ export function expeditionPressureFor(input: {
     realmProgress: 4 + guardianBump,
     stoneDelta,
     moralityDelta,
-    beat: grazed && !fork
+    beat: grazed
       ? {
           kind: "injury",
           title: "擦伤",

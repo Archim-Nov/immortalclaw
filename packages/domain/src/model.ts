@@ -508,6 +508,19 @@ export const PRODUCTION_QUEUE_MAX_LENGTH = 3;
 
 export type MessageTemplateKind = "greet" | "share-info" | "request-help" | "gift-item";
 
+export interface PendingHelpRequest {
+  readonly id: string;
+  readonly fromCultivatorId: string;
+  readonly tick: number;
+}
+
+export interface LocationBoardNote {
+  readonly authorId: string;
+  readonly authorName: string;
+  readonly tick: number;
+  readonly text: string;
+}
+
 export interface PendingGift {
   readonly messageId: string;
   readonly fromCultivatorId: string;
@@ -704,6 +717,7 @@ export interface DungeonExpeditionStateView {
     context: string;
     defaultOptionId: string;
     timeoutTicks: number;
+    options: WakeNodeOption[];
   } | null;
 }
 
@@ -857,6 +871,9 @@ export type ImmediateActionId =
   | `reject-gift:${string}`
   | `post-commission:${CommissionType}:${string}`
   | `accept-commission:${string}`
+  | `answer-help:${string}`
+  | "post-board-note"
+  | `dungeon-wake-decision:${string}`
   | `bahuang-wake-decision:${string}`;
 
 export type ActionId = TimedActionId | ImmediateActionId;
@@ -1054,6 +1071,10 @@ export interface Cultivator {
     lastTick: number;
   };
   lastSectApplicationTick?: number;
+  /** Help requests waiting on this cultivator. Absent on older saves. */
+  pendingHelpRequests?: PendingHelpRequest[];
+  /** Sect diary chain, 0–2 while climbing, reset after the elder notice. */
+  sectDiaryStep?: number;
 }
 
 export interface CultivationRegistrationResult {
@@ -2163,6 +2184,8 @@ export interface CultivatorStateView {
   productionQueue: readonly { slot: number; recipeId: string; ticksRemaining: number }[];
   pendingGifts: readonly { messageId: string; fromName: string; itemId: ItemId; count: number }[];
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
+  /** Notes other cultivators left at this location. Omitted by older view fixtures. */
+  localBoard?: readonly { authorName: string; tick: number; text: string }[];
   endgame: { guixuCompletedNodeIds: readonly string[]; originHeartAwakened: boolean };
   onboarding: OnboardingProgress;
   decisionPolicy: DecisionPolicyView;
@@ -2220,6 +2243,8 @@ export interface WorldState {
   partyInvitations: Record<string, import("./social.js").PartyInvitation>;
   parties: Record<string, import("./social.js").Party>;
   commissions: Record<string, Commission>;
+  /** Public notes pinned at a location. Absent on worlds saved before deepen v3. */
+  locationBoards?: Record<string, LocationBoardNote[]>;
   nextCultivatorSequence: number;
   nextJobSequence: number;
   nextLogSequence: number;
