@@ -514,11 +514,14 @@ export interface PendingHelpRequest {
   readonly tick: number;
 }
 
+export type BoardNoteKind = "journey" | "favor" | "rival" | "sect";
+
 export interface LocationBoardNote {
   readonly authorId: string;
   readonly authorName: string;
   readonly tick: number;
   readonly text: string;
+  readonly kind?: BoardNoteKind;
 }
 
 export interface PendingGift {
@@ -642,6 +645,8 @@ export interface DungeonExpeditionProgress {
   pendingWakeNode: WakeNode | null;
   pendingWakeNodeDeadlineTick: number | null;
   resolvedWakeNodeCount: number;
+  /** Party partner sharing this run. Absent when nobody came along. */
+  companionId?: string | null;
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -710,6 +715,7 @@ export interface DungeonExpeditionStateView {
     maxSteps: number;
     nextResolutionTick: number;
     remainingTicks: number;
+    companionName?: string | null;
   } | null;
   lastReport: DungeonExpeditionReport | null;
   wakeNodeHint?: {
@@ -873,6 +879,12 @@ export type ImmediateActionId =
   | `accept-commission:${string}`
   | `answer-help:${string}`
   | "post-board-note"
+  | "post-board-note:journey"
+  | "post-board-note:favor"
+  | "post-board-note:rival"
+  | "post-board-note:sect"
+  | `call-favor:${string}`
+  | `press-rival:${string}`
   | `dungeon-wake-decision:${string}`
   | `bahuang-wake-decision:${string}`;
 
@@ -2185,7 +2197,9 @@ export interface CultivatorStateView {
   pendingGifts: readonly { messageId: string; fromName: string; itemId: ItemId; count: number }[];
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
   /** Notes other cultivators left at this location. Omitted by older view fixtures. */
-  localBoard?: readonly { authorName: string; tick: number; text: string }[];
+  localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];
+  /** Set while this cultivator is the idle companion on someone else's dungeon run. */
+  sharedDungeon?: { leaderName: string; rank: number; grade: string } | null;
   endgame: { guixuCompletedNodeIds: readonly string[]; originHeartAwakened: boolean };
   onboarding: OnboardingProgress;
   decisionPolicy: DecisionPolicyView;

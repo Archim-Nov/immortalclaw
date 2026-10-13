@@ -32,6 +32,7 @@ Recent supporting gameplay specs:
 - `docs/specs/playtest-deepen-v1/spec.md`
 - `docs/specs/playtest-deepen-v2/spec.md`
 - `docs/specs/playtest-deepen-v3/spec.md`
+- `docs/specs/playtest-deepen-v4/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`

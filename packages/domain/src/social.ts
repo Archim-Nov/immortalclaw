@@ -40,6 +40,8 @@ export interface SocialLink {
   readonly favorBalance?: number;
   /** Set after a city duel. Stays until a later story clears it. */
   readonly rival?: boolean;
+  /** Tick of the last public rivalry scene. Keeps press-rival from firing every tick. */
+  readonly lastRivalSceneTick?: number;
 }
 
 export interface DaoCompanionProposal {

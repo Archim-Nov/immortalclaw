@@ -264,6 +264,9 @@ export function buildDungeonExpeditionStateView(
           maxSteps: active.maxSteps,
           nextResolutionTick: active.nextResolutionTick,
           remainingTicks: job?.remainingTicks ?? 0,
+          companionName: active.companionId
+            ? (world.cultivators[active.companionId]?.name ?? null)
+            : null,
         }
       : null,
     lastReport,
