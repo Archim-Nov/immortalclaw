@@ -1,4 +1,4 @@
-export type RealmStage = "炼气" | "筑基" | "金丹";
+export type RealmStage = "炼气" | "筑基" | "金丹" | "元婴" | "化神";
 export type RealmPhase = "前期" | "中期" | "后期";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
@@ -617,6 +617,11 @@ export interface DungeonExpeditionProgress {
   unlockedNextRank: boolean;
   lastResolvedAction: "search" | "guardian" | null;
   flavorEventTitles: string[];
+  /** Diary beats gathered during the run. Missing on expeditions saved before deepen v1. */
+  beats?: DungeonBeat[];
+  qiSpent?: number;
+  spiritualPowerSpent?: number;
+  injuryTicksGained?: number;
   wakeNodesEncountered: number;
   maxWakeNodes: number;
   pendingWakeNode: WakeNode | null;
@@ -646,6 +651,36 @@ export interface DungeonExpeditionReport {
   returnLocationId: string;
   summary: string;
   flavorEvents: string[];
+  beats?: DungeonBeat[];
+  qiSpent?: number;
+  spiritualPowerSpent?: number;
+  injuryTicksGained?: number;
+}
+
+export type TravelNoteKind =
+  | "find"
+  | "close-call"
+  | "person"
+  | "injury"
+  | "insight"
+  | "mood"
+  | "breakthrough"
+  | "setback";
+
+export interface TravelNote {
+  tick: number;
+  kind: TravelNoteKind;
+  title: string;
+  detail: string;
+  locationId: string;
+  mood?: string;
+}
+
+export interface DungeonBeat {
+  kind: TravelNoteKind;
+  title: string;
+  detail: string;
+  mood: string;
 }
 
 export interface DungeonExpeditionStateView {
@@ -1008,6 +1043,14 @@ export interface Cultivator {
   mainAttributeGrowth: Record<string, number>;
   fiveElementGrowth: Record<string, number>;
   mainAttributePercentageBonus: number;
+  /** Recent moments an agent can retell. Absent on cultivators saved before deepen v1. */
+  travelNotes?: TravelNote[];
+  actionFatigue?: {
+    key: string;
+    count: number;
+    lastTick: number;
+  };
+  lastSectApplicationTick?: number;
 }
 
 export interface CultivationRegistrationResult {
@@ -2078,6 +2121,10 @@ export interface CultivatorStateView {
   factionReputation: FactionStandingView[];
   recentEvents: WorldEvent[];
   recentCombats: CombatLogEntry[];
+  travelogue: {
+    mood: string;
+    notes: TravelNote[];
+  };
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
   registrationProfile: RegistrationProfileView | null;

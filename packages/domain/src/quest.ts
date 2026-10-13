@@ -263,6 +263,7 @@ export function resolveActiveQuest(
     if (quest.category === "base") {
       cultivator.completedBaseQuests += 1;
     }
+    cultivator.realmProgress = Math.min(100, cultivator.realmProgress + (quest.category === "high-risk" ? 6 : 3));
     if (quest.category === "sect" && quest.reward.contribution > 0) {
       const previousContribution = cultivator.totalContribution;
       cultivator.totalContribution += quest.reward.contribution;

@@ -3361,6 +3361,14 @@ test("city duel actions only include eligible same-location targets", () => {
   const busySummary = createCultivator(world, { name: "Busy Duel Target" });
   const busyTarget = world.cultivators[busySummary.id]!;
   busyTarget.locationId = challenger.locationId;
+  world.jobs["busy-job"] = {
+    id: "busy-job",
+    cultivatorId: busyTarget.id,
+    actionId: "meditate",
+    label: "Meditate",
+    remainingTicks: 4,
+    totalTicks: 4,
+  };
   busyTarget.activeJobId = "busy-job";
 
   const farSummary = createCultivator(world, { name: "Far Duel Target" });

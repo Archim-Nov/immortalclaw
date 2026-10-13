@@ -1,3 +1,4 @@
+import { stampActionRejection } from "../../domain/src/gameplay-error.js";
 import {
   advanceWorld,
   createSeedWorld,
@@ -87,9 +88,13 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
 
   async performAction(cultivatorId: string, actionId: ActionId) {
     const draftWorld = structuredClone(this.world);
-    const result = performAction(draftWorld, cultivatorId, actionId);
-    this.world = hydrateWorldState(toPersistedWorldState(draftWorld));
-    return structuredClone(result);
+    try {
+      const result = performAction(draftWorld, cultivatorId, actionId);
+      this.world = hydrateWorldState(toPersistedWorldState(draftWorld));
+      return structuredClone(result);
+    } catch (error) {
+      throw stampActionRejection(error);
+    }
   }
 
   async advanceWorld(steps: number, trigger: TickRunRecord["trigger"] = "manual"): Promise<TickSummary> {

@@ -17,6 +17,8 @@ const REALM_ORDER: Record<string, number> = {
   "筑基": 1,
   "閲戜腹": 2,
   "金丹": 2,
+  "元婴": 3,
+  "化神": 4,
 };
 
 const MAX_WAKE_NODES = 3;

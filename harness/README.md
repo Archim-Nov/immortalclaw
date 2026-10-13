@@ -20,6 +20,7 @@ Current high-value scenarios:
 - web shell smoke: confirm the Vite/Pages frontend build scaffold and browser entrypoint wiring
 
 The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-action-and-tick.md`.
+Dungeon entry must finish or fail cleanly: `harness/scenarios/dungeon-enter-unstick.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

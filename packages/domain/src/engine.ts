@@ -38,6 +38,8 @@ import {
 } from "./attributes.js";
 import {
   DEFAULT_ACTION_DURATIONS,
+  MAX_ACTIVE_BASE_QUESTS,
+  MAX_ACTIVE_SECT_QUESTS,
   PLAYER_SECT_APPLICATION_TTL,
   PLAYER_SECT_FOUNDING_REPUTATION_COST,
   PLAYER_SECT_FOUNDING_STONE_COST,
@@ -61,7 +63,9 @@ import {
   eventSeverityOf,
   type EventSourceType,
 } from "./events.js";
-import { repairCultivatorRealm } from "./realms.js";
+import { repairCultivatorRealm, realmStageForLevel } from "./realms.js";
+import { GameplayRejection } from "./gameplay-error.js";
+import { describeMood, noteSpam, pushTravelNote, spamRewardMultiplier, travelNote } from "./travelogue.js";
 import {
   getWeaponLoadoutsByFamily,
   getSpellLoadoutsByElement,
@@ -250,6 +254,7 @@ import {
   parseEnterDungeonActionId,
   parseStartDungeonExpeditionActionId,
   recordDungeonExpeditionStep,
+  expeditionPressureFor,
   resolveDungeonWakeNodeByDefault,
   shouldRetreatDungeonExpedition,
   strategyFromPolicy,
@@ -353,6 +358,8 @@ const REALM_ORDER = {
   炼气: 0,
   筑基: 1,
   金丹: 2,
+  元婴: 3,
+  化神: 4,
 } satisfies Record<Cultivator["realm"], number>;
 const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
   "dungeon-c": {
@@ -2475,7 +2482,7 @@ function getRecipeReverseIndex() {
 function getBreakthroughReverseIndex() {
   if (!_breakthroughReverseIndex) {
     const levels: BreakthroughLevelEntry[] = [];
-    for (let level = 1; level <= 8; level++) {
+    for (let level = 1; level <= 14; level++) {
       const def = breakthroughDefinitionOf({ realmLevel: level } as Cultivator);
       if (def) {
         levels.push({
@@ -3415,7 +3422,7 @@ function summarizeItemEffects(
 }
 
 function realmOfLevel(level: number): Cultivator["realm"] {
-  return level <= 3 ? REALM_QI : level <= 6 ? REALM_FOUNDATION : REALM_CORE;
+  return realmStageForLevel(level);
 }
 
 function addRealmProgress(cultivator: Cultivator, amount: number): void {
@@ -3470,6 +3477,42 @@ function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinitio
       return {
         category: "minor", targetRealm: REALM_CORE, targetLevel: 9, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
         genericMaterials: [{ itemId: "moon-glory-jade", count: 1 }, { itemId: "clear-mystic-wood", count: 1 }, { itemId: "chaos-moss", count: 1 }],
+        specialMaterial: { itemId: "dragon-radiance-crystal", count: 1 },
+      };
+    case 9:
+      return {
+        category: "major", targetRealm: "元婴", targetLevel: 10, marketBuyable: false, durationTicks: 8, baseSuccessRate: 40,
+        genericMaterials: [{ itemId: "golden-spirit-flower", count: 2 }, { itemId: "purple-celestial-leaf", count: 1 }, { itemId: "star-fall-sand", count: 1 }],
+        specialMaterial: { itemId: "nine-turn-golden-marrow", count: 1 },
+      };
+    case 10:
+      return {
+        category: "minor", targetRealm: "元婴", targetLevel: 11, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "moon-glory-jade", count: 1 }, { itemId: "clear-mystic-wood", count: 1 }, { itemId: "chaos-moss", count: 1 }],
+        specialMaterial: { itemId: "flowing-aurora-core", count: 1 },
+      };
+    case 11:
+      return {
+        category: "minor", targetRealm: "元婴", targetLevel: 12, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "golden-spirit-flower", count: 1 }, { itemId: "purple-celestial-leaf", count: 1 }, { itemId: "star-fall-sand", count: 1 }],
+        specialMaterial: { itemId: "dragon-radiance-crystal", count: 1 },
+      };
+    case 12:
+      return {
+        category: "major", targetRealm: "化神", targetLevel: 13, marketBuyable: false, durationTicks: 8, baseSuccessRate: 30,
+        genericMaterials: [{ itemId: "moon-glory-jade", count: 2 }, { itemId: "clear-mystic-wood", count: 1 }, { itemId: "chaos-moss", count: 1 }],
+        specialMaterial: { itemId: "nine-turn-golden-marrow", count: 2 },
+      };
+    case 13:
+      return {
+        category: "minor", targetRealm: "化神", targetLevel: 14, marketBuyable: false, durationTicks: 5, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "golden-spirit-flower", count: 2 }, { itemId: "star-fall-sand", count: 1 }, { itemId: "chaos-moss", count: 1 }],
+        specialMaterial: { itemId: "flowing-aurora-core", count: 1 },
+      };
+    case 14:
+      return {
+        category: "minor", targetRealm: "化神", targetLevel: 15, marketBuyable: false, durationTicks: 5, baseSuccessRate: null,
+        genericMaterials: [{ itemId: "purple-celestial-leaf", count: 2 }, { itemId: "moon-glory-jade", count: 1 }, { itemId: "clear-mystic-wood", count: 1 }],
         specialMaterial: { itemId: "dragon-radiance-crystal", count: 1 },
       };
     default:
@@ -3772,6 +3815,39 @@ function resolveDungeonExpeditionStepIfDue(
   resolveEnhancedJob(world, syntheticJob);
   cultivator.activeJobId = outerJobId;
 
+  const pressure = expeditionPressureFor({
+    policy: effectiveProgress.policy,
+    rank: effectiveProgress.targetRank,
+    action: actionKind,
+    seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:${actionKind}`,
+  });
+  cultivator.qi = clamp(cultivator.qi - pressure.qiDrain, 1, cultivator.maxQi);
+  cultivator.spiritualPower = clamp(
+    cultivator.spiritualPower - pressure.spiritualDrain,
+    0,
+    cultivator.maxSpiritualPower,
+  );
+  if (pressure.injuryTicks > 0) {
+    cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, pressure.injuryTicks);
+    syncWounded(cultivator);
+  }
+  addRealmProgress(cultivator, pressure.realmProgress);
+  effectiveProgress = {
+    ...effectiveProgress,
+    beats: [...(effectiveProgress.beats ?? []), pressure.beat].slice(-8),
+    qiSpent: (effectiveProgress.qiSpent ?? 0) + pressure.qiDrain,
+    spiritualPowerSpent: (effectiveProgress.spiritualPowerSpent ?? 0) + pressure.spiritualDrain,
+    injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + pressure.injuryTicks,
+  };
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: pressure.beat.kind,
+    title: pressure.beat.title,
+    detail: pressure.beat.detail,
+    locationId: cultivator.locationId,
+    mood: pressure.beat.mood,
+  }));
+
   const flavorEventTitles = actionKind === "search"
     ? extractDungeonFlavorEventTitles(world.worldEvents, beforeEventCount, actionId)
     : (() => {
@@ -3943,7 +4019,9 @@ function materialSourcesOf(
       channel: "dungeon",
       locationHint: "dungeon-a",
       actionId: null,
-      note: "金丹期突破灵材主要来自甲级地宫高风险探索与守关。",
+      note: realmLevel >= 9
+        ? "元婴与化神的突破灵材不在坊市出售，得到甲级地宫里用更高的姿态去换。"
+        : "金丹期突破灵材主要来自甲级地宫高风险探索与守关。",
     });
   }
 
@@ -4711,6 +4789,39 @@ function buildWildernessView(world: WorldState, cultivator: Cultivator): Cultiva
   };
 }
 
+function reconcileBusyState(world: WorldState): void {
+  const jobByCultivator = new Map<string, ActionJob>();
+  for (const job of Object.values(world.jobs)) {
+    if (!jobByCultivator.has(job.cultivatorId)) {
+      jobByCultivator.set(job.cultivatorId, job);
+    }
+  }
+  for (const cultivator of Object.values(world.cultivators)) {
+    if (cultivator.activeJobId && !world.jobs[cultivator.activeJobId]) {
+      cultivator.activeJobId = null;
+    }
+    if (!cultivator.activeJobId) {
+      const orphan = jobByCultivator.get(cultivator.id);
+      if (orphan) {
+        cultivator.activeJobId = orphan.id;
+      }
+    }
+    const expedition = world.dungeonExpeditions[cultivator.id];
+    if (!expedition) {
+      continue;
+    }
+    const liveJob = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] : null;
+    if (liveJob && liveJob.id === expedition.jobId) {
+      continue;
+    }
+    try {
+      finalizeDungeonExpedition(world, cultivator, expedition, "withdrew");
+    } catch {
+      delete world.dungeonExpeditions[cultivator.id];
+    }
+  }
+}
+
 function ensureOptionalProgressMaps(world: WorldState): void {
   const runtimeWorld = world as WorldState & {
     dungeonExpeditions?: Record<string, unknown>;
@@ -4802,6 +4913,7 @@ function ensureOptionalProgressMaps(world: WorldState): void {
   if (typeof (world as unknown as Record<string, unknown>).nextCommissionSequence !== "number") {
     (world as unknown as Record<string, unknown>).nextCommissionSequence = 1;
   }
+  reconcileBusyState(world);
 }
 
 function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorStateView["guixu"] {
@@ -5013,6 +5125,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     })),
     recentEvents: getRecentWorldEvents(world, cultivatorId, 5),
     recentCombats: getCombatLogs(world, cultivatorId, 4),
+    travelogue: {
+      mood: describeMood(cultivator, Boolean(getActiveDungeonExpedition(world, cultivator.id))),
+      notes: [...(cultivator.travelNotes ?? [])],
+    },
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
     registrationProfile: cultivator.registrationRecord ? buildRegistrationProfile(cultivator.registrationRecord) : null,
@@ -5453,7 +5569,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   const board = getQuestBoard(world, cultivator.locationId);
   if (board) {
+    const baseQuestCount = cultivator.activeQuests.filter((quest) => quest.category === "base").length;
+    const sectQuestCount = cultivator.activeQuests.filter((quest) => quest.category === "sect").length;
     for (const quest of board.quests) {
+      if (quest.category === "base" && baseQuestCount >= MAX_ACTIVE_BASE_QUESTS) {
+        continue;
+      }
+      if (quest.category === "sect" && sectQuestCount >= MAX_ACTIVE_SECT_QUESTS) {
+        continue;
+      }
       actions.push({
         actionId: buildAcceptQuestActionId(quest.type, quest.boardIndex) as ActionId,
         label: `Accept quest: ${quest.nameCn}`,
@@ -5818,6 +5942,10 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       (c) => c.locationId === cultivator.locationId && c.completedAtTick === null && c.acceptedById === null && c.posterId !== cultivator.id,
     );
     for (const commission of localCommissions.slice(0, 3)) {
+      const owned = cultivator.inventory[commission.targetItemId] ?? 0;
+      if (owned < commission.targetCount) {
+        continue;
+      }
       const posterName = world.cultivators[commission.posterId]?.name ?? "unknown";
       actions.push({
         actionId: `accept-commission:${commission.id}` as ActionId,
@@ -5848,7 +5976,11 @@ const SPELL_BRANCH_NAMES_INLINE: Record<string, string> = {
   "earth-wall": "土/岩壁", "earth-suppress": "土/镇岳", "earth-vein": "土/地脉",
 };
 
-function requireIdle(cultivator: Cultivator) { if (cultivator.activeJobId) throw new Error("Cultivator is already executing another action."); }
+function requireIdle(cultivator: Cultivator) {
+  if (cultivator.activeJobId) {
+    throw new GameplayRejection("Cultivator is busy with an active job. Wait until it finishes. If a dungeon expedition is running, abort-dungeon-expedition settles the report and returns you to a safe place.");
+  }
+}
 function isResidenceAction(actionId: ActionId): actionId is ResidenceActionId {
   return actionId.startsWith("residence-") && !actionId.startsWith("residence-produce:") && !actionId.startsWith("residence-heal:") && !actionId.startsWith("residence-recover-qi:");
 }
@@ -6612,7 +6744,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (commission.locationId !== cultivator.locationId) throw new Error("Must be at the same location as the commission.");
     // Check if the acceptor has the required item
     const hasItem = (cultivator.inventory[commission.targetItemId] ?? 0) >= commission.targetCount;
-    if (!hasItem) throw new Error(`Need ${commission.targetCount} ${commission.targetItemId} to fulfill this commission.`);
+    if (!hasItem) {
+      throw new GameplayRejection(`Need ${commission.targetCount} ${commission.targetItemId} to fulfill this commission. It is not listed while you are short.`);
+    }
     // Fulfill immediately: deduct item, pay reward, add affinity
     cultivator.inventory[commission.targetItemId] = (cultivator.inventory[commission.targetItemId] ?? 0) - commission.targetCount;
     cultivator.spiritStones += commission.rewardSpiritStones;
@@ -6885,10 +7019,36 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} socialized at residence.`;
   }
   if (job.actionId === "take-mortal-task") {
-    cultivator.spiritStones += 140 + ((registration?.taskBonus ?? 0) * 10);
-    cultivator.inventory[pickBreakthroughDrop("cloud-heart-grass", `${world.tick}:${job.id}:task-material`)] += 1;
-    addCurrentStateReputation(cultivator, 8 + Math.floor((registration?.taskBonus ?? 0) / 2));
-    return `${cultivator.name} finished a town task.`;
+    const fatigue = noteSpam(cultivator, "take-mortal-task", world.tick);
+    const multiplier = spamRewardMultiplier(fatigue.count);
+    const stoneGain = Math.max(12, Math.floor((140 + ((registration?.taskBonus ?? 0) * 10)) * multiplier));
+    const progressGain = Math.max(fatigue.count >= 5 ? 0 : 1, Math.round(4 * multiplier));
+    cultivator.spiritStones += stoneGain;
+    cultivator.inventory[pickBreakthroughDrop("cloud-heart-grass", `${world.tick}:${job.id}:task-material`)] += fatigue.count >= 4 ? 0 : 1;
+    addCurrentStateReputation(cultivator, Math.max(1, Math.floor((8 + Math.floor((registration?.taskBonus ?? 0) / 2)) * multiplier)));
+    addRealmProgress(cultivator, progressGain);
+    if (fatigue.note) {
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "mood",
+        title: "城里的差事做腻了",
+        detail: fatigue.note,
+        locationId: cultivator.locationId,
+        mood: "想离开主城走走",
+      }));
+    } else if (progressGain > 0) {
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "insight",
+        title: "跑腿里的一点进境",
+        detail: `${cultivator.name}在城里办完一件差事，修为轻轻动了 ${progressGain}。这不是闭关，但总比停在原地强。`,
+        locationId: cultivator.locationId,
+        mood: "还在长，只是很慢",
+      }));
+    }
+    return fatigue.note
+      ? `${cultivator.name} finished a town task, but the same errand is going stale. Cultivation +${progressGain}.`
+      : `${cultivator.name} finished a town task. Cultivation +${progressGain}.`;
   }
   if (job.actionId === "take-neutral-duty") {
     const neutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -7124,6 +7284,15 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           remainingTicks: 4,
           intensity: 1,
         });
+        addRealmProgress(cultivator, 4 + Math.floor(cultivator.realmLevel / 3));
+        pushTravelNote(cultivator, travelNote({
+          tick: world.tick,
+          kind: "find",
+          title: `斗过${enemyDisplayName}`,
+          detail: `${cultivator.name}在荒野里斗过${enemyDisplayName}，身上还留着那一战的气血翻涌，修为也跟着动了一截。`,
+          locationId: cultivator.locationId,
+          mood: "打完还想再找一场",
+        }));
         addCombatLog(world, {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
@@ -7445,12 +7614,51 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
     return `${cultivator.name} fought ${targetName} to a draw.`;
   }
-  if (parseStartDungeonExpeditionActionId(job.actionId)) {
+  if (parseStartDungeonExpeditionActionId(job.actionId) || parseEnterDungeonActionId(job.actionId)) {
     cultivator.activeJobId = null;
-    const report = world.dungeonExpeditionReports[cultivator.id];
+    let report = world.dungeonExpeditionReports[cultivator.id];
     if (!report) {
-      throw new Error("Dungeon expedition completed without a report.");
+      const progress = getActiveDungeonExpedition(world, cultivator.id);
+      if (progress) {
+        report = finalizeDungeonExpedition(world, cultivator, progress, "withdrew");
+      } else {
+        const metadata = dungeonMetadataOf(world.locations[cultivator.locationId]);
+        const returnLocationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
+        cultivator.locationId = returnLocationId;
+        report = {
+          cultivatorId: cultivator.id,
+          grade: metadata?.grade ?? "丙",
+          targetRank: 1,
+          policy: "balanced",
+          outcome: "withdrew",
+          startedAtTick: world.tick,
+          endedAtTick: world.tick,
+          stepsResolved: 0,
+          primaryMaterial: { itemId: metadata?.materialBand ?? "cloud-heart-grass", count: 0 },
+          secondaryDrops: {},
+          spiritStoneGain: 0,
+          realmProgressGain: 0,
+          unlockedNextRank: false,
+          returnLocationId,
+          summary: `${cultivator.name} 被送出地宫。这次远征没有留下完整记录，人已经回到安全的地方。`,
+          flavorEvents: [],
+          beats: [],
+          qiSpent: 0,
+          spiritualPowerSpent: 0,
+          injuryTicksGained: 0,
+        };
+        world.dungeonExpeditionReports[cultivator.id] = report;
+        delete world.dungeonExpeditions[cultivator.id];
+      }
     }
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: report.outcome === "catastrophic" ? "setback" : report.outcome === "completed" ? "find" : "mood",
+      title: "地宫归来",
+      detail: report.summary,
+      locationId: cultivator.locationId,
+      mood: report.outcome === "catastrophic" ? "劫后余生" : report.outcome === "completed" ? "这一趟值得讲" : "人回来了，账也算清了",
+    }));
     return report.summary;
   }
   if (job.actionId === "heal") {
@@ -7715,7 +7923,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   if (actionId.startsWith("queue-production:")) {
     const recipeId = actionId.slice("queue-production:".length);
     if (!isAtResidence(cultivator)) throw new Error("Must be at residence to queue production.");
-    if ((cultivator.productionQueue?.length ?? 0) >= PRODUCTION_QUEUE_MAX_LENGTH) throw new Error("Production queue is full.");
+    if ((cultivator.productionQueue?.length ?? 0) >= PRODUCTION_QUEUE_MAX_LENGTH) throw new GameplayRejection("Production queue is full.");
+    if ((cultivator.productionQueue ?? []).some((entry) => entry.recipeId === recipeId)) {
+      throw new GameplayRejection(`这炉「${recipeId}」已经在排队。同样的方子再排只会空耗灵材，先换个方子，或者去地宫和荒野走走。`);
+    }
     const recipe = RESIDENCE_PRODUCTION_RECIPES.find((r) => r.id === recipeId && r.enabledInLive);
     if (!recipe) throw new Error(`Unknown or disabled recipe: ${recipeId}`);
     if (cultivator.spiritStones < recipe.spiritStoneCost) throw new Error(`Not enough spirit stones. Need ${recipe.spiritStoneCost}.`);
@@ -8158,6 +8369,52 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   return immediateAction(world, cultivator, actionId);
 }
 
+function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown): string {
+  const message = error instanceof Error ? error.message : "Action failed.";
+  const cultivator = world.cultivators[job.cultivatorId];
+  if (!cultivator) {
+    return `Action ended early: ${message}`;
+  }
+  cultivator.activeJobId = null;
+  const progress = world.dungeonExpeditions[cultivator.id];
+  if (progress && progress.jobId === job.id) {
+    try {
+      const report = finalizeDungeonExpedition(world, cultivator, progress, "withdrew");
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "setback",
+        title: "地宫中断",
+        detail: report.summary,
+        locationId: cultivator.locationId,
+        mood: "人出来了，这一趟不算完",
+      }));
+      return report.summary;
+    } catch {
+      delete world.dungeonExpeditions[cultivator.id];
+      cultivator.locationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
+    }
+  }
+  const summary = `${cultivator.name} 的行动提前结束：${message}。人已经空出来，世界仍在往前走。`;
+  addDaoLog(world, cultivator.id, "行动中断", summary, ["action-failed", job.actionId]);
+  addWorldEvent(world, {
+    cultivatorId: cultivator.id,
+    locationId: cultivator.locationId,
+    title: "行动中断",
+    content: summary,
+    severity: "medium",
+    tags: ["action-failed", job.actionId],
+  });
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: "setback",
+    title: "行动中断",
+    detail: summary,
+    locationId: cultivator.locationId,
+    mood: "事情没做成，人还在",
+  }));
+  return summary;
+}
+
 export function advanceWorld(world: WorldState, steps: number): TickSummary {
   ensureOptionalProgressMaps(world);
   const safeSteps = clamp(Math.floor(steps), 1, 200); const completedJobs: TickSummary["completedJobs"] = []; const triggeredEvents: WorldEvent[] = [];
@@ -8254,6 +8511,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       }
     }
     for (const job of Object.values(world.jobs)) {
+      try {
       job.remainingTicks -= 1;
       const combatState = getCombatJobState(job);
       if (combatState && !combatState.resolved) {
@@ -8310,6 +8568,11 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       completedJobs.push({ cultivatorId: job.cultivatorId, actionId: job.actionId, summary });
       addDaoLog(world, job.cultivatorId, "Action Complete", summary, ["action-complete", job.actionId]);
       delete world.jobs[job.id];
+      } catch (error) {
+        const summary = settleFailedTimedJob(world, job, error);
+        completedJobs.push({ cultivatorId: job.cultivatorId, actionId: job.actionId, summary });
+        delete world.jobs[job.id];
+      }
     }
     refreshQuestBoardsIfDue(world);
     updateSectTitlesIfDue(world);
@@ -8613,6 +8876,14 @@ export function applyToPlayerSect(
   if (!policyMatchesCultivator(sect, cultivator)) {
     throw new Error("Cultivator does not satisfy the current sect admission policy.");
   }
+  const SECT_APPLICATION_GAP_TICKS = 12;
+  if (
+    typeof cultivator.lastSectApplicationTick === "number"
+    && world.tick - cultivator.lastSectApplicationTick < SECT_APPLICATION_GAP_TICKS
+  ) {
+    const wait = SECT_APPLICATION_GAP_TICKS - (world.tick - cultivator.lastSectApplicationTick);
+    throw new GameplayRejection(`刚递过入派申请，宗门的人还记得你的脸。再等 ${wait} 个时辰再投别家，或者先去地宫走走。`);
+  }
 
   const applicationId = `sect-application-${world.nextSectApplicationSequence++}`;
   world.pendingSectApplications[applicationId] = {
@@ -8623,6 +8894,7 @@ export function applyToPlayerSect(
     expiresAtTick: world.tick + PLAYER_SECT_APPLICATION_TTL,
   };
   cultivator.pendingSectApplicationId = applicationId;
+  cultivator.lastSectApplicationTick = world.tick;
   notifySectReviewers(world, sect, "新入派申请", `${cultivator.name}提交了加入${sect.name}的申请。`);
   addMessage(world, cultivator.id, sect.name, "申请已提交", `${cultivator.name}提交了加入${sect.name}的申请。`);
   addDaoLog(world, cultivator.id, "Sect Application", `${cultivator.name} applied to ${sect.name}.`, ["sect", "sect-application"]);

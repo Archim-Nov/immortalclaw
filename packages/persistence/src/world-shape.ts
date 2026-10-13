@@ -241,18 +241,26 @@ export function hydrateMigratedP3WorldState(
       typeof cultivator.realmProgress === "number" && Number.isFinite(cultivator.realmProgress)
         ? Math.max(0, Math.min(100, cultivator.realmProgress))
         : 0;
+    cultivator.travelNotes = Array.isArray(cultivator.travelNotes)
+      ? cultivator.travelNotes.filter((note) => note && typeof note.detail === "string").slice(0, 12)
+      : [];
   }
 
   for (const progress of Object.values(copy.dungeonExpeditions)) {
     progress.flavorEventTitles = Array.isArray(progress.flavorEventTitles)
       ? progress.flavorEventTitles.filter((title): title is string => typeof title === "string")
       : [];
+    progress.beats = Array.isArray(progress.beats) ? progress.beats : [];
+    progress.qiSpent = typeof progress.qiSpent === "number" ? progress.qiSpent : 0;
+    progress.spiritualPowerSpent = typeof progress.spiritualPowerSpent === "number" ? progress.spiritualPowerSpent : 0;
+    progress.injuryTicksGained = typeof progress.injuryTicksGained === "number" ? progress.injuryTicksGained : 0;
   }
 
   for (const report of Object.values(copy.dungeonExpeditionReports)) {
     report.flavorEvents = Array.isArray(report.flavorEvents)
       ? report.flavorEvents.filter((title): title is string => typeof title === "string")
       : [];
+    report.beats = Array.isArray(report.beats) ? report.beats : [];
   }
 
   return hydrateWorldState(copy, options);
