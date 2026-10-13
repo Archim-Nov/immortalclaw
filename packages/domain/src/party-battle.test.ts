@@ -373,4 +373,10 @@ test("a gate companion is named in the fight and still has no second job", () =>
   assert.ok(named.includes("墨儿"));
   assert.ok(named.includes(leader.name));
   assert.equal(getCultivatorState(world, mate.id).sharedDungeon, null);
+  const mateReport = getCultivatorState(world, mate.id).dungeonExpedition.lastReport;
+  assert.equal(mateReport?.sharedLeaderId, leader.id);
+  assert.equal(mateReport?.sharedLeaderName, leader.name);
+  assert.deepEqual(mateReport?.combatRounds, report?.combatRounds);
+  assert.match(mateReport?.summary ?? "", /你跟着/);
+  assert.match((mate.travelNotes ?? []).map((note) => note.detail).join("\n"), /主攻|破法|护卫|辅助|控场/);
 });

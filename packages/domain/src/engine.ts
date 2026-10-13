@@ -4063,6 +4063,144 @@ function echoDungeonCompanion(
   }
 }
 
+function spokenClauseFromDetail(detail: string): string | null {
+  const quote = detail.match(/「([^」]{1,40})」/);
+  if (!quote) return null;
+  const speaker = detail.match(/^([\u4e00-\u9fffA-Za-z0-9·]{1,8}?)(?:对|跟|向|在|说|回|传|用)/);
+  return `${speaker?.[1] ?? "有人"}说：「${quote[1]}」`;
+}
+
+function tendClauseFromNote(title: string, detail: string): string | null {
+  if (!title.includes("疗") && !detail.includes("把伤压")) return null;
+  const match = detail.match(/^([\u4e00-\u9fffA-Za-z0-9·]{1,8}?)(?:用了|耗了).*帮([\u4e00-\u9fffA-Za-z0-9·]{1,8}?)把伤压/);
+  if (!match) return null;
+  return `${match[1]}给${match[2]}把伤压了下去。`;
+}
+
+function rememberSharedMoment(
+  world: WorldState,
+  principals: readonly Cultivator[],
+  clause: string,
+  kind: "spoken" | "tended",
+): void {
+  const ids = new Set(principals.map((person) => person.id));
+  for (const progress of Object.values(world.dungeonExpeditions)) {
+    const onRun = ids.has(progress.cultivatorId) || expeditionCompanionIds(progress).some((id) => ids.has(id));
+    if (!onRun) continue;
+    if (kind === "spoken") {
+      const heard = progress.heardLines ?? [];
+      if (heard.length < 2 && !heard.includes(clause)) progress.heardLines = [...heard, clause];
+    } else {
+      const tended = progress.tendedLines ?? [];
+      if (tended.length < 2 && !tended.includes(clause)) progress.tendedLines = [...tended, clause];
+    }
+  }
+}
+
+function echoPartyWitness(
+  world: WorldState,
+  principals: readonly Cultivator[],
+  title: string,
+  detail: string,
+): void {
+  const party = principals.map((person) => getPartyOf(world, person.id)).find((candidate) => candidate !== null);
+  if (!party) return;
+  const principalIds = new Set(principals.map((person) => person.id));
+  const places = new Set(principals.map((person) => person.locationId));
+  for (const memberId of party.memberIds) {
+    if (principalIds.has(memberId)) continue;
+    const witness = world.cultivators[memberId];
+    if (!witness || !places.has(witness.locationId)) continue;
+    pushTravelNote(witness, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title,
+      detail,
+      locationId: witness.locationId,
+      mood: "同队的人听见了",
+    }));
+  }
+}
+
+function shareMoment(
+  world: WorldState,
+  principals: readonly Cultivator[],
+  title: string,
+  detail: string,
+  clause: string,
+  kind: "spoken" | "tended",
+): void {
+  try {
+    echoPartyWitness(world, principals, title, detail);
+    rememberSharedMoment(world, principals, clause, kind);
+  } catch {
+    // A witness note must not roll the action back.
+  }
+}
+
+function seedSharedMoments(world: WorldState, progress: DungeonExpeditionProgress, people: readonly Cultivator[]): void {
+  const since = world.tick - 6;
+  const heard = [...(progress.heardLines ?? [])];
+  const tended = [...(progress.tendedLines ?? [])];
+  for (const person of people) {
+    for (const note of person.travelNotes ?? []) {
+      if (note.tick < since) continue;
+      const spoken = spokenClauseFromDetail(note.detail);
+      if (spoken && heard.length < 2 && !heard.includes(spoken)) heard.push(spoken);
+      const tendedLine = tendClauseFromNote(note.title, note.detail);
+      if (tendedLine && tended.length < 2 && !tended.includes(tendedLine)) tended.push(tendedLine);
+    }
+  }
+  if (heard.length > 0) progress.heardLines = heard;
+  if (tended.length > 0) progress.tendedLines = tended;
+}
+
+function sharedRunRetelling(world: WorldState, leader: Cultivator, progress: DungeonExpeditionProgress): string {
+  const companions = expeditionCompanionIds(progress)
+    .map((id) => world.cultivators[id])
+    .filter((person): person is Cultivator => Boolean(person));
+  const people = [leader, ...companions];
+  const last = progress.combatRounds?.[progress.combatRounds.length - 1];
+  const roles = last && last.party.length > 0
+    ? last.party.map((member) => `${member.name}以${member.roleLabel}`).join("，")
+    : people.map((person) => `${person.name}以${partyRoleForCultivator(person).label}`).join("，");
+  const skillLine = last
+    ? last.party
+      .filter((member) => member.skills.length > 0)
+      .slice(0, 3)
+      .map((member) => `${member.name}使出${member.skills.slice(0, 2).join("、")}`)
+      .join("，")
+    : "";
+  const beat = last?.beats[0] ?? progress.beats?.[progress.beats.length - 1]?.detail ?? "";
+  const wound = last?.wound ?? "";
+  const spoken = (progress.heardLines ?? [])[0] ?? "";
+  const tended = (progress.tendedLines ?? [])[0] ?? "";
+  return [`${roles}。`, skillLine ? `${skillLine}。` : "", beat, wound, spoken, tended].filter(Boolean).join("");
+}
+
+function publishCompanionExpeditionReports(
+  world: WorldState,
+  leader: Cultivator,
+  progress: DungeonExpeditionProgress,
+  report: DungeonExpeditionReport,
+): void {
+  for (const companionId of expeditionCompanionIds(progress)) {
+    if (companionId === leader.id) continue;
+    const companion = world.cultivators[companionId];
+    if (!companion) continue;
+    try {
+      const copy = structuredClone(report);
+      copy.cultivatorId = companion.id;
+      copy.sharedLeaderId = leader.id;
+      copy.sharedLeaderName = leader.name;
+      copy.summary = `你跟着${leader.name}走了这一趟。${report.summary}`;
+      world.dungeonExpeditionReports[companion.id] = copy;
+    } catch {
+      // One companion's report must not drop the leader's.
+    }
+  }
+}
+
 function settleDungeonCompanion(
   world: WorldState,
   leader: Cultivator,
@@ -4071,54 +4209,76 @@ function settleDungeonCompanion(
   returnLocationId: string,
 ): void {
   try {
-    const settling = expeditionCompanionIds(progress)
+    const ids = expeditionCompanionIds(progress);
+    if (ids.length === 0) return;
+    const settling = ids
       .map((companionId) => world.cultivators[companionId])
       .filter((companion): companion is Cultivator => Boolean(
         companion && companion.locationId === progress.locationId && !companion.activeJobId,
       ));
-    if (settling.length === 0) {
-      return;
-    }
-    const eachShare = Math.max(0, Math.floor(progress.spiritStoneGain * 0.2 / settling.length));
-    for (const companion of settling) {
-      try {
-        let detail = `${leader.name}与${companion.name}一起离开了地宫。`;
-        if (outcome === "completed") {
-          const share = Math.min(leader.spiritStones, eachShare);
-          if (share > 0) {
-            leader.spiritStones -= share;
-            companion.spiritStones += share;
+    const retelling = sharedRunRetelling(world, leader, progress);
+    const settledIds = new Set<string>();
+    if (settling.length > 0) {
+      const eachShare = Math.max(0, Math.floor(progress.spiritStoneGain * 0.2 / settling.length));
+      for (const companion of settling) {
+        try {
+          let detail = `${leader.name}与${companion.name}一起离开了地宫。`;
+          if (outcome === "completed") {
+            const share = Math.min(leader.spiritStones, eachShare);
+            if (share > 0) {
+              leader.spiritStones -= share;
+              companion.spiritStones += share;
+            }
+            detail = `${leader.name}与${companion.name}一起出了地宫。收获里分给${companion.name} ${share} 枚灵石。`;
+            addMutualAffinity(world, leader.id, companion.id, 2);
+          } else if (outcome === "withdrew" || outcome === "catastrophic") {
+            const loss = Math.min(companion.spiritStones, Math.max(4, Math.floor((progress.stonesLost ?? 0) * 0.3)));
+            companion.spiritStones -= loss;
+            companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, outcome === "catastrophic" ? 4 : 2);
+            syncWounded(companion);
+            detail = `${leader.name}与${companion.name}一起被拖出地宫。${companion.name}也洒了 ${loss} 枚灵石，身上挂了伤。`;
+          } else {
+            detail = `${leader.name}中止了探索。${companion.name}跟着一起撤出地宫。`;
           }
-          detail = `${leader.name}与${companion.name}一起出了地宫。收获里分给${companion.name} ${share} 枚灵石。`;
-          addMutualAffinity(world, leader.id, companion.id, 2);
-        } else if (outcome === "withdrew" || outcome === "catastrophic") {
-          const loss = Math.min(companion.spiritStones, Math.max(4, Math.floor((progress.stonesLost ?? 0) * 0.3)));
-          companion.spiritStones -= loss;
-          companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, outcome === "catastrophic" ? 4 : 2);
-          syncWounded(companion);
-          detail = `${leader.name}与${companion.name}一起被拖出地宫。${companion.name}也洒了 ${loss} 枚灵石，身上挂了伤。`;
-        } else {
-          detail = `${leader.name}中止了探索。${companion.name}跟着一起撤出地宫。`;
+          detail = `${detail}${retelling}`;
+          companion.locationId = returnLocationId;
+          settledIds.add(companion.id);
+          pushTravelNote(leader, travelNote({
+            tick: world.tick,
+            kind: outcome === "completed" ? "person" : "injury",
+            title: `与${companion.name}一起出了地宫`,
+            detail,
+            locationId: leader.locationId,
+            mood: outcome === "completed" ? "有人分了这一趟" : "两个人都记得为什么疼",
+          }));
+          pushTravelNote(companion, travelNote({
+            tick: world.tick,
+            kind: outcome === "completed" ? "find" : "injury",
+            title: `跟着${leader.name}出了地宫`,
+            detail,
+            locationId: companion.locationId,
+            mood: outcome === "completed" ? "口袋里有同伴分来的石头" : "伤是一起带出来的",
+          }));
+        } catch {
+          // One companion must not roll the leader's exit back.
         }
-        companion.locationId = returnLocationId;
-        pushTravelNote(leader, travelNote({
-          tick: world.tick,
-          kind: outcome === "completed" ? "person" : "injury",
-          title: `与${companion.name}一起出了地宫`,
-          detail,
-          locationId: leader.locationId,
-          mood: outcome === "completed" ? "有人分了这一趟" : "两个人都记得为什么疼",
-        }));
+      }
+    }
+    for (const companionId of ids) {
+      if (settledIds.has(companionId)) continue;
+      const companion = world.cultivators[companionId];
+      if (!companion) continue;
+      try {
         pushTravelNote(companion, travelNote({
           tick: world.tick,
-          kind: outcome === "completed" ? "find" : "injury",
-          title: `跟着${leader.name}出了地宫`,
-          detail,
+          kind: "person",
+          title: `${leader.name}的这一趟`,
+          detail: `你没有留在门口分这一趟的账。${retelling}`,
           locationId: companion.locationId,
-          mood: outcome === "completed" ? "口袋里有同伴分来的石头" : "伤是一起带出来的",
+          mood: "人没在门口，这一趟还是听见了",
         }));
       } catch {
-        // One companion must not roll the leader's exit back.
+        // One absent companion must not drop the others.
       }
     }
   } catch {
@@ -4162,6 +4322,7 @@ function finalizeDungeonExpedition(
   world.dungeonExpeditionReports[cultivator.id] = report;
   delete world.dungeonExpeditions[cultivator.id];
   settleDungeonCompanion(world, cultivator, progress, outcome, returnLocationId);
+  publishCompanionExpeditionReports(world, cultivator, progress, report);
   writeDungeonExpeditionSummaryEvent(world, cultivator.id, returnLocationId, report);
   return report;
 }
@@ -4262,8 +4423,18 @@ function paintDuelFromBattle(state: CombatJobState, battle: PartyBattleResult, p
   state.currentRound = Math.max(1, battle.roundsPlayed);
   state.playerSnapshot = { ...state.playerSnapshot, hp: battle.finalHp[playerId] ?? state.playerSnapshot.hp };
   state.enemySnapshot = { ...state.enemySnapshot, hp: battle.finalHp[enemyId] ?? state.enemySnapshot.hp };
+  const cast = battle.summary.party
+    .map((member) => {
+      const skills = member.skills.filter((name) => name.length > 0).slice(0, 2);
+      return skills.length > 0
+        ? `${member.name}（${member.roleLabel}）使出${skills.join("、")}`
+        : `${member.name}（${member.roleLabel}）`;
+    })
+    .join("，");
   const spoken = battle.summary.highlights.map((line) => line.note).filter((note) => note.includes("使出"));
-  state.duelReport = (spoken.length > 0 ? spoken.slice(0, 3) : battle.summary.beats).join("");
+  const beats = (spoken.length > 0 ? spoken.slice(0, 2) : battle.summary.beats.slice(0, 2)).join("");
+  state.duelReport = `${cast}。${beats}`;
+  state.duelSummary = battle.summary;
   state.duelPractice = Object.fromEntries(battle.practice.map((entry) => [entry.id, entry.skillIds]));
   state.rounds = battle.strikeLog.map((strike, index) => ({
     round: index + 1,
@@ -4438,6 +4609,7 @@ function resolveDungeonExpeditionStepIfDue(
     },
   };
   let expeditionBattle: PartyBattleResult | null = null;
+  const battleAllyIds: string[] = [];
   if (actionKind === "guardian") {
     const expedGuardianSeed = hashString(`${world.tick}:${cultivator.id}:expedition-guardian:${effectiveProgress.grade}:${effectiveProgress.targetRank}`);
     const expedGuardianEncounter = resolveGuardianEncounterTemplate(expedGuardianSeed);
@@ -4456,6 +4628,7 @@ function resolveDungeonExpeditionStepIfDue(
         const companion = world.cultivators[companionId];
         if (!companion || companion.locationId !== cultivator.locationId || companion.activeJobId) continue;
         allies.push(battleCombatantFromCultivator(companion));
+        battleAllyIds.push(companion.id);
       }
       const template = expedGuardianEncounter.template;
       const cfg = expedGuardianEncounter.enemyConfigId ? getEnemyConfig(expedGuardianEncounter.enemyConfigId) : null;
@@ -4594,15 +4767,24 @@ function resolveDungeonExpeditionStepIfDue(
     injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + injuryTicks,
   };
   const told = fightBeats.length > 0 ? fightBeats : [pressure.beat];
-  for (const beat of told.slice(0, 3)) {
-    pushTravelNote(cultivator, travelNote({
-      tick: world.tick,
-      kind: beat.kind,
-      title: beat.title,
-      detail: beat.detail,
-      locationId: cultivator.locationId,
-      mood: beat.mood,
-    }));
+  const beatAudience = [cultivator];
+  if (expeditionBattle) {
+    for (const companionId of battleAllyIds) {
+      const companion = world.cultivators[companionId];
+      if (companion && companion.id !== cultivator.id) beatAudience.push(companion);
+    }
+  }
+  for (const person of beatAudience) {
+    for (const beat of told.slice(0, 3)) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: beat.kind,
+        title: beat.title,
+        detail: beat.detail,
+        locationId: person.locationId,
+        mood: beat.mood,
+      }));
+    }
   }
   if (expeditionBattle?.summary.wound) {
     const woundDetail = expeditionBattle.summary.wound;
@@ -5980,6 +6162,9 @@ function sharedDungeonOf(world: WorldState, cultivatorId: string): CultivatorSta
       locationName,
       stayPut: true,
       shareNote: `你跟着${leaderName}下了${progress.targetRank}阶。自己没有开工。人在开跑时就算进这一趟，中途离开门口不会被悄悄抹掉，回来还能接着打。要退出用 leave-shared-expedition。出来时还在地宫里的人，会分到灵石，也会分到伤。`,
+      ...(progress.combatRounds && progress.combatRounds.length > 0
+        ? { combatRounds: progress.combatRounds }
+        : {}),
     };
   }
   return null;
@@ -7860,6 +8045,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       locationId: target.locationId,
       mood: "有人找上门说话",
     }));
+    shareMoment(
+      world,
+      [cultivator, target],
+      `${cultivator.name}过来攀谈`,
+      chatDetail,
+      `${cultivator.name}说：「${spoken}」`,
+      "spoken",
+    );
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} chatted up ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
   }
 
@@ -8343,6 +8536,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: rival ? "宿敌也伸了手" : "伤轻了一点",
       }));
     }
+    shareMoment(
+      world,
+      [cultivator, target],
+      `${cultivator.name}给${target.name}疗了伤`,
+      detail,
+      `${cultivator.name}给${target.name}把伤压了下去。`,
+      "tended",
+    );
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
@@ -8373,6 +8574,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: "话留在了耳朵里",
       }));
     }
+    shareMoment(world, [cultivator, target], `${cultivator.name}说了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} said a line to ${target.name}.` };
   }
 
@@ -8394,6 +8596,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: "话接上了",
       }));
     }
+    shareMoment(world, [cultivator, target], `${cultivator.name}回了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} replied to ${target.name}.` };
   }
 
@@ -8453,6 +8656,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         locationId: target.locationId,
         mood: line.mood,
       }));
+      shareMoment(world, [cultivator, target], line.title, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}.` };
     }
     if (cultivator.locationId !== target.locationId) throw new Error("send-message requires same location.");
@@ -8491,6 +8695,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         locationId: target.locationId,
         mood: "手里多了别人的东西",
       }));
+      shareMoment(
+        world,
+        [cultivator, target],
+        `${cultivator.name}递来一份礼`,
+        `${cultivator.name}把1个${giftName}塞给${target.name}，说：「${giftSpoken}」`,
+        `${cultivator.name}说：「${giftSpoken}」`,
+        "spoken",
+      );
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} gifted 1 ${giftItemId} to ${target.name}. Affinity +15.` };
     }
     // Non-gift message: greet / share-info / request-help
@@ -8552,6 +8764,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         locationId: target.locationId,
         mood: "有人找上门了",
       }));
+      shareMoment(world, [cultivator, target], note.title, `${note.detail}${said}`, `${cultivator.name}说：「${spoken}」`, "spoken");
     }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}. Affinity +3.` };
   }
@@ -9723,6 +9936,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         summary,
         encounterTemplateId: pvpEncounterBuildId,
         encounterBuildId: pvpEncounterBuildId,
+        combatRounds: combatState.duelSummary ? [combatState.duelSummary] : undefined,
         totalRounds,
         rounds: combatState.rounds,
         playerSnapshot: isPlayerPerspective ? combatState.initialPlayerSnapshot : combatState.initialEnemySnapshot,
@@ -9771,6 +9985,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         locationId: target.locationId,
         mood: "城里过了一手",
       }));
+      echoPartyWitness(world, [cultivator, target], `听见${cultivator.name}与${targetName}切磋`, report);
       const practice = combatState.duelPractice ?? {};
       const longFight = combatState.rounds.length >= 5;
       grantCombatPractice(cultivator, practice[cultivator.id] ?? [], outcome === "victory" && longFight ? 2 : 1);
@@ -10539,6 +10754,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         expeditionProgress.companionId = sharing[0]!.id;
       }
       world.dungeonExpeditions[cultivator.id] = expeditionProgress;
+      if (sharing.length > 0) {
+        seedSharedMoments(world, expeditionProgress, [cultivator, ...sharing]);
+      }
       if (atGate.length > 0) {
         const placeName = location.name;
         const sharingNames = sharing.map((member) => member.name).join("、");

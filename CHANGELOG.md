@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 同伴也能读到的战报 / Companion combat rounds
+
+同队下地宫结束以后，每个还在这一趟上的同伴自己的 `dungeonExpedition.lastReport.combatRounds` 与队长相同，写明敌人、胜负、站位和招式名。`sharedLeaderId` 是队长。摘要以「你跟着某走了这一趟」起头。跑着的时候，`sharedDungeon.combatRounds` 是已经打过的几场。收队的见闻仍写分灵石、被拖出去或中止，后面补上谁以什么站位上场、使出了哪一式、门口或途中的一句「」，以及谁把伤压下去。中途离开门口、没有 `leave-shared-expedition` 的人也会拿到这份战报，只是账没有分到身上。
+
+城里切磋的同一份具名战报写进双方 `recentCombats[].combatRounds`。同队、同地的人游记里也能看到这句切磋。
+
+After a shared dungeon, each companion still on the run has the leader's `combatRounds` on their own `lastReport`, including `sharedLeaderId`. The closing travel note names roles, one skill, a spoken line, and a tended wound when those happened. A city duel stores that fight on both `recentCombats[].combatRounds`.
+
 ### 口头的一句 / A spoken line
 
 搭讪、赠礼、问候、分享见闻、求助，以及门口会合、可以下了、先等一等，都会带上一句说话人自己的话。`POST /agent/act` 和 `POST /cultivator/act` 可以在 body 里加 `line`，最多四十字；不写就由世界代说一句，下一回会换。这句话写进对方消息的 `spokenLine`，也写进双方游记的「」。

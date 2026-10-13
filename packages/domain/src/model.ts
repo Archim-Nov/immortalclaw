@@ -694,6 +694,10 @@ export interface DungeonExpeditionProgress {
   companionIds?: string[];
   /** Compact fight logs from guardian steps. Missing on expeditions saved before turn combat. */
   combatRounds?: DungeonCombatSummary[];
+  /** Spoken clauses heard on this shared run. Absent on older expeditions. */
+  heardLines?: string[];
+  /** Wound-tending clauses from this shared run. Absent on older expeditions. */
+  tendedLines?: string[];
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -725,6 +729,10 @@ export interface DungeonExpeditionReport {
   stonesLost?: number;
   /** Guardian fights from this run, newest last, at most three. */
   combatRounds?: DungeonCombatSummary[];
+  /** Set on a companion's copy of someone else's run. The leader's own report omits this. */
+  sharedLeaderId?: string;
+  /** Display name for sharedLeaderId. */
+  sharedLeaderName?: string;
 }
 
 export type TravelNoteKind =
@@ -1712,6 +1720,8 @@ export interface CombatJobState {
   pvpBattleKind?: PvpBattleKind;
   /** Readable city-duel beats. Absent on older combat jobs. */
   duelReport?: string;
+  /** Named skill fight from a city duel. Absent on older combat jobs. */
+  duelSummary?: DungeonCombatSummary;
   /** Set when a city duel times out with both sides still standing close. */
   duelDraw?: boolean;
   /** Skill ids cast in a city duel, keyed by cultivator id. */
@@ -1759,6 +1769,8 @@ export interface CombatLogEntry {
   pvpBattleKind?: PvpBattleKind;
   totalRounds?: number;
   rounds?: CombatRoundLog[];
+  /** Named skill fights. A city duel stores the one shared summary on both sides. */
+  combatRounds?: DungeonCombatSummary[];
   playerSnapshot?: CombatSnapshot;
   enemySnapshot?: CombatSnapshot;
   retreated?: boolean;
@@ -2356,6 +2368,8 @@ export interface CultivatorStateView {
     locationName: string;
     stayPut: boolean;
     shareNote: string;
+    /** Fights so far on the leader's run. The finished copy lives on lastReport.combatRounds. */
+    combatRounds?: DungeonCombatSummary[];
   } | null;
   endgame: { guixuCompletedNodeIds: readonly string[]; originHeartAwakened: boolean };
   onboarding: OnboardingProgress;
