@@ -254,6 +254,7 @@ export function hydrateMigratedP3WorldState(
     progress.qiSpent = typeof progress.qiSpent === "number" ? progress.qiSpent : 0;
     progress.spiritualPowerSpent = typeof progress.spiritualPowerSpent === "number" ? progress.spiritualPowerSpent : 0;
     progress.injuryTicksGained = typeof progress.injuryTicksGained === "number" ? progress.injuryTicksGained : 0;
+    progress.stonesLost = typeof progress.stonesLost === "number" ? progress.stonesLost : 0;
   }
 
   for (const report of Object.values(copy.dungeonExpeditionReports)) {

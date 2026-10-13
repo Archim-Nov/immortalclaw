@@ -65,7 +65,7 @@ import {
 } from "./events.js";
 import { repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import { GameplayRejection } from "./gameplay-error.js";
-import { describeMood, noteSpam, pushTravelNote, spamRewardMultiplier, travelNote } from "./travelogue.js";
+import { describeMood, noteSpam, pushTravelNote, settledMoment, spamRewardMultiplier, travelNote } from "./travelogue.js";
 import {
   getWeaponLoadoutsByFamily,
   getSpellLoadoutsByElement,
@@ -187,6 +187,7 @@ import {
   type AffinityLevel,
   type SocialLink,
   AFFINITY_GAINS,
+  CHAT_UP_COOLDOWN_TICKS,
   AFFINITY_THRESHOLDS,
   CO_LOCATION_AFFINITY_INTERVAL,
   DAO_COMPANION_MIN_LEVEL,
@@ -249,7 +250,7 @@ import {
   DUNGEON_EXPEDITION_STEP_TICKS,
   getActiveDungeonExpedition,
   isAbortDungeonExpeditionAction,
-  isDungeonExpeditionCatastrophic,
+  dangerousDungeonExit,
   maybeCreateDungeonWakeNode,
   parseEnterDungeonActionId,
   parseStartDungeonExpeditionActionId,
@@ -3429,6 +3430,45 @@ function addRealmProgress(cultivator: Cultivator, amount: number): void {
   cultivator.realmProgress = clamp(cultivator.realmProgress + amount, 0, BREAKTHROUGH_PROGRESS_REQUIRED);
 }
 
+function rememberSettledMoment(world: WorldState, cultivator: Cultivator, actionKey: string): void {
+  const moment = settledMoment(actionKey, hashString(`${world.tick}:${cultivator.id}:${actionKey}`));
+  if (!moment) {
+    return;
+  }
+  pushTravelNote(cultivator, {
+    ...moment,
+    tick: world.tick,
+    locationId: cultivator.locationId,
+  });
+}
+
+function noteCultivationMark(world: WorldState, cultivator: Cultivator, before: number): void {
+  const location = world.locations[cultivator.locationId];
+  if (location && isDungeonNode(location.nodeType)) {
+    return;
+  }
+  const marks = [25, 50, 75, 100] as const;
+  const crossed = marks.find((mark) => before < mark && cultivator.realmProgress >= mark);
+  if (crossed === undefined) {
+    return;
+  }
+  const title = crossed === 100
+    ? "修为顶在门槛上"
+    : crossed >= 75
+      ? "门槛近了"
+      : crossed >= 50
+        ? "进度过半"
+        : "修为刚有了影";
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: crossed === 100 ? "breakthrough" : "insight",
+    title,
+    detail: `${cultivator.name}感到境界进度到了 ${crossed}。还没破境，但这已经是能写进日记的一步。`,
+    locationId: cultivator.locationId,
+    mood: crossed >= 100 ? "想破境" : "还在长",
+  }));
+}
+
 function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinition | null {
   switch (cultivator.realmLevel) {
     case 1:
@@ -3815,12 +3855,20 @@ function resolveDungeonExpeditionStepIfDue(
   resolveEnhancedJob(world, syntheticJob);
   cultivator.activeJobId = outerJobId;
 
+  const qiRatioBefore = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
   const pressure = expeditionPressureFor({
     policy: effectiveProgress.policy,
     rank: effectiveProgress.targetRank,
     action: actionKind,
     seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:${actionKind}`,
+    qiRatio: qiRatioBefore,
   });
+  if (pressure.stoneDelta !== 0) {
+    cultivator.spiritStones = Math.max(0, cultivator.spiritStones + pressure.stoneDelta);
+  }
+  if (pressure.moralityDelta !== 0) {
+    applyMoralityDelta(world, cultivator, pressure.moralityDelta, "dungeon-encounter");
+  }
   cultivator.qi = clamp(cultivator.qi - pressure.qiDrain, 1, cultivator.maxQi);
   cultivator.spiritualPower = clamp(
     cultivator.spiritualPower - pressure.spiritualDrain,
@@ -3889,8 +3937,37 @@ function resolveDungeonExpeditionStepIfDue(
     flavorEventTitles,
   });
 
-  if (isDungeonExpeditionCatastrophic(cultivator)) {
-    finalizeDungeonExpedition(world, cultivator, updatedProgress, "catastrophic");
+  const danger = dangerousDungeonExit({
+    policy: updatedProgress.policy,
+    qi: cultivator.qi,
+    maxQi: cultivator.maxQi,
+    spiritualPower: cultivator.spiritualPower,
+    maxSpiritualPower: cultivator.maxSpiritualPower,
+    injuryTicks: cultivator.injuryTicksRemaining,
+    rank: updatedProgress.targetRank,
+    spiritStones: cultivator.spiritStones,
+  });
+  if (danger) {
+    cultivator.spiritStones = Math.max(0, cultivator.spiritStones - danger.stoneLoss);
+    if (danger.injuryTicks > 0) {
+      cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, danger.injuryTicks);
+      syncWounded(cultivator);
+    }
+    const collapsed = {
+      ...updatedProgress,
+      stonesLost: (updatedProgress.stonesLost ?? 0) + danger.stoneLoss,
+      injuryTicksGained: (updatedProgress.injuryTicksGained ?? 0) + danger.injuryTicks,
+      beats: [...(updatedProgress.beats ?? []), danger.beat].slice(-8),
+    };
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: danger.beat.kind,
+      title: danger.beat.title,
+      detail: danger.beat.detail,
+      locationId: cultivator.locationId,
+      mood: danger.beat.mood,
+    }));
+    finalizeDungeonExpedition(world, cultivator, collapsed, danger.outcome);
     job.remainingTicks = 0;
     return;
   }
@@ -5757,14 +5834,18 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       const chatTarget = pickChatUpTarget(world, cultivator.id, `${world.tick}:${cultivator.id}:chat-up`);
       if (chatTarget) {
         const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
-        const levelLabel = existingLink ? getAffinityLevel(existingLink.affinity) : "陌生人";
-        actions.push({
-          actionId: `chat-up:${chatTarget.id}` as ActionId,
-          label: `搭讪：${chatTarget.name}（${levelLabel}）`,
-          description: `与${chatTarget.name}攀谈，增进好感度。`,
-          durationTicks: 0,
-          kind: "immediate",
-        });
+        const onCooldown = existingLink?.lastChatUpTick !== undefined
+          && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS;
+        if (!onCooldown) {
+          const levelLabel = existingLink ? getAffinityLevel(existingLink.affinity) : "陌生人";
+          actions.push({
+            actionId: `chat-up:${chatTarget.id}` as ActionId,
+            label: `搭讪：${chatTarget.name}（${levelLabel}）`,
+            description: `与${chatTarget.name}攀谈，增进好感度。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
       }
     }
     // 传音: send voice message to any 朋友+ level friend, from anywhere
@@ -6462,10 +6543,29 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const target = getCultivatorOrThrow(world, chatUpTargetId);
     if (cultivator.locationId !== target.locationId) throw new Error("搭讪 requires being at the same location.");
     if (cultivator.id === target.id) throw new Error("Cannot chat up yourself.");
+    const existingLink = getSocialLink(world, cultivator.id, target.id);
+    if (existingLink?.lastChatUpTick !== undefined && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS) {
+      const wait = CHAT_UP_COOLDOWN_TICKS - (world.tick - existingLink.lastChatUpTick);
+      throw new GameplayRejection(`刚与${target.name}说过话，再过 ${wait} 刻。同一句话重复多了，情分涨得很慢。`);
+    }
     const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.chatUp);
+    const stamped = { ...linkAB, lastChatUpTick: world.tick };
+    writeSocialLink(world, cultivator.id, stamped);
+    const reverse = getSocialLink(world, target.id, cultivator.id);
+    if (reverse) {
+      writeSocialLink(world, target.id, { ...reverse, lastChatUpTick: world.tick });
+    }
     const level = getAffinityLevel(linkAB.affinity);
     addDaoLog(world, cultivator.id, "搭讪", `${cultivator.name}与${target.name}攀谈，好感度上升至${linkAB.affinity}（${level}）。`, ["social", "chat-up"]);
     addMessage(world, target.id, "社交", "有人搭讪", `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "某处"}向你搭话。`, { fromCultivatorId: cultivator.id });
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `与${target.name}说上了话`,
+      detail: `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "城里"}跟${target.name}攀谈，关系到了${level}。`,
+      locationId: cultivator.locationId,
+      mood: level === "认识" ? "多了一个能说话的人" : "这人渐渐熟了",
+    }));
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} chatted up ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
   }
 
@@ -6782,6 +6882,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       `${world.tick}:${cultivator.id}:${job.id}:arrival`,
     );
     addDaoLog(world, cultivator.id, "Travel", `${cultivator.name} traveled to ${destination.name}.`, ["travel"]);
+    rememberSettledMoment(world, cultivator, "travel");
     return `${cultivator.name} arrived at ${destination.name}.`;
   }
   if (questAction?.phase === "execute" && activeQuestId) {
@@ -6860,6 +6961,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       0,
       cultivator.maxSpiritualPower,
     );
+    rememberSettledMoment(world, cultivator, "meditate");
     return `${cultivator.name} recovered spiritual power.`;
   }
   if (job.actionId === "heal") {
@@ -6871,9 +6973,11 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned");
     upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 });
     syncWounded(cultivator);
+    rememberSettledMoment(world, cultivator, "heal");
     return `${cultivator.name} recovered from injuries.`;
   }
   if (job.actionId === "cultivate") {
+    const progressBefore = cultivator.realmProgress;
     addRealmProgress(
       cultivator,
       18 +
@@ -6883,6 +6987,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
         (registration?.cultivateBonus ?? 0) -
         (hasEffect(cultivator, "poisoned") ? 8 : 0),
     );
+    noteCultivationMark(world, cultivator, progressBefore);
+    rememberSettledMoment(world, cultivator, "cultivate");
     return `${cultivator.name} gained cultivation progress.`;
   }
   if (job.actionId === "residence-meditate") {
@@ -6897,7 +7003,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       (hashString(`${world.tick}:${job.id}:residence-meditate`) % (fallback ? 3 : 5)) +
       (hasEffect(cultivator, "clear-mind") ? 4 : 0) +
       (registration?.cultivateBonus ?? 0);
+    const progressBefore = cultivator.realmProgress;
     addRealmProgress(cultivator, gain);
+    noteCultivationMark(world, cultivator, progressBefore);
     const roll = hashString(`${world.tick}:${job.id}:residence-meditate:roll`) % 100;
     if (roll < (fallback ? 5 : 15)) {
       upsertEffect(cultivator, {
@@ -6926,6 +7034,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       ["cultivation", "residence"],
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
+    rememberSettledMoment(world, cultivator, "cultivate");
     return `${cultivator.name} completed residence meditation.`;
   }
   if (job.actionId === "residence-heal") {
@@ -7019,6 +7128,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} socialized at residence.`;
   }
   if (job.actionId === "take-mortal-task") {
+    const progressBefore = cultivator.realmProgress;
     const fatigue = noteSpam(cultivator, "take-mortal-task", world.tick);
     const multiplier = spamRewardMultiplier(fatigue.count);
     const stoneGain = Math.max(12, Math.floor((140 + ((registration?.taskBonus ?? 0) * 10)) * multiplier));
@@ -7027,6 +7137,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.inventory[pickBreakthroughDrop("cloud-heart-grass", `${world.tick}:${job.id}:task-material`)] += fatigue.count >= 4 ? 0 : 1;
     addCurrentStateReputation(cultivator, Math.max(1, Math.floor((8 + Math.floor((registration?.taskBonus ?? 0) / 2)) * multiplier)));
     addRealmProgress(cultivator, progressGain);
+    noteCultivationMark(world, cultivator, progressBefore);
     if (fatigue.note) {
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
@@ -7170,6 +7281,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       );
       syncWounded(cultivator);
     }
+    rememberSettledMoment(world, cultivator, "mine");
     return `${cultivator.name} mined stones and ore.`;
   }
   const fallbackSearchFortuneRank = parseSearchFortuneRank(job.actionId);
@@ -7679,7 +7791,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       (registration?.cultivateBonus ?? 0) -
       (hasEffect(cultivator, "poisoned") ? 8 : 0) -
       (hasEffect(cultivator, "deviation") ? 12 : 0);
+    const progressBefore = cultivator.realmProgress;
     addRealmProgress(cultivator, gain);
+    noteCultivationMark(world, cultivator, progressBefore);
+    rememberSettledMoment(world, cultivator, "cultivate");
     if (cultivateRoll % 7 === 0) {
       upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "cultivation", remainingTicks: 4, intensity: 1 });
       addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Closed-Door Insight", content: "The retreat produced a sudden insight into the path ahead.", severity: "medium", tags: ["event", "retreat", "insight"] });

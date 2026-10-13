@@ -107,5 +107,55 @@ export function buildDungeonCEventPack(location: Location): EventTemplate[] {
         spiritStones: 8 + rank * 2,
       },
     }),
+    ...(rank === 1
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-1-wounded-scavenger",
+            semanticType: "human",
+            resultType: "story",
+            nameSuffix: "Rank 1 Wounded Scavenger",
+            nameCnSuffix: "第一层伤者",
+            description: `第一层的石阶上坐着个采药人，袖口是破的。他不拦路，只问你是把水留下，还是把路让开。`,
+            baseWeight: 0.9,
+            dungeonGrade: "丙",
+            minDungeonRank: 1,
+            maxDungeonRank: 1,
+            effects: {
+              statusEffects: [{ effectId: "clear-mind", ticks: 2 }],
+            },
+          }),
+          buildNodeEvent(location, {
+            idSuffix: "rank-1-loose-brick",
+            semanticType: "fortune",
+            resultType: "resource",
+            nameSuffix: "Rank 1 Loose Brick",
+            nameCnSuffix: "第一层松砖",
+            description: `一块松动的地砖下压着半袋碎灵石，和一张画到入口就停笔的地图。`,
+            baseWeight: 0.85,
+            dungeonGrade: "丙",
+            minDungeonRank: 1,
+            maxDungeonRank: 1,
+            effects: {
+              spiritStones: 22,
+              itemRewards: [{ itemId: "ruin-fragment" as ItemId, count: 1 }],
+            },
+          }),
+          buildNodeEvent(location, {
+            idSuffix: "rank-1-parting-words",
+            semanticType: "human",
+            resultType: "story",
+            nameSuffix: "Rank 1 Parting Words",
+            nameCnSuffix: "第一层临别",
+            description: `一个往外走的散修停下来，说里面的东西不值这条命。说完就把灯偏向你这边，自己走了。`,
+            baseWeight: 0.8,
+            dungeonGrade: "丙",
+            minDungeonRank: 1,
+            maxDungeonRank: 1,
+            effects: {
+              reputationChange: 1,
+            },
+          }),
+        ]
+      : []),
   ]);
 }

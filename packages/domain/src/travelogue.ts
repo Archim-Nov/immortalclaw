@@ -62,6 +62,100 @@ export function describeMood(cultivator: Cultivator, inDungeon: boolean): string
   return cultivator.travelNotes?.[0]?.mood ?? "心境平稳";
 }
 
+const SETTLED_MOMENTS: Record<string, readonly TravelNote[]> = {
+  meditate: [
+    {
+      tick: 0,
+      kind: "mood",
+      title: "调息",
+      detail: "找了处背风的地方把气沉下去。没有突破，只是胸口那点乱慢慢平了。",
+      locationId: "",
+      mood: "呼吸长了一点",
+    },
+    {
+      tick: 0,
+      kind: "insight",
+      title: "静坐里的杂念",
+      detail: "本来想炼气，脑子里先过了一遍今天见过的人。收功时才发现灵力比坐下时厚了一丝。",
+      locationId: "",
+      mood: "心还没静透，气倒是顺了",
+    },
+  ],
+  cultivate: [
+    {
+      tick: 0,
+      kind: "insight",
+      title: "周天转完",
+      detail: "功法走完一个周天，丹田发热。离破境还远，可进度不再是零。",
+      locationId: "",
+      mood: "还在长",
+    },
+    {
+      tick: 0,
+      kind: "mood",
+      title: "闭关到一半走神",
+      detail: "运转到中段时想起城门口的灯火。走神了一息，又把气拉回来。",
+      locationId: "",
+      mood: "想出去看看，又舍不得这点进境",
+    },
+  ],
+  heal: [
+    {
+      tick: 0,
+      kind: "injury",
+      title: "把伤口重新包上",
+      detail: "药味压过了血腥。伤还在，至少走路不再一抽一抽地疼。",
+      locationId: "",
+      mood: "能走了",
+    },
+  ],
+  travel: [
+    {
+      tick: 0,
+      kind: "mood",
+      title: "到了一处新地方",
+      detail: "路走到头，风和上一站不一样。先站了一会儿，才去看这地方有什么可做的。",
+      locationId: "",
+      mood: "脚还热着",
+    },
+    {
+      tick: 0,
+      kind: "person",
+      title: "路上擦肩",
+      detail: "进城的人很多，有一个跟你对视了一眼，又各自走了。名字都没问。",
+      locationId: "",
+      mood: "人来人往，自己也是其中一个",
+    },
+  ],
+  mine: [
+    {
+      tick: 0,
+      kind: "find",
+      title: "矿脉里的一下",
+      detail: "镐尖磕开一块温热的矿。灵石进了袋，手也震得发麻。",
+      locationId: "",
+      mood: "累，但袋子沉了",
+    },
+    {
+      tick: 0,
+      kind: "close-call",
+      title: "矿洞落石",
+      detail: "头顶碎石掉了一阵。人躲开了，袖子上全是灰。",
+      locationId: "",
+      mood: "还想再挖一会儿，也想出去",
+    },
+  ],
+};
+
+export function settledMoment(actionKey: string, seed: number): TravelNote | null {
+  const pool = SETTLED_MOMENTS[actionKey];
+  if (!pool || pool.length === 0) {
+    return null;
+  }
+  const picked = pool[Math.abs(seed) % pool.length]!;
+  return { ...picked };
+}
+
 export function travelNote(input: {
   tick: number;
   kind: TravelNoteKind;

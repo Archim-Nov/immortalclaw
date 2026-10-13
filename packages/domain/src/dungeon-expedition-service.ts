@@ -204,6 +204,7 @@ export function createDungeonExpeditionProgress(input: {
     qiSpent: 0,
     spiritualPowerSpent: 0,
     injuryTicksGained: 0,
+    stonesLost: 0,
     wakeNodesEncountered: 0,
     maxWakeNodes: MAX_DUNGEON_WAKE_NODES,
     pendingWakeNode: null,
@@ -538,6 +539,146 @@ const POSTURE_LABEL: Record<DungeonExpeditionPolicy, string> = {
   aggressive: "冒进",
 };
 
+const RANK_ONE_BEATS: readonly DungeonBeat[] = [
+  {
+    kind: "person",
+    title: "灯下的采药人",
+    detail: "丙级地宫的第一层里，一个采药人蹲在灯下分拣断根。见你来，把一截还能用的灵草推过来，说再往里别一个人走。",
+    mood: "记住了那张被灯熏黄的脸",
+  },
+  {
+    kind: "find",
+    title: "砖缝里的储物袋",
+    detail: "一块松动的地砖下压着一只发潮的小袋，里面是碎灵石和半张画到一半的路线。画的人没有再回来。",
+    mood: "收获不大，可像捡到了别人的后半程",
+  },
+  {
+    kind: "close-call",
+    title: "活阵眨了一下",
+    detail: "脚下的阵纹亮了半息。你踩着灭掉的那一格跨过去，靴底还是烫的。",
+    mood: "后颈还凉着",
+  },
+  {
+    kind: "insight",
+    title: "壁上的半句口诀",
+    detail: "石壁上只剩半句，读出声的时候呼吸自己顺了一拍。不是功法，是有人把活着走出去的方法刻在这里。",
+    mood: "心里亮了一下",
+  },
+  {
+    kind: "person",
+    title: "往外走的散修",
+    detail: "对面来了一个往外撤的散修，袖口是破的。他只说了一句「里面的东西不值这条命」，就侧身让开了路。",
+    mood: "有点想跟着他出去",
+  },
+  {
+    kind: "mood",
+    title: "第一层的潮气",
+    detail: "第一层并不深，潮气却已经压到胸口。灯火矮，脚步声显得很长。",
+    mood: "还没出事，已经想记下来",
+  },
+];
+
+export function rankOneMoralFork(
+  policy: DungeonExpeditionPolicy,
+  seed: string,
+): { beat: DungeonBeat; stoneDelta: number; moralityDelta: number } | null {
+  if (hashString(`${seed}:fork`) % 4 !== 0) {
+    return null;
+  }
+  if (policy === "conservative") {
+    return {
+      stoneDelta: -6,
+      moralityDelta: 2,
+      beat: {
+        kind: "person",
+        title: "扶起伤者",
+        detail: "岔路里躺着个被阵纹擦伤的人。你把水囊留下，又分了几枚灵石，看他扶着墙往外走。袋子比进来时轻了一点。",
+        mood: "东西少了，人还在",
+      },
+    };
+  }
+  if (policy === "aggressive") {
+    return {
+      stoneDelta: 16,
+      moralityDelta: -3,
+      beat: {
+        kind: "close-call",
+        title: "拿走了袋子",
+        detail: "那人伤得站不稳，袋子就挂在腕上。你拿走了。他没有追，只是看着你走进更暗的那一条。灵石还热着。",
+        mood: "手里有东西，心里不干净",
+      },
+    };
+  }
+  return {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "分了一口水",
+      detail: "你把水囊递过去，喝完又还了回来。谁也没多拿谁的东西。各自点了下头，岔路就在这里分开。",
+      mood: "算是认识了一个人",
+    },
+  };
+}
+
+function beatForRank(rank: DungeonRank, seed: string): DungeonBeat {
+  const pool = rank === 1 ? RANK_ONE_BEATS : DUNGEON_BEAT_POOL;
+  return pool[hashString(`${seed}:beat`) % pool.length]!;
+}
+
+const AGGRESSIVE_LOW_QI_BEAT: DungeonBeat = {
+  kind: "injury",
+  title: "气不够了还在往里走",
+  detail: "灵台发空，脚步开始飘。冒进的路还没到头，肩上已经先挨了一下，血顺着袖口往下走。",
+  mood: "该撤了，腿还在往前",
+};
+
+export function dangerousDungeonExit(input: {
+  policy: DungeonExpeditionPolicy;
+  qi: number;
+  maxQi: number;
+  spiritualPower: number;
+  maxSpiritualPower: number;
+  injuryTicks: number;
+  rank: DungeonRank;
+  spiritStones: number;
+}): {
+  outcome: "withdrew" | "catastrophic";
+  stoneLoss: number;
+  injuryTicks: number;
+  beat: DungeonBeat;
+} | null {
+  const qiRatio = input.maxQi > 0 ? input.qi / input.maxQi : 0;
+  const spiritualRatio = input.maxSpiritualPower > 0 ? input.spiritualPower / input.maxSpiritualPower : 0;
+  const catastrophic = qiRatio <= 0.1 || spiritualRatio <= 0.1 || input.injuryTicks >= 10;
+  const aggressiveCollapse = input.policy === "aggressive"
+    && (qiRatio < 0.37 || spiritualRatio < 0.2 || input.injuryTicks >= 7);
+  if (!catastrophic && !aggressiveCollapse) {
+    return null;
+  }
+  const stoneLoss = Math.min(input.spiritStones, 80 + input.rank * 8);
+  const outcome = catastrophic ? "catastrophic" : "withdrew";
+  const beat: DungeonBeat = outcome === "catastrophic"
+    ? {
+        kind: "setback",
+        title: "几乎是被抬出来的",
+        detail: `气快断了。最后一段路是别人拖着你过的门槛，袋子在石阶上磕开，灵石散了 ${stoneLoss} 枚。醒来时人已经在城门口。`,
+        mood: "活着，可这一趟是亏的",
+      }
+    : {
+        kind: "injury",
+        title: "冒进被地宫吐出来",
+        detail: `气血撑不住那条短路。你连滚带爬退到入口，护腕浸透了，路上又洒了 ${stoneLoss} 枚灵石。门在身后合上。`,
+        mood: "疼，而且记得为什么疼",
+      };
+  return {
+    outcome,
+    stoneLoss,
+    injuryTicks: catastrophic ? 8 : 6,
+    beat,
+  };
+}
+
 const DUNGEON_BEAT_POOL: readonly DungeonBeat[] = [
   {
     kind: "find",
@@ -606,17 +747,23 @@ export function expeditionPressureFor(input: {
   rank: DungeonRank;
   action: "search" | "guardian";
   seed: string;
+  qiRatio: number;
 }): {
   qiDrain: number;
   spiritualDrain: number;
   injuryTicks: number;
   realmProgress: number;
+  stoneDelta: number;
+  moralityDelta: number;
   beat: DungeonBeat;
 } {
   const roll = hashString(`${input.seed}:pressure`) % 100;
-  const beat = DUNGEON_BEAT_POOL[hashString(`${input.seed}:beat`) % DUNGEON_BEAT_POOL.length]!;
+  const fork = input.rank === 1 ? rankOneMoralFork(input.policy, input.seed) : null;
+  const beat = fork?.beat ?? beatForRank(input.rank, input.seed);
   const rankBump = input.rank >= 7 ? 2 : input.rank >= 4 ? 1 : 0;
   const guardianBump = input.action === "guardian" ? 1 : 0;
+  const stoneDelta = fork?.stoneDelta ?? 0;
+  const moralityDelta = fork?.moralityDelta ?? 0;
 
   if (input.policy === "conservative") {
     return {
@@ -624,6 +771,8 @@ export function expeditionPressureFor(input: {
       spiritualDrain: 1 + guardianBump,
       injuryTicks: 0,
       realmProgress: 2 + guardianBump,
+      stoneDelta,
+      moralityDelta,
       beat: beat.kind === "injury"
         ? {
             kind: "close-call",
@@ -636,20 +785,16 @@ export function expeditionPressureFor(input: {
   }
 
   if (input.policy === "aggressive") {
-    const injured = roll < 22;
+    const lowQi = input.qiRatio < 0.6;
+    const injured = lowQi || roll < 28;
     return {
       qiDrain: 4 + rankBump + guardianBump,
       spiritualDrain: 3 + guardianBump,
-      injuryTicks: injured ? 5 : 0,
+      injuryTicks: injured ? 4 : 0,
       realmProgress: 7 + guardianBump + Math.floor((input.rank - 1) / 3),
-      beat: injured
-        ? {
-            kind: "injury",
-            title: "冒进的代价",
-            detail: "你选了那条更短的路。灵材确实更多，肩上也实实在在地挨了一下，血把护腕浸透了一圈。",
-            mood: "疼，但东西在手里",
-          }
-        : beat,
+      stoneDelta,
+      moralityDelta,
+      beat: fork ? beat : injured ? AGGRESSIVE_LOW_QI_BEAT : beat,
     };
   }
 
@@ -659,7 +804,9 @@ export function expeditionPressureFor(input: {
     spiritualDrain: 2 + guardianBump,
     injuryTicks: grazed ? 2 : 0,
     realmProgress: 4 + guardianBump,
-    beat: grazed
+    stoneDelta,
+    moralityDelta,
+    beat: grazed && !fork
       ? {
           kind: "injury",
           title: "擦伤",
@@ -682,6 +829,7 @@ export function createDungeonExpeditionReport(input: {
     `地宫${outcomePhrase(input.outcome)}${input.progress.grade}${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
     `带回 ${input.progress.primaryMaterialCount} ${input.primaryMaterial}，旁支 ${summarizeSecondaryDrops(input.progress.secondaryDrops)}，灵石 ${input.progress.spiritStoneGain}，修为 +${input.progress.realmProgressGain}。`,
     `气血耗去 ${input.progress.qiSpent ?? 0}，灵力耗去 ${input.progress.spiritualPowerSpent ?? 0}。`,
+    (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石 ${input.progress.stonesLost}。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
     `人已回到 ${input.returnLocationId}。`,
     `(${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy})`,
@@ -711,5 +859,6 @@ export function createDungeonExpeditionReport(input: {
     qiSpent: input.progress.qiSpent ?? 0,
     spiritualPowerSpent: input.progress.spiritualPowerSpent ?? 0,
     injuryTicksGained: input.progress.injuryTicksGained ?? 0,
+    stonesLost: input.progress.stonesLost ?? 0,
   };
 }

@@ -222,11 +222,12 @@ function normalizeStoredWorldShape(world: WorldState): WorldState {
     }
   }
 
+  const legacyCopy = copy as unknown as Record<string, unknown>;
   if (!copy.commissions || typeof copy.commissions !== "object") {
-    (copy as Record<string, unknown>).commissions = {};
+    legacyCopy.commissions = {};
   }
-  if (typeof (copy as Record<string, unknown>).nextCommissionSequence !== "number") {
-    (copy as Record<string, unknown>).nextCommissionSequence = 1;
+  if (typeof legacyCopy.nextCommissionSequence !== "number") {
+    legacyCopy.nextCommissionSequence = 1;
   }
 
   for (const event of copy.worldEvents) {
