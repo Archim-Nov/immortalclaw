@@ -2204,6 +2204,8 @@ export interface CultivatorStateView {
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
   /** Notes other cultivators left at this location. Omitted by older view fixtures. */
   localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];
+  /** Why social buttons cover only a prefix of nearbyCultivators. Omitted by older view fixtures. */
+  nearbyNote?: string;
   /** Other cultivators at this location. Omitted by older view fixtures. Every other agent is kept; NPCs are capped. */
   nearbyCultivators?: readonly {
     cultivatorId: string;
@@ -2228,6 +2230,14 @@ export interface CultivatorStateView {
     dungeonShareReady: boolean;
     shareNote: string;
     members?: readonly { cultivatorId: string; name: string; here: boolean; idle: boolean }[];
+    /** Seats left before the party reaches five, counting the leader. */
+    openSeats?: number;
+    /** True when the party already holds five. */
+    full?: boolean;
+    /** Idle companions at this dungeon gate. */
+    atGate?: readonly string[];
+    /** Idle companions in this same city, not yet at a gate. */
+    waitingInCity?: readonly string[];
   } | null;
   /** Set while this cultivator is the idle companion on someone else's dungeon run. */
   sharedDungeon?: {

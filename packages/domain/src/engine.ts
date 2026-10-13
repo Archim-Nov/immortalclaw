@@ -3831,13 +3831,23 @@ function noteFightDiary(
   let myHit = false;
   let theirCrit = false;
   let theirHit = false;
+  let myCritCount = 0;
+  let guardCount = 0;
+  let stance: CombatStyle | undefined;
   for (const round of rounds) {
     const mine = side === "player" ? round.playerAttack : round.enemyAttack;
     const theirs = side === "player" ? round.enemyAttack : round.playerAttack;
-    if (mine?.result === "crit") myCrit = true;
-    else if (mine?.result === "hit") myHit = true;
+    const myRoute = side === "player"
+      ? (round.playerRoute ?? round.playerBoundRoute ?? undefined)
+      : (round.enemyRoute ?? round.enemyBoundRoute ?? undefined);
+    if (!stance && myRoute) stance = myRoute;
+    if (mine?.result === "crit") {
+      myCrit = true;
+      myCritCount += 1;
+    } else if (mine?.result === "hit") myHit = true;
     if (theirs?.result === "crit") theirCrit = true;
     else if (theirs?.result === "hit") theirHit = true;
+    if (mine?.result === "miss" || theirs?.result === "miss") guardCount += 1;
   }
   let qiPressure = rounds.length > 0 ? 2 : 0;
   if (theirCrit) qiPressure += 4;
@@ -3846,13 +3856,14 @@ function noteFightDiary(
   if (qiPressure > 0) {
     self.qi = clamp(self.qi - qiPressure, 1, self.maxQi);
   }
+  const stanceName = stance === "brute" ? "刚猛" : stance === "finesse" ? "灵巧" : stance === "tactic" ? "算计" : "寻常";
   const strike = myCrit ? "一击破防" : myHit ? "出手击中" : "出手被守住";
   const answer = theirCrit ? "对方破开了守势" : theirHit ? "对方还了一击" : "对方攻势被守住";
   const someoneLeft = retreated && retreatingSide !== null;
   const closing = someoneLeft
     ? `${retreatingSide === side ? self.name : foeName}撤了。这一阵耗了${qiPressure}点灵气。`
     : `这一阵耗了${qiPressure}点灵气。`;
-  const detail = `${self.name}与${foeName}过了${rounds.length}合。${strike}，${answer}。${closing}`;
+  const detail = `${self.name}与${foeName}过了${rounds.length}合。${self.name}以${stanceName}起手。${strike}，${answer}。破防${myCritCount}次，守势拦住${guardCount}次。${closing}`;
   pushTravelNote(self, travelNote({
     tick: world.tick,
     kind: someoneLeft ? "injury" : "person",
@@ -4106,6 +4117,32 @@ function finalizeDungeonExpedition(
   return report;
 }
 
+function noteDungeonRoomRhythm(
+  world: WorldState,
+  cultivator: Cultivator,
+  room: number,
+  actionKind: "search" | "guardian",
+  rounds: readonly CombatRoundLog[],
+): void {
+  try {
+    const crits = rounds.filter((round) => round.playerAttack?.result === "crit" || round.enemyAttack?.result === "crit").length;
+    const guards = rounds.filter((round) => round.playerAttack?.result === "miss" || round.enemyAttack?.result === "miss").length;
+    const detail = actionKind === "guardian"
+      ? `第${room}间守关过了${rounds.length}合。${crits > 0 ? "有一击破防" : "出手没能破防"}。守势拦住${guards}次。节奏是进、拆、再进。`
+      : `第${room}间没有守关。石室里的短节奏是探、停、再探，像一回合交手，还没到破防的时候。`;
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: actionKind === "guardian" ? "injury" : "insight",
+      title: `第${room}间的节奏`,
+      detail,
+      locationId: cultivator.locationId,
+      mood: actionKind === "guardian" ? "这一间是打出来的" : "这一间只是探路",
+    }));
+  } catch {
+    // A room note must not stop the expedition step.
+  }
+}
+
 function resolveDungeonExpeditionStepIfDue(
   world: WorldState,
   job: ActionJob,
@@ -4236,6 +4273,13 @@ function resolveDungeonExpeditionStepIfDue(
     locationId: cultivator.locationId,
     mood: pressure.beat.mood,
   }));
+  noteDungeonRoomRhythm(
+    world,
+    cultivator,
+    effectiveProgress.stepIndex + 1,
+    actionKind,
+    actionKind === "guardian" ? (getCombatJobState(syntheticJob)?.rounds ?? []) : [],
+  );
   effectiveProgress = echoDungeonCompanion(world, effectiveProgress, pressure.qiDrain);
 
   const flavorEventTitles = actionKind === "search"
@@ -5383,6 +5427,8 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
 
 /** NPCs after the reserved agent slots. Party partners and bonds are not counted here. */
 const NEARBY_NPC_LIMIT = 8;
+/** Social buttons (chat-up, greet, gift, duel, party invite) stop here. The nearby list does not. */
+const SOCIAL_ACTION_LIMIT = 8;
 
 function sectDisplayName(world: WorldState, sectId: string | null): string | null {
   if (!sectId) {
@@ -5426,6 +5472,16 @@ function selectNearbyCultivators(world: WorldState, cultivator: Cultivator): Cul
   return selected;
 }
 
+function socialActionTargets(world: WorldState, cultivator: Cultivator): Cultivator[] {
+  return selectNearbyCultivators(world, cultivator).slice(0, SOCIAL_ACTION_LIMIT);
+}
+
+function nearbyActionNote(world: WorldState, cultivator: Cultivator): string {
+  const listed = selectNearbyCultivators(world, cultivator);
+  const agents = listed.filter((other) => isAgentCultivator(other)).length;
+  return `同场能看见的修士有 ${agents} 位，都在 nearbyCultivators 里。搭讪、问候、赠礼、切磋和组队先列前 ${SOCIAL_ACTION_LIMIT} 位。`;
+}
+
 function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
   const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
   return selectNearbyCultivators(world, cultivator)
@@ -5453,20 +5509,38 @@ function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<Cu
   if (!partner) {
     return null;
   }
+  const party = getPartyOf(world, cultivator.id);
+  const size = party?.memberIds.length ?? members.length + 1;
+  const openSeats = Math.max(0, PARTY_MAX_MEMBERS - size);
+  const full = openSeats === 0;
   const location = world.locations[cultivator.locationId];
+  const placeName = location?.name ?? "这里";
   const inDungeon = Boolean(location && dungeonMetadataOf(location));
-  const sharing = members.filter((member) => member.locationId === cultivator.locationId && !member.activeJobId);
-  const ready = sharing.length > 0 && !cultivator.activeJobId && inDungeon;
-  const sharingNames = sharing.map((member) => member.name).join("、");
+  const here = members.filter((member) => member.locationId === cultivator.locationId);
+  const idleHere = here.filter((member) => !member.activeJobId);
+  const busyHere = here.filter((member) => Boolean(member.activeJobId));
+  const away = members.filter((member) => member.locationId !== cultivator.locationId);
+  const ready = idleHere.length > 0 && !cultivator.activeJobId && inDungeon;
+  const idleNames = idleHere.map((member) => member.name).join("、");
+  const awayNames = away.map((member) => member.name).join("、");
+  const busyNames = busyHere.map((member) => member.name).join("、");
+  const seatLine = full
+    ? "队伍已满，五人就是上限。"
+    : `还空着${openSeats}个位子。同城认识的人可以先组上，人齐了再到门口。`;
   let shareNote: string;
   if (ready) {
-    shareNote = `${sharingNames}就在地宫门口，而且闲着。下地宫会把他们算进这一趟，不另开工。出来时还在身边的人，会分到灵石，也会分到伤。`;
-  } else if (sharing.length === 0 && members.every((member) => member.locationId !== cultivator.locationId)) {
-    shareNote = `${partner.name}不在${location?.name ?? "这里"}。这一趟不会分险。`;
-  } else if (members.some((member) => member.locationId === cultivator.locationId && member.activeJobId)) {
-    shareNote = `${partner.name}正在做事。这一趟不会把人拖进来。`;
+    const awayLine = awayNames ? `${awayNames}还没到门口，这一趟带不走。` : "";
+    const busyLine = busyNames ? `${busyNames}正在做事，不会被拖进来。` : "";
+    shareNote = `${idleNames}就在地宫门口，而且闲着。下地宫会把他们算进这一趟，不另开工。出来时还在身边的人，会分到灵石，也会分到伤。${awayLine}${busyLine}${seatLine}`;
+  } else if (idleHere.length === 0 && here.length === 0) {
+    shareNote = `${partner.name}不在${placeName}。这一趟不会分险。${seatLine}`;
+  } else if (idleHere.length === 0 && busyHere.length > 0) {
+    shareNote = `${busyNames || partner.name}正在做事。这一趟不会把人拖进来。${seatLine}`;
+  } else if (!inDungeon && idleHere.length > 0) {
+    const awayLine = awayNames ? `${awayNames}还在别处，这一趟不会分险。` : "还在别处的人，这一趟不会分险。";
+    shareNote = `${idleNames}就在${placeName}，还没到地宫门口。先在城里结伴，到了门口再下，闲着的人才会一起进去，不另开工，也会分到灵石。${awayLine}${seatLine}`;
   } else {
-    shareNote = `${partner.name}在身边。到了地宫门口再下，才会一起分险。`;
+    shareNote = `${partner.name}在身边。到了地宫门口再下，才会一起分险。${seatLine}`;
   }
   return {
     partnerId: partner.id,
@@ -5476,6 +5550,10 @@ function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<Cu
     partnerIdle: !partner.activeJobId,
     dungeonShareReady: ready,
     shareNote,
+    openSeats,
+    full,
+    atGate: inDungeon ? idleHere.map((member) => member.name) : [],
+    waitingInCity: inDungeon ? [] : idleHere.map((member) => member.name),
     members: members.map((member) => ({
       cultivatorId: member.id,
       name: member.name,
@@ -5741,6 +5819,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         rewardSpiritStones: c.rewardSpiritStones,
       })),
     nearbyCultivators: nearbyCultivatorsOf(world, cultivator),
+    nearbyNote: nearbyActionNote(world, cultivator),
     party: partyShareOf(world, cultivator),
     sharedDungeon: sharedDungeonOf(world, cultivator.id),
     localBoard: (world.locationBoards?.[cultivator.locationId] ?? []).map((note) => ({
@@ -6302,7 +6381,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
   if (location.kind === "safe") {
-    const duelTargets = selectNearbyCultivators(world, cultivator)
+    const duelTargets = socialActionTargets(world, cultivator)
       .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
     for (const candidate of duelTargets) {
       actions.push({
@@ -6344,7 +6423,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   {
     // 搭讪: chat up someone at the same location (must be in safe zone)
     if (location.kind === "safe") {
-      const chatTargets = selectNearbyCultivators(world, cultivator)
+      const chatTargets = socialActionTargets(world, cultivator)
         .filter((candidate) => !candidate.activeJobId);
       for (const chatTarget of chatTargets) {
         const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
@@ -6437,7 +6516,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       }
     }
     if ((!party || party.memberIds.length < PARTY_MAX_MEMBERS) && location.kind === "safe") {
-      const inviteCandidates = selectNearbyCultivators(world, cultivator)
+      const inviteCandidates = socialActionTargets(world, cultivator)
         .filter((c) => {
           if (c.activeJobId) return false;
           if (isInParty(world, c.id)) return false;
@@ -6449,7 +6528,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         actions.push({
           actionId: `party-invite:${candidate.id}` as ActionId,
           label: `组队邀请：${candidate.name}（${level}）`,
-          description: `向${candidate.name}发送组队邀请。五人满员为止。`,
+            description: `向${candidate.name}发送组队邀请。人可以先在城里结伴，到地宫门口再一起下。五人满员为止。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -6471,7 +6550,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   // ---- Social Verbs (结构化消息 / 赠送 / 委托) ----
   {
     // send-message to nearby cultivators at same location
-    const nearbyTargets = selectNearbyCultivators(world, cultivator);
+    const nearbyTargets = socialActionTargets(world, cultivator);
     for (const target of nearbyTargets) {
       for (const kind of ["greet", "share-info", "request-help"] as const) {
         actions.push({
@@ -7240,7 +7319,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (cultivator.id === target.id) throw new Error("Cannot invite yourself to a party.");
     if (cultivator.locationId !== target.locationId) throw new Error("组队邀请 requires being at the same location.");
     const ownParty = getPartyOf(world, cultivator.id);
-    if (ownParty && ownParty.memberIds.length >= PARTY_MAX_MEMBERS) throw new Error("队伍已满，五人就是上限。");
+    if (ownParty && ownParty.memberIds.length >= PARTY_MAX_MEMBERS) {
+      throw new GameplayRejection("队伍已满，五人就是上限。这一趟带不了第六个人。");
+    }
     if (isInParty(world, target.id)) throw new Error("Target is already in a party.");
     const link = getSocialLink(world, cultivator.id, target.id);
     if (!link || !meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL)) {
@@ -7256,7 +7337,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       createdAtTick: world.tick,
       expiresAtTick: world.tick + PARTY_INVITE_EXPIRY,
     };
-    addMessage(world, target.id, "组队邀请", `${cultivator.name}的邀请`, `${cultivator.name}向你发送了组队邀请，请及时回复。`, { fromCultivatorId: cultivator.id });
+    const invitePlace = world.locations[cultivator.locationId]?.name ?? "这里";
+    addMessage(world, target.id, "组队邀请", `${cultivator.name}的邀请`, `${cultivator.name}向你发送了组队邀请。人可以先在${invitePlace}结伴，到地宫门口再一起下。五人满员为止。请及时回复。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "组队邀请", `${cultivator.name}向${target.name}发送了组队邀请。`, ["social", "party"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} invited ${target.name} to form a party.` };
   }
@@ -7273,7 +7355,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (typeof world.nextPartySequence !== "number") (world as unknown as Record<string, unknown>).nextPartySequence = 1;
     const existingParty = getPartyOf(world, invitation.fromCultivatorId);
     if (existingParty) {
-      if (existingParty.memberIds.length >= PARTY_MAX_MEMBERS) throw new Error("队伍已满，五人就是上限。");
+      if (existingParty.memberIds.length >= PARTY_MAX_MEMBERS) {
+        throw new GameplayRejection("队伍已满，五人就是上限。这一趟带不了第六个人。");
+      }
       world.parties[existingParty.id] = {
         ...existingParty,
         memberIds: [...existingParty.memberIds, cultivator.id],
@@ -7294,9 +7378,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addDaoLog(world, cultivator.id, "组队成功", `${cultivator.name}与${leaderName}组成了队伍。`, ["social", "party"]);
     addDaoLog(world, invitation.fromCultivatorId, "组队成功", `${leaderName}与${cultivator.name}组成了队伍。`, ["social", "party"]);
     const sameSect = Boolean(leader?.sectId && leader.sectId === cultivator.sectId);
+    const acceptPlace = world.locations[cultivator.locationId];
+    const acceptInDungeon = Boolean(acceptPlace && dungeonMetadataOf(acceptPlace));
+    const meetLine = acceptInDungeon
+      ? "人已经在地宫门口。闲着就会一起下，不另开工。"
+      : "人还在城里。到了地宫门口、大家都闲着，才会一起下，不另开工。";
     const partyDetail = sameSect
-      ? `${cultivator.name}与${leaderName}同门结伴，路上有人照应。`
-      : `${cultivator.name}与${leaderName}把名字写在同一张路上。`;
+      ? `${cultivator.name}与${leaderName}同门结伴，路上有人照应。${meetLine}`
+      : `${cultivator.name}与${leaderName}把名字写在同一张路上。${meetLine}`;
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "person",
