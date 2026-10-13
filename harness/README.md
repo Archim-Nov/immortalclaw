@@ -30,6 +30,7 @@ A city party explains the gate, fights name a stance, and the social inbox stays
 A greet can start a party invite, later agents get a social page, and a fight notes the consequence: `harness/scenarios/social-page-and-invite-path.md`.
 Dungeon guardians resolve as turn-based fights with a role and named skills: `harness/scenarios/dungeon-turn-combat.md`.
 City duels, a chosen role, a reserve seat, and small skill practice: `harness/scenarios/combat-party-deepen-v2.md`.
+Named aftermath notes, harder rank 3 packs, and a wound a teammate can tend: `harness/scenarios/combat-deepen-v3.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

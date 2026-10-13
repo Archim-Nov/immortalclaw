@@ -1,4 +1,4 @@
-import type { DungeonCombatSummary, DungeonExpeditionPolicy, PartyRoleId } from "./model.js";
+import type { DungeonCombatSummary, DungeonExpeditionPolicy, DungeonGrade, PartyRoleId } from "./model.js";
 import {
   PARTY_ROLE_LABEL,
   type ResolvedCombatSkill,
@@ -105,6 +105,110 @@ export function enemyPatternFor(id: string, name: string): EnemyPattern {
   if (text.includes("spell") || text.includes("术")) return "burst";
   if (text.includes("heavy") || text.includes("重")) return "pressure";
   return "pressure";
+}
+
+const ADD_PATTERNS: readonly EnemyPattern[] = ["swift", "drain", "burst"];
+
+/** Rank 3+ and 乙/甲 guardians are a pack. Rank 1–2 丙 stays one elite. */
+export function guardianPackIsHard(grade: DungeonGrade, rank: number): boolean {
+  return rank >= 3 || grade !== "丙";
+}
+
+export function buildGuardianPack(input: {
+  id: string;
+  name: string;
+  patternKey: string;
+  grade: DungeonGrade;
+  rank: number;
+  policy: DungeonExpeditionPolicy;
+  /** Grade and rank scale, already multiplied by the posture scale. */
+  combatScale: number;
+  baseHp: number;
+  attack: number;
+  defense: number;
+  speed: number;
+  hit: number;
+  dodge: number;
+  crit: number;
+  critDamage: number;
+  guardHeart: number;
+  spirit: number;
+  maxSpirit: number;
+}): BattleCombatant[] {
+  const hard = guardianPackIsHard(input.grade, input.rank);
+  const aggressiveBump = hard && input.policy === "aggressive" ? 1.08 : 1;
+  const eliteFactor = hard ? 1.18 : 1;
+  const scale = input.combatScale * aggressiveBump;
+  const make = (
+    suffix: string,
+    factor: number,
+    elite: boolean,
+    pattern: EnemyPattern,
+  ): BattleCombatant => {
+    const hp = Math.max(1, Math.round(input.baseHp * scale * eliteFactor * factor));
+    const attack = Math.max(1, Math.round(input.attack * scale * eliteFactor * factor));
+    return {
+      id: suffix ? `${input.id}:${suffix}` : input.id,
+      name: suffix ? `${input.name}·${suffix}` : input.name,
+      side: "enemy",
+      role: "dps",
+      hp,
+      maxHp: hp,
+      weaponAttack: attack,
+      spellAttack: Math.max(1, Math.round(attack * 0.9)),
+      defense: Math.max(1, Math.round(input.defense * scale * eliteFactor * factor)),
+      speed: input.speed + (elite ? 0 : 2),
+      hit: input.hit,
+      dodge: input.dodge,
+      crit: input.crit,
+      critDamage: input.critDamage,
+      guardHeart: input.guardHeart,
+      spirit: input.spirit,
+      maxSpirit: input.maxSpirit,
+      skills: [],
+      pattern,
+      elite,
+    };
+  };
+  const pack = [make("", 1, true, enemyPatternFor(input.patternKey, input.name))];
+  if (!hard) return pack;
+  const start = hashString(`${input.patternKey}:${input.grade}:${input.rank}`) % ADD_PATTERNS.length;
+  pack.push(make("从者", 0.7, false, ADD_PATTERNS[start]!));
+  if (input.rank >= 6 || input.grade !== "丙") {
+    pack.push(make("侧翼", 0.58, false, ADD_PATTERNS[(start + 1) % ADD_PATTERNS.length]!));
+  }
+  return pack.slice(0, 3);
+}
+
+export function woundTicksForGuardian(input: {
+  rank: number;
+  grade: DungeonGrade;
+  policy: DungeonExpeditionPolicy;
+  outcome: PartyBattleResult["outcome"];
+  leaderHpLostRatio: number;
+  pressureInjury: number;
+}): number {
+  const hard = guardianPackIsHard(input.grade, input.rank);
+  let ticks = input.pressureInjury;
+  if (input.outcome === "loss") ticks = Math.max(ticks, hard ? 6 : 4);
+  else if (input.outcome === "withdraw") ticks = Math.max(ticks, 2);
+  else if (input.outcome === "win" && hard) {
+    if (input.leaderHpLostRatio >= 0.4) ticks = Math.max(ticks, 3);
+    else if (input.policy === "aggressive" && input.leaderHpLostRatio > 0.22) ticks = Math.max(ticks, 2);
+  }
+  return ticks;
+}
+
+export function companionWoundTicks(input: {
+  rank: number;
+  grade: DungeonGrade;
+  outcome: PartyBattleResult["outcome"];
+  qiLoss: number;
+}): number {
+  const hard = guardianPackIsHard(input.grade, input.rank);
+  if (input.outcome === "loss") return 4;
+  if (hard && input.outcome === "win" && input.qiLoss >= 4) return 2;
+  return 0;
 }
 
 function living(fighters: readonly LiveFighter[]): LiveFighter[] {

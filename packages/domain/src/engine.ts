@@ -110,7 +110,7 @@ import {
   skillContextOf,
   skillsForCultivator,
 } from "./combat-skills.js";
-import { enemyPatternFor, runPartyBattle, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
+import { buildGuardianPack, companionWoundTicks, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
   buildAcceptQuestActionId,
@@ -3832,6 +3832,25 @@ function noteCityRivalry(
   }));
 }
 
+function relationClause(
+  link: ReturnType<typeof getSocialLink>,
+  otherName: string,
+  previousLevel: string | null,
+): string {
+  if (!link) return "";
+  const parts: string[] = [];
+  const level = getAffinityLevel(link.affinity);
+  if (previousLevel && previousLevel !== level) {
+    parts.push(`关系从${previousLevel}到了${level}`);
+  }
+  if (link.rival) parts.push(`与${otherName}仍是宿敌`);
+  const favor = link.favorBalance ?? 0;
+  if (favor > 0) parts.push(`${otherName}还欠着人情`);
+  else if (favor < 0) parts.push(`还欠${otherName}人情`);
+  if (parts.length === 0) return "";
+  return `${parts.slice(0, 2).join("，")}。`;
+}
+
 function noteFightDiary(
   world: WorldState,
   self: Cultivator,
@@ -4414,16 +4433,17 @@ function resolveDungeonExpeditionStepIfDue(
       const template = expedGuardianEncounter.template;
       const cfg = expedGuardianEncounter.enemyConfigId ? getEnemyConfig(expedGuardianEncounter.enemyConfigId) : null;
       const enemyName = cfg?.nameCn ?? template.enemyName;
-      const enemy: BattleCombatant = {
+      const enemies = buildGuardianPack({
         id: template.id,
         name: enemyName,
-        side: "enemy",
-        role: "dps",
-        hp: Math.max(1, Math.round(template.baseHp * combatScale)),
-        maxHp: Math.max(1, Math.round(template.baseHp * combatScale)),
-        weaponAttack: Math.max(1, Math.round(template.attack * combatScale)),
-        spellAttack: Math.max(1, Math.round(template.attack * combatScale * 0.9)),
-        defense: Math.max(1, Math.round(template.defense * combatScale)),
+        patternKey: expedGuardianEncounter.enemyConfigId ?? template.id,
+        grade: effectiveProgress.grade,
+        rank: effectiveProgress.targetRank,
+        policy: effectiveProgress.policy,
+        combatScale,
+        baseHp: template.baseHp,
+        attack: template.attack,
+        defense: template.defense,
         speed: template.speed,
         hit: template.hit,
         dodge: template.dodge,
@@ -4432,14 +4452,11 @@ function resolveDungeonExpeditionStepIfDue(
         guardHeart: template.guardHeart,
         spirit: template.spirit ?? 40,
         maxSpirit: template.maxSpirit ?? template.spirit ?? 40,
-        skills: [],
-        pattern: enemyPatternFor(expedGuardianEncounter.enemyConfigId ?? template.id, enemyName),
-        elite: true,
-      };
+      });
       const rankExtra = effectiveProgress.targetRank >= 7 ? 1 : 0;
       expeditionBattle = runPartyBattle({
         allies,
-        enemies: [enemy],
+        enemies,
         policy: effectiveProgress.policy,
         seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:party-battle`,
         maxRounds: (effectiveProgress.policy === "conservative" ? 5 : effectiveProgress.policy === "aggressive" ? 8 : 6) + rankExtra,
@@ -4483,16 +4500,23 @@ function resolveDungeonExpeditionStepIfDue(
   let qiDrain = Math.max(1, Math.round(pressure.qiDrain * (expeditionBattle ? 0.65 + battleSeverity : 1)));
   let spiritualDrain = Math.max(1, Math.round(pressure.spiritualDrain * (expeditionBattle ? 0.55 + battleSpirit : 1)));
   let injuryTicks = pressure.injuryTicks;
-  if (expeditionBattle?.outcome === "loss") {
-    qiDrain = Math.round(qiDrain * 1.25);
-    injuryTicks = Math.max(injuryTicks, 4);
-  } else if (expeditionBattle?.outcome === "withdraw") {
-    injuryTicks = Math.max(injuryTicks, 2);
-  } else if (expeditionBattle?.outcome === "win") {
-    const bonus = effectiveProgress.policy === "aggressive"
-      ? 2 + Math.floor((effectiveProgress.targetRank - 1) / 3)
-      : effectiveProgress.policy === "balanced" ? 1 : 0;
-    cultivator.spiritStones += bonus;
+  if (expeditionBattle) {
+    if (expeditionBattle.outcome === "loss") {
+      qiDrain = Math.round(qiDrain * 1.25);
+    } else if (expeditionBattle.outcome === "win") {
+      const bonus = effectiveProgress.policy === "aggressive"
+        ? 2 + Math.floor((effectiveProgress.targetRank - 1) / 3)
+        : effectiveProgress.policy === "balanced" ? 1 : 0;
+      cultivator.spiritStones += bonus;
+    }
+    injuryTicks = woundTicksForGuardian({
+      rank: effectiveProgress.targetRank,
+      grade: effectiveProgress.grade,
+      policy: effectiveProgress.policy,
+      outcome: expeditionBattle.outcome,
+      leaderHpLostRatio: expeditionBattle.leaderHpLostRatio,
+      pressureInjury: injuryTicks,
+    });
   }
   cultivator.qi = clamp(cultivator.qi - qiDrain, 1, cultivator.maxQi);
   cultivator.spiritualPower = clamp(
@@ -4500,9 +4524,11 @@ function resolveDungeonExpeditionStepIfDue(
     0,
     cultivator.maxSpiritualPower,
   );
+  const woundedNow: Cultivator[] = [];
   if (injuryTicks > 0) {
     cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, injuryTicks);
     syncWounded(cultivator);
+    woundedNow.push(cultivator);
   }
   const foughtWith = new Set<string>();
   if (expeditionBattle) {
@@ -4511,6 +4537,21 @@ function resolveDungeonExpeditionStepIfDue(
       if (!companion) continue;
       companion.qi = clamp(companion.qi - loss, 1, companion.maxQi);
       foughtWith.add(companionId);
+      const companionInjury = companionWoundTicks({
+        rank: effectiveProgress.targetRank,
+        grade: effectiveProgress.grade,
+        outcome: expeditionBattle.outcome,
+        qiLoss: loss,
+      });
+      if (companionInjury > 0) {
+        companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, companionInjury);
+        syncWounded(companion);
+        woundedNow.push(companion);
+      }
+    }
+    if (woundedNow.length > 0) {
+      const names = woundedNow.map((person) => person.name).join("、");
+      expeditionBattle.summary.wound = `${names}挂了伤。伤着的时候进不了地宫，得歇着、服疗伤丹，或让身边的人把伤压下去。`;
     }
   }
   addRealmProgress(cultivator, pressure.realmProgress);
@@ -4535,6 +4576,20 @@ function resolveDungeonExpeditionStepIfDue(
       locationId: cultivator.locationId,
       mood: beat.mood,
     }));
+  }
+  if (expeditionBattle?.summary.wound) {
+    const woundDetail = expeditionBattle.summary.wound;
+    const audience = new Set<Cultivator>([cultivator, ...woundedNow]);
+    for (const person of audience) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "injury",
+        title: "这一场留下了伤",
+        detail: woundDetail,
+        locationId: person.locationId,
+        mood: "得先把伤压下去",
+      }));
+    }
   }
   noteDungeonRoomRhythm(
     world,
@@ -6957,6 +7012,27 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           });
         }
       }
+      if (target.injuryTicksRemaining > 0) {
+        actions.push({
+          actionId: `tend-wound:${target.id}` as ActionId,
+          label: `疗伤：${target.name}`,
+          description: `帮${target.name}压伤。身上有疗伤丹就用一枚，没有就耗一点灵力。对方会欠一份人情。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    }
+    for (const mate of getPartyMembers(world, cultivator.id)) {
+      if (mate.id === cultivator.id || mate.locationId !== cultivator.locationId || mate.injuryTicksRemaining <= 0) continue;
+      const tendId = `tend-wound:${mate.id}` as ActionId;
+      if (actions.some((action) => action.actionId === tendId)) continue;
+      actions.push({
+        actionId: tendId,
+        label: `疗伤：${mate.name}`,
+        description: `帮${mate.name}压伤。身上有疗伤丹就用一枚，没有就耗一点灵力。对方会欠一份人情。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
     }
     // read-messages: available when there are unread messages addressed to this cultivator
     const unreadMessages = (world.messages ?? []).filter((m) => m.toCultivatorId === cultivator.id);
@@ -7214,6 +7290,9 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("queue-party-reserve:")) return;
   if (actionId === "leave-party-reserve") return;
   if (actionId === "leave-shared-expedition") return;
+  if (actionId.startsWith("tend-wound:")) return;
+  if (actionId.startsWith("accept-gift:")) return;
+  if (actionId.startsWith("reject-gift:")) return;
   if (actionId.startsWith("set-party-role:")) return;
   if (actionId.startsWith("equip-skill-slot:")) return;
   if (actionId === "clear-skill-loadout") return;
@@ -7331,6 +7410,7 @@ function executeItemImmediateAction(
   if (cultivator.inventory[binding.itemId] <= 0) {
     throw new Error(`Item not available: ${binding.itemId}`);
   }
+  const injuryBeforeUse = cultivator.injuryTicksRemaining;
   if (definition.use.consumesOnUse) {
     cultivator.inventory[binding.itemId] -= 1;
   }
@@ -7342,6 +7422,16 @@ function executeItemImmediateAction(
     cultivator.techniques.push(definition.use.grantsTechnique);
   }
   syncWounded(cultivator);
+  if (binding.itemId === "healing-pill" && cultivator.injuryTicksRemaining < injuryBeforeUse) {
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "injury",
+      title: "服下疗伤丹",
+      detail: `${cultivator.name}服下疗伤丹，伤势从${injuryBeforeUse}刻压到${cultivator.injuryTicksRemaining}刻。`,
+      locationId: cultivator.locationId,
+      mood: cultivator.injuryTicksRemaining > 0 ? "伤轻了，还没好全" : "伤压下去了",
+    }));
+  }
   return {
     tick: world.tick,
     cultivatorId: cultivator.id,
@@ -7676,6 +7766,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       const wait = CHAT_UP_COOLDOWN_TICKS - (world.tick - existingLink.lastChatUpTick);
       throw new GameplayRejection(`刚与${target.name}说过话，再过 ${wait} 刻。同一句话重复多了，情分涨得很慢。`);
     }
+    const previousLevel = existingLink ? getAffinityLevel(existingLink.affinity) : null;
     const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.chatUp);
     const stamped = { ...linkAB, lastChatUpTick: world.tick };
     writeSocialLink(world, cultivator.id, stamped);
@@ -7686,13 +7777,25 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const level = getAffinityLevel(linkAB.affinity);
     addDaoLog(world, cultivator.id, "搭讪", `${cultivator.name}与${target.name}攀谈，好感度上升至${linkAB.affinity}（${level}）。`, ["social", "chat-up"]);
     addMessage(world, target.id, "社交", "有人搭讪", `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "某处"}向你搭话。`, { fromCultivatorId: cultivator.id });
+    const chatClause = relationClause(getSocialLink(world, cultivator.id, target.id), target.name, previousLevel);
+    const chatPlace = world.locations[cultivator.locationId]?.name ?? "城里";
+    const chatDetail = `${cultivator.name}在${chatPlace}跟${target.name}攀谈，关系到了${level}。${chatClause}`;
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "person",
       title: `与${target.name}说上了话`,
-      detail: `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "城里"}跟${target.name}攀谈，关系到了${level}。`,
+      detail: chatDetail,
       locationId: cultivator.locationId,
       mood: level === "认识" ? "多了一个能说话的人" : "这人渐渐熟了",
+    }));
+    const heard = relationClause(getSocialLink(world, target.id, cultivator.id), cultivator.name, previousLevel);
+    pushTravelNote(target, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `${cultivator.name}过来攀谈`,
+      detail: `${cultivator.name}在${chatPlace}跟${target.name}说上了话，关系到了${level}。${heard}`,
+      locationId: target.locationId,
+      mood: "有人找上门说话",
     }));
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} chatted up ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
   }
@@ -7959,6 +8062,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     if (reserve) {
       addMessage(world, reserve.id, "组队", "候补上场", `${cultivator.name}请${kicked?.name ?? "一名队员"}离队，你补上了这个位子。`);
+      const reserveBond = relationClause(getSocialLink(world, reserve.id, cultivator.id), cultivator.name, null);
+      pushTravelNote(reserve, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `补上了${cultivator.name}的队伍`,
+        detail: `${cultivator.name}请${kicked?.name ?? "一名队员"}离队，${reserve.name}补上了这个位子。场上仍不超过五人。${reserveBond}`,
+        locationId: reserve.locationId,
+        mood: "位子轮到自己了",
+      }));
     }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} removed ${kicked?.name ?? memberId} from the party.` };
   }
@@ -7994,7 +8106,27 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (!party) throw new GameplayRejection("你不在任何队伍的候补里。");
     world.parties[party.id] = { ...party, reserveIds: (party.reserveIds ?? []).filter((id) => id !== cultivator.id) };
     const leader = world.cultivators[party.leaderId];
-    if (leader) addMessage(world, leader.id, "组队", "候补走了", `${cultivator.name}退出了候补。`);
+    const leaderName = leader?.name ?? "队长";
+    const leftReserve = `${cultivator.name}退出了${leaderName}的候补，不再等这个位子。`;
+    if (leader) {
+      addMessage(world, leader.id, "组队", "候补走了", `${cultivator.name}退出了候补。`);
+      pushTravelNote(leader, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}退出了候补`,
+        detail: leftReserve,
+        locationId: leader.locationId,
+        mood: "门外空了",
+      }));
+    }
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `退出了${leaderName}的候补`,
+      detail: leftReserve,
+      locationId: cultivator.locationId,
+      mood: "不再等这个位子",
+    }));
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left the party reserve.` };
   }
 
@@ -8016,14 +8148,19 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const outgoingName = outgoing?.name ?? memberId;
     addMessage(world, reserve.id, "组队", "轮换上场", `${cultivator.name}让你换下${outgoingName}。场上仍是五人。`);
     if (outgoing) addMessage(world, outgoing.id, "组队", "改去候补", `${cultivator.name}让${reserve.name}上场，你改去候补。`);
-    pushTravelNote(cultivator, travelNote({
-      tick: world.tick,
-      kind: "person",
-      title: `${reserve.name}换上了`,
-      detail: `${cultivator.name}让${reserve.name}换下${outgoingName}。队伍还是五个人，多出来的人在候补。`,
-      locationId: cultivator.locationId,
-      mood: "位子转了一手",
-    }));
+    const rotateBond = relationClause(getSocialLink(world, cultivator.id, reserve.id), reserve.name, null)
+      || relationClause(getSocialLink(world, cultivator.id, memberId), outgoingName, null);
+    const rotateDetail = `${cultivator.name}让${reserve.name}换下${outgoingName}。队伍还是五个人，多出来的人在候补。${rotateBond}`;
+    for (const person of [cultivator, reserve, outgoing].filter((person): person is Cultivator => Boolean(person))) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${reserve.name}换下了${outgoingName}`,
+        detail: rotateDetail,
+        locationId: person.locationId,
+        mood: "位子转了一手",
+      }));
+    }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rotated ${reserve.name} in for ${outgoingName}.` };
   }
 
@@ -8105,6 +8242,51 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (actionId === "clear-skill-loadout") {
     cultivator.preferredSkillIds = [];
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} cleared the preferred skill loadout.` };
+  }
+
+  if (actionId.startsWith("tend-wound:")) {
+    const targetId = actionId.slice("tend-wound:".length);
+    const target = getCultivatorOrThrow(world, targetId);
+    if (target.id === cultivator.id) throw new GameplayRejection("自己的伤要自己歇，或服下疗伤丹。");
+    if (target.locationId !== cultivator.locationId) throw new GameplayRejection("人得在眼前才能疗伤。");
+    if (target.injuryTicksRemaining <= 0) throw new GameplayRejection(`${target.name}现在没有伤。`);
+    const usedPill = (cultivator.inventory["healing-pill"] ?? 0) > 0;
+    if (usedPill) {
+      cultivator.inventory["healing-pill"] -= 1;
+    } else {
+      const cost = Math.max(4, Math.round(cultivator.maxSpiritualPower * 0.08));
+      if (cultivator.spiritualPower < cost) {
+        throw new GameplayRejection(`灵力不够，身上也没有疗伤丹，帮不了${target.name}。`);
+      }
+      cultivator.spiritualPower -= cost;
+    }
+    const cleared = usedPill ? 5 : 3;
+    target.injuryTicksRemaining = Math.max(0, target.injuryTicksRemaining - cleared);
+    syncWounded(target);
+    adjustFavor(world, cultivator.id, target.id, 1);
+    const rival = getSocialLink(world, cultivator.id, target.id)?.rival === true;
+    const how = usedPill ? `${cultivator.name}用了一枚疗伤丹` : `${cultivator.name}耗了一点灵力`;
+    const awkward = rival
+      ? "两人是宿敌，这一手仍旧别扭，人情还是记下了。"
+      : `${target.name}欠${cultivator.name}一份人情。`;
+    const detail = `${how}，帮${target.name}把伤压下去，还剩${target.injuryTicksRemaining}刻。${awkward}`;
+    for (const person of [cultivator, target]) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}给${target.name}疗了伤`,
+        detail,
+        locationId: person.locationId,
+        mood: rival ? "宿敌也伸了手" : "伤轻了一点",
+      }));
+    }
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} tended ${target.name}. Injury left: ${target.injuryTicksRemaining}.`,
+    };
   }
 
   // ---- Social Verbs: send-message ----
@@ -8202,6 +8384,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     // Non-gift message: greet / share-info / request-help
     const kindLabels: Record<string, string> = { greet: "问候", "share-info": "情报分享", "request-help": "求助" };
+    const messageLevelBefore = getSocialLink(world, cultivator.id, target.id);
+    const messagePrevious = messageLevelBefore ? getAffinityLevel(messageLevelBefore.affinity) : null;
     addMutualAffinity(world, cultivator.id, target.id, 3);
     const msgSubject = kindLabels[kind] ?? kind;
     addMessage(world, target.id, "消息", msgSubject, `${cultivator.name}向你发送了${msgSubject}。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
@@ -8237,11 +8421,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     };
     const note = messageNotes[kind];
     if (note) {
+      const said = relationClause(getSocialLink(world, cultivator.id, target.id), target.name, messagePrevious);
+      const heard = relationClause(getSocialLink(world, target.id, cultivator.id), cultivator.name, messagePrevious);
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
         kind: "person",
         title: note.title,
-        detail: note.detail,
+        detail: `${note.detail}${said}`,
         locationId: cultivator.locationId,
         mood: "多了一句能回给主人的话",
       }));
@@ -8249,7 +8435,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         tick: world.tick,
         kind: "person",
         title: note.replyTitle,
-        detail: note.replyDetail,
+        detail: `${note.replyDetail}${heard}`,
         locationId: target.locationId,
         mood: "有人找上门了",
       }));
@@ -8284,9 +8470,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "accepted", giftName);
     addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${giftName}。`, { fromCultivatorId: cultivator.id });
     addResourceGainLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${giftName}。`, ["social", "gift"], [{ itemId: gift.itemId as ItemId, count: gift.count }]);
-    const giftDetail = forgiven
+    const giftBond = relationClause(getSocialLink(world, cultivator.id, gift.fromCultivatorId), fromName, null);
+    const pillEase = gift.itemId === "healing-pill" && cultivator.injuryTicksRemaining > 0
+      ? `${cultivator.name}还挂着伤，这枚疗伤丹服下去能减轻伤势。`
+      : "";
+    const giftDetail = (forgiven
       ? `${cultivator.name}收下了${fromName}的${giftName}，并勾掉了一份对方欠下的人情。`
-      : `${cultivator.name}收下了${fromName}送来的${gift.count}个${giftName}。`;
+      : `${cultivator.name}收下了${fromName}送来的${gift.count}个${giftName}。`) + pillEase + giftBond;
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "person",

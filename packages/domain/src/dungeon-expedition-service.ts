@@ -659,7 +659,9 @@ function fightLine(progress: DungeonExpeditionProgress): string | null {
   if (!last) return null;
   const result = last.outcome === "win" ? "胜" : last.outcome === "loss" ? "负" : last.outcome === "draw" ? "平" : "撤";
   const who = last.party.map((member) => `${member.name}（${member.roleLabel}）`).join("、");
-  return `最近一战对上${last.enemyName}，${who ? `${who}上场，` : ""}结果${result}。${last.beats.join("")}`;
+  const wound = last.wound
+    ?? ((progress.injuryTicksGained ?? 0) > 0 ? "这一趟已经挂了伤。" : "");
+  return `最近一战对上${last.enemyName}，${who ? `${who}上场，` : ""}结果${result}。${last.beats.join("")}${wound}`;
 }
 
 function outcomePhrase(outcome: DungeonExpeditionReport["outcome"]): string {

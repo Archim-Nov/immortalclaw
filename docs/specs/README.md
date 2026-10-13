@@ -39,6 +39,7 @@ Recent supporting gameplay specs:
 - `docs/specs/playtest-deepen-v8/spec.md`
 - `docs/specs/dungeon-turn-combat-v1/spec.md`
 - `docs/specs/combat-party-deepen-v2/spec.md`
+- `docs/specs/combat-deepen-v3/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`
