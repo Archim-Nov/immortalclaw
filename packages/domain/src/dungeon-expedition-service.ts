@@ -264,8 +264,12 @@ export function buildDungeonExpeditionStateView(
           maxSteps: active.maxSteps,
           nextResolutionTick: active.nextResolutionTick,
           remainingTicks: job?.remainingTicks ?? 0,
+          companionId: active.companionId ?? null,
           companionName: active.companionId
             ? (world.cultivators[active.companionId]?.name ?? null)
+            : null,
+          shareNote: active.companionId
+            ? `同队的${world.cultivators[active.companionId]?.name ?? "同伴"}跟着这一趟，不另开工。结束时还在身边，会分灵石或分伤。`
             : null,
         }
       : null,

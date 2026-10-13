@@ -42,7 +42,19 @@ export interface SocialLink {
   readonly rival?: boolean;
   /** Tick of the last public rivalry scene. Keeps press-rival from firing every tick. */
   readonly lastRivalSceneTick?: number;
+  /** This cultivator's result in the latest city duel with the target. */
+  readonly lastDuelResult?: CityDuelResult;
+  readonly lastDuelStoneDelta?: number;
+  readonly lastDuelTick?: number;
+  /** Latest gift that changed hands with the target. */
+  readonly lastGiftResult?: GiftExchangeResult;
+  readonly lastGiftItemName?: string;
+  readonly lastGiftTick?: number;
 }
+
+export type CityDuelResult = "win" | "loss" | "draw" | "retreat";
+
+export type GiftExchangeResult = "accepted" | "returned";
 
 export interface DaoCompanionProposal {
   readonly id: string;
@@ -241,6 +253,39 @@ export function forgiveOneFavor(
   return true;
 }
 
+export function rememberCityDuel(
+  world: WorldState,
+  cultivatorId: string,
+  targetId: string,
+  result: CityDuelResult,
+  stoneDelta: number,
+): void {
+  const link = getOrCreateSocialLink(world, cultivatorId, targetId);
+  writeSocialLink(world, cultivatorId, {
+    ...link,
+    rival: true,
+    lastDuelResult: result,
+    lastDuelStoneDelta: stoneDelta,
+    lastDuelTick: world.tick,
+  });
+}
+
+export function rememberGiftExchange(
+  world: WorldState,
+  cultivatorId: string,
+  targetId: string,
+  result: GiftExchangeResult,
+  itemName: string,
+): void {
+  const link = getOrCreateSocialLink(world, cultivatorId, targetId);
+  writeSocialLink(world, cultivatorId, {
+    ...link,
+    lastGiftResult: result,
+    lastGiftItemName: itemName,
+    lastGiftTick: world.tick,
+  });
+}
+
 export function markRival(world: WorldState, cultivatorA: string, cultivatorB: string): void {
   const linkAB = getOrCreateSocialLink(world, cultivatorA, cultivatorB);
   const linkBA = getOrCreateSocialLink(world, cultivatorB, cultivatorA);
@@ -255,6 +300,20 @@ export function describeSocialBond(link: SocialLink): string {
   }
   if (link.rival) {
     parts.push("宿敌");
+  }
+  if (link.lastDuelResult) {
+    const duelLine: Record<CityDuelResult, string> = {
+      win: "城中切磋赢过",
+      loss: "城中切磋输过",
+      draw: "城中切磋平手",
+      retreat: "城中切磋撤过",
+    };
+    parts.push(duelLine[link.lastDuelResult]);
+  }
+  if (link.lastGiftResult === "accepted") {
+    parts.push("收下过礼");
+  } else if (link.lastGiftResult === "returned") {
+    parts.push("退过礼");
   }
   const favor = link.favorBalance ?? 0;
   if (favor > 0) {
@@ -376,6 +435,8 @@ export interface SocialLinkView {
   readonly rival: boolean;
   /** Short Chinese line an agent can read back to its owner. */
   readonly bondLine: string;
+  readonly lastDuel: { tick: number; result: CityDuelResult; stoneDelta: number } | null;
+  readonly lastGift: { tick: number; result: GiftExchangeResult; itemName: string } | null;
 }
 
 export function getSocialLinksView(
@@ -396,6 +457,20 @@ export function getSocialLinksView(
       favorBalance: link.favorBalance ?? 0,
       rival: link.rival === true,
       bondLine: describeSocialBond(link),
+      lastDuel: link.lastDuelResult
+        ? {
+            tick: link.lastDuelTick ?? 0,
+            result: link.lastDuelResult,
+            stoneDelta: link.lastDuelStoneDelta ?? 0,
+          }
+        : null,
+      lastGift: link.lastGiftResult
+        ? {
+            tick: link.lastGiftTick ?? 0,
+            result: link.lastGiftResult,
+            itemName: link.lastGiftItemName ?? "礼物",
+          }
+        : null,
     }));
 }
 

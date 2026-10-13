@@ -715,7 +715,10 @@ export interface DungeonExpeditionStateView {
     maxSteps: number;
     nextResolutionTick: number;
     remainingTicks: number;
+    companionId?: string | null;
     companionName?: string | null;
+    /** Present when a party partner is sharing this run without their own job. */
+    shareNote?: string | null;
   } | null;
   lastReport: DungeonExpeditionReport | null;
   wakeNodeHint?: {
@@ -2194,12 +2197,44 @@ export interface CultivatorStateView {
   activeResidence: Residence | null;
   residenceContext: ResidenceContextView | null;
   productionQueue: readonly { slot: number; recipeId: string; ticksRemaining: number }[];
-  pendingGifts: readonly { messageId: string; fromName: string; itemId: ItemId; count: number }[];
+  pendingGifts: readonly { messageId: string; fromCultivatorId?: string; fromName: string; itemId: ItemId; itemName?: string; count: number }[];
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
   /** Notes other cultivators left at this location. Omitted by older view fixtures. */
   localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];
+  /** Other cultivators at this location. Omitted by older view fixtures. Capped. */
+  nearbyCultivators?: readonly {
+    cultivatorId: string;
+    name: string;
+    realm: string;
+    realmLevel: number;
+    sectName: string | null;
+    idle: boolean;
+    affinity: number | null;
+    bondLine: string | null;
+    rival: boolean;
+    favorBalance: number;
+    placeLine: string;
+  }[];
+  /** Party partner and whether a dungeon start will share the run. Omitted by older view fixtures. */
+  party?: {
+    partnerId: string;
+    partnerName: string;
+    partnerLocationId: string;
+    partnerHere: boolean;
+    partnerIdle: boolean;
+    dungeonShareReady: boolean;
+    shareNote: string;
+  } | null;
   /** Set while this cultivator is the idle companion on someone else's dungeon run. */
-  sharedDungeon?: { leaderName: string; rank: number; grade: string } | null;
+  sharedDungeon?: {
+    leaderId: string;
+    leaderName: string;
+    rank: number;
+    grade: string;
+    locationName: string;
+    stayPut: boolean;
+    shareNote: string;
+  } | null;
   endgame: { guixuCompletedNodeIds: readonly string[]; originHeartAwakened: boolean };
   onboarding: OnboardingProgress;
   decisionPolicy: DecisionPolicyView;
