@@ -214,8 +214,10 @@ import {
   getDualWildernessTaskById,
   getFriendsAtLevel,
   getOrCreateSocialLink,
+  getPartyMembers,
   getPartyOf,
   getPartyPartner,
+  PARTY_MAX_MEMBERS,
   getSocialLink,
   getSocialLinksView,
   hasDaoCompanion,
@@ -3816,6 +3818,51 @@ function noteCityRivalry(
   }));
 }
 
+function noteFightDiary(
+  world: WorldState,
+  self: Cultivator,
+  foeName: string,
+  rounds: readonly CombatRoundLog[],
+  side: "player" | "enemy",
+  retreated: boolean,
+  retreatingSide: "player" | "enemy" | null,
+): void {
+  let myCrit = false;
+  let myHit = false;
+  let theirCrit = false;
+  let theirHit = false;
+  for (const round of rounds) {
+    const mine = side === "player" ? round.playerAttack : round.enemyAttack;
+    const theirs = side === "player" ? round.enemyAttack : round.playerAttack;
+    if (mine?.result === "crit") myCrit = true;
+    else if (mine?.result === "hit") myHit = true;
+    if (theirs?.result === "crit") theirCrit = true;
+    else if (theirs?.result === "hit") theirHit = true;
+  }
+  let qiPressure = rounds.length > 0 ? 2 : 0;
+  if (theirCrit) qiPressure += 4;
+  const iRetreated = retreated && retreatingSide === side;
+  if (iRetreated) qiPressure += 8;
+  if (qiPressure > 0) {
+    self.qi = clamp(self.qi - qiPressure, 1, self.maxQi);
+  }
+  const strike = myCrit ? "一击破防" : myHit ? "出手击中" : "出手被守住";
+  const answer = theirCrit ? "对方破开了守势" : theirHit ? "对方还了一击" : "对方攻势被守住";
+  const someoneLeft = retreated && retreatingSide !== null;
+  const closing = someoneLeft
+    ? `${retreatingSide === side ? self.name : foeName}撤了。这一阵耗了${qiPressure}点灵气。`
+    : `这一阵耗了${qiPressure}点灵气。`;
+  const detail = `${self.name}与${foeName}过了${rounds.length}合。${strike}，${answer}。${closing}`;
+  pushTravelNote(self, travelNote({
+    tick: world.tick,
+    kind: someoneLeft ? "injury" : "person",
+    title: `与${foeName}过了手`,
+    detail,
+    locationId: self.locationId,
+    mood: someoneLeft ? "这一架撤得不干净" : "拳脚还在身上",
+  }));
+}
+
 function namedSectMate(world: WorldState, cultivator: Cultivator): { name: string; cultivatorId: string | null } {
   const peer = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
     .find((candidate) => candidate.sectId !== null && candidate.sectId === cultivator.sectId);
@@ -3908,39 +3955,49 @@ function echoDungeonCompanion(
   qiDrain: number,
 ): DungeonExpeditionProgress {
   try {
-    if (!progress.companionId) {
+    const ids = expeditionCompanionIds(progress);
+    if (ids.length === 0) {
       return progress;
     }
-    const companion = world.cultivators[progress.companionId];
     const leader = world.cultivators[progress.cultivatorId];
-    if (!companion || companion.locationId !== progress.locationId) {
-      if (companion && leader) {
-        const parted = `${companion.name}没有留在地宫里。和${leader.name}的这一趟，到这里分开。`;
-        pushTravelNote(companion, travelNote({
-          tick: world.tick,
-          kind: "person",
-          title: `与${leader.name}分开了`,
-          detail: parted,
-          locationId: companion.locationId,
-          mood: "人先走了",
-        }));
-        pushTravelNote(leader, travelNote({
-          tick: world.tick,
-          kind: "person",
-          title: `${companion.name}先离开了`,
-          detail: parted,
-          locationId: leader.locationId,
-          mood: "门口空了",
-        }));
+    const stillSharing: string[] = [];
+    for (const companionId of ids) {
+      try {
+        const companion = world.cultivators[companionId];
+        if (!companion || companion.locationId !== progress.locationId) {
+          if (companion && leader) {
+            const parted = `${companion.name}没有留在地宫里。和${leader.name}的这一趟，到这里分开。`;
+            pushTravelNote(companion, travelNote({
+              tick: world.tick,
+              kind: "person",
+              title: `与${leader.name}分开了`,
+              detail: parted,
+              locationId: companion.locationId,
+              mood: "人先走了",
+            }));
+            pushTravelNote(leader, travelNote({
+              tick: world.tick,
+              kind: "person",
+              title: `${companion.name}先离开了`,
+              detail: parted,
+              locationId: leader.locationId,
+              mood: "门口空了",
+            }));
+          }
+          continue;
+        }
+        if (companion.activeJobId) {
+          stillSharing.push(companionId);
+          continue;
+        }
+        const drain = Math.max(1, Math.floor(qiDrain / 2));
+        companion.qi = clamp(companion.qi - drain, 1, companion.maxQi);
+        stillSharing.push(companionId);
+      } catch {
+        // One companion must not drop the others or the leader's step.
       }
-      return { ...progress, companionId: null };
     }
-    if (companion.activeJobId) {
-      return progress;
-    }
-    const drain = Math.max(1, Math.floor(qiDrain / 2));
-    companion.qi = clamp(companion.qi - drain, 1, companion.maxQi);
-    return progress;
+    return withCompanionIds(progress, stillSharing);
   } catch {
     return progress;
   }
@@ -3954,48 +4011,56 @@ function settleDungeonCompanion(
   returnLocationId: string,
 ): void {
   try {
-    if (!progress.companionId) {
+    const settling = expeditionCompanionIds(progress)
+      .map((companionId) => world.cultivators[companionId])
+      .filter((companion): companion is Cultivator => Boolean(
+        companion && companion.locationId === progress.locationId && !companion.activeJobId,
+      ));
+    if (settling.length === 0) {
       return;
     }
-    const companion = world.cultivators[progress.companionId];
-    if (!companion || companion.locationId !== progress.locationId || companion.activeJobId) {
-      return;
-    }
-    let detail = `${leader.name}与${companion.name}一起离开了地宫。`;
-    if (outcome === "completed") {
-      const share = Math.min(leader.spiritStones, Math.max(0, Math.floor(progress.spiritStoneGain * 0.2)));
-      if (share > 0) {
-        leader.spiritStones -= share;
-        companion.spiritStones += share;
+    const eachShare = Math.max(0, Math.floor(progress.spiritStoneGain * 0.2 / settling.length));
+    for (const companion of settling) {
+      try {
+        let detail = `${leader.name}与${companion.name}一起离开了地宫。`;
+        if (outcome === "completed") {
+          const share = Math.min(leader.spiritStones, eachShare);
+          if (share > 0) {
+            leader.spiritStones -= share;
+            companion.spiritStones += share;
+          }
+          detail = `${leader.name}与${companion.name}一起出了地宫。收获里分给${companion.name} ${share} 枚灵石。`;
+          addMutualAffinity(world, leader.id, companion.id, 2);
+        } else if (outcome === "withdrew" || outcome === "catastrophic") {
+          const loss = Math.min(companion.spiritStones, Math.max(4, Math.floor((progress.stonesLost ?? 0) * 0.3)));
+          companion.spiritStones -= loss;
+          companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, outcome === "catastrophic" ? 4 : 2);
+          syncWounded(companion);
+          detail = `${leader.name}与${companion.name}一起被拖出地宫。${companion.name}也洒了 ${loss} 枚灵石，身上挂了伤。`;
+        } else {
+          detail = `${leader.name}中止了探索。${companion.name}跟着一起撤出地宫。`;
+        }
+        companion.locationId = returnLocationId;
+        pushTravelNote(leader, travelNote({
+          tick: world.tick,
+          kind: outcome === "completed" ? "person" : "injury",
+          title: `与${companion.name}一起出了地宫`,
+          detail,
+          locationId: leader.locationId,
+          mood: outcome === "completed" ? "有人分了这一趟" : "两个人都记得为什么疼",
+        }));
+        pushTravelNote(companion, travelNote({
+          tick: world.tick,
+          kind: outcome === "completed" ? "find" : "injury",
+          title: `跟着${leader.name}出了地宫`,
+          detail,
+          locationId: companion.locationId,
+          mood: outcome === "completed" ? "口袋里有同伴分来的石头" : "伤是一起带出来的",
+        }));
+      } catch {
+        // One companion must not roll the leader's exit back.
       }
-      detail = `${leader.name}与${companion.name}一起出了地宫。收获里分给${companion.name} ${share} 枚灵石。`;
-      addMutualAffinity(world, leader.id, companion.id, 2);
-    } else if (outcome === "withdrew" || outcome === "catastrophic") {
-      const loss = Math.min(companion.spiritStones, Math.max(4, Math.floor((progress.stonesLost ?? 0) * 0.3)));
-      companion.spiritStones -= loss;
-      companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, outcome === "catastrophic" ? 4 : 2);
-      syncWounded(companion);
-      detail = `${leader.name}与${companion.name}一起被拖出地宫。${companion.name}也洒了 ${loss} 枚灵石，身上挂了伤。`;
-    } else {
-      detail = `${leader.name}中止了探索。${companion.name}跟着一起撤出地宫。`;
     }
-    companion.locationId = returnLocationId;
-    pushTravelNote(leader, travelNote({
-      tick: world.tick,
-      kind: outcome === "completed" ? "person" : "injury",
-      title: `与${companion.name}一起出了地宫`,
-      detail,
-      locationId: leader.locationId,
-      mood: outcome === "completed" ? "有人分了这一趟" : "两个人都记得为什么疼",
-    }));
-    pushTravelNote(companion, travelNote({
-      tick: world.tick,
-      kind: outcome === "completed" ? "find" : "injury",
-      title: `跟着${leader.name}出了地宫`,
-      detail,
-      locationId: companion.locationId,
-      mood: outcome === "completed" ? "口袋里有同伴分来的石头" : "伤是一起带出来的",
-    }));
   } catch {
     // A companion note must not roll the leader's exit back.
   }
@@ -5316,7 +5381,8 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
   };
 }
 
-const NEARBY_CULTIVATOR_LIMIT = 8;
+/** NPCs after the reserved agent slots. Party partners and bonds are not counted here. */
+const NEARBY_NPC_LIMIT = 8;
 
 function sectDisplayName(world: WorldState, sectId: string | null): string | null {
   if (!sectId) {
@@ -5325,22 +5391,44 @@ function sectDisplayName(world: WorldState, sectId: string | null): string | nul
   return world.sects[sectId]?.name ?? world.neutralSects[sectId]?.name ?? null;
 }
 
-function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
-  const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
-  const partnerId = getPartyPartner(world, cultivator.id)?.id ?? null;
-  return [...getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)]
+function isAgentCultivator(cultivator: Cultivator): boolean {
+  return typeof cultivator.createdByAgentId === "string" && cultivator.createdByAgentId.length > 0;
+}
+
+function nearbyPriority(world: WorldState, self: Cultivator, other: Cultivator): number {
+  if (getPartyOf(world, self.id)?.memberIds.includes(other.id)) return 0;
+  const link = getSocialLink(world, self.id, other.id);
+  if (link && (link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)) return 1;
+  if (isAgentCultivator(other)) return 2;
+  return 3;
+}
+
+function selectNearbyCultivators(world: WorldState, cultivator: Cultivator): Cultivator[] {
+  const ordered = [...getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)]
     .sort((left, right) => {
-      const rank = (other: Cultivator) => {
-        if (other.id === partnerId) return 0;
-        const link = getSocialLink(world, cultivator.id, other.id);
-        if (link && (link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)) return 1;
-        return 2;
-      };
-      const byRank = rank(left) - rank(right);
+      const byRank = nearbyPriority(world, cultivator, left) - nearbyPriority(world, cultivator, right);
       if (byRank !== 0) return byRank;
       return left.name.localeCompare(right.name, "zh") || left.id.localeCompare(right.id);
-    })
-    .slice(0, NEARBY_CULTIVATOR_LIMIT)
+    });
+  const selected: Cultivator[] = [];
+  let npcCount = 0;
+  for (const other of ordered) {
+    if (nearbyPriority(world, cultivator, other) < 3) {
+      selected.push(other);
+      continue;
+    }
+    if (npcCount >= NEARBY_NPC_LIMIT) {
+      continue;
+    }
+    selected.push(other);
+    npcCount += 1;
+  }
+  return selected;
+}
+
+function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
+  const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
+  return selectNearbyCultivators(world, cultivator)
     .map((other) => {
       const link = getSocialLink(world, cultivator.id, other.id);
       return {
@@ -5360,20 +5448,22 @@ function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNull
 }
 
 function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["party"]> | null {
-  const partner = getPartyPartner(world, cultivator.id);
+  const members = getPartyMembers(world, cultivator.id);
+  const partner = members[0];
   if (!partner) {
     return null;
   }
   const location = world.locations[cultivator.locationId];
-  const here = partner.locationId === cultivator.locationId;
   const inDungeon = Boolean(location && dungeonMetadataOf(location));
-  const ready = here && !partner.activeJobId && !cultivator.activeJobId && inDungeon;
+  const sharing = members.filter((member) => member.locationId === cultivator.locationId && !member.activeJobId);
+  const ready = sharing.length > 0 && !cultivator.activeJobId && inDungeon;
+  const sharingNames = sharing.map((member) => member.name).join("、");
   let shareNote: string;
   if (ready) {
-    shareNote = `${partner.name}就在地宫门口，而且闲着。下地宫会把对方算进这一趟，不另开工。出来时还在身边的人，会分到灵石，也会分到伤。`;
-  } else if (!here) {
+    shareNote = `${sharingNames}就在地宫门口，而且闲着。下地宫会把他们算进这一趟，不另开工。出来时还在身边的人，会分到灵石，也会分到伤。`;
+  } else if (sharing.length === 0 && members.every((member) => member.locationId !== cultivator.locationId)) {
     shareNote = `${partner.name}不在${location?.name ?? "这里"}。这一趟不会分险。`;
-  } else if (partner.activeJobId) {
+  } else if (members.some((member) => member.locationId === cultivator.locationId && member.activeJobId)) {
     shareNote = `${partner.name}正在做事。这一趟不会把人拖进来。`;
   } else {
     shareNote = `${partner.name}在身边。到了地宫门口再下，才会一起分险。`;
@@ -5382,16 +5472,37 @@ function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<Cu
     partnerId: partner.id,
     partnerName: partner.name,
     partnerLocationId: partner.locationId,
-    partnerHere: here,
+    partnerHere: partner.locationId === cultivator.locationId,
     partnerIdle: !partner.activeJobId,
     dungeonShareReady: ready,
     shareNote,
+    members: members.map((member) => ({
+      cultivatorId: member.id,
+      name: member.name,
+      here: member.locationId === cultivator.locationId,
+      idle: !member.activeJobId,
+    })),
+  };
+}
+
+function expeditionCompanionIds(progress: DungeonExpeditionProgress): string[] {
+  if (progress.companionIds && progress.companionIds.length > 0) {
+    return progress.companionIds;
+  }
+  return progress.companionId ? [progress.companionId] : [];
+}
+
+function withCompanionIds(progress: DungeonExpeditionProgress, companionIds: string[]): DungeonExpeditionProgress {
+  return {
+    ...progress,
+    companionIds,
+    companionId: companionIds[0] ?? null,
   };
 }
 
 function sharedDungeonOf(world: WorldState, cultivatorId: string): CultivatorStateView["sharedDungeon"] {
   for (const progress of Object.values(world.dungeonExpeditions)) {
-    if (progress.companionId !== cultivatorId) {
+    if (!expeditionCompanionIds(progress).includes(cultivatorId)) {
       continue;
     }
     const leader = world.cultivators[progress.cultivatorId];
@@ -6191,9 +6302,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
   if (location.kind === "safe") {
-    const duelTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+    const duelTargets = selectNearbyCultivators(world, cultivator)
       .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
-    for (const candidate of duelTargets.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
+    for (const candidate of duelTargets) {
       actions.push({
         actionId: `challenge-cultivator:${candidate.id}` as ActionId,
         label: `Challenge ${candidate.name}`,
@@ -6233,10 +6344,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   {
     // 搭讪: chat up someone at the same location (must be in safe zone)
     if (location.kind === "safe") {
-      const chatTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
-        .filter((candidate) => !candidate.activeJobId)
-        .sort((left, right) => left.name.localeCompare(right.name, "zh") || left.id.localeCompare(right.id))
-        .slice(0, NEARBY_CULTIVATOR_LIMIT);
+      const chatTargets = selectNearbyCultivators(world, cultivator)
+        .filter((candidate) => !candidate.activeJobId);
       for (const chatTarget of chatTargets) {
         const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
         const onCooldown = existingLink?.lastChatUpTick !== undefined
@@ -6326,26 +6435,24 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           });
         }
       }
-    } else if (!isInParty(world, cultivator.id)) {
-      // Party invite: invite someone with 认识+ affinity at same safe location
-      if (location.kind === "safe") {
-        const inviteCandidates = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
-          .filter((c) => {
-            if (c.activeJobId) return false;
-            if (isInParty(world, c.id)) return false;
-            const link = getSocialLink(world, cultivator.id, c.id);
-            return link !== null && meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL);
-          });
-        for (const candidate of inviteCandidates.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
-          const level = getAffinityLevel(getSocialLink(world, cultivator.id, candidate.id)!.affinity);
-          actions.push({
-            actionId: `party-invite:${candidate.id}` as ActionId,
-            label: `组队邀请：${candidate.name}（${level}）`,
-            description: `向${candidate.name}发送组队邀请。`,
-            durationTicks: 0,
-            kind: "immediate",
-          });
-        }
+    }
+    if ((!party || party.memberIds.length < PARTY_MAX_MEMBERS) && location.kind === "safe") {
+      const inviteCandidates = selectNearbyCultivators(world, cultivator)
+        .filter((c) => {
+          if (c.activeJobId) return false;
+          if (isInParty(world, c.id)) return false;
+          const link = getSocialLink(world, cultivator.id, c.id);
+          return link !== null && meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL);
+        });
+      for (const candidate of inviteCandidates) {
+        const level = getAffinityLevel(getSocialLink(world, cultivator.id, candidate.id)!.affinity);
+        actions.push({
+          actionId: `party-invite:${candidate.id}` as ActionId,
+          label: `组队邀请：${candidate.name}（${level}）`,
+          description: `向${candidate.name}发送组队邀请。五人满员为止。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
       }
     }
     // Accept/reject pending party invitations
@@ -6364,8 +6471,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   // ---- Social Verbs (结构化消息 / 赠送 / 委托) ----
   {
     // send-message to nearby cultivators at same location
-    const nearbyTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id);
-    for (const target of nearbyTargets.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
+    const nearbyTargets = selectNearbyCultivators(world, cultivator);
+    for (const target of nearbyTargets) {
       for (const kind of ["greet", "share-info", "request-help"] as const) {
         actions.push({
           actionId: `send-message:${target.id}:${kind}` as ActionId,
@@ -7132,7 +7239,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const target = getCultivatorOrThrow(world, partyInviteTargetId);
     if (cultivator.id === target.id) throw new Error("Cannot invite yourself to a party.");
     if (cultivator.locationId !== target.locationId) throw new Error("组队邀请 requires being at the same location.");
-    if (isInParty(world, cultivator.id)) throw new Error("You are already in a party.");
+    const ownParty = getPartyOf(world, cultivator.id);
+    if (ownParty && ownParty.memberIds.length >= PARTY_MAX_MEMBERS) throw new Error("队伍已满，五人就是上限。");
     if (isInParty(world, target.id)) throw new Error("Target is already in a party.");
     const link = getSocialLink(world, cultivator.id, target.id);
     if (!link || !meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL)) {
@@ -7161,16 +7269,24 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (invitation.toCultivatorId !== cultivator.id) throw new Error("Only the invited cultivator can accept.");
     if (world.tick >= invitation.expiresAtTick) throw new Error("Party invitation has expired.");
     if (isInParty(world, cultivator.id)) throw new Error("You are already in a party.");
-    if (isInParty(world, invitation.fromCultivatorId)) throw new Error("Inviter is already in a party.");
     if (!world.parties) (world as unknown as Record<string, unknown>).parties = {};
     if (typeof world.nextPartySequence !== "number") (world as unknown as Record<string, unknown>).nextPartySequence = 1;
-    const partyId = `party-${world.nextPartySequence++}`;
-    world.parties[partyId] = {
-      id: partyId,
-      memberIds: [invitation.fromCultivatorId, cultivator.id],
-      leaderId: invitation.fromCultivatorId,
-      formedAtTick: world.tick,
-    };
+    const existingParty = getPartyOf(world, invitation.fromCultivatorId);
+    if (existingParty) {
+      if (existingParty.memberIds.length >= PARTY_MAX_MEMBERS) throw new Error("队伍已满，五人就是上限。");
+      world.parties[existingParty.id] = {
+        ...existingParty,
+        memberIds: [...existingParty.memberIds, cultivator.id],
+      };
+    } else {
+      const partyId = `party-${world.nextPartySequence++}`;
+      world.parties[partyId] = {
+        id: partyId,
+        memberIds: [invitation.fromCultivatorId, cultivator.id],
+        leaderId: invitation.fromCultivatorId,
+        formedAtTick: world.tick,
+      };
+    }
     delete world.partyInvitations[acceptPartyInvId];
     const leader = world.cultivators[invitation.fromCultivatorId];
     const leaderName = leader?.name ?? "unknown";
@@ -7218,11 +7334,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (actionId === "disband-party") {
     const party = disbandParty(world, cultivator.id);
     if (!party) throw new Error("You are not in a party.");
-    const partnerId = party.memberIds[0] === cultivator.id ? party.memberIds[1] : party.memberIds[0];
-    const partnerName = world.cultivators[partnerId]?.name ?? "unknown";
-    addMessage(world, partnerId, "组队", "队伍解散", `${cultivator.name}解散了队伍。`);
-    addDaoLog(world, cultivator.id, "队伍解散", `${cultivator.name}解散了与${partnerName}的队伍。`, ["social", "party"]);
-    addDaoLog(world, partnerId, "队伍解散", `${cultivator.name}解散了队伍。`, ["social", "party"]);
+    const others = party.memberIds.filter((memberId) => memberId !== cultivator.id);
+    const otherNames = others.map((memberId) => world.cultivators[memberId]?.name ?? "unknown").join("、");
+    for (const memberId of others) {
+      addMessage(world, memberId, "组队", "队伍解散", `${cultivator.name}解散了队伍。`);
+      addDaoLog(world, memberId, "队伍解散", `${cultivator.name}解散了队伍。`, ["social", "party"]);
+    }
+    addDaoLog(world, cultivator.id, "队伍解散", `${cultivator.name}解散了与${otherNames}的队伍。`, ["social", "party"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} disbanded the party.` };
   }
 
@@ -8302,6 +8420,15 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         const cfg = getEnemyConfig(guardianEncId as unknown as EnemyConfigId);
         return cfg ? `${location.name} ${cfg.name}` : `${location.name} Guardian`;
       })();
+      noteFightDiary(
+        world,
+        cultivator,
+        guardianDisplayName,
+        combatState.rounds,
+        "player",
+        retreated,
+        retreated ? (combatState.retreatingSide ?? "player") : null,
+      );
       if (retreated) {
         addCombatLog(world, {
           cultivatorId: cultivator.id,
@@ -8493,6 +8620,12 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       (sum, round) => sum + (round.playerAttack?.damage.finalDamage ?? 0),
       0,
     );
+
+    if (isCityDuel && target) {
+      const retreatSide = retreated ? retreatingSide : null;
+      noteFightDiary(world, cultivator, targetName, combatState.rounds, "player", retreated, retreatSide);
+      noteFightDiary(world, target, cultivator.name, combatState.rounds, "enemy", retreated, retreatSide);
+    }
 
     if (retreated) {
       if (retreatingSide === "enemy") {
@@ -9248,39 +9381,41 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         strategy: parsedExpedition.strategy,
         startedAtTick: world.tick,
       });
-      const partyPartner = getPartyPartner(world, cultivator.id);
-      const sharingCompanion = partyPartner
-        && partyPartner.locationId === cultivator.locationId
-        && !partyPartner.activeJobId
-        ? partyPartner
-        : null;
-      if (sharingCompanion) {
-        expeditionProgress.companionId = sharingCompanion.id;
+      const atGate = getPartyMembers(world, cultivator.id)
+        .filter((member) => member.locationId === cultivator.locationId);
+      const sharing = atGate.filter((member) => !member.activeJobId).slice(0, PARTY_MAX_MEMBERS - 1);
+      if (sharing.length > 0) {
+        expeditionProgress.companionIds = sharing.map((member) => member.id);
+        expeditionProgress.companionId = sharing[0]!.id;
       }
       world.dungeonExpeditions[cultivator.id] = expeditionProgress;
-      if (partyPartner && partyPartner.locationId === cultivator.locationId) {
-        addMutualAffinity(world, cultivator.id, partyPartner.id, AFFINITY_GAINS.sharedWilderness);
+      if (atGate.length > 0) {
         const placeName = location.name;
-        const inviteDetail = sharingCompanion
-          ? `${cultivator.name}在${placeName}拉上${partyPartner.name}一起下${parsedExpedition.rank}阶。人就在门口。出来时还在身边的人，会分到灵石，也会分到伤。`
-          : `${cultivator.name}在${placeName}开始了${parsedExpedition.rank}阶探索。${partyPartner.name}就在门口。想进去的话，自己也能进。`;
-        addMessage(world, partyPartner.id, "地宫", "同行的人进了地宫", inviteDetail, { fromCultivatorId: cultivator.id });
-        pushTravelNote(cultivator, travelNote({
-          tick: world.tick,
-          kind: "person",
-          title: `邀${partyPartner.name}一起下地宫`,
-          detail: inviteDetail,
-          locationId: cultivator.locationId,
-          mood: "门口还有一个自己人",
-        }));
-        pushTravelNote(partyPartner, travelNote({
-          tick: world.tick,
-          kind: "person",
-          title: `${cultivator.name}进了地宫`,
-          detail: inviteDetail,
-          locationId: partyPartner.locationId,
-          mood: "同伴先走了进去",
-        }));
+        const sharingNames = sharing.map((member) => member.name).join("、");
+        for (const member of atGate) {
+          const bound = sharing.some((candidate) => candidate.id === member.id);
+          addMutualAffinity(world, cultivator.id, member.id, AFFINITY_GAINS.sharedWilderness);
+          const inviteDetail = bound
+            ? `${cultivator.name}在${placeName}拉上${sharingNames}一起下${parsedExpedition.rank}阶。人就在门口。出来时还在身边的人，会分到灵石，也会分到伤。`
+            : `${cultivator.name}在${placeName}开始了${parsedExpedition.rank}阶探索。${member.name}就在门口。想进去的话，自己也能进。`;
+          addMessage(world, member.id, "地宫", "同行的人进了地宫", inviteDetail, { fromCultivatorId: cultivator.id });
+          pushTravelNote(cultivator, travelNote({
+            tick: world.tick,
+            kind: "person",
+            title: `邀${member.name}一起下地宫`,
+            detail: inviteDetail,
+            locationId: cultivator.locationId,
+            mood: "门口还有自己人",
+          }));
+          pushTravelNote(member, travelNote({
+            tick: world.tick,
+            kind: "person",
+            title: `${cultivator.name}进了地宫`,
+            detail: inviteDetail,
+            locationId: member.locationId,
+            mood: "同伴先走了进去",
+          }));
+        }
       }
       return started;
     }

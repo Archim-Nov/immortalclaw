@@ -251,6 +251,14 @@ export function buildDungeonExpeditionStateView(
   const active = getActiveDungeonExpedition(world, cultivator.id);
   const lastReport = world.dungeonExpeditionReports[cultivator.id] ?? null;
   const pendingWakeNode = active?.pendingWakeNode ?? null;
+  const companionIds = active?.companionIds && active.companionIds.length > 0
+    ? active.companionIds
+    : active?.companionId
+      ? [active.companionId]
+      : [];
+  const companionNames = companionIds
+    .map((companionId) => world.cultivators[companionId]?.name)
+    .filter((name): name is string => Boolean(name));
 
   return {
     active: active
@@ -264,12 +272,11 @@ export function buildDungeonExpeditionStateView(
           maxSteps: active.maxSteps,
           nextResolutionTick: active.nextResolutionTick,
           remainingTicks: job?.remainingTicks ?? 0,
-          companionId: active.companionId ?? null,
-          companionName: active.companionId
-            ? (world.cultivators[active.companionId]?.name ?? null)
-            : null,
-          shareNote: active.companionId
-            ? `同队的${world.cultivators[active.companionId]?.name ?? "同伴"}跟着这一趟，不另开工。结束时还在身边，会分灵石或分伤。`
+          companionId: companionIds[0] ?? null,
+          companionName: companionNames[0] ?? null,
+          companionNames: companionNames.length > 0 ? companionNames : undefined,
+          shareNote: companionIds.length > 0
+            ? `同队的${companionNames.join("、") || "同伴"}跟着这一趟，不另开工。结束时还在身边，会分灵石或分伤。`
             : null,
         }
       : null,

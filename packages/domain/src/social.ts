@@ -72,9 +72,12 @@ export interface PartyInvitation {
   readonly expiresAtTick: number;
 }
 
+/** Leader plus companions. A dungeon run can share this whole party. */
+export const PARTY_MAX_MEMBERS = 5;
+
 export interface Party {
   readonly id: string;
-  readonly memberIds: readonly [string, string];
+  readonly memberIds: readonly string[];
   readonly leaderId: string;
   readonly formedAtTick: number;
 }
@@ -517,11 +520,17 @@ export function getPartyOf(world: WorldState, cultivatorId: string): Party | nul
   return null;
 }
 
-export function getPartyPartner(world: WorldState, cultivatorId: string): Cultivator | null {
+export function getPartyMembers(world: WorldState, cultivatorId: string): Cultivator[] {
   const party = getPartyOf(world, cultivatorId);
-  if (!party) return null;
-  const partnerId = party.memberIds[0] === cultivatorId ? party.memberIds[1] : party.memberIds[0];
-  return world.cultivators[partnerId] ?? null;
+  if (!party) return [];
+  return party.memberIds
+    .filter((memberId) => memberId !== cultivatorId)
+    .map((memberId) => world.cultivators[memberId])
+    .filter((member): member is Cultivator => Boolean(member));
+}
+
+export function getPartyPartner(world: WorldState, cultivatorId: string): Cultivator | null {
+  return getPartyMembers(world, cultivatorId)[0] ?? null;
 }
 
 export function isInParty(world: WorldState, cultivatorId: string): boolean {
