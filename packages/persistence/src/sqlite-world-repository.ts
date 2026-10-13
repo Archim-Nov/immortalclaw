@@ -1,3 +1,4 @@
+import { stampActionRejection } from "../../domain/src/gameplay-error.js";
 import {
   advanceWorld as advanceWorldState,
   getCultivationRegistration,
@@ -327,7 +328,7 @@ export class SqliteWorldRepository implements WorldRepository {
       return structuredClone(result);
     } catch (error) {
       this.cachedSnapshot = null;
-      throw error;
+      throw stampActionRejection(error);
     }
   }
 

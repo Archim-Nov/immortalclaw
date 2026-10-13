@@ -130,6 +130,10 @@ function createState(): CultivatorStateView {
       priorities: [],
       suggestedActions: ["take-mortal-task"],
     },
+    travelogue: {
+      mood: "心绪平稳",
+      notes: [],
+    },
   };
 }
 

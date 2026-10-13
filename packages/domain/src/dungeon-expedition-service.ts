@@ -1,6 +1,7 @@
 import type {
   ActionJob,
   Cultivator,
+  DungeonBeat,
   DungeonExpeditionPolicy,
   DungeonExpeditionProgress,
   DungeonExpeditionReport,
@@ -199,6 +200,10 @@ export function createDungeonExpeditionProgress(input: {
     unlockedNextRank: false,
     lastResolvedAction: null,
     flavorEventTitles: [],
+    beats: [],
+    qiSpent: 0,
+    spiritualPowerSpent: 0,
+    injuryTicksGained: 0,
     wakeNodesEncountered: 0,
     maxWakeNodes: MAX_DUNGEON_WAKE_NODES,
     pendingWakeNode: null,
@@ -514,6 +519,157 @@ function outcomeVerb(outcome: DungeonExpeditionReport["outcome"]): string {
   return "barely escaped";
 }
 
+function outcomePhrase(outcome: DungeonExpeditionReport["outcome"]): string {
+  if (outcome === "completed") {
+    return "走完了";
+  }
+  if (outcome === "withdrew") {
+    return "提前撤出了";
+  }
+  if (outcome === "aborted") {
+    return "中途放弃了";
+  }
+  return "几乎是被抬出来的";
+}
+
+const POSTURE_LABEL: Record<DungeonExpeditionPolicy, string> = {
+  conservative: "稳妥",
+  balanced: "均衡",
+  aggressive: "冒进",
+};
+
+const DUNGEON_BEAT_POOL: readonly DungeonBeat[] = [
+  {
+    kind: "find",
+    title: "石室残材",
+    detail: "塌掉的石室角落里还剩一截温热的灵材，像是有人刚挖走过一回，又没能拿干净。",
+    mood: "小有收获，脚步轻了些",
+  },
+  {
+    kind: "find",
+    title: "壁缝灵光",
+    detail: "墙缝里渗出一点细碎的灵光，刮下来能入药，也沾了满手潮灰。",
+    mood: "手还是脏的，心里却稳",
+  },
+  {
+    kind: "close-call",
+    title: "夹壁骤合",
+    detail: "阵纹忽然亮了一下，左右石壁往中间挤。人是侧身挤出来的，背后的衣料撕了一条。",
+    mood: "后背还在发凉",
+  },
+  {
+    kind: "close-call",
+    title: "暗器擦肩",
+    detail: "岔路上方掉下一枚生锈的暗器，贴着肩膀落下，钉在脚边的砖缝里还在颤。",
+    mood: "走得比进来时小心",
+  },
+  {
+    kind: "person",
+    title: "岔路散修",
+    detail: "遇见一个同样在探路的散修。对方只点了点头，把一盏快灭的灯往这边偏了偏，就拐进另一条岔路。",
+    mood: "地宫里居然不算只剩自己",
+  },
+  {
+    kind: "person",
+    title: "石台上的人",
+    detail: "石台上坐着个调息的人，看见来客就收了功，说前面三丈有活阵，说完便起身往回走。",
+    mood: "记住了那句话",
+  },
+  {
+    kind: "insight",
+    title: "残诀半行",
+    detail: "石壁上剩半行刻痕，读到第二遍时灵台清了一瞬，像是把刚才乱掉的呼吸又顺了回去。",
+    mood: "心里亮了一下",
+  },
+  {
+    kind: "mood",
+    title: "潮气压胸",
+    detail: "越往里走潮气越重，灯火显得很矮。并没有出事，只是胸口一直发紧。",
+    mood: "想出去透口气",
+  },
+  {
+    kind: "mood",
+    title: "路还算顺",
+    detail: "这一段居然没什么岔子。脚印、壁灯、落灰的石阶都按着该有的样子排开。",
+    mood: "走得顺，胆子也大了一点",
+  },
+  {
+    kind: "injury",
+    title: "肩上的口子",
+    detail: "暗处扫来一道锋芒，肩上被拉开一道不深的口子。血不多，可袖子已经湿了一块。",
+    mood: "带伤，还想再看一段",
+  },
+];
+
+export function expeditionPressureFor(input: {
+  policy: DungeonExpeditionPolicy;
+  rank: DungeonRank;
+  action: "search" | "guardian";
+  seed: string;
+}): {
+  qiDrain: number;
+  spiritualDrain: number;
+  injuryTicks: number;
+  realmProgress: number;
+  beat: DungeonBeat;
+} {
+  const roll = hashString(`${input.seed}:pressure`) % 100;
+  const beat = DUNGEON_BEAT_POOL[hashString(`${input.seed}:beat`) % DUNGEON_BEAT_POOL.length]!;
+  const rankBump = input.rank >= 7 ? 2 : input.rank >= 4 ? 1 : 0;
+  const guardianBump = input.action === "guardian" ? 1 : 0;
+
+  if (input.policy === "conservative") {
+    return {
+      qiDrain: 1 + rankBump,
+      spiritualDrain: 1 + guardianBump,
+      injuryTicks: 0,
+      realmProgress: 2 + guardianBump,
+      beat: beat.kind === "injury"
+        ? {
+            kind: "close-call",
+            title: "收手及时",
+            detail: "那一下本来能伤到人。稳妥的走法让你提前侧开，只留下掌心一层冷汗。",
+            mood: "还活着，而且知道自己为什么还活着",
+          }
+        : beat,
+    };
+  }
+
+  if (input.policy === "aggressive") {
+    const injured = roll < 22;
+    return {
+      qiDrain: 4 + rankBump + guardianBump,
+      spiritualDrain: 3 + guardianBump,
+      injuryTicks: injured ? 5 : 0,
+      realmProgress: 7 + guardianBump + Math.floor((input.rank - 1) / 3),
+      beat: injured
+        ? {
+            kind: "injury",
+            title: "冒进的代价",
+            detail: "你选了那条更短的路。灵材确实更多，肩上也实实在在地挨了一下，血把护腕浸透了一圈。",
+            mood: "疼，但东西在手里",
+          }
+        : beat,
+    };
+  }
+
+  const grazed = roll < 8;
+  return {
+    qiDrain: 2 + rankBump,
+    spiritualDrain: 2 + guardianBump,
+    injuryTicks: grazed ? 2 : 0,
+    realmProgress: 4 + guardianBump,
+    beat: grazed
+      ? {
+          kind: "injury",
+          title: "擦伤",
+          detail: "均衡着往前走，还是被阵纹擦到了小臂。不至于退，接下来几步会疼。",
+          mood: "挂着轻伤，还没到该撤的时候",
+        }
+      : beat,
+  };
+}
+
 export function createDungeonExpeditionReport(input: {
   progress: DungeonExpeditionProgress;
   outcome: DungeonExpeditionReport["outcome"];
@@ -521,7 +677,15 @@ export function createDungeonExpeditionReport(input: {
   returnLocationId: string;
   primaryMaterial: ItemId;
 }): DungeonExpeditionReport {
-  const summary = `Dungeon expedition ${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy} route with ${input.progress.primaryMaterialCount} ${input.primaryMaterial} and ${summarizeSecondaryDrops(input.progress.secondaryDrops)}.`;
+  const remembered = input.progress.beats?.[input.progress.beats.length - 1];
+  const summary = [
+    `地宫${outcomePhrase(input.outcome)}${input.progress.grade}${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
+    `带回 ${input.progress.primaryMaterialCount} ${input.primaryMaterial}，旁支 ${summarizeSecondaryDrops(input.progress.secondaryDrops)}，灵石 ${input.progress.spiritStoneGain}，修为 +${input.progress.realmProgressGain}。`,
+    `气血耗去 ${input.progress.qiSpent ?? 0}，灵力耗去 ${input.progress.spiritualPowerSpent ?? 0}。`,
+    remembered ? `记得最清楚的是：${remembered.detail}` : null,
+    `人已回到 ${input.returnLocationId}。`,
+    `(${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy})`,
+  ].filter((part): part is string => Boolean(part)).join("");
 
   return {
     cultivatorId: input.progress.cultivatorId,
@@ -543,5 +707,9 @@ export function createDungeonExpeditionReport(input: {
     returnLocationId: input.returnLocationId,
     summary,
     flavorEvents: [...input.progress.flavorEventTitles],
+    beats: [...(input.progress.beats ?? [])],
+    qiSpent: input.progress.qiSpent ?? 0,
+    spiritualPowerSpent: input.progress.spiritualPowerSpent ?? 0,
+    injuryTicksGained: input.progress.injuryTicksGained ?? 0,
   };
 }
