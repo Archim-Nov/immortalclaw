@@ -86,10 +86,10 @@ export class InMemoryWorldRepository implements WorldRepository, AuthClient {
     return listAvailableActions(this.world, cultivatorId);
   }
 
-  async performAction(cultivatorId: string, actionId: ActionId) {
+  async performAction(cultivatorId: string, actionId: ActionId, line?: string) {
     const draftWorld = structuredClone(this.world);
     try {
-      const result = performAction(draftWorld, cultivatorId, actionId);
+      const result = performAction(draftWorld, cultivatorId, actionId, line);
       this.world = hydrateWorldState(toPersistedWorldState(draftWorld));
       return structuredClone(result);
     } catch (error) {

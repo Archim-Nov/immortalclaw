@@ -297,10 +297,11 @@ export async function requestAgentActions(credential: string): Promise<AgentActi
 export async function performAgentAction(
   credential: string,
   actionId: string,
+  line?: string,
 ): Promise<ActionExecutionResult> {
   return requestJson(
     "/agent/act",
-    createJsonInit("POST", { actionId }, credential),
+    createJsonInit("POST", line ? { actionId, line } : { actionId }, credential),
   );
 }
 

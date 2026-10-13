@@ -48,6 +48,12 @@ export interface SocialLink {
   readonly lastDuelTick?: number;
   /** Latest gift that changed hands with the target. */
   readonly lastGiftResult?: GiftExchangeResult;
+  /** Tick of the last spoken line this cultivator sent. */
+  readonly lastSpokenTick?: number;
+  readonly lastSpokenLine?: string;
+  readonly lastSpokenKind?: string;
+  /** Free-chat turns inside the current short exchange. */
+  readonly dialogueDepth?: number;
   readonly lastGiftItemName?: string;
   readonly lastGiftTick?: number;
 }
