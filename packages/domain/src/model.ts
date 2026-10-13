@@ -876,6 +876,7 @@ export type ImmediateActionId =
   | `accept-party:${string}`
   | `reject-party:${string}`
   | "disband-party"
+  | "cycle-social-page"
   | `buy-residence:${string}`
   | `send-message:${string}:${MessageTemplateKind}`
   | "read-messages"
@@ -1075,6 +1076,8 @@ export interface Cultivator {
   // ---- Social Verbs ----
   pendingGifts: PendingGift[];
   lastGiftTick: number;
+  /** Extra turns through the social-action page. Omitted by older saves. */
+  socialPageOffset?: number;
   // ---- Endgame ----
   guixuCompletedNodeIds: string[];
   // ---- Breakthrough Growth ----
@@ -2206,6 +2209,8 @@ export interface CultivatorStateView {
   localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];
   /** Why social buttons cover only a prefix of nearbyCultivators. Omitted by older view fixtures. */
   nearbyNote?: string;
+  /** Which page of social buttons is showing. Omitted by older view fixtures. */
+  socialPage?: { index: number; pageCount: number; holdTicks: number };
   /** Other cultivators at this location. Omitted by older view fixtures. Every other agent is kept; NPCs are capped. */
   nearbyCultivators?: readonly {
     cultivatorId: string;

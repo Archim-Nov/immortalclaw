@@ -3863,7 +3863,14 @@ function noteFightDiary(
   const closing = someoneLeft
     ? `${retreatingSide === side ? self.name : foeName}撤了。这一阵耗了${qiPressure}点灵气。`
     : `这一阵耗了${qiPressure}点灵气。`;
-  const detail = `${self.name}与${foeName}过了${rounds.length}合。${self.name}以${stanceName}起手。${strike}，${answer}。破防${myCritCount}次，守势拦住${guardCount}次。${closing}`;
+  const consequence = myCritCount > 0
+    ? "破防之后，对手的守势松了一拍。"
+    : theirCrit
+      ? "守势被破开，胸口一滞。"
+      : guardCount > 0
+        ? "守住了这一下，余劲还在腕上。"
+        : "这一阵谁也没破开谁的守势。";
+  const detail = `${self.name}与${foeName}过了${rounds.length}合。${self.name}以${stanceName}起手。${strike}，${answer}。破防${myCritCount}次，守势拦住${guardCount}次。${closing}${consequence}`;
   pushTravelNote(self, travelNote({
     tick: world.tick,
     kind: someoneLeft ? "injury" : "person",
@@ -5429,6 +5436,8 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
 const NEARBY_NPC_LIMIT = 8;
 /** Social buttons (chat-up, greet, gift, duel, party invite) stop here. The nearby list does not. */
 const SOCIAL_ACTION_LIMIT = 8;
+/** Ticks a social-action page stays put before the next unbound agents rotate in. */
+const SOCIAL_PAGE_HOLD_TICKS = 4;
 
 function sectDisplayName(world: WorldState, sectId: string | null): string | null {
   if (!sectId) {
@@ -5472,14 +5481,48 @@ function selectNearbyCultivators(world: WorldState, cultivator: Cultivator): Cul
   return selected;
 }
 
+function socialWindow(world: WorldState, cultivator: Cultivator): {
+  agentsHere: number;
+  page: number;
+  pageCount: number;
+  targets: Cultivator[];
+} {
+  const listed = selectNearbyCultivators(world, cultivator);
+  const pinned: Cultivator[] = [];
+  const agents: Cultivator[] = [];
+  const npcs: Cultivator[] = [];
+  for (const other of listed) {
+    const rank = nearbyPriority(world, cultivator, other);
+    if (rank < 2) pinned.push(other);
+    else if (rank === 2) agents.push(other);
+    else npcs.push(other);
+  }
+  const pinnedShown = pinned.slice(0, SOCIAL_ACTION_LIMIT);
+  const room = SOCIAL_ACTION_LIMIT - pinnedShown.length;
+  const pageCount = room > 0 && agents.length > room ? Math.ceil(agents.length / room) : 1;
+  const offset = cultivator.socialPageOffset ?? 0;
+  const page = pageCount <= 1 ? 0 : (Math.floor(world.tick / SOCIAL_PAGE_HOLD_TICKS) + offset) % pageCount;
+  const agentShown = room <= 0
+    ? []
+    : agents.length <= room
+      ? agents
+      : agents.slice(page * room, page * room + room);
+  const npcRoom = Math.max(0, room - agentShown.length);
+  return {
+    agentsHere: listed.filter((other) => isAgentCultivator(other)).length,
+    page,
+    pageCount,
+    targets: [...pinnedShown, ...agentShown, ...npcs.slice(0, npcRoom)],
+  };
+}
+
 function socialActionTargets(world: WorldState, cultivator: Cultivator): Cultivator[] {
-  return selectNearbyCultivators(world, cultivator).slice(0, SOCIAL_ACTION_LIMIT);
+  return socialWindow(world, cultivator).targets;
 }
 
 function nearbyActionNote(world: WorldState, cultivator: Cultivator): string {
-  const listed = selectNearbyCultivators(world, cultivator);
-  const agents = listed.filter((other) => isAgentCultivator(other)).length;
-  return `同场能看见的修士有 ${agents} 位，都在 nearbyCultivators 里。搭讪、问候、赠礼、切磋和组队先列前 ${SOCIAL_ACTION_LIMIT} 位。`;
+  const window = socialWindow(world, cultivator);
+  return `同场能看见的修士有 ${window.agentsHere} 位，都在 nearbyCultivators 里。搭讪、问候、赠礼、切磋和组队先列这一页，最多 ${SOCIAL_ACTION_LIMIT} 位。第 ${window.page + 1}/${window.pageCount} 页，每 ${SOCIAL_PAGE_HOLD_TICKS} 刻换一页。认识了的人留在这一页上。`;
 }
 
 function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
@@ -5820,6 +5863,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       })),
     nearbyCultivators: nearbyCultivatorsOf(world, cultivator),
     nearbyNote: nearbyActionNote(world, cultivator),
+    socialPage: (() => {
+      const window = socialWindow(world, cultivator);
+      return { index: window.page, pageCount: window.pageCount, holdTicks: SOCIAL_PAGE_HOLD_TICKS };
+    })(),
     party: partyShareOf(world, cultivator),
     sharedDungeon: sharedDungeonOf(world, cultivator.id),
     localBoard: (world.locationBoards?.[cultivator.locationId] ?? []).map((note) => ({
@@ -6421,6 +6468,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
 
   // ---- Social actions (搭讪 / 传音 / 道侣) ----
   {
+    const socialWindowView = socialWindow(world, cultivator);
+    if (socialWindowView.pageCount > 1) {
+      actions.push({
+        actionId: "cycle-social-page",
+        label: "换一页同场的人",
+        description: `搭讪和问候每次最多 ${SOCIAL_ACTION_LIMIT} 位。这一页没有的修士，换一页就能搭讪。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
     // 搭讪: chat up someone at the same location (must be in safe zone)
     if (location.kind === "safe") {
       const chatTargets = socialActionTargets(world, cultivator)
@@ -6434,7 +6491,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           actions.push({
             actionId: `chat-up:${chatTarget.id}` as ActionId,
             label: `搭讪：${chatTarget.name}（${levelLabel}）`,
-            description: `与${chatTarget.name}攀谈，增进好感度。`,
+            description: `与${chatTarget.name}攀谈，增进好感度。认识之后才能组队，同一心跳里可以接着邀请。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -6556,7 +6613,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         actions.push({
           actionId: `send-message:${target.id}:${kind}` as ActionId,
           label: `发送消息（${kind}）：${target.name}`,
-          description: `向${target.name}发送${kind === "greet" ? "问候" : kind === "share-info" ? "情报" : "求助"}。`,
+          description: kind === "greet"
+            ? `向${target.name}问候。问候之后就认识了，可以接着组队。`
+            : `向${target.name}发送${kind === "share-info" ? "情报" : "求助"}。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -6752,6 +6811,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("accept-party:")) return;
   if (actionId.startsWith("reject-party:")) return;
   if (actionId === "disband-party") return;
+  if (actionId === "cycle-social-page") return;
   if (actionId.startsWith("buy-residence:")) return;
   // Allow low-risk sect tasks (resource tribute) while injured
   const injuredSectTask = parseSectTaskId(actionId);
@@ -7312,6 +7372,23 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected dao companionship with ${proposerName}.` };
   }
 
+  // ---- Social page: show the next unbound agents ----
+  if (actionId === "cycle-social-page") {
+    const window = socialWindow(world, cultivator);
+    if (window.pageCount <= 1) {
+      throw new GameplayRejection("这一页已经是全部能搭讪的人。");
+    }
+    cultivator.socialPageOffset = (cultivator.socialPageOffset ?? 0) + 1;
+    const next = socialWindow(world, cultivator);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} turned the social page to ${next.page + 1}/${next.pageCount}.`,
+    };
+  }
+
   // ---- Party: 组队邀请 (Party Invite) ----
   const partyInviteTargetId = parsePartyInviteTarget(actionId);
   if (partyInviteTargetId) {
@@ -7325,7 +7402,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (isInParty(world, target.id)) throw new Error("Target is already in a party.");
     const link = getSocialLink(world, cultivator.id, target.id);
     if (!link || !meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL)) {
-      throw new Error(`组队邀请 requires at least ${PARTY_INVITE_MIN_LEVEL} level relationship.`);
+      throw new GameplayRejection(`还没认识${target.name}。先搭讪或问候一声，认识了才能组队。同一心跳里可以先搭讪再邀请。`);
     }
     if (!world.partyInvitations) (world as unknown as Record<string, unknown>).partyInvitations = {};
     if (typeof world.nextPartyInvitationSequence !== "number") (world as unknown as Record<string, unknown>).nextPartyInvitationSequence = 1;
