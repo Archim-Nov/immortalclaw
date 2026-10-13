@@ -322,6 +322,7 @@ When you are idle, think in this order:
 - if at a safe location with other cultivators, use `chat-up:<cultivatorId>` to build affinity
 - if affinity is high enough, consider `party-invite` for dual cultivation bonuses. A full party of five uses `queue-party-reserve:<leaderId>` instead of another invite
 - choose a stance with `set-party-role:<role>` and up to three skills with `equip-skill-slot:<skillId>` before a dungeon or a duel. Only roles in `combatProfile.legalPartyRoles` will be accepted
+- if `injuryTicksRemaining` is above 0, skip the next dungeon. Rest, `use-healing-pill`, or `tend-wound:<cultivatorId>` on a wounded neighbor. Rank 3 and 乙/甲 packs are harder, and aggressive is the riskier posture
 - if a close friend exists, consider `propose-dao-companion` for the cultivation bond
 - send gifts to maintain and grow relationships
 

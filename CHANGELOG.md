@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### 见闻、高压地宫和疗伤 / Aftermath, packs, and wounds
+
+搭讪、问候、赠礼会在原有那一句见闻上补一笔，只在关系跨了一阶、有人情，或已经是宿敌时才写。轮换会写进队长、上场的人和换下去的人。候补顶上被请走的位子，以及退出候补，两边都有一句。
+
+丙级 1、2 阶仍是单个精英，炼气单人照旧难赢。3 阶起精英更硬，并带一个从者。6 阶，以及乙、甲任何阶，再加一个侧翼。冒进在原有姿态倍率上再乘 1.08。
+
+硬仗会留下伤。3 阶以上战败至少 6 刻，打赢但掉了四成血至少 3 刻，冒进打赢掉了两成以上至少 2 刻。同伴若这场输了会带 4 刻伤，硬仗打赢但气血掉得多会带 2 刻。伤着时进不了地宫。歇着每刻掉 1，`use-healing-pill` 掉 2，`tend-wound:<cultivatorId>` 没丹掉 3、有疗伤丹掉 5，并让受伤的人欠一份人情。战报的 `combatRounds` 在有伤时多一句 `wound`。
+
+16 个种子、均衡 6 回合、炼气近似的 130 血 / 48 攻：单人主攻 1 阶 6.3%、3 阶 0%；五人混合 1 阶 100%、3 阶 50%；五主攻 3 阶 75%；五人混合冒进 3 阶 31.3%。
+
+Chat, greet, and gift notes gain one extra clause only when affinity just stepped, a favor is owed, or the two are rivals. A rotate is written for the leader and both people who swapped. The reserve who fills a kick, and both sides of leaving the reserve, get a note.
+
+丙 ranks 1–2 stay one elite, so solo 炼气 stays hard. From rank 3 the elite is tougher and brings a follower. Rank 6, and every 乙 or 甲 guardian, also brings a flanker. Aggressive multiplies that pack by an extra 1.08.
+
+A hard loss leaves at least 6 injury ticks, a costly win at least 3, and an aggressive win that spent health at least 2. Companions can leave wounded too. Injury blocks the next dungeon. Idle rest clears 1 tick, `use-healing-pill` clears 2, and `tend-wound:<cultivatorId>` clears 3, or 5 with a pill, and records a favor. `combatRounds[].wound` carries the sentence when a fight caused it.
+
+Across 16 seeds, balanced, 6 rounds, 炼气-like 130 hp / 48 attack: solo damage rank 1 is 6.3% and rank 3 is 0%. A mixed party of five is 100% at rank 1 and 50% at rank 3. Five damage dealers are 75% at rank 3. The same mixed party on aggressive is 31.3% at rank 3.
+
 ### 切磋、站位和候补 / Duels, roles, and reserves
 
 城里的切磋改走和地宫守关同一套回合战斗。两边都按自己的站位出招。游记里除了原来的起手和灵气，还会多一句双方都能复述的切磋，写明使出了哪一式。灵石、声望、好感和对手记录仍按原来的胜负、撤退和平手结算。

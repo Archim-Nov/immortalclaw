@@ -651,6 +651,8 @@ export interface DungeonCombatSummary {
   party: Array<{ name: string; roleLabel: string; skills: string[] }>;
   beats: string[];
   highlights: DungeonCombatHighlight[];
+  /** Present when this fight left a wound someone can rest, dose, or tend. */
+  wound?: string;
 }
 
 export interface DungeonExpeditionProgress {
@@ -926,6 +928,7 @@ export type ImmediateActionId =
   | `queue-party-reserve:${string}`
   | "leave-party-reserve"
   | "leave-shared-expedition"
+  | `tend-wound:${string}`
   | `set-party-role:${PartyRoleId}`
   | `equip-skill-slot:${string}`
   | "clear-skill-loadout"
