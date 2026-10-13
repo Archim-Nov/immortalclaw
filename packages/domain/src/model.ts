@@ -2201,7 +2201,7 @@ export interface CultivatorStateView {
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
   /** Notes other cultivators left at this location. Omitted by older view fixtures. */
   localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];
-  /** Other cultivators at this location. Omitted by older view fixtures. Capped. */
+  /** Other cultivators at this location. Omitted by older view fixtures. Every other agent is kept; NPCs are capped. */
   nearbyCultivators?: readonly {
     cultivatorId: string;
     name: string;

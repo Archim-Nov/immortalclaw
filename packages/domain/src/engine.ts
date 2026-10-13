@@ -5316,7 +5316,8 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
   };
 }
 
-const NEARBY_CULTIVATOR_LIMIT = 8;
+/** NPCs after the reserved agent slots. Party partners and bonds are not counted here. */
+const NEARBY_NPC_LIMIT = 8;
 
 function sectDisplayName(world: WorldState, sectId: string | null): string | null {
   if (!sectId) {
@@ -5325,22 +5326,44 @@ function sectDisplayName(world: WorldState, sectId: string | null): string | nul
   return world.sects[sectId]?.name ?? world.neutralSects[sectId]?.name ?? null;
 }
 
-function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
-  const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
-  const partnerId = getPartyPartner(world, cultivator.id)?.id ?? null;
-  return [...getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)]
+function isAgentCultivator(cultivator: Cultivator): boolean {
+  return typeof cultivator.createdByAgentId === "string" && cultivator.createdByAgentId.length > 0;
+}
+
+function nearbyPriority(world: WorldState, self: Cultivator, other: Cultivator): number {
+  if (getPartyPartner(world, self.id)?.id === other.id) return 0;
+  const link = getSocialLink(world, self.id, other.id);
+  if (link && (link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)) return 1;
+  if (isAgentCultivator(other)) return 2;
+  return 3;
+}
+
+function selectNearbyCultivators(world: WorldState, cultivator: Cultivator): Cultivator[] {
+  const ordered = [...getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)]
     .sort((left, right) => {
-      const rank = (other: Cultivator) => {
-        if (other.id === partnerId) return 0;
-        const link = getSocialLink(world, cultivator.id, other.id);
-        if (link && (link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)) return 1;
-        return 2;
-      };
-      const byRank = rank(left) - rank(right);
+      const byRank = nearbyPriority(world, cultivator, left) - nearbyPriority(world, cultivator, right);
       if (byRank !== 0) return byRank;
       return left.name.localeCompare(right.name, "zh") || left.id.localeCompare(right.id);
-    })
-    .slice(0, NEARBY_CULTIVATOR_LIMIT)
+    });
+  const selected: Cultivator[] = [];
+  let npcCount = 0;
+  for (const other of ordered) {
+    if (nearbyPriority(world, cultivator, other) < 3) {
+      selected.push(other);
+      continue;
+    }
+    if (npcCount >= NEARBY_NPC_LIMIT) {
+      continue;
+    }
+    selected.push(other);
+    npcCount += 1;
+  }
+  return selected;
+}
+
+function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
+  const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
+  return selectNearbyCultivators(world, cultivator)
     .map((other) => {
       const link = getSocialLink(world, cultivator.id, other.id);
       return {
@@ -6191,9 +6214,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
   if (location.kind === "safe") {
-    const duelTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+    const duelTargets = selectNearbyCultivators(world, cultivator)
       .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
-    for (const candidate of duelTargets.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
+    for (const candidate of duelTargets) {
       actions.push({
         actionId: `challenge-cultivator:${candidate.id}` as ActionId,
         label: `Challenge ${candidate.name}`,
@@ -6233,10 +6256,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   {
     // 搭讪: chat up someone at the same location (must be in safe zone)
     if (location.kind === "safe") {
-      const chatTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
-        .filter((candidate) => !candidate.activeJobId)
-        .sort((left, right) => left.name.localeCompare(right.name, "zh") || left.id.localeCompare(right.id))
-        .slice(0, NEARBY_CULTIVATOR_LIMIT);
+      const chatTargets = selectNearbyCultivators(world, cultivator)
+        .filter((candidate) => !candidate.activeJobId);
       for (const chatTarget of chatTargets) {
         const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
         const onCooldown = existingLink?.lastChatUpTick !== undefined
@@ -6329,14 +6350,14 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     } else if (!isInParty(world, cultivator.id)) {
       // Party invite: invite someone with 认识+ affinity at same safe location
       if (location.kind === "safe") {
-        const inviteCandidates = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+        const inviteCandidates = selectNearbyCultivators(world, cultivator)
           .filter((c) => {
             if (c.activeJobId) return false;
             if (isInParty(world, c.id)) return false;
             const link = getSocialLink(world, cultivator.id, c.id);
             return link !== null && meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL);
           });
-        for (const candidate of inviteCandidates.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
+        for (const candidate of inviteCandidates) {
           const level = getAffinityLevel(getSocialLink(world, cultivator.id, candidate.id)!.affinity);
           actions.push({
             actionId: `party-invite:${candidate.id}` as ActionId,
@@ -6364,8 +6385,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   // ---- Social Verbs (结构化消息 / 赠送 / 委托) ----
   {
     // send-message to nearby cultivators at same location
-    const nearbyTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id);
-    for (const target of nearbyTargets.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
+    const nearbyTargets = selectNearbyCultivators(world, cultivator);
+    for (const target of nearbyTargets) {
       for (const kind of ["greet", "share-info", "request-help"] as const) {
         actions.push({
           actionId: `send-message:${target.id}:${kind}` as ActionId,

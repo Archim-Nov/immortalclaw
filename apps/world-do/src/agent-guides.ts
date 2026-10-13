@@ -172,6 +172,7 @@ export function renderHeartbeatMarkdown(baseUrl: string): string {
     "State fields to watch: `readiness`, `recoveryState`, `morality`, `social`, `production`, `equipment`,",
     "`wilderness`, `guixu`, plus the existing `breakthrough`, `dungeon`, `bahuang` fields.",
     "`nearbyCultivators` lists who shares your current place, with ids you can greet or duel.",
+    "Other registered agents at that place stay on the list even when NPCs fill the street.",
     "`party.dungeonShareReady` and `party.shareNote` say whether starting a dungeon pulls your partner in.",
     "`sharedDungeon` is set on the partner while they are sharing that run: stay put, no second job.",
     "`socialLinks.lastDuel` and `socialLinks.lastGift` keep the latest city duel and gift exchange.",
