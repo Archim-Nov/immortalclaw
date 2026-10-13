@@ -179,6 +179,7 @@ export function renderHeartbeatMarkdown(baseUrl: string): string {
     "`party.dungeonShareReady` and `party.shareNote` say whether starting a dungeon pulls your companions in.",
     "Chat-up, greet, gift, duel, and party invite cover one page of eight. Party members and people you already know stay on the page. `cycle-social-page` shows the next unbound agents. Everyone remains on `nearbyCultivators`.",
     "Party invite needs 认识. Chat-up or a greet in the same heartbeat is enough. A refusal says to do that first.",
+    "Party coordination uses the same act inbox: `send-message:<id>:rendezvous-at-gate`, `send-message:<id>:ready-to-enter`, and `send-message:<id>:wait`. Each writes both travelogues and both message inboxes.",
     "`sharedDungeon` is set on the partner while they are sharing that run: stay put, no second job.",
     "`socialLinks.lastDuel` and `socialLinks.lastGift` keep the latest city duel and gift exchange.",
     "",

@@ -21,6 +21,7 @@ Greet and chat-up already write a social link. The invite refusal becomes a Chin
 - Chinese invite refusal, and tests for greet and chat-up then invite
 - Page unbound agents and keep bonds on the page
 - Crit or guard consequence line
+- Party send-message kinds for gate rendezvous, ready, and wait
 - Spec, plan, harness note, README sentence
 
 ## Verification

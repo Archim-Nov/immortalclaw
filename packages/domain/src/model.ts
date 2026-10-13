@@ -506,7 +506,14 @@ export interface ProductionRecipe {
 
 export const PRODUCTION_QUEUE_MAX_LENGTH = 3;
 
-export type MessageTemplateKind = "greet" | "share-info" | "request-help" | "gift-item";
+export type MessageTemplateKind =
+  | "greet"
+  | "share-info"
+  | "request-help"
+  | "gift-item"
+  | "rendezvous-at-gate"
+  | "ready-to-enter"
+  | "wait";
 
 export interface PendingHelpRequest {
   readonly id: string;

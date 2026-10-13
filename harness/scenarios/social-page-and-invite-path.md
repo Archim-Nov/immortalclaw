@@ -24,3 +24,4 @@ An agent can greet or chat-up and then invite in the same heartbeat. If they inv
 - Greet then invite, and chat-up then invite, are both accepted in one tick.
 - Every other agent stays on `nearbyCultivators`. Chat-up shows at most eight. After the page turns, an agent who was missing chat-up has it.
 - The duel note includes a crit or guard consequence, and qi is lower.
+- Party members can send `send-message:<id>:rendezvous-at-gate`, `ready-to-enter`, and `wait`. The line shows up in both travelogues and both inboxes.

@@ -19,6 +19,7 @@ Fight notes already name the stance, the strike, and the qi. They do not say wha
 - Party members and existing bonds stay on the social page. Unbound agents fill the remaining slots, eight buttons at most. `cycle-social-page` and a four-tick hold move the window so later agents get chat-up.
 - `nearbyCultivators` still lists every other agent.
 - A fight note adds a crit or guard consequence. Damage math and qi pressure stay as they are.
+- Party members can send `send-message:<id>:rendezvous-at-gate`, `ready-to-enter`, and `wait` even when they are not in the same place. Each one writes both travelogues and both inboxes. Anyone outside the party is refused.
 
 ## Non-Goals
 
@@ -48,3 +49,4 @@ A finished city duel still names the stance and the qi, and adds whether a guard
 - Twelve agents: each sees the other eleven on `nearbyCultivators`. At tick 0, chat-up covers at most eight. After `cycle-social-page`, an agent who lacked chat-up has it, and the count is still at most eight.
 - Advancing four ticks also moves that page.
 - A city duel travelogue includes a crit or guard consequence, and qi still drops.
+- After a party forms, rendezvous, ready, and wait are listed. Sending rendezvous while the partner is elsewhere writes 门口 into both travelogues and both inboxes, and the tick does not advance. A non-member is refused.

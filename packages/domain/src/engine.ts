@@ -6547,6 +6547,31 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (party) {
       // Disband party
       actions.push({ actionId: "disband-party" as ActionId, label: "解散队伍", description: "解散当前队伍。", durationTicks: 0, kind: "immediate" });
+      for (const mate of getPartyMembers(world, cultivator.id)) {
+        actions.push(
+          {
+            actionId: `send-message:${mate.id}:rendezvous-at-gate` as ActionId,
+            label: `约到门口：${mate.name}`,
+            description: `传话给${mate.name}，约在地宫门口会合。双方游记和信箱都会记下。`,
+            durationTicks: 0,
+            kind: "immediate",
+          },
+          {
+            actionId: `send-message:${mate.id}:ready-to-enter` as ActionId,
+            label: `可以下了：${mate.name}`,
+            description: `告诉${mate.name}人已就绪，可以一起下地宫。不另开工。`,
+            durationTicks: 0,
+            kind: "immediate",
+          },
+          {
+            actionId: `send-message:${mate.id}:wait` as ActionId,
+            label: `先等一等：${mate.name}`,
+            description: `让${mate.name}先别下，在原地等。`,
+            durationTicks: 0,
+            kind: "immediate",
+          },
+        );
+      }
       const partner = getPartyPartner(world, cultivator.id);
       if (partner && !partner.activeJobId && !cultivator.activeJobId) {
         // Dual survey wilderness (if in wilderness)
@@ -6808,6 +6833,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("accept-dao-companion:")) return;
   if (actionId.startsWith("reject-dao-companion:")) return;
   if (actionId.startsWith("party-invite:")) return;
+  if (actionId.endsWith(":rendezvous-at-gate") || actionId.endsWith(":ready-to-enter") || actionId.endsWith(":wait")) return;
   if (actionId.startsWith("accept-party:")) return;
   if (actionId.startsWith("reject-party:")) return;
   if (actionId === "disband-party") return;
@@ -7516,6 +7542,57 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const { targetId, kind } = sendMessageParsed;
     const target = getCultivatorOrThrow(world, targetId);
     if (cultivator.id === target.id) throw new Error("Cannot send message to yourself.");
+    if (kind === "rendezvous-at-gate" || kind === "ready-to-enter" || kind === "wait") {
+      const party = getPartyOf(world, cultivator.id);
+      if (!party || !party.memberIds.includes(target.id)) {
+        throw new GameplayRejection("只有同队的人能传这句。先组上队，再用传话约门口。");
+      }
+      const place = world.locations[cultivator.locationId]?.name ?? "这里";
+      const lines = {
+        "rendezvous-at-gate": {
+          subject: "门口会合",
+          content: `${cultivator.name}传话：到地宫门口会合。人到了、闲着，再一起下。`,
+          title: `约${target.name}到门口`,
+          replyTitle: `${cultivator.name}约在门口`,
+          mood: "约在地宫门口",
+        },
+        "ready-to-enter": {
+          subject: "可以下了",
+          content: `${cultivator.name}传话：人已就绪，可以下地宫。闲着就一起进，不另开工。`,
+          title: `告诉${target.name}可以下了`,
+          replyTitle: `${cultivator.name}说可以下了`,
+          mood: "等人一起进",
+        },
+        wait: {
+          subject: "先等一等",
+          content: `${cultivator.name}传话：先别下。在原地等，齐了再进。`,
+          title: `让${target.name}先等`,
+          replyTitle: `${cultivator.name}说先等`,
+          mood: "先别进门",
+        },
+      } as const;
+      const line = lines[kind];
+      const detail = `${line.content}人在${place}。`;
+      addMessage(world, target.id, cultivator.name, line.subject, detail, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      addMessage(world, cultivator.id, cultivator.name, line.subject, `你对${target.name}说：${detail}`, { fromCultivatorId: cultivator.id, toCultivatorId: cultivator.id });
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: line.title,
+        detail,
+        locationId: cultivator.locationId,
+        mood: line.mood,
+      }));
+      pushTravelNote(target, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: line.replyTitle,
+        detail,
+        locationId: target.locationId,
+        mood: line.mood,
+      }));
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}.` };
+    }
     if (cultivator.locationId !== target.locationId) throw new Error("send-message requires same location.");
     if (kind === "gift-item") {
       // gift-item: deduct 1 of the first available item in inventory, create PendingGift

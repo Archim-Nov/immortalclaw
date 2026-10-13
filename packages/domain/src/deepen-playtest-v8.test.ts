@@ -111,6 +111,51 @@ test("later agents get chat-up when the social page turns", () => {
   assert.ok(laterWatcher.activeJobId === null);
 });
 
+test("party coordination is an in-game message, not a side channel", () => {
+  const world = createSeedWorld();
+  const leader = world.cultivators[CULTIVATOR_ID]!;
+  leader.locationId = "qingzhou:main-city";
+  const partner = spawnAgent(world, "agent-v8-party-msg", "青萝");
+  const outsider = spawnAgent(world, "agent-v8-party-out", "沈砺");
+  performAction(world, leader.id, `chat-up:${partner.id}`);
+  performAction(world, leader.id, `party-invite:${partner.id}`);
+  const inviteId = Object.keys(world.partyInvitations).find(
+    (id) => world.partyInvitations[id]?.toCultivatorId === partner.id,
+  );
+  assert.ok(inviteId);
+  performAction(world, partner.id, `accept-party:${inviteId}`);
+  partner.locationId = "qingzhou:dungeon-c";
+
+  const actions = listAvailableActions(world, leader.id).map((action) => action.actionId);
+  assert.ok(actions.includes(`send-message:${partner.id}:rendezvous-at-gate`));
+  assert.ok(actions.includes(`send-message:${partner.id}:ready-to-enter`));
+  assert.ok(actions.includes(`send-message:${partner.id}:wait`));
+  assert.equal(actions.includes(`send-message:${outsider.id}:rendezvous-at-gate`), false);
+
+  const tick = world.tick;
+  const sent = performAction(world, leader.id, `send-message:${partner.id}:rendezvous-at-gate`);
+  assert.equal(sent.accepted, true);
+  assert.equal(world.tick, tick);
+  assert.ok((leader.travelNotes ?? []).some((note) => note.detail.includes("门口")));
+  assert.ok((partner.travelNotes ?? []).some((note) => note.detail.includes("门口")));
+  const inbox = (world.messages ?? []).filter((message) => message.subject === "门口会合");
+  assert.ok(inbox.some((message) => message.toCultivatorId === partner.id && message.content.includes("门口")));
+  assert.ok(inbox.some((message) => message.toCultivatorId === leader.id && message.content.includes(partner.name)));
+
+  performAction(world, leader.id, `send-message:${partner.id}:ready-to-enter`);
+  performAction(world, leader.id, `send-message:${partner.id}:wait`);
+  const subjects = new Set((world.messages ?? []).filter((message) => message.toCultivatorId === partner.id).map((message) => message.subject));
+  assert.ok(subjects.has("可以下了"));
+  assert.ok(subjects.has("先等一等"));
+  assert.ok((partner.travelNotes ?? []).some((note) => note.detail.includes("先别下")));
+  assert.equal(world.tick, tick);
+
+  assert.throws(
+    () => performAction(world, leader.id, `send-message:${outsider.id}:wait`),
+    (error: unknown) => error instanceof GameplayRejection && /同队/.test(error.message),
+  );
+});
+
 test("a city duel notes what the crit or the guard left behind", () => {
   const world = createSeedWorld();
   const first = world.cultivators[CULTIVATOR_ID]!;
