@@ -23,6 +23,7 @@ The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-a
 Dungeon entry must finish or fail cleanly: `harness/scenarios/dungeon-enter-unstick.md`.
 An aggressive low-qi run must eject with a report: `harness/scenarios/dungeon-aggressive-collapse.md`.
 Favors, rivals, board notes, and a harder aggressive rank live at `harness/scenarios/social-and-higher-dungeon.md`.
+Shared dungeon runs, richer board notes, and the longer sect chain live at `harness/scenarios/shared-dungeon-and-sect-chain.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

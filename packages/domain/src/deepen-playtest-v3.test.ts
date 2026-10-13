@@ -230,7 +230,7 @@ test("a board note and a dungeon party invite are visible to the other cultivato
   assert.ok((world.messages ?? []).some((message) => message.toCultivatorId === second.id && message.subject.includes("地宫")));
 });
 
-test("three sect errands write a diary chain and notice a sect-mate", () => {
+test("sect errands write a diary chain and notice a sect-mate", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators[CULTIVATOR_ID]!;
   const sect = seedPlayerSect(world);
@@ -248,7 +248,7 @@ test("three sect errands write a diary chain and notice a sect-mate", () => {
   sect.memberIds.push(peer.id);
   const progressBefore = cultivator.realmProgress;
 
-  for (let step = 0; step < 3; step += 1) {
+  for (let step = 0; step < 6; step += 1) {
     performAction(world, cultivator.id, "take-sect-errand");
     advanceWorld(world, 2);
     assert.equal(cultivator.activeJobId, null);
