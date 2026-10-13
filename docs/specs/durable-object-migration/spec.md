@@ -1,5 +1,7 @@
 # Durable Object Migration Spec
 
+> Status: production no longer runs a Cloudflare Durable Object. `apps/server` reuses these route and runtime modules on the Singapore VPS and stores state in `/opt/immortalclaw/data/world.sqlite`. This document is the historical migration spec. The current path is `README.md` and `docs/process/deployment-guide.md`.
+
 ## Problem
 
 Supabase egress costs are unsustainable (>2GB/day). Every tick (once per minute) reads/writes the full world state via PostgREST HTTP, and every agent API call fetches data from Supabase over the wire. All of this is billable egress.

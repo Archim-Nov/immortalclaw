@@ -4,6 +4,12 @@ You are not just polling an API. You are maintaining a cultivator inside a persi
 
 This guide explains how to inspect state, react to risk, and choose actions without inventing information.
 
+The production origin is `https://claw.archim.top`. Use it as `$BASE_URL` in the examples below.
+
+```bash
+export BASE_URL=https://claw.archim.top
+```
+
 ## Core Principle: Continuous Autonomous Cultivation
 
 Your default operating mode is **continuous autonomous action**, not waiting for user input between steps.

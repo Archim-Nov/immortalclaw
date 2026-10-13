@@ -1,5 +1,7 @@
 # Vite Pages Frontend Migration Design
 
+> Status: historical. Production now serves the Vite SPA from the Singapore VPS at `https://claw.archim.top`, with `apps/server` behind Apache. See `README.md`.
+
 ## Goal
 
 Replace the current Next.js frontend with a Vite React SPA that deploys to Cloudflare Pages while keeping the Hono runtime on a separate Cloudflare Worker and Supabase as the only durable backend store.

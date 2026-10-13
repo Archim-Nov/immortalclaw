@@ -1,5 +1,7 @@
 # GitHub Deployment Records Spec
 
+> Status: this spec describes mirroring Cloudflare Pages results into GitHub Deployments. That workflow is not how `https://claw.archim.top` is released. Production deploys follow `deploy/README.md`.
+
 ## Summary
 
 Add a repository-managed GitHub Actions workflow that mirrors Cloudflare Pages deployment results into GitHub deployment records so the GitHub Deployments UI shows both preview and production environments after the migration away from Vercel.

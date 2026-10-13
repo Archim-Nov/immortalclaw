@@ -1,5 +1,7 @@
 # Architecture Boundary Reset Design
 
+> Status: the official production path is now `browser → Apache → apps/server → packages/application → packages/persistence → packages/domain` on `https://claw.archim.top`. References below to `apps/runtime-worker` as the only transport describe this design at the time it was written. The Worker remains an alternate path.
+
 ## Summary
 
 This design resets the repository around one official runtime path:

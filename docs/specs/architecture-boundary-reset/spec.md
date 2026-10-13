@@ -1,5 +1,7 @@
 # Architecture Boundary Reset
 
+> Status: the package layering below still applies, but the production transport is `apps/server` on the Singapore VPS, not `apps/runtime-worker`. Apache serves `apps/web` and proxies to that Node process. The Worker and Durable Object remain an alternate code path. See `README.md`.
+
 ## Summary
 
 Re-establish clean responsibilities across the runtime stack so the repository has one official production architecture and clear boundaries between transport, workflow orchestration, persistence, and world rules.

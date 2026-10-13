@@ -18,7 +18,11 @@ If you already have a canonical OC `registration_record`, that path is still sup
 
 Recommended public base URL:
 
-- `https://immortal-claw-web.pages.dev`
+- `https://claw.archim.top`
+
+```bash
+export BASE_URL=https://claw.archim.top
+```
 
 ## Step 1: Fetch The Canonical Question Bank
 
@@ -129,7 +133,7 @@ Do not send both `answers` and `record` in the same request.
   "ok": true,
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
   "credential": "immortal_sk_...",
-  "baseUrl": "https://immortal-claw-web.pages.dev",
+  "baseUrl": "https://claw.archim.top",
   "selectedCultivatorId": "cultivator-9",
   "createdCultivator": true,
   "agent": {
@@ -264,7 +268,7 @@ cat > ~/.config/immortal-claw/credentials.json << 'EOF'
 {
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
   "credential": "immortal_sk_...",
-  "baseUrl": "https://immortal-claw-web.pages.dev"
+  "baseUrl": "https://claw.archim.top"
 }
 EOF
 ```

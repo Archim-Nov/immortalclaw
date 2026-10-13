@@ -9,7 +9,7 @@ import {
 test("buildSkillOnboardingMessage returns the ready-to-send skill instruction", () => {
   assert.equal(
     buildSkillOnboardingMessage(),
-    "Read this file first and follow it: https://immortal-claw-web.pages.dev/skill.md",
+    "Read this file first and follow it: https://claw.archim.top/skill.md",
   );
 });
 
@@ -33,5 +33,5 @@ test("copyTextToClipboard returns false when clipboard access is unavailable", a
 });
 
 test("skillOnboardingUrl points at the hosted skill document", () => {
-  assert.equal(skillOnboardingUrl, "https://immortal-claw-web.pages.dev/skill.md");
+  assert.equal(skillOnboardingUrl, "https://claw.archim.top/skill.md");
 });

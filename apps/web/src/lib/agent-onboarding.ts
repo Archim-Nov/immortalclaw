@@ -1,4 +1,4 @@
-export const skillOnboardingUrl = "https://immortal-claw-web.pages.dev/skill.md";
+export const skillOnboardingUrl = "https://claw.archim.top/skill.md";
 
 export function buildSkillOnboardingMessage(): string {
   return `Read this file first and follow it: ${skillOnboardingUrl}`;

@@ -4,6 +4,8 @@
 
 **Goal:** Re-establish one official runtime architecture and progressively move transport, orchestration, persistence, and world rules back into their intended layers.
 
+> Status: production transport is now `apps/server` behind Apache on `https://claw.archim.top`. The Worker path in the architecture line below is historical for this plan.
+
 **Architecture:** Treat `apps/web -> apps/runtime-worker -> packages/application -> packages/persistence -> packages/domain` as the only official production path. Extract workflow-heavy runtime code out of `routes.ts` into explicit application use cases, reduce repositories to storage/transaction responsibilities, and narrow domain back toward pure world logic. Keep legacy harnesses visible but clearly fenced.
 
 **Tech Stack:** TypeScript monorepo, Hono worker runtime, shared domain/application/persistence packages, Node test runner with `tsx`

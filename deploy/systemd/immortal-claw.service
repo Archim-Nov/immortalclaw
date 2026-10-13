@@ -7,6 +7,7 @@ Type=simple
 WorkingDirectory=/opt/immortalclaw
 EnvironmentFile=/opt/immortalclaw/server.env
 # Node 22+ required (uses the built-in node:sqlite). Adjust the path to `which node`.
+# Production server.env sets PORT=8788. Apache on claw.archim.top proxies to 127.0.0.1:8788.
 ExecStart=/usr/bin/node --import tsx apps/server/src/index.ts
 Restart=always
 RestartSec=3

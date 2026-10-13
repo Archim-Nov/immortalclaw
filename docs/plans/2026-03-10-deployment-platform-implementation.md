@@ -2,7 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 >
-> Status update on 2026-03-11: the repository completed a follow-on frontend migration that replaced the planned Vercel and Next.js web surface with a Vite React SPA on Cloudflare Pages. Treat Vercel and Next.js task details below as original draft context; current frontend guidance lives in `README.md` and the 2026-03-11 Vite Pages Worker plans.
+> Status update on 2026-03-11: the repository completed a follow-on frontend migration that replaced the planned Vercel and Next.js web surface with a Vite React SPA on Cloudflare Pages. Treat Vercel and Next.js task details below as original draft context.
+>
+> Later status: production moved off Cloudflare. The live site is the Singapore VPS at `https://claw.archim.top` (`apps/server`, Apache, SQLite). Current deploy guidance is `README.md` and `docs/process/deployment-guide.md`. The Cloudflare goal in this plan is historical.
 
 **Goal:** Turn Immortal Claw into a deployable Cloudflare Pages + Cloudflare Workers + Supabase application without baking platform-specific assumptions into the domain rules.
 
