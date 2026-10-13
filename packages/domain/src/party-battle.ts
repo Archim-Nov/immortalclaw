@@ -39,7 +39,7 @@ interface LiveFighter extends BattleCombatant {
 }
 
 export interface PartyBattleResult {
-  outcome: "win" | "loss" | "withdraw";
+  outcome: "win" | "loss" | "withdraw" | "draw";
   roundsPlayed: number;
   leaderHpLostRatio: number;
   leaderSpiritSpentRatio: number;
@@ -47,6 +47,11 @@ export interface PartyBattleResult {
   summary: DungeonCombatSummary;
   beats: Array<{ kind: "close-call" | "injury" | "insight"; title: string; detail: string; mood: string }>;
   strikeLog: Array<{ leader: "hit" | "miss" | "crit" | null; enemy: "hit" | "miss" | "crit" | null }>;
+  /** Who left the field. Set only when the outcome is withdraw. */
+  retreatingSide: "party" | "enemy" | null;
+  finalHp: Record<string, number>;
+  /** Skill ids actually cast, keyed by combatant id. */
+  practice: Array<{ id: string; skillIds: string[] }>;
 }
 
 interface PlannedAction {
@@ -125,8 +130,13 @@ function fleeThreshold(policy: DungeonExpeditionPolicy): number {
   return 0.18;
 }
 
-function shouldFlee(fighter: LiveFighter, allies: readonly LiveFighter[], policy: DungeonExpeditionPolicy): boolean {
-  if (fighter.side !== "party") return false;
+function shouldFlee(
+  fighter: LiveFighter,
+  allies: readonly LiveFighter[],
+  policy: DungeonExpeditionPolicy,
+  duel = false,
+): boolean {
+  if (!duel && fighter.side !== "party") return false;
   const selfRatio = fighter.maxHp > 0 ? fighter.hp / fighter.maxHp : 0;
   const party = living(allies);
   const partyRatio = party.length === 0
@@ -163,8 +173,9 @@ export function choosePartyAction(
   enemies: readonly LiveFighter[],
   policy: DungeonExpeditionPolicy,
   round = 1,
+  duel = false,
 ): PlannedAction {
-  if (shouldFlee(fighter, allies, policy)) {
+  if (shouldFlee(fighter, allies, policy, duel)) {
     return { skill: FLEE_SKILL, flee: true };
   }
   const skills = legalSkills(fighter);
@@ -177,7 +188,7 @@ export function choosePartyAction(
   if (fighter.role === "guard") {
     const guard = pickSkill(skills, (skill) => skill.focus || skill.guardRatio < 1 || skill.wardRatio < 1);
     if (hurt && guard) return { skill: guard, flee: false };
-    if (guard && hashString(`${fighter.id}:${round}:guard`) % 3 !== 0) return { skill: guard, flee: false };
+    if (guard && hashString(`${fighter.id}:${round}:guard`) % 2 === 0) return { skill: guard, flee: false };
   }
   if (fighter.role === "support") {
     const heal = pickSkill(skills, (skill) => skill.healRatio > 0 && affordable(skill));
@@ -307,13 +318,22 @@ function spend(fighter: LiveFighter, skill: ResolvedCombatSkill): void {
   fighter.spirit = Math.max(0, fighter.spirit - skill.spiritCost);
   fighter.hp = Math.max(1, fighter.hp - skill.qiCost);
   if (skill.cooldown > 0) fighter.cooldowns[skill.id] = skill.cooldown;
-  if (!fighter.skillsUsed.includes(skill.name)) fighter.skillsUsed.push(skill.name);
+  if (!fighter.skillsUsed.includes(skill.id)) fighter.skillsUsed.push(skill.id);
 }
 
 function applySelfBuff(fighter: LiveFighter, skill: ResolvedCombatSkill): void {
   if (skill.guardRatio < 1) fighter.guardRatio = Math.min(fighter.guardRatio, skill.guardRatio);
   if (skill.wardRatio < 1) fighter.wardRatio = Math.min(fighter.wardRatio, skill.wardRatio);
   if (skill.focus) fighter.tauntRounds = 2;
+}
+
+function fleeChance(fighter: LiveFighter, enemies: readonly LiveFighter[], duel: boolean): number {
+  const pursuer = living(enemies).sort((a, b) => b.speed - a.speed)[0];
+  const speedGap = fighter.speed - (pursuer?.speed ?? fighter.speed);
+  const ratio = fighter.hp / Math.max(1, fighter.maxHp);
+  let chance = clamp(35 + (speedGap * 0.2) + (ratio <= 0.2 ? 20 : 0), 10, 85);
+  if (duel && ratio <= 0.15 && speedGap >= 200) chance = 100;
+  return chance;
 }
 
 function actParty(
@@ -324,11 +344,11 @@ function actParty(
   round: number,
   seed: string,
   leaderId: string,
+  duel = false,
 ): ActRecord {
   const roleLabel = PARTY_ROLE_LABEL[fighter.role];
   if (action.flee) {
-    const pursuer = living(enemies).sort((a, b) => b.speed - a.speed)[0];
-    const chance = clamp(35 + ((fighter.speed - (pursuer?.speed ?? fighter.speed)) * 0.2) + (fighter.hp / Math.max(1, fighter.maxHp) <= 0.2 ? 20 : 0), 10, 85);
+    const chance = fleeChance(fighter, enemies, duel);
     const success = (hashString(`${seed}:flee`) % 100) < chance;
     return {
       round,
@@ -418,7 +438,7 @@ function actParty(
     result: best,
     note: noteOf(fighter.name, roleLabel, skill.name, targetName, resultText),
     leaderStrike: fighter.id === leaderId ? best : null,
-    enemyStrike: null,
+    enemyStrike: fighter.side === "enemy" ? best : null,
   };
 }
 
@@ -500,7 +520,9 @@ function readableBeats(records: readonly ActRecord[], enemyName: string, outcome
     ? `${enemyName}撑不住，这一场赢了。`
     : outcome === "loss"
       ? `人倒在${enemyName}面前，这一场输了。`
-      : `有人撤步，这一场退出${enemyName}。`;
+      : outcome === "draw"
+        ? `${enemyName}和这边都还站着，这一场算平手。`
+        : `有人撤步，这一场退出${enemyName}。`;
   if (beats.length < 3) beats.push(ending);
   return beats.slice(0, 3);
 }
@@ -527,6 +549,8 @@ export function runPartyBattle(input: {
   seed: string;
   maxRounds?: number;
   leaderId?: string;
+  /** Both sides cast their own skills. A close timeout is a draw, not a retreat. */
+  duel?: boolean;
 }): PartyBattleResult {
   const allies = input.allies.map(awaken);
   const enemies = input.enemies.map(awaken);
@@ -539,6 +563,7 @@ export function runPartyBattle(input: {
   const records: ActRecord[] = [];
   const strikeLog: PartyBattleResult["strikeLog"] = [];
   let outcome: PartyBattleResult["outcome"] | null = null;
+  let retreatingSide: PartyBattleResult["retreatingSide"] = null;
   const maxRounds = input.maxRounds ?? (input.policy === "conservative" ? 5 : input.policy === "aggressive" ? 8 : 6);
 
   if (allies.length === 0) {
@@ -559,6 +584,9 @@ export function runPartyBattle(input: {
       summary,
       beats: [{ kind: "insight", title: "无人应战", detail: "没有人站进这一场。", mood: "门口是空的" }],
       strikeLog: [],
+      retreatingSide: null,
+      finalHp: {},
+      practice: [],
     };
   }
 
@@ -576,14 +604,26 @@ export function runPartyBattle(input: {
       if (fighter.hp <= 0) continue;
       if (living(allies).length === 0 || living(enemies).length === 0) break;
       const seed = `${input.seed}:r${round}:${fighter.id}`;
-      const record = fighter.side === "party"
-        ? actParty(fighter, allies, enemies, choosePartyAction(fighter, allies, enemies, input.policy, round), round, seed, leaderId)
+      const ownSide = fighter.side === "party" ? allies : enemies;
+      const otherSide = fighter.side === "party" ? enemies : allies;
+      const record = fighter.side === "party" || input.duel
+        ? actParty(
+          fighter,
+          ownSide,
+          otherSide,
+          choosePartyAction(fighter, ownSide, otherSide, input.policy, round, Boolean(input.duel)),
+          round,
+          seed,
+          leaderId,
+          Boolean(input.duel),
+        )
         : actEnemy(fighter, allies, chooseEnemyAction(fighter, round), round, seed);
       records.push(record);
       if (record.leaderStrike) leaderStrike = record.leaderStrike;
       if (record.enemyStrike) enemyStrike = record.enemyStrike;
       if (record.result === "flee" && record.note.includes("退出去了")) {
         outcome = "withdraw";
+        retreatingSide = fighter.side;
         break;
       }
       if (living(enemies).length === 0) {
@@ -604,7 +644,11 @@ export function runPartyBattle(input: {
     const enemyRatio = living(enemies).reduce((sum, enemy) => sum + enemy.hp / enemy.maxHp, 0) / Math.max(1, enemies.length);
     if (living(enemies).length === 0) outcome = "win";
     else if (living(allies).length === 0) outcome = "loss";
-    else if (allyRatio > enemyRatio) outcome = "win";
+    else if (input.duel) {
+      const gap = Math.abs(allyRatio - enemyRatio);
+      if (gap < 0.08) outcome = "draw";
+      else outcome = allyRatio > enemyRatio ? "win" : "loss";
+    } else if (allyRatio > enemyRatio) outcome = "win";
     else outcome = input.policy === "aggressive" ? "loss" : "withdraw";
   }
 
@@ -626,7 +670,7 @@ export function runPartyBattle(input: {
     party: allies.map((ally) => ({
       name: ally.name,
       roleLabel: PARTY_ROLE_LABEL[ally.role],
-      skills: ally.skillsUsed.slice(0, 3),
+      skills: ally.skillsUsed.slice(0, 3).map((id) => ally.skills.find((skill) => skill.id === id)?.name ?? id),
     })),
     beats,
     highlights,
@@ -647,11 +691,14 @@ export function runPartyBattle(input: {
     companionQiLoss,
     summary,
     beats: beats.map((detail, index) => ({
-      kind: outcome === "win" ? "close-call" : "injury",
+      kind: outcome === "win" ? "close-call" as const : outcome === "draw" ? "insight" as const : "injury" as const,
       title: index === 0 ? enemyName : `${enemyName}·${index + 1}`,
       detail,
-      mood: outcome === "win" ? "这一场是打赢的" : outcome === "loss" ? "这一场没站住" : "人先撤了",
+      mood: outcome === "win" ? "这一场是打赢的" : outcome === "loss" ? "这一场没站住" : outcome === "draw" ? "这一架没分出高下" : "人先撤了",
     })),
     strikeLog,
+    retreatingSide,
+    finalHp: Object.fromEntries([...allies, ...enemies].map((fighter) => [fighter.id, fighter.hp])),
+    practice: [...allies, ...enemies].map((fighter) => ({ id: fighter.id, skillIds: [...fighter.skillsUsed] })),
   };
 }

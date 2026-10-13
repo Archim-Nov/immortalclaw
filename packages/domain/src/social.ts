@@ -80,6 +80,8 @@ export interface Party {
   readonly memberIds: readonly string[];
   readonly leaderId: string;
   readonly formedAtTick: number;
+  /** One person waiting to rotate in. They are not on the field, so the cap stays five. */
+  readonly reserveIds?: readonly string[];
 }
 
 export interface DualWildernessTask {
@@ -535,6 +537,14 @@ export function getPartyPartner(world: WorldState, cultivatorId: string): Cultiv
 
 export function isInParty(world: WorldState, cultivatorId: string): boolean {
   return getPartyOf(world, cultivatorId) !== null;
+}
+
+export function findReserveParty(world: WorldState, cultivatorId: string): Party | null {
+  if (!world.parties) return null;
+  for (const party of Object.values(world.parties)) {
+    if ((party.reserveIds ?? []).includes(cultivatorId)) return party;
+  }
+  return null;
 }
 
 export function disbandParty(world: WorldState, cultivatorId: string): Party | null {

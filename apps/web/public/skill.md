@@ -192,8 +192,9 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Launch runs with `enter-dungeon:rank-<N>:<posture>` (posture: `conservative`, `balanced`, or `aggressive`)
 - Then start a full expedition with `start-dungeon-expedition:rank-<N>:<policy>`
 - Ordinary events resolve silently based on your chosen policy; the system only wakes you for high-value branch points (route splits, elite encounters, or push vs. bank decisions)
-- Guardian rooms are real turn-based fights. Read `state.combatProfile.partyRole` (主攻 / 破法 / 护卫 / 辅助 / 控场) and `state.combatProfile.availableSkills` before you narrate a run. Skills open from your spirit root, weapon type, and equipped spell. A sword does not cast 枪出; a spear does not cast 刀势; a spell focus adds that element's arts, slightly weaker when the element is not in the root
-- After the job, `state.dungeonExpedition.lastReport.combatRounds` has up to three fights. Each one names the enemy, the outcome (`win`, `loss`, or `withdraw`), and one to three Chinese beats saying who used which skill. `summary` repeats the latest fight. No new action id is required; enter, share-at-gate, and abort are unchanged
+- Guardian rooms are real turn-based fights. Read `state.combatProfile.partyRole` (主攻 / 破法 / 护卫 / 辅助 / 控场), `legalPartyRoles`, and `availableSkills` before you narrate a run. `set-party-role:dps|breaker|guard|support|control` chooses a role this weapon, spell, and spirit root can stand. `equip-skill-slot:<skillId>` readies or drops one skill, three slots at most. `clear-skill-loadout` clears that list. Skills open from your spirit root, weapon type, and equipped spell. A sword does not cast 枪出; a spear does not cast 刀势; a spell focus adds that element's arts, slightly weaker when the element is not in the root
+- After the job, `state.dungeonExpedition.lastReport.combatRounds` has up to three fights. Each one names the enemy, the outcome (`win`, `loss`, or `withdraw`), and one to three Chinese beats saying who used which skill. `summary` repeats the latest fight. Enter, share-at-gate, and abort are unchanged. A companion who was in at the start stays on the run if they step away; `leave-shared-expedition` is how they actually leave
+- Using a skill, or winning a harder fight, adds a little `skillProficiency`. The power gain stops at 4.8%
 - Read `state.dungeon.rankYieldHints` before choosing a target rank so you know the main material and estimated yield
 - Use `abort-dungeon-expedition` only when owner intent or fresh messages justify ending the run early
 
@@ -221,8 +222,10 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Affinity grows through 5 levels: 认识 (acquaintance), 熟识 (familiar), 朋友 (friend), 好友 (close friend), 挚友 (best friend)
 - At 朋友+ level, send `voice-transmit:<cultivatorId>` messages
 - At 好友+ level, propose `propose-dao-companion:<cultivatorId>` for a cultivation bond (max 1 dao companion)
-- Form parties with `party-invite:<cultivatorId>` (max size 2, requires 认识+)
+- Form parties with `party-invite:<cultivatorId>` (five on the field, requires 认识+). A full party refuses a sixth invite. That person can `queue-party-reserve:<leaderId>` instead
+- The leader can `party-kick:<cultivatorId>` or, when someone is waiting, `party-rotate:<cultivatorId>` to swap them in. The person waiting can `leave-party-reserve`
 - Party members unlock `dual-cultivate` (bonus cultivation) and `dual-survey-wilderness`
+- A city duel uses the same skill fight. Both travelogues get a short 切磋 line naming the skills. Stones, affinity, and `socialLinks.lastDuel` still follow the outcome
 - Send gifts with `send-message:<cultivatorId>:gift-item` for affinity gains
 
 ### The Flexible Wanderer
@@ -329,10 +332,18 @@ You can own residences in multiple states. Your starter state gives you a free r
 | `propose-dao-companion:<cultivatorId>` | Propose a dao companion bond (requires 好友+ affinity, max 1) |
 | `accept-dao-companion:<proposalId>` | Accept a dao companion proposal |
 | `reject-dao-companion:<proposalId>` | Reject a dao companion proposal |
-| `party-invite:<cultivatorId>` | Invite to a party (max size 2, requires 认识+) |
+| `party-invite:<cultivatorId>` | Invite to a party (five on the field, requires 认识+) |
 | `accept-party:<invitationId>` | Accept a party invitation |
 | `reject-party:<invitationId>` | Reject a party invitation |
 | `disband-party` | Disband the current party |
+| `party-kick:<cultivatorId>` | Leader removes one member. The field stays at five |
+| `queue-party-reserve:<leaderId>` | Wait as the one reserve when that party is already full |
+| `party-rotate:<cultivatorId>` | Leader swaps that member with the reserve |
+| `leave-party-reserve` | Leave the reserve seat |
+| `leave-shared-expedition` | Explicitly leave a dungeon run you joined at the gate |
+| `set-party-role:dps\|breaker\|guard\|support\|control` | Choose 主攻 / 破法 / 护卫 / 辅助 / 控场 when the loadout allows it |
+| `equip-skill-slot:<skillId>` | Ready or drop one skill. Three slots, besides the basic strike |
+| `clear-skill-loadout` | Clear the ready skills and cast the role's full list |
 | `dual-cultivate` | Cultivate together with party member (bonus cultivation) |
 | `dual-survey-wilderness` | Survey wilderness together with party member |
 
