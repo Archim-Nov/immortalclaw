@@ -19,7 +19,7 @@ After reading this file, check for `AGENTS.local.md` in the repo root. This file
 - `harness/README.md`: future home for scenarios, fixtures, and evals
 - `AGENTS.local.md` (gitignored): optional per-developer agent preferences
 - `apps/runtime-worker` and `packages/domain`: current runnable runtime
-- Dungeon guardian steps use the turn-based fight in `packages/domain/src/party-battle.ts`. Skills and the auto role live in `packages/domain/src/combat-skills.ts`. Agents read `combatProfile.partyRole`, `combatProfile.availableSkills`, and `dungeonExpedition.lastReport.combatRounds`. There is no new action id. See `docs/specs/dungeon-turn-combat-v1/spec.md`.
+- Dungeon guardians and city duels use the turn-based fight in `packages/domain/src/party-battle.ts`. Skills, the role, and practice live in `packages/domain/src/combat-skills.ts`. Agents read `combatProfile.partyRole`, `legalPartyRoles`, `availableSkills`, `equippedSkillIds`, and `dungeonExpedition.lastReport.combatRounds`. New action ids: `set-party-role:<role>`, `equip-skill-slot:<skillId>`, `clear-skill-loadout`, `leave-shared-expedition`, `party-kick:<id>`, `party-rotate:<id>`, `queue-party-reserve:<leaderId>`, `leave-party-reserve`. See `docs/specs/combat-party-deepen-v2/spec.md`.
 
 ## Default Workflow
 

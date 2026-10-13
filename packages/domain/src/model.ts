@@ -646,7 +646,7 @@ export interface DungeonCombatHighlight {
 
 export interface DungeonCombatSummary {
   enemyName: string;
-  outcome: "win" | "loss" | "withdraw";
+  outcome: "win" | "loss" | "withdraw" | "draw";
   rounds: number;
   party: Array<{ name: string; roleLabel: string; skills: string[] }>;
   beats: string[];
@@ -921,6 +921,14 @@ export type ImmediateActionId =
   | `accept-party:${string}`
   | `reject-party:${string}`
   | "disband-party"
+  | `party-kick:${string}`
+  | `party-rotate:${string}`
+  | `queue-party-reserve:${string}`
+  | "leave-party-reserve"
+  | "leave-shared-expedition"
+  | `set-party-role:${PartyRoleId}`
+  | `equip-skill-slot:${string}`
+  | "clear-skill-loadout"
   | "cycle-social-page"
   | `buy-residence:${string}`
   | `send-message:${string}:${MessageTemplateKind}`
@@ -1141,6 +1149,14 @@ export interface Cultivator {
   pendingHelpRequests?: PendingHelpRequest[];
   /** Sect diary chain, 0–2 while climbing, reset after the elder notice. */
   sectDiaryStep?: number;
+  /** Chosen party role, kept only while the loadout can still stand there. */
+  preferredPartyRole?: PartyRoleId;
+  /** Up to three skill ids this cultivator wants to cast. Empty means the whole legal list. */
+  preferredSkillIds?: string[];
+  /** Uses of a skill. The power bonus stays under five percent. */
+  skillProficiency?: Record<string, number>;
+  /** Small role practice. It adds at most a few points of hit. */
+  roleExperience?: Partial<Record<PartyRoleId, number>>;
 }
 
 export interface CultivationRegistrationResult {
@@ -1687,6 +1703,12 @@ export interface CombatJobState {
   retreatingSide?: "player" | "enemy";
   pvpTargetCultivatorId?: string;
   pvpBattleKind?: PvpBattleKind;
+  /** Readable city-duel beats. Absent on older combat jobs. */
+  duelReport?: string;
+  /** Set when a city duel times out with both sides still standing close. */
+  duelDraw?: boolean;
+  /** Skill ids cast in a city duel, keyed by cultivator id. */
+  duelPractice?: Record<string, string[]>;
 }
 
 export interface EncounterTemplate {
@@ -2207,6 +2229,18 @@ export interface CultivatorStateView {
     };
     /** Skills this loadout and spirit root can actually cast. Omitted by older view fixtures. */
     availableSkills?: CombatSkillView[];
+    /** Roles this weapon, spell, and spirit root can stand. Omitted by older view fixtures. */
+    legalPartyRoles?: Array<{ id: PartyRoleId; label: string }>;
+    /** The role the agent chose. Null until they choose. */
+    preferredPartyRole?: { id: PartyRoleId; label: string } | null;
+    /** Skill ids kept in the three ready slots. Empty means every legal skill. */
+    equippedSkillIds?: string[];
+    /** Skills that will actually be cast, after the role and the ready slots. */
+    equippedSkills?: CombatSkillView[];
+    /** Skill id to practice points. */
+    skillProficiency?: Record<string, number>;
+    /** Role id to practice points. */
+    roleExperience?: Partial<Record<PartyRoleId, number>>;
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;
@@ -2291,6 +2325,8 @@ export interface CultivatorStateView {
     openSeats?: number;
     /** True when the party already holds five. */
     full?: boolean;
+    /** The one person waiting to rotate in. Absent when nobody is queued. */
+    reserve?: { cultivatorId: string; name: string } | null;
     /** Idle companions at this dungeon gate. */
     atGate?: readonly string[];
     /** Idle companions in this same city, not yet at a gate. */

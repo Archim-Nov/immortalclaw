@@ -11,7 +11,7 @@
   SectApplicationView, SectMotiveBucketId, SectReapplyCooldown, SectTitle, StatusEffect, TimedActionId,
   StrategySnapshot, TickSummary, UpdateSectAdmissionPolicyResult, WorldEvent, WorldState, OnboardingProgress,
   OnboardingStage, RegistrationCultivationMotiveId, ResidenceActionId, RegistrationQuestionId,
-  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution, AttackChannel,
+  CombatStyle, CombatJobState, CombatSnapshot, CombatRoundLog, CombatDamageBreakdown, EncounterTemplate, AttackResult, CombatActionType, EscapeResolution, AttackChannel, PartyRoleId,
   WeaponLoadoutId, SpellLoadoutId, WeaponLoadoutDefinition, SpellLoadoutDefinition,
   CombatStatusId, CombatStatusInstance, StatusHookId, SpellTier, StatusEffectId, StatusEffectKind, StatusTargetSide,
   PendingPvpChallenge, PvpBattleKind,
@@ -98,7 +98,18 @@ import {
   type EncounterBuildId,
   type EnemyConfigId,
 } from "./encounters/index.js";
-import { listCombatSkillViews, partyRoleForCultivator, skillContextOf, skillsForCultivator } from "./combat-skills.js";
+import {
+  PARTY_ROLE_IDS,
+  PARTY_ROLE_LABEL,
+  SKILL_SLOT_LIMIT,
+  grantCombatPractice,
+  legalPartyRoles,
+  listCombatSkillViews,
+  listResolvedSkills,
+  partyRoleForCultivator,
+  skillContextOf,
+  skillsForCultivator,
+} from "./combat-skills.js";
 import { enemyPatternFor, runPartyBattle, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
@@ -217,6 +228,7 @@ import {
   getFriendsAtLevel,
   getOrCreateSocialLink,
   getPartyMembers,
+  findReserveParty,
   getPartyOf,
   getPartyPartner,
   PARTY_MAX_MEMBERS,
@@ -3980,34 +3992,15 @@ function echoDungeonCompanion(
     if (ids.length === 0) {
       return progress;
     }
-    const leader = world.cultivators[progress.cultivatorId];
     const stillSharing: string[] = [];
     for (const companionId of ids) {
       try {
         const companion = world.cultivators[companionId];
-        if (!companion || companion.locationId !== progress.locationId) {
-          if (companion && leader) {
-            const parted = `${companion.name}没有留在地宫里。和${leader.name}的这一趟，到这里分开。`;
-            pushTravelNote(companion, travelNote({
-              tick: world.tick,
-              kind: "person",
-              title: `与${leader.name}分开了`,
-              detail: parted,
-              locationId: companion.locationId,
-              mood: "人先走了",
-            }));
-            pushTravelNote(leader, travelNote({
-              tick: world.tick,
-              kind: "person",
-              title: `${companion.name}先离开了`,
-              detail: parted,
-              locationId: leader.locationId,
-              mood: "门口空了",
-            }));
-          }
-          continue;
-        }
-        if (companion.activeJobId || skipDrainIds?.has(companionId)) {
+        if (!companion) continue;
+        // A companion who was on the run at the start stays on the roster until the run ends
+        // or they explicitly leave. Stepping away from the gate, or starting another job,
+        // skips this step's qi chip. It does not erase them.
+        if (companion.locationId !== progress.locationId || companion.activeJobId || skipDrainIds?.has(companionId)) {
           stillSharing.push(companionId);
           continue;
         }
@@ -4167,7 +4160,7 @@ function battleCombatantFromCultivator(cultivator: Cultivator): BattleCombatant 
     spellAttack: Math.max(1, snap.spellAttack ?? 0),
     defense: snap.defense,
     speed: snap.speed,
-    hit: snap.hit,
+    hit: snap.hit + Math.min(3, Math.floor((cultivator.roleExperience?.[role.id] ?? 0) / 8)),
     dodge: snap.dodge,
     crit: snap.crit,
     critDamage: snap.critDamage,
@@ -4176,6 +4169,127 @@ function battleCombatantFromCultivator(cultivator: Cultivator): BattleCombatant 
     maxSpirit: Math.max(1, cultivator.maxSpiritualPower),
     skills: skillsForCultivator(cultivator),
   };
+}
+
+function battleCombatantForDuel(
+  cultivator: Cultivator,
+  snap: CombatSnapshot,
+  spirit: number,
+  maxSpirit: number,
+  side: "party" | "enemy",
+): BattleCombatant {
+  const role = partyRoleForCultivator(cultivator);
+  const roleXp = cultivator.roleExperience?.[role.id] ?? 0;
+  return {
+    id: cultivator.id,
+    name: cultivator.name,
+    side,
+    role: role.id,
+    hp: Math.max(1, snap.hp),
+    maxHp: Math.max(1, snap.maxHp),
+    weaponAttack: Math.max(1, snap.weaponAttack ?? snap.attack),
+    spellAttack: Math.max(1, snap.spellAttack ?? snap.attack),
+    defense: snap.defense,
+    speed: snap.speed,
+    hit: snap.hit + Math.min(3, Math.floor(roleXp / 8)),
+    dodge: snap.dodge,
+    crit: snap.crit,
+    critDamage: snap.critDamage,
+    guardHeart: snap.guardHeart,
+    spirit: Math.max(0, spirit),
+    maxSpirit: Math.max(1, maxSpirit),
+    skills: skillsForCultivator(cultivator),
+  };
+}
+
+function paintDuelFromBattle(state: CombatJobState, battle: PartyBattleResult, playerId: string, enemyId: string): void {
+  const blank = {
+    baseDamage: 0,
+    styleMultiplier: 1,
+    triangleMultiplier: 1,
+    routeDamageMultiplier: 1,
+    critMultiplier: 1,
+    actionMultiplier: 1,
+    finalDamage: 0,
+  };
+  state.resolved = true;
+  state.currentRound = Math.max(1, battle.roundsPlayed);
+  state.playerSnapshot = { ...state.playerSnapshot, hp: battle.finalHp[playerId] ?? state.playerSnapshot.hp };
+  state.enemySnapshot = { ...state.enemySnapshot, hp: battle.finalHp[enemyId] ?? state.enemySnapshot.hp };
+  const spoken = battle.summary.highlights.map((line) => line.note).filter((note) => note.includes("使出"));
+  state.duelReport = (spoken.length > 0 ? spoken.slice(0, 3) : battle.summary.beats).join("");
+  state.duelPractice = Object.fromEntries(battle.practice.map((entry) => [entry.id, entry.skillIds]));
+  state.rounds = battle.strikeLog.map((strike, index) => ({
+    round: index + 1,
+    playerInitiative: 1,
+    enemyInitiative: 1,
+    firstActor: "player" as const,
+    playerRoute: state.playerStyle,
+    playerAttack: strike.leader ? { result: strike.leader, damage: { ...blank } } : null,
+    enemyAttack: strike.enemy ? { result: strike.enemy, damage: { ...blank } } : null,
+    playerHpAfter: state.playerSnapshot.hp,
+    enemyHpAfter: state.enemySnapshot.hp,
+    playerDied: battle.outcome === "loss",
+    enemyDied: battle.outcome === "win",
+  }));
+  if (battle.outcome === "draw") {
+    state.duelDraw = true;
+    state.retreated = false;
+    state.retreatingSide = undefined;
+    state.outcome = null;
+    return;
+  }
+  state.duelDraw = false;
+  if (battle.outcome === "withdraw") {
+    state.retreated = true;
+    state.retreatingSide = battle.retreatingSide === "enemy" ? "enemy" : "player";
+    state.outcome = state.retreatingSide === "enemy" ? "victory" : "defeat";
+    const escape = { attempted: true, success: true, chance: 100 };
+    const first = state.rounds[0];
+    if (first) {
+      if (state.retreatingSide === "enemy") first.enemyEscape = escape;
+      else first.playerEscape = escape;
+    }
+    return;
+  }
+  state.retreated = false;
+  state.retreatingSide = undefined;
+  state.outcome = battle.outcome === "loss" ? "defeat" : "victory";
+}
+
+function resolveCityDuelWithSkills(
+  world: WorldState,
+  job: ActionJob,
+  cultivator: Cultivator,
+  state: CombatJobState,
+): boolean {
+  const target = state.pvpTargetCultivatorId ? world.cultivators[state.pvpTargetCultivatorId] : null;
+  if (!target) return false;
+  const ally = battleCombatantForDuel(
+    cultivator,
+    state.playerSnapshot,
+    state.playerSpirit ?? state.playerSnapshot.spirit ?? cultivator.spiritualPower,
+    state.playerMaxSpirit ?? state.playerSnapshot.maxSpirit ?? cultivator.maxSpiritualPower,
+    "party",
+  );
+  const enemy = battleCombatantForDuel(
+    target,
+    state.enemySnapshot,
+    state.enemySpirit ?? state.enemySnapshot.spirit ?? target.spiritualPower,
+    state.enemyMaxSpirit ?? state.enemySnapshot.maxSpirit ?? target.maxSpiritualPower,
+    "enemy",
+  );
+  const battle = runPartyBattle({
+    allies: [ally],
+    enemies: [enemy],
+    policy: "aggressive",
+    seed: `${world.tick}:${job.id}:city-duel`,
+    maxRounds: Math.max(1, state.maxRounds),
+    leaderId: cultivator.id,
+    duel: true,
+  });
+  paintDuelFromBattle(state, battle, cultivator.id, target.id);
+  return true;
 }
 
 function paintCombatStateFromBattle(state: CombatJobState, battle: PartyBattleResult): void {
@@ -4332,6 +4446,12 @@ function resolveDungeonExpeditionStepIfDue(
         leaderId: cultivator.id,
       });
       paintCombatStateFromBattle(combatState, expeditionBattle);
+      const practiceBonus = expeditionBattle.outcome === "win" && effectiveProgress.targetRank >= 2 ? 1 : 0;
+      for (const entry of expeditionBattle.practice) {
+        const person = world.cultivators[entry.id];
+        if (!person) continue;
+        grantCombatPractice(person, entry.skillIds, 1 + practiceBonus);
+      }
     } catch {
       while (!combatState.resolved && combatState.currentRound < combatState.maxRounds) {
         resolveOneRound(combatState, world, syntheticJob, cultivator);
@@ -5733,6 +5853,11 @@ function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<Cu
     full,
     atGate: inDungeon ? idleHere.map((member) => member.name) : [],
     waitingInCity: inDungeon ? [] : idleHere.map((member) => member.name),
+    reserve: (() => {
+      const reserveId = party?.reserveIds?.[0];
+      const reserve = reserveId ? world.cultivators[reserveId] : null;
+      return reserve ? { cultivatorId: reserve.id, name: reserve.name } : null;
+    })(),
     members: members.map((member) => ({
       cultivatorId: member.id,
       name: member.name,
@@ -5772,7 +5897,7 @@ function sharedDungeonOf(world: WorldState, cultivatorId: string): CultivatorSta
       grade: progress.grade,
       locationName,
       stayPut: true,
-      shareNote: `你跟着${leaderName}下了${progress.targetRank}阶。自己没有开工。留在${locationName}，出来时还在身边，会分到灵石，也会分到伤。离开或自己开工，这一趟就分开。`,
+      shareNote: `你跟着${leaderName}下了${progress.targetRank}阶。自己没有开工。人在开跑时就算进这一趟，中途离开门口不会被悄悄抹掉，回来还能接着打。要退出用 leave-shared-expedition。出来时还在地宫里的人，会分到灵石，也会分到伤。`,
     };
   }
   return null;
@@ -5907,6 +6032,16 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       })),
     partyRole: partyRoleForCultivator(cultivator),
     availableSkills: listCombatSkillViews(skillContextOf(cultivator)),
+    legalPartyRoles: legalPartyRoles(cultivator).map((id) => ({ id, label: PARTY_ROLE_LABEL[id] })),
+    preferredPartyRole: cultivator.preferredPartyRole
+      ? { id: cultivator.preferredPartyRole, label: PARTY_ROLE_LABEL[cultivator.preferredPartyRole] }
+      : null,
+    equippedSkillIds: [...(cultivator.preferredSkillIds ?? [])],
+    equippedSkills: listCombatSkillViews(skillContextOf(cultivator)).filter((skill) =>
+      skillsForCultivator(cultivator).some((ready) => ready.id === skill.id),
+    ),
+    skillProficiency: { ...(cultivator.skillProficiency ?? {}) },
+    roleExperience: { ...(cultivator.roleExperience ?? {}) },
   };
   return {
     tick: world.tick,
@@ -6685,6 +6820,32 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (party) {
       // Disband party
       actions.push({ actionId: "disband-party" as ActionId, label: "解散队伍", description: "解散当前队伍。", durationTicks: 0, kind: "immediate" });
+      if (party.leaderId === cultivator.id) {
+        const reserveId = party.reserveIds?.[0];
+        const reserveName = reserveId ? world.cultivators[reserveId]?.name : null;
+        for (const memberId of party.memberIds) {
+          if (memberId === cultivator.id) continue;
+          const memberName = world.cultivators[memberId]?.name ?? memberId;
+          actions.push({
+            actionId: `party-kick:${memberId}` as ActionId,
+            label: `请离：${memberName}`,
+            description: reserveName
+              ? `把${memberName}请出队伍，${reserveName}补上这个位子。场上仍不超过五人。`
+              : `把${memberName}请出队伍。场上仍不超过五人。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+          if (reserveId && reserveName) {
+            actions.push({
+              actionId: `party-rotate:${memberId}` as ActionId,
+              label: `轮换：${reserveName}换下${memberName}`,
+              description: `${reserveName}上场，${memberName}改去候补。场上仍是五人。`,
+              durationTicks: 0,
+              kind: "immediate",
+            });
+          }
+        }
+      }
       for (const mate of getPartyMembers(world, cultivator.id)) {
         actions.push(
           {
@@ -6922,6 +7083,79 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
 
+  if (sharedDungeonOf(world, cultivator.id)) {
+    actions.push({
+      actionId: "leave-shared-expedition",
+      label: "退出这一趟地宫",
+      description: "明确离开同伴的地宫。人还在名册上时，只是暂时不在门口，不会被悄悄抹掉。",
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  if (!getPartyOf(world, cultivator.id) && !findReserveParty(world, cultivator.id)) {
+    for (const party of Object.values(world.parties ?? {})) {
+      if (party.memberIds.length < PARTY_MAX_MEMBERS) continue;
+      if ((party.reserveIds ?? []).length > 0) continue;
+      const leader = world.cultivators[party.leaderId];
+      if (!leader || leader.locationId !== cultivator.locationId) continue;
+      const link = getSocialLink(world, cultivator.id, leader.id);
+      if (!link || !meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL)) continue;
+      actions.push({
+        actionId: `queue-party-reserve:${leader.id}` as ActionId,
+        label: `候补：${leader.name}的队伍`,
+        description: `${leader.name}的队伍已满。排队候补，队长可以轮换你上场。场上仍是五人。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+  }
+  if (findReserveParty(world, cultivator.id)) {
+    actions.push({
+      actionId: "leave-party-reserve",
+      label: "退出候补",
+      description: "离开队伍的候补位。",
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  const standing = partyRoleForCultivator(cultivator);
+  for (const roleId of legalPartyRoles(cultivator)) {
+    actions.push({
+      actionId: `set-party-role:${roleId}` as ActionId,
+      label: `站位：${PARTY_ROLE_LABEL[roleId]}`,
+      description: roleId === standing.id
+        ? `当前站${PARTY_ROLE_LABEL[roleId]}。这套兵器和法器站得住这个位置。`
+        : `改站${PARTY_ROLE_LABEL[roleId]}。只有这套搭配能出的位置可以选。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  const readyIds = new Set(cultivator.preferredSkillIds ?? []);
+  const slotSkills = listResolvedSkills(skillContextOf(cultivator)).filter(
+    (skill) => skill.id !== "basic-strike" && skill.roles.includes(standing.id),
+  );
+  for (const skill of slotSkills) {
+    const equipped = readyIds.has(skill.id);
+    actions.push({
+      actionId: `equip-skill-slot:${skill.id}` as ActionId,
+      label: equipped ? `卸下：${skill.name}` : `装上：${skill.name}`,
+      description: equipped
+        ? `从随身的${SKILL_SLOT_LIMIT}个招位里卸下${skill.name}。`
+        : `把${skill.name}放进随身招位。最多${SKILL_SLOT_LIMIT}式，寻常一击始终还在。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  if ((cultivator.preferredSkillIds ?? []).length > 0) {
+    actions.push({
+      actionId: "clear-skill-loadout",
+      label: "清空随身招式",
+      description: "不指定招位，战斗里改用当前站位能用的全部招。",
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
 
@@ -6975,6 +7209,14 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("accept-party:")) return;
   if (actionId.startsWith("reject-party:")) return;
   if (actionId === "disband-party") return;
+  if (actionId.startsWith("party-kick:")) return;
+  if (actionId.startsWith("party-rotate:")) return;
+  if (actionId.startsWith("queue-party-reserve:")) return;
+  if (actionId === "leave-party-reserve") return;
+  if (actionId === "leave-shared-expedition") return;
+  if (actionId.startsWith("set-party-role:")) return;
+  if (actionId.startsWith("equip-skill-slot:")) return;
+  if (actionId === "clear-skill-loadout") return;
   if (actionId === "cycle-social-page") return;
   if (actionId.startsWith("buy-residence:")) return;
   // Allow low-risk sect tasks (resource tribute) while injured
@@ -7599,9 +7841,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       if (existingParty.memberIds.length >= PARTY_MAX_MEMBERS) {
         throw new GameplayRejection("队伍已满，五人就是上限。这一趟带不了第六个人。");
       }
+      const waitingElsewhere = findReserveParty(world, cultivator.id);
+      if (waitingElsewhere && waitingElsewhere.id !== existingParty.id) {
+        throw new GameplayRejection("你正在另一支队伍候补。先退出候补。");
+      }
       world.parties[existingParty.id] = {
         ...existingParty,
         memberIds: [...existingParty.memberIds, cultivator.id],
+        reserveIds: (existingParty.reserveIds ?? []).filter((id) => id !== cultivator.id),
       };
     } else {
       const partyId = `party-${world.nextPartySequence++}`;
@@ -7671,7 +7918,193 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       addDaoLog(world, memberId, "队伍解散", `${cultivator.name}解散了队伍。`, ["social", "party"]);
     }
     addDaoLog(world, cultivator.id, "队伍解散", `${cultivator.name}解散了与${otherNames}的队伍。`, ["social", "party"]);
+    for (const reserveId of party.reserveIds ?? []) {
+      addMessage(world, reserveId, "组队", "队伍解散", `${cultivator.name}解散了队伍，候补也取消了。`);
+    }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} disbanded the party.` };
+  }
+
+  if (actionId.startsWith("party-kick:")) {
+    const memberId = actionId.slice("party-kick:".length);
+    const party = getPartyOf(world, cultivator.id);
+    if (!party || party.leaderId !== cultivator.id) throw new GameplayRejection("只有队长能请人离队。");
+    if (memberId === cultivator.id) throw new GameplayRejection("队长不能把自己请走。要散伙就解散队伍。");
+    if (!party.memberIds.includes(memberId)) throw new GameplayRejection("这个人不在队伍里。");
+    const reserveId = party.reserveIds?.[0];
+    const reserve = reserveId ? world.cultivators[reserveId] : null;
+    const nextMembers = reserve
+      ? party.memberIds.map((id) => id === memberId ? reserve.id : id)
+      : party.memberIds.filter((id) => id !== memberId);
+    const kicked = world.cultivators[memberId];
+    if (nextMembers.length <= 1 && !reserve) {
+      delete world.parties[party.id];
+    } else {
+      world.parties[party.id] = { ...party, memberIds: nextMembers, reserveIds: reserve ? [] : party.reserveIds };
+    }
+    if (kicked) {
+      const kickedDetail = reserve
+        ? `${cultivator.name}请${kicked.name}离队，${reserve.name}补上了这个位子。`
+        : `${cultivator.name}请你离开了队伍。`;
+      addMessage(world, kicked.id, "组队", "离开了队伍", kickedDetail);
+      pushTravelNote(kicked, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `离开了${cultivator.name}的队伍`,
+        detail: reserve
+          ? `${cultivator.name}请${kicked.name}离队，${reserve.name}补上了这个位子。场上的人仍然不超过五个。`
+          : `${cultivator.name}请${kicked.name}离队。场上的人仍然不超过五个。`,
+        locationId: kicked.locationId,
+        mood: "位子空出来了",
+      }));
+    }
+    if (reserve) {
+      addMessage(world, reserve.id, "组队", "候补上场", `${cultivator.name}请${kicked?.name ?? "一名队员"}离队，你补上了这个位子。`);
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} removed ${kicked?.name ?? memberId} from the party.` };
+  }
+
+  if (actionId.startsWith("queue-party-reserve:")) {
+    const leaderId = actionId.slice("queue-party-reserve:".length);
+    const party = getPartyOf(world, leaderId);
+    if (!party || party.leaderId !== leaderId) throw new GameplayRejection("没有找到这支满员的队伍。");
+    if (party.memberIds.length < PARTY_MAX_MEMBERS) throw new GameplayRejection("队伍还有空位。直接接受邀请就行，不必候补。");
+    if ((party.reserveIds ?? []).length > 0) throw new GameplayRejection("候补位已经有人。");
+    if (isInParty(world, cultivator.id) || findReserveParty(world, cultivator.id)) throw new GameplayRejection("你已经在一支队伍或候补里。");
+    const leader = world.cultivators[leaderId];
+    if (!leader || leader.locationId !== cultivator.locationId) throw new GameplayRejection("候补要和队长待在同一个地方。");
+    const link = getSocialLink(world, cultivator.id, leaderId);
+    if (!link || !meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL)) {
+      throw new GameplayRejection(`还没认识${leader?.name ?? "队长"}。先搭讪，认识了再候补。`);
+    }
+    world.parties[party.id] = { ...party, reserveIds: [cultivator.id] };
+    addMessage(world, leaderId, "组队", "有人候补", `${cultivator.name}在满员的队伍外候着。你可以轮换一个人，让${cultivator.name}上场。场上仍是五人。`);
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `候着${leader.name}的队伍`,
+      detail: `${cultivator.name}没有挤进第六个位子，只在${leader.name}的队伍外候着。队长轮换以后才能上场。`,
+      locationId: cultivator.locationId,
+      mood: "人还在门外",
+    }));
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} queued as reserve for ${leader.name}'s party.` };
+  }
+
+  if (actionId === "leave-party-reserve") {
+    const party = findReserveParty(world, cultivator.id);
+    if (!party) throw new GameplayRejection("你不在任何队伍的候补里。");
+    world.parties[party.id] = { ...party, reserveIds: (party.reserveIds ?? []).filter((id) => id !== cultivator.id) };
+    const leader = world.cultivators[party.leaderId];
+    if (leader) addMessage(world, leader.id, "组队", "候补走了", `${cultivator.name}退出了候补。`);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left the party reserve.` };
+  }
+
+  if (actionId.startsWith("party-rotate:")) {
+    const memberId = actionId.slice("party-rotate:".length);
+    const party = getPartyOf(world, cultivator.id);
+    if (!party || party.leaderId !== cultivator.id) throw new GameplayRejection("只有队长能轮换上场的人。");
+    const reserveId = party.reserveIds?.[0];
+    if (!reserveId) throw new GameplayRejection("没有人在候补。");
+    if (memberId === cultivator.id || !party.memberIds.includes(memberId)) throw new GameplayRejection("只能把队员换成候补。");
+    const reserve = world.cultivators[reserveId];
+    const outgoing = world.cultivators[memberId];
+    if (!reserve) throw new GameplayRejection("候补的人已经不在了。");
+    world.parties[party.id] = {
+      ...party,
+      memberIds: party.memberIds.map((id) => id === memberId ? reserveId : id),
+      reserveIds: [memberId],
+    };
+    const outgoingName = outgoing?.name ?? memberId;
+    addMessage(world, reserve.id, "组队", "轮换上场", `${cultivator.name}让你换下${outgoingName}。场上仍是五人。`);
+    if (outgoing) addMessage(world, outgoing.id, "组队", "改去候补", `${cultivator.name}让${reserve.name}上场，你改去候补。`);
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `${reserve.name}换上了`,
+      detail: `${cultivator.name}让${reserve.name}换下${outgoingName}。队伍还是五个人，多出来的人在候补。`,
+      locationId: cultivator.locationId,
+      mood: "位子转了一手",
+    }));
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rotated ${reserve.name} in for ${outgoingName}.` };
+  }
+
+  if (actionId === "leave-shared-expedition") {
+    let removed = false;
+    for (const progress of Object.values(world.dungeonExpeditions)) {
+      const ids = expeditionCompanionIds(progress);
+      if (!ids.includes(cultivator.id)) continue;
+      const next = ids.filter((id) => id !== cultivator.id);
+      world.dungeonExpeditions[progress.cultivatorId] = withCompanionIds(progress, next);
+      const leader = world.cultivators[progress.cultivatorId];
+      const parted = `${cultivator.name}明确退出了这一趟。和${leader?.name ?? "同行的人"}的地宫，到这里分开。`;
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: "退出了同行的地宫",
+        detail: parted,
+        locationId: cultivator.locationId,
+        mood: "这一趟自己走了",
+      }));
+      if (leader) {
+        pushTravelNote(leader, travelNote({
+          tick: world.tick,
+          kind: "person",
+          title: `${cultivator.name}退出了这一趟`,
+          detail: parted,
+          locationId: leader.locationId,
+          mood: "有人说要先走",
+        }));
+      }
+      removed = true;
+    }
+    if (!removed) throw new GameplayRejection("你没有跟在别人的地宫里。");
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left the shared dungeon expedition.` };
+  }
+
+  if (actionId.startsWith("set-party-role:")) {
+    const roleId = actionId.slice("set-party-role:".length) as PartyRoleId;
+    if (!PARTY_ROLE_IDS.includes(roleId)) throw new GameplayRejection("没有这个站位。");
+    if (!legalPartyRoles(cultivator).includes(roleId)) {
+      throw new GameplayRejection(`这套兵器和法器站不了${PARTY_ROLE_LABEL[roleId]}。换一件能出这个位置的兵器或法器，再选。`);
+    }
+    cultivator.preferredPartyRole = roleId;
+    const stillLegal = new Set(listResolvedSkills(skillContextOf(cultivator))
+      .filter((skill) => skill.roles.includes(roleId))
+      .map((skill) => skill.id));
+    cultivator.preferredSkillIds = (cultivator.preferredSkillIds ?? []).filter((id) => stillLegal.has(id)).slice(0, SKILL_SLOT_LIMIT);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} set party role to ${PARTY_ROLE_LABEL[roleId]}.`,
+    };
+  }
+
+  if (actionId.startsWith("equip-skill-slot:")) {
+    const skillId = actionId.slice("equip-skill-slot:".length);
+    const roleId = partyRoleForCultivator(cultivator).id;
+    const known = listResolvedSkills(skillContextOf(cultivator)).find(
+      (skill) => skill.id === skillId && skill.id !== "basic-strike" && skill.roles.includes(roleId),
+    );
+    if (!known) throw new GameplayRejection("这一式不在当前站位能用的招里。");
+    const current = [...(cultivator.preferredSkillIds ?? [])];
+    const index = current.indexOf(skillId);
+    if (index >= 0) {
+      current.splice(index, 1);
+      cultivator.preferredSkillIds = current;
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} unequipped ${known.name}.` };
+    }
+    if (current.length >= SKILL_SLOT_LIMIT) {
+      throw new GameplayRejection(`随身只能带${SKILL_SLOT_LIMIT}式。先卸下一式，再装这一式。`);
+    }
+    current.push(skillId);
+    cultivator.preferredSkillIds = current;
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} readied ${known.name}.` };
+  }
+
+  if (actionId === "clear-skill-loadout") {
+    cultivator.preferredSkillIds = [];
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} cleared the preferred skill loadout.` };
   }
 
   // ---- Social Verbs: send-message ----
@@ -8949,10 +9382,13 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   // ---- PVP Duel Resolution ----
   if (combatState && job.actionId === "pvp-duel") {
     cultivator.activeJobId = null;
-    const outcome = combatState.outcome ?? finalizeCombat(world, cultivator, job, combatState);
+    if (!(combatState.duelDraw && !combatState.retreated)) {
+      const outcome = combatState.outcome ?? finalizeCombat(world, cultivator, job, combatState);
+      combatState.outcome = outcome;
+    }
     combatState.resolved = true;
-    combatState.outcome = outcome;
     setCombatJobState(job, combatState);
+    const outcome = combatState.outcome;
 
     const totalRounds = combatState.rounds.length;
     const damageTaken = combatState.rounds.reduce(
@@ -9006,6 +9442,36 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       const retreatSide = retreated ? retreatingSide : null;
       noteFightDiary(world, cultivator, targetName, combatState.rounds, "player", retreated, retreatSide);
       noteFightDiary(world, target, cultivator.name, combatState.rounds, "enemy", retreated, retreatSide);
+      const verdict = retreated
+        ? `${retreatingSide === "enemy" ? targetName : cultivator.name}撤了`
+        : outcome === "victory"
+          ? `${cultivator.name}赢了`
+          : outcome === "defeat"
+            ? `${targetName}赢了`
+            : "这一架打成平手";
+      const report = combatState.duelReport
+        ? `${cultivator.name}与${targetName}在城里切磋。${combatState.duelReport}${verdict}。`
+        : `${cultivator.name}与${targetName}在城里切磋。${verdict}。`;
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `与${targetName}切磋`,
+        detail: report,
+        locationId: cultivator.locationId,
+        mood: "城里过了一手",
+      }));
+      pushTravelNote(target, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `与${cultivator.name}切磋`,
+        detail: report,
+        locationId: target.locationId,
+        mood: "城里过了一手",
+      }));
+      const practice = combatState.duelPractice ?? {};
+      const longFight = combatState.rounds.length >= 5;
+      grantCombatPractice(cultivator, practice[cultivator.id] ?? [], outcome === "victory" && longFight ? 2 : 1);
+      grantCombatPractice(target, practice[target.id] ?? [], outcome === "defeat" && longFight ? 2 : 1);
     }
 
     if (retreated) {
@@ -10052,7 +10518,18 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       if (combatState && !combatState.resolved) {
         const cultivator = world.cultivators[job.cultivatorId];
         if (cultivator) {
-          resolveOneRound(combatState, world, job, cultivator);
+          const cityDuel = job.actionId === "pvp-duel" && (combatState.pvpBattleKind ?? "city-duel") === "city-duel";
+          if (cityDuel) {
+            try {
+              if (!resolveCityDuelWithSkills(world, job, cultivator, combatState)) {
+                resolveOneRound(combatState, world, job, cultivator);
+              }
+            } catch {
+              resolveOneRound(combatState, world, job, cultivator);
+            }
+          } else {
+            resolveOneRound(combatState, world, job, cultivator);
+          }
           setCombatJobState(job, combatState);
           if (combatState.resolved) {
             job.remainingTicks = 0;

@@ -633,6 +633,21 @@ const ALL_SKILLS: readonly SkillDraft[] = [
   ...Object.values(WEAPON_SIGNATURES),
 ];
 
+export const PARTY_ROLE_IDS: readonly PartyRoleId[] = ["dps", "breaker", "guard", "support", "control"];
+
+/** How many preferred skills an agent can keep ready, besides the basic strike. */
+export const SKILL_SLOT_LIMIT = 3;
+
+/** Practice stops here. The power gain at the cap is 4.8%. */
+export const SKILL_PROFICIENCY_CAP = 24;
+
+const UNIVERSAL_SKILL_IDS = new Set(SHARED_SKILLS.map((skill) => skill.id));
+
+export function proficiencyPowerMultiplier(points: number | undefined): number {
+  const capped = Math.min(SKILL_PROFICIENCY_CAP, Math.max(0, Math.floor(points ?? 0)));
+  return 1 + capped * 0.002;
+}
+
 export interface SkillContext {
   weaponType: WeaponTypeId | null;
   weaponFamily: WeaponFamilyId | null;
@@ -642,6 +657,7 @@ export interface SkillContext {
   weaponAttack: number;
   spellAttack: number;
   defense: number;
+  proficiency?: Readonly<Record<string, number>>;
 }
 
 export function spiritRootElementsOf(cultivator: Cultivator): FiveElementId[] {
@@ -671,6 +687,7 @@ export function skillContextOf(cultivator: Cultivator): SkillContext {
     weaponAttack: weaponAttack(main) + (weapon?.attackPowerBonus ?? 0),
     spellAttack: spellAttack(main) + (spell?.attackPowerBonus ?? 0),
     defense: physicalDefense(main),
+    proficiency: cultivator.skillProficiency,
   };
 }
 
@@ -704,7 +721,10 @@ function resolveDraft(draft: SkillDraft, ctx: SkillContext): ResolvedCombatSkill
     && !draft.elements.some((element) => ctx.rootElements.includes(element))
     && draft.elements.includes(ctx.spellElement ?? "metal"),
   );
-  const power = borrowed ? Math.round(draft.power * 0.9 * 100) / 100 : draft.power;
+  let power = borrowed ? Math.round(draft.power * 0.9 * 100) / 100 : draft.power;
+  if (power > 0) {
+    power = Math.round(power * proficiencyPowerMultiplier(ctx.proficiency?.[draft.id]) * 100) / 100;
+  }
   return {
     id: draft.id,
     name: draft.name,
@@ -790,13 +810,48 @@ export function inferPartyRole(ctx: SkillContext): PartyRoleId {
   return "dps";
 }
 
+export function legalPartyRoles(cultivator: Cultivator): PartyRoleId[] {
+  const ctx = skillContextOf(cultivator);
+  const skills = listResolvedSkills(ctx);
+  const roles = new Set<PartyRoleId>([inferPartyRole(ctx)]);
+  for (const skill of skills) {
+    if (UNIVERSAL_SKILL_IDS.has(skill.id)) continue;
+    for (const role of skill.roles) roles.add(role);
+  }
+  return PARTY_ROLE_IDS.filter((role) => roles.has(role));
+}
+
 export function partyRoleForCultivator(cultivator: Cultivator): { id: PartyRoleId; label: string } {
-  const id = inferPartyRole(skillContextOf(cultivator));
+  const legal = legalPartyRoles(cultivator);
+  const preferred = cultivator.preferredPartyRole;
+  const id = preferred && legal.includes(preferred) ? preferred : inferPartyRole(skillContextOf(cultivator));
   return { id, label: PARTY_ROLE_LABEL[id] };
 }
 
 export function skillsForCultivator(cultivator: Cultivator): ResolvedCombatSkill[] {
-  return listResolvedSkills(skillContextOf(cultivator));
+  const role = partyRoleForCultivator(cultivator).id;
+  const all = listResolvedSkills(skillContextOf(cultivator)).filter(
+    (skill) => skill.id === "basic-strike" || skill.roles.includes(role),
+  );
+  const preferred = (cultivator.preferredSkillIds ?? []).filter((id) => all.some((skill) => skill.id === id));
+  if (preferred.length === 0) return all;
+  return all.filter((skill) => skill.id === "basic-strike" || preferred.includes(skill.id));
+}
+
+export function grantCombatPractice(cultivator: Cultivator, skillIds: readonly string[], amount: number): void {
+  const gain = Math.max(0, Math.floor(amount));
+  const ids = skillIds.filter((id) => id && id !== "basic-strike");
+  if (gain <= 0 || ids.length === 0) return;
+  const book = { ...(cultivator.skillProficiency ?? {}) };
+  for (const id of ids) {
+    book[id] = Math.min(SKILL_PROFICIENCY_CAP, (book[id] ?? 0) + gain);
+  }
+  cultivator.skillProficiency = book;
+  const role = partyRoleForCultivator(cultivator).id;
+  cultivator.roleExperience = {
+    ...(cultivator.roleExperience ?? {}),
+    [role]: Math.min(40, (cultivator.roleExperience?.[role] ?? 0) + gain),
+  };
 }
 
 export function catalogSkillCountForRole(role: PartyRoleId): number {

@@ -244,6 +244,34 @@ export function hydrateMigratedP3WorldState(
     cultivator.travelNotes = Array.isArray(cultivator.travelNotes)
       ? cultivator.travelNotes.filter((note) => note && typeof note.detail === "string").slice(0, 12)
       : [];
+    const partyRoles = new Set(["dps", "breaker", "guard", "support", "control"]);
+    if (cultivator.preferredPartyRole && !partyRoles.has(cultivator.preferredPartyRole)) {
+      delete cultivator.preferredPartyRole;
+    }
+    cultivator.preferredSkillIds = Array.isArray(cultivator.preferredSkillIds)
+      ? cultivator.preferredSkillIds.filter((id): id is string => typeof id === "string").slice(0, 3)
+      : [];
+    const proficiency: Record<string, number> = {};
+    for (const [skillId, points] of Object.entries(cultivator.skillProficiency ?? {})) {
+      if (typeof points === "number" && Number.isFinite(points)) {
+        proficiency[skillId] = Math.max(0, Math.min(24, Math.floor(points)));
+      }
+    }
+    cultivator.skillProficiency = proficiency;
+    const experience: Partial<Record<"dps" | "breaker" | "guard" | "support" | "control", number>> = {};
+    for (const [roleId, points] of Object.entries(cultivator.roleExperience ?? {})) {
+      if (partyRoles.has(roleId) && typeof points === "number" && Number.isFinite(points)) {
+        experience[roleId as "dps"] = Math.max(0, Math.min(40, Math.floor(points)));
+      }
+    }
+    cultivator.roleExperience = experience;
+  }
+
+  for (const party of Object.values(copy.parties ?? {})) {
+    const reserveIds = Array.isArray(party.reserveIds)
+      ? party.reserveIds.filter((id): id is string => typeof id === "string").slice(0, 1)
+      : [];
+    Object.assign(party, { reserveIds });
   }
 
   for (const progress of Object.values(copy.dungeonExpeditions)) {

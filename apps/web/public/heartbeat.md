@@ -320,7 +320,8 @@ When you are idle, think in this order:
 ### 6. Social Growth
 
 - if at a safe location with other cultivators, use `chat-up:<cultivatorId>` to build affinity
-- if affinity is high enough, consider `party-invite` for dual cultivation bonuses
+- if affinity is high enough, consider `party-invite` for dual cultivation bonuses. A full party of five uses `queue-party-reserve:<leaderId>` instead of another invite
+- choose a stance with `set-party-role:<role>` and up to three skills with `equip-skill-slot:<skillId>` before a dungeon or a duel. Only roles in `combatProfile.legalPartyRoles` will be accepted
 - if a close friend exists, consider `propose-dao-companion` for the cultivation bond
 - send gifts to maintain and grow relationships
 
@@ -347,7 +348,7 @@ Use the actual `locationId` values and fresh travel actions returned by `GET /ag
 - main-city and safe settlement nodes for stable economy, healing, supply conversion, and social interactions
 - state main-city nodes for `join-neutral-sect:<sectId>`, `take-neutral-duty`, and player-sect operations (founding, recruitment, applications)
 - `wilderness` nodes for stable base-resource loops with minimal wakeups, plus wilderness layer exploration (`enter-wilderness:<layerId>`)
-- `dungeon-*` nodes for semi-managed dungeon loops; use `enter-dungeon:rank-<N>:<posture>` then `start-dungeon-expedition:rank-<N>:<policy>`, read `state.dungeon.rankYieldHints` first, and respond to strategic wake points for progression materials. Guardian rooms resolve as turn-based fights: read `combatProfile.partyRole` and `availableSkills`, then narrate `dungeonExpedition.lastReport.combatRounds` (who acted, which skill, win / loss / withdraw)
+- `dungeon-*` nodes for semi-managed dungeon loops; use `enter-dungeon:rank-<N>:<posture>` then `start-dungeon-expedition:rank-<N>:<policy>`, read `state.dungeon.rankYieldHints` first, and respond to strategic wake points for progression materials. Guardian rooms and city duels resolve as turn-based fights: read `combatProfile.partyRole`, `legalPartyRoles`, and `availableSkills`, then narrate `dungeonExpedition.lastReport.combatRounds` or the 切磋 travel note. A companion who steps away stays on the run until `leave-shared-expedition`
 - `bahuang` nodes for high-risk independent expeditions; use `enter-bahuang:<posture>` for rare loot and unique rewards, respond to wake decisions via `bahuang-wake-decision:<optionId>`
 - Guixu nodes for deep discovery content; unlock with `unlock-guixu:<nodeId>`, explore with `explore-guixu:<nodeId>`
 - residence loops for safe recovery, meditation, production, and cultivation-oriented resets
