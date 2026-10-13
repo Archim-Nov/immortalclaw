@@ -34,6 +34,8 @@ export interface SocialLink {
   readonly specialBond: SpecialBond | null;
   readonly firstMetTick: number;
   readonly lastInteractionTick: number;
+  /** Tick of the last 搭讪. Passive affinity does not refresh this. */
+  readonly lastChatUpTick?: number;
 }
 
 export interface DaoCompanionProposal {
@@ -83,6 +85,9 @@ export const AFFINITY_THRESHOLDS: Record<AffinityLevel, number> = {
 const AFFINITY_LEVELS_ORDERED: readonly AffinityLevel[] = [
   "挚友", "好友", "朋友", "熟识", "认识",
 ];
+
+/** Ticks before the same person can be chatted up again for full affinity. */
+export const CHAT_UP_COOLDOWN_TICKS = 4;
 
 /** Affinity gains per interaction type */
 export const AFFINITY_GAINS = {

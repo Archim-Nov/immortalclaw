@@ -11,6 +11,7 @@ import {
 import {
   AFFINITY_GAINS,
   AFFINITY_THRESHOLDS,
+  CHAT_UP_COOLDOWN_TICKS,
   getAffinityLevel,
   getDaoCompanionId,
   getPartyOf,
@@ -20,6 +21,22 @@ import {
   hasDaoCompanion,
   isInParty,
 } from "./social.js";
+
+function chatUpTimes(
+  world: ReturnType<typeof createSeedWorld>,
+  fromId: string,
+  toId: string,
+  times: number,
+) {
+  for (let i = 0; i < times; i += 1) {
+    const link = getSocialLink(world, fromId, toId);
+    const lastChat = link?.lastChatUpTick;
+    if (typeof lastChat === "number" && world.tick - lastChat < CHAT_UP_COOLDOWN_TICKS) {
+      advanceWorld(world, CHAT_UP_COOLDOWN_TICKS - (world.tick - lastChat));
+    }
+    performAction(world, fromId, `chat-up:${toId}`);
+  }
+}
 
 function runUntilIdle(world: ReturnType<typeof createSeedWorld>, cultivatorId: string) {
   let ticks = 0;
@@ -82,10 +99,8 @@ test("voice-transmit requires 朋友 level relationship", () => {
     /朋友/,
   );
 
-  // Build affinity to 朋友 level (60)
-  for (let i = 0; i < 6; i++) {
-    performAction(world, first.id, `chat-up:${second.id}`);
-  }
+  // Build affinity to 朋友 level (60), waiting out the chat-up cooldown between attempts.
+  chatUpTimes(world, first.id, second.id, 6);
   const link = getSocialLink(world, first.id, second.id);
   assert.ok(link);
   assert.ok(link.affinity >= AFFINITY_THRESHOLDS["朋友"]);
@@ -98,10 +113,7 @@ test("voice-transmit requires 朋友 level relationship", () => {
 test("voice-transmit works from any location", () => {
   const { world, first, second } = createTwoCultivators();
 
-  // Build 朋友 level
-  for (let i = 0; i < 6; i++) {
-    performAction(world, first.id, `chat-up:${second.id}`);
-  }
+  chatUpTimes(world, first.id, second.id, 6);
 
   // Move first to a different location
   first.locationId = "yangzhou:main-city";
@@ -113,10 +125,7 @@ test("voice-transmit works from any location", () => {
 test("dao companion proposal-accept flow creates mutual bond", () => {
   const { world, first, second } = createTwoCultivators();
 
-  // Build 好友 level (120)
-  for (let i = 0; i < 12; i++) {
-    performAction(world, first.id, `chat-up:${second.id}`);
-  }
+  chatUpTimes(world, first.id, second.id, 12);
   const link = getSocialLink(world, first.id, second.id);
   assert.ok(link && link.affinity >= AFFINITY_THRESHOLDS["好友"]);
 
@@ -143,10 +152,7 @@ test("dao companion proposal-accept flow creates mutual bond", () => {
 test("dao companion proposal can be rejected", () => {
   const { world, first, second } = createTwoCultivators();
 
-  // Build 好友 level
-  for (let i = 0; i < 12; i++) {
-    performAction(world, first.id, `chat-up:${second.id}`);
-  }
+  chatUpTimes(world, first.id, second.id, 12);
 
   performAction(world, first.id, `propose-dao-companion:${second.id}`);
   const proposals = Object.values(world.daoCompanionProposals);
@@ -161,10 +167,7 @@ test("dao companion proposal can be rejected", () => {
 test("dao companion requires 好友 level affinity", () => {
   const { world, first, second } = createTwoCultivators();
 
-  // Just a few chat-ups — not enough
-  for (let i = 0; i < 5; i++) {
-    performAction(world, first.id, `chat-up:${second.id}`);
-  }
+  chatUpTimes(world, first.id, second.id, 5);
 
   assert.throws(
     () => performAction(world, first.id, `propose-dao-companion:${second.id}`),
@@ -187,19 +190,19 @@ test("social links show up in getCultivatorState view", () => {
 test("affinity levels progress through tiers with repeated interaction", () => {
   const { world, first, second } = createTwoCultivators();
 
-  // Each chat-up gives 10 affinity
+  // Each fresh chat-up gives 10 affinity. Repeats wait out the cooldown.
   // 认识: 0, 熟识: 20, 朋友: 60, 好友: 120, 挚友: 200
-  for (let i = 0; i < 2; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "熟识"); // 20
+  chatUpTimes(world, first.id, second.id, 2);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "熟识");
 
-  for (let i = 0; i < 4; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "朋友"); // 60
+  chatUpTimes(world, first.id, second.id, 4);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "朋友");
 
-  for (let i = 0; i < 6; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "好友"); // 120
+  chatUpTimes(world, first.id, second.id, 6);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "好友");
 
-  for (let i = 0; i < 8; i++) performAction(world, first.id, `chat-up:${second.id}`);
-  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "挚友"); // 200
+  chatUpTimes(world, first.id, second.id, 8);
+  assert.equal(getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity), "挚友");
 });
 
 test("chat-up and voice-transmit actions appear in available actions", () => {
@@ -209,10 +212,7 @@ test("chat-up and voice-transmit actions appear in available actions", () => {
   const actions1 = listAvailableActions(world, first.id).map((a) => a.actionId);
   assert.ok(actions1.some((a) => a.startsWith("chat-up:")), "Expected chat-up action when others are at same location");
 
-  // Build 朋友 level for voice-transmit
-  for (let i = 0; i < 6; i++) {
-    performAction(world, first.id, `chat-up:${second.id}`);
-  }
+  chatUpTimes(world, first.id, second.id, 6);
 
   const actions2 = listAvailableActions(world, first.id).map((a) => a.actionId);
   assert.ok(actions2.some((a) => a.startsWith("voice-transmit:")), "Expected voice-transmit action for 朋友+ friends");

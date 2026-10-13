@@ -139,14 +139,19 @@ function createState(): CultivatorStateView {
       label_locale: "en",
       core_temperament_id: "qian_yuan",
       core_temperament: "Calm strategist",
+      core_temperament_description: "Plans first, then moves.",
       secondary_temperament_id: "guan_lan",
       secondary_temperament: "Patient observer",
+      secondary_temperament_description: "Watches before speaking.",
       behavior_aspect_id: "water-earth",
       behavior_aspect: "Water-Earth / Latent Guard",
+      behavior_aspect_description: "Holds ground and redirects force.",
       cultivation_motive_id: "seek-truth",
       cultivation_motive: "Seek truth",
+      cultivation_motive_description: "Wants to understand how the world works.",
       spirit_root_kind_id: "dual-root",
       spirit_root_result: "Water-Earth dual root",
+      spirit_root_description: "Two roots, water and earth.",
       overall_confidence: "high",
     },
     registrationEffects: {
@@ -207,6 +212,16 @@ function createState(): CultivatorStateView {
       priorities: ["Earn more spirit stones."],
       suggestedActions: ["take-mortal-task"],
     },
+    travelogue: {
+      mood: "心绪平稳",
+      notes: [],
+    },
+    registrationProfile: null,
+    residenceContext: null,
+    productionQueue: [],
+    pendingGifts: [],
+    localCommissions: [],
+    endgame: { guixuCompletedNodeIds: [], originHeartAwakened: false },
   };
 }
 

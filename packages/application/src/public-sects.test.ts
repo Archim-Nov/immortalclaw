@@ -9,7 +9,8 @@ test("buildPublicSectsDirectory lists player and neutral sects ranked by followi
   if (!founderId) {
     throw new Error("Seed world should include at least one cultivator.");
   }
-  const stateId = world.cultivators[founderId]!.stateId;
+  const founder = world.cultivators[founderId]!;
+  const stateId = world.locations[founder.locationId]!.stateId;
 
   world.sects = {
     "sect-azure": {

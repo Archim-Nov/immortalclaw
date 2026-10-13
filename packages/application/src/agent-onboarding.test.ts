@@ -134,6 +134,12 @@ function createState(): CultivatorStateView {
       mood: "心绪平稳",
       notes: [],
     },
+    registrationProfile: null,
+    residenceContext: null,
+    productionQueue: [],
+    pendingGifts: [],
+    localCommissions: [],
+    endgame: { guixuCompletedNodeIds: [], originHeartAwakened: false },
   };
 }
 

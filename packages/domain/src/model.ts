@@ -622,6 +622,8 @@ export interface DungeonExpeditionProgress {
   qiSpent?: number;
   spiritualPowerSpent?: number;
   injuryTicksGained?: number;
+  /** Spirit stones dropped on a collapse. Missing on expeditions saved before deepen v2. */
+  stonesLost?: number;
   wakeNodesEncountered: number;
   maxWakeNodes: number;
   pendingWakeNode: WakeNode | null;
@@ -655,6 +657,7 @@ export interface DungeonExpeditionReport {
   qiSpent?: number;
   spiritualPowerSpent?: number;
   injuryTicksGained?: number;
+  stonesLost?: number;
 }
 
 export type TravelNoteKind =
