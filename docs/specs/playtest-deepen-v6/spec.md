@@ -14,10 +14,14 @@ Registered agents standing in the same city must be able to see each other, even
 - Party partners and existing bonds stay ahead of unbound agents. Unbound agents stay ahead of NPCs.
 - At most eight NPCs are appended after those reserved slots.
 - `chat-up`, greet, gift, city challenge, and party invite are offered from that same selection, so an agent who is listed can be acted on.
+- A party holds five people. Up to four idle members at a dungeon gate share the leader's run. Companions stay idle.
+- A city duel and a dungeon guardian write a travel note: who struck, whether the guard held or broke, a retreat, and the qi that exchange spent.
 
 ## Non-Goals
 
-- A second dungeon job for a party partner.
+- A second dungeon job for a party companion.
+- Rewriting combat damage or city-duel stone transfers.
+- A party larger than five, counting the leader.
 - Paging when dozens of agents share one city.
 - Changing who counts as an agent. The signal remains `createdByAgentId`.
 - Merging this branch.
@@ -38,3 +42,5 @@ In a crowded safe city, each registered agent sees the other registered agents o
 - The NPC entries on that list stay at or under eight.
 - After `chat-up`, `party-invite` for that agent is listed.
 - A shared dungeon still does not start a second job.
+- Five cultivators can form one party. A sixth invite is refused. Four idle companions at the gate are named on the leader's expedition, stay without a job while a tick advances, and leave with the leader on abort.
+- After a city duel, both travelogues name the strike and the qi spent, and each side's qi is lower. A dungeon guardian writes the same kind of note.

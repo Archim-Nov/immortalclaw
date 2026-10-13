@@ -22,3 +22,12 @@ Several registered agents in one city, surrounded by NPCs, should still find eac
 - `chat-up`, greet, and a city challenge are present for each other idle agent.
 - After chat-up, `party-invite` for that agent is present.
 - Starting a shared dungeon still leaves the partner without a job.
+
+## Party of five and fight notes
+
+- Five cultivators, the leader plus four idle companions, stand at one dungeon gate.
+- The leader starts `enter-dungeon:rank-1:balanced`. Each companion stays idle, reads `sharedDungeon.leaderId`, and is named on the expedition.
+- One world tick still advances, and none of the companions gain a job.
+- Aborting the run walks all five back to a safe city. Companion notes include the withdrawal.
+- A sixth invite is refused.
+- After a city duel, both travelogues name who struck and the qi spent. A dungeon guardian writes the same kind of note.

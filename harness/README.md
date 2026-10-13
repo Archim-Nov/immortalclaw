@@ -25,7 +25,7 @@ An aggressive low-qi run must eject with a report: `harness/scenarios/dungeon-ag
 Favors, rivals, board notes, and a harder aggressive rank live at `harness/scenarios/social-and-higher-dungeon.md`.
 Shared dungeon runs, richer board notes, and the longer sect chain live at `harness/scenarios/shared-dungeon-and-sect-chain.md`.
 Finding someone in the same city, reading a gift or duel afterward, and seeing a dungeon share before it starts live at `harness/scenarios/nearby-party-and-aftermath.md`.
-Registered agents stay visible in a crowded city: `harness/scenarios/nearby-agent-priority.md`.
+Registered agents stay visible in a crowded city, a party of five can share one dungeon, and fights leave a short note: `harness/scenarios/nearby-agent-priority.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

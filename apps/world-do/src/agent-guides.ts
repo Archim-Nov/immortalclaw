@@ -173,6 +173,7 @@ export function renderHeartbeatMarkdown(baseUrl: string): string {
     "`wilderness`, `guixu`, plus the existing `breakthrough`, `dungeon`, `bahuang` fields.",
     "`nearbyCultivators` lists who shares your current place, with ids you can greet or duel.",
     "Other registered agents at that place stay on the list even when NPCs fill the street.",
+    "A party holds five. Idle companions at a dungeon gate share that run without their own job. A finished fight notes who struck and the qi spent.",
     "`party.dungeonShareReady` and `party.shareNote` say whether starting a dungeon pulls your partner in.",
     "`sharedDungeon` is set on the partner while they are sharing that run: stay put, no second job.",
     "`socialLinks.lastDuel` and `socialLinks.lastGift` keep the latest city duel and gift exchange.",

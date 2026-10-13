@@ -645,8 +645,10 @@ export interface DungeonExpeditionProgress {
   pendingWakeNode: WakeNode | null;
   pendingWakeNodeDeadlineTick: number | null;
   resolvedWakeNodeCount: number;
-  /** Party partner sharing this run. Absent when nobody came along. */
+  /** First party companion sharing this run. Absent when nobody came along. */
   companionId?: string | null;
+  /** Every idle party member sharing this run, up to four beside the leader. */
+  companionIds?: string[];
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -717,7 +719,8 @@ export interface DungeonExpeditionStateView {
     remainingTicks: number;
     companionId?: string | null;
     companionName?: string | null;
-    /** Present when a party partner is sharing this run without their own job. */
+    companionNames?: string[];
+    /** Present when party members are sharing this run without their own jobs. */
     shareNote?: string | null;
   } | null;
   lastReport: DungeonExpeditionReport | null;
@@ -2224,6 +2227,7 @@ export interface CultivatorStateView {
     partnerIdle: boolean;
     dungeonShareReady: boolean;
     shareNote: string;
+    members?: readonly { cultivatorId: string; name: string; here: boolean; idle: boolean }[];
   } | null;
   /** Set while this cultivator is the idle companion on someone else's dungeon run. */
   sharedDungeon?: {
