@@ -936,6 +936,8 @@ export type ImmediateActionId =
   | `buy-residence:${string}`
   | `send-message:${string}:${MessageTemplateKind}`
   | "read-messages"
+  | `say:${string}`
+  | `reply-line:${string}`
   | `accept-gift:${string}`
   | `reject-gift:${string}`
   | `post-commission:${CommissionType}:${string}`
@@ -1378,6 +1380,8 @@ export interface Message {
   toCultivatorId?: string | null;
   subject: string;
   content: string;
+  /** The words actually spoken, when this message carries a line. */
+  spokenLine?: string;
 }
 
 export interface WorldEvent {
@@ -2259,6 +2263,14 @@ export interface CultivatorStateView {
     mood: string;
     notes: TravelNote[];
   };
+  /** Unanswered spoken lines. Omitted by older view fixtures. */
+  pendingDialogue?: Array<{
+    fromId: string;
+    fromName: string;
+    line: string;
+    tick: number;
+    replyActionId: string;
+  }>;
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
   registrationProfile: RegistrationProfileView | null;

@@ -65,6 +65,7 @@ import {
 } from "./events.js";
 import { repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import { GameplayRejection } from "./gameplay-error.js";
+import { openSpokenLine, type SpeechKind } from "./spoken-lines.js";
 import { describeMood, noteSpam, pushTravelNote, settledMoment, spamRewardMultiplier, travelNote } from "./travelogue.js";
 import {
   getWeaponLoadoutsByFamily,
@@ -2619,6 +2620,7 @@ const addMessage = (
   options: {
     fromCultivatorId?: string | null;
     toCultivatorId?: string | null;
+    spokenLine?: string;
   } = {},
 ) => {
   const message = {
@@ -2630,6 +2632,7 @@ const addMessage = (
     toCultivatorId: options.toCultivatorId ?? cultivatorId,
     subject,
     content,
+    ...(options.spokenLine ? { spokenLine: options.spokenLine } : {}),
   } satisfies Message;
   world.messages.unshift(message);
   return message;
@@ -3830,6 +3833,30 @@ function noteCityRivalry(
     locationId: right.locationId,
     mood: "这一架会记住",
   }));
+}
+
+function pendingDialogueOf(world: WorldState, cultivatorId: string) {
+  const rows: Array<{ fromId: string; fromName: string; line: string; tick: number; replyActionId: string }> = [];
+  const seen = new Set<string>();
+  for (const message of world.messages ?? []) {
+    if (message.toCultivatorId !== cultivatorId || !message.spokenLine || !message.fromCultivatorId) continue;
+    if (message.fromCultivatorId === cultivatorId || seen.has(message.fromCultivatorId)) continue;
+    const link = getSocialLink(world, cultivatorId, message.fromCultivatorId);
+    if (link?.lastSpokenTick !== undefined && link.lastSpokenTick >= message.tick && (link.lastSpokenKind === "say" || link.lastSpokenKind === "reply")) {
+      continue;
+    }
+    seen.add(message.fromCultivatorId);
+    const fromName = world.cultivators[message.fromCultivatorId]?.name ?? message.from;
+    rows.push({
+      fromId: message.fromCultivatorId,
+      fromName,
+      line: message.spokenLine,
+      tick: message.tick,
+      replyActionId: `reply-line:${message.fromCultivatorId}`,
+    });
+    if (rows.length >= 4) break;
+  }
+  return rows;
 }
 
 function relationClause(
@@ -6141,6 +6168,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       mood: describeMood(cultivator, Boolean(getActiveDungeonExpedition(world, cultivator.id))),
       notes: [...(cultivator.travelNotes ?? [])],
     },
+    ...(() => {
+      const pendingDialogue = pendingDialogueOf(world, cultivator.id);
+      return pendingDialogue.length > 0 ? { pendingDialogue } : {};
+    })(),
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
     registrationProfile: cultivator.registrationRecord ? buildRegistrationProfile(cultivator.registrationRecord) : null,
@@ -6906,7 +6937,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           {
             actionId: `send-message:${mate.id}:rendezvous-at-gate` as ActionId,
             label: `约到门口：${mate.name}`,
-            description: `传话给${mate.name}，约在地宫门口会合。双方游记和信箱都会记下。`,
+            description: `传话给${mate.name}，约在地宫门口会合。会带一句不一样的话。同一句隔几刻才能再传。`,
             durationTicks: 0,
             kind: "immediate",
           },
@@ -6925,6 +6956,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
             kind: "immediate",
           },
         );
+        const sayId = `say:${mate.id}` as ActionId;
+        if (!actions.some((action) => action.actionId === sayId)) {
+          actions.push({
+            actionId: sayId,
+            label: `说话：${mate.name}`,
+            description: `对同队的${mate.name}说一句。act 的 body 可带 line，最多四十字。不带就代说一句。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
       }
       const partner = getPartyPartner(world, cultivator.id);
       if (partner && !partner.activeJobId && !cultivator.activeJobId) {
@@ -7021,6 +7062,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           kind: "immediate",
         });
       }
+      const sayId = `say:${target.id}` as ActionId;
+      if (!actions.some((action) => action.actionId === sayId)) {
+        actions.push({
+          actionId: sayId,
+          label: `说话：${target.name}`,
+          description: `对${target.name}说一句短话。act 的 body 可带 line，最多四十字。不带就代说一句，每次不一样。同一句不能连说。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
     }
     for (const mate of getPartyMembers(world, cultivator.id)) {
       if (mate.id === cultivator.id || mate.locationId !== cultivator.locationId || mate.injuryTicksRemaining <= 0) continue;
@@ -7035,6 +7086,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       });
     }
     // read-messages: available when there are unread messages addressed to this cultivator
+    for (const pending of pendingDialogueOf(world, cultivator.id)) {
+      actions.push({
+        actionId: pending.replyActionId as ActionId,
+        label: `回话：${pending.fromName}`,
+        description: `${pending.fromName}说：「${pending.line}」回一句。act 的 body 可带 line。来回两句就先停。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
     const unreadMessages = (world.messages ?? []).filter((m) => m.toCultivatorId === cultivator.id);
     if (unreadMessages.length > 0) {
       actions.push({
@@ -7293,6 +7353,8 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("tend-wound:")) return;
   if (actionId.startsWith("accept-gift:")) return;
   if (actionId.startsWith("reject-gift:")) return;
+  if (actionId.startsWith("say:")) return;
+  if (actionId.startsWith("reply-line:")) return;
   if (actionId.startsWith("set-party-role:")) return;
   if (actionId.startsWith("equip-skill-slot:")) return;
   if (actionId === "clear-skill-loadout") return;
@@ -7449,7 +7511,7 @@ const parseEquipSpellLoadoutId = (actionId: ActionId): SpellLoadoutId | null =>
 const parseUnlockLoadoutItemId = (actionId: ActionId): ItemId | null =>
   actionId.startsWith("unlock-loadout:") ? actionId.slice("unlock-loadout:".length) as ItemId : null;
 
-function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId): ActionExecutionResult {
+function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
 
   // ---- Equip weapon loadout ----
@@ -7776,10 +7838,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     const level = getAffinityLevel(linkAB.affinity);
     addDaoLog(world, cultivator.id, "搭讪", `${cultivator.name}与${target.name}攀谈，好感度上升至${linkAB.affinity}（${level}）。`, ["social", "chat-up"]);
-    addMessage(world, target.id, "社交", "有人搭讪", `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "某处"}向你搭话。`, { fromCultivatorId: cultivator.id });
-    const chatClause = relationClause(getSocialLink(world, cultivator.id, target.id), target.name, previousLevel);
     const chatPlace = world.locations[cultivator.locationId]?.name ?? "城里";
-    const chatDetail = `${cultivator.name}在${chatPlace}跟${target.name}攀谈，关系到了${level}。${chatClause}`;
+    const spoken = openSpokenLine(world, cultivator.id, target.id, "chat-up", world.tick, speechLine);
+    addMessage(world, target.id, cultivator.name, "有人搭讪", `${cultivator.name}在${chatPlace}向你搭话：「${spoken}」`, { fromCultivatorId: cultivator.id, spokenLine: spoken });
+    const chatClause = relationClause(getSocialLink(world, cultivator.id, target.id), target.name, previousLevel);
+    const chatDetail = `${cultivator.name}在${chatPlace}跟${target.name}攀谈，说到：「${spoken}」关系到了${level}。${chatClause}`;
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "person",
@@ -7793,7 +7856,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       tick: world.tick,
       kind: "person",
       title: `${cultivator.name}过来攀谈`,
-      detail: `${cultivator.name}在${chatPlace}跟${target.name}说上了话，关系到了${level}。${heard}`,
+      detail: `${cultivator.name}在${chatPlace}跟${target.name}说：「${spoken}」关系到了${level}。${heard}`,
       locationId: target.locationId,
       mood: "有人找上门说话",
     }));
@@ -8289,6 +8352,51 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     };
   }
 
+  if (actionId.startsWith("say:")) {
+    const targetId = actionId.slice("say:".length);
+    const target = getCultivatorOrThrow(world, targetId);
+    if (target.id === cultivator.id) throw new GameplayRejection("不能对自己说话。");
+    const party = getPartyOf(world, cultivator.id);
+    const samePlace = target.locationId === cultivator.locationId;
+    const sameParty = Boolean(party && party.memberIds.includes(target.id));
+    if (!samePlace && !sameParty) throw new GameplayRejection("人得在眼前，或是同队，才能说这句话。");
+    const spoken = openSpokenLine(world, cultivator.id, target.id, "say", world.tick, speechLine);
+    const detail = `${cultivator.name}对${target.name}说：「${spoken}」`;
+    addMessage(world, target.id, cultivator.name, "有人说话", detail, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: spoken });
+    for (const person of [cultivator, target]) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}说了一句`,
+        detail,
+        locationId: person.locationId,
+        mood: "话留在了耳朵里",
+      }));
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} said a line to ${target.name}.` };
+  }
+
+  if (actionId.startsWith("reply-line:")) {
+    const targetId = actionId.slice("reply-line:".length);
+    const target = getCultivatorOrThrow(world, targetId);
+    const pending = (world.messages ?? []).find((message) => message.toCultivatorId === cultivator.id && message.fromCultivatorId === target.id && message.spokenLine);
+    if (!pending) throw new GameplayRejection(`${target.name}没有一句还等着你回。`);
+    const spoken = openSpokenLine(world, cultivator.id, target.id, "reply", world.tick, speechLine);
+    const detail = `${cultivator.name}回${target.name}：「${spoken}」`;
+    addMessage(world, target.id, cultivator.name, "有人回话", detail, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: spoken });
+    for (const person of [cultivator, target]) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}回了一句`,
+        detail,
+        locationId: person.locationId,
+        mood: "话接上了",
+      }));
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} replied to ${target.name}.` };
+  }
+
   // ---- Social Verbs: send-message ----
   const sendMessageParsed = parseSendMessage(actionId);
   if (sendMessageParsed) {
@@ -8325,9 +8433,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         },
       } as const;
       const line = lines[kind];
-      const detail = `${line.content}人在${place}。`;
-      addMessage(world, target.id, cultivator.name, line.subject, detail, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
-      addMessage(world, cultivator.id, cultivator.name, line.subject, `你对${target.name}说：${detail}`, { fromCultivatorId: cultivator.id, toCultivatorId: cultivator.id });
+      const spoken = openSpokenLine(world, cultivator.id, target.id, kind, world.tick, speechLine);
+      const detail = `${line.content}「${spoken}」人在${place}。`;
+      addMessage(world, target.id, cultivator.name, line.subject, detail, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: spoken });
+      addMessage(world, cultivator.id, cultivator.name, line.subject, `你对${target.name}说：「${spoken}」${line.content}`, { fromCultivatorId: cultivator.id, toCultivatorId: cultivator.id, spokenLine: spoken });
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
         kind: "person",
@@ -8355,20 +8464,22 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       if (!giftableEntry) throw new Error("No items to gift.");
       const [giftItemId] = giftableEntry;
       const giftName = itemDisplayName(giftItemId);
+      const giftSpoken = openSpokenLine(world, cultivator.id, target.id, "gift-item", world.tick, speechLine);
       cultivator.inventory[giftItemId as ItemId] = (cultivator.inventory[giftItemId as ItemId] ?? 0) - 1;
       cultivator.lastGiftTick = world.tick;
-      const giftMsg = addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftName}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      const giftContent = `${cultivator.name}向你赠送了1个${giftName}，说：「${giftSpoken}」请接受或拒绝。`;
+      const giftMsg = addMessage(world, target.id, cultivator.name, `${cultivator.name}的赠礼`, giftContent, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: giftSpoken });
       const gift: PendingGift = { messageId: giftMsg.id, fromCultivatorId: cultivator.id, itemId: giftItemId as ItemId, count: 1, tick: world.tick };
       if (!target.pendingGifts) target.pendingGifts = [];
       target.pendingGifts.push(gift);
       addMutualAffinity(world, cultivator.id, target.id, 15);
-      addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftName}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      addMessage(world, target.id, cultivator.name, `${cultivator.name}的赠礼`, giftContent, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: giftSpoken });
       addDaoLog(world, cultivator.id, "赠礼", `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`, ["social", "gift"]);
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
         kind: "person",
         title: `把东西递给${target.name}`,
-        detail: `${cultivator.name}把1个${giftName}塞进${target.name}手里。还没说收不收。`,
+        detail: `${cultivator.name}把1个${giftName}塞进${target.name}手里，说：「${giftSpoken}」还没说收不收。`,
         locationId: cultivator.locationId,
         mood: "东西先离开了自己",
       }));
@@ -8376,7 +8487,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         tick: world.tick,
         kind: "person",
         title: `${cultivator.name}递来一份礼`,
-        detail: `${cultivator.name}递来1个${giftName}。收或不收，都得回一句话。`,
+        detail: `${cultivator.name}递来1个${giftName}，说：「${giftSpoken}」收或不收，都得回一句话。`,
         locationId: target.locationId,
         mood: "手里多了别人的东西",
       }));
@@ -8386,9 +8497,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const kindLabels: Record<string, string> = { greet: "问候", "share-info": "情报分享", "request-help": "求助" };
     const messageLevelBefore = getSocialLink(world, cultivator.id, target.id);
     const messagePrevious = messageLevelBefore ? getAffinityLevel(messageLevelBefore.affinity) : null;
+    const speechKind: SpeechKind = kind === "share-info" || kind === "request-help" ? kind : "greet";
+    const spoken = openSpokenLine(world, cultivator.id, target.id, speechKind, world.tick, speechLine);
     addMutualAffinity(world, cultivator.id, target.id, 3);
     const msgSubject = kindLabels[kind] ?? kind;
-    addMessage(world, target.id, "消息", msgSubject, `${cultivator.name}向你发送了${msgSubject}。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+    addMessage(world, target.id, cultivator.name, msgSubject, `${cultivator.name}说：「${spoken}」`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: spoken });
     addDaoLog(world, cultivator.id, "消息", `${cultivator.name}向${target.name}发送了${msgSubject}。好感度+3。`, ["social", "message"]);
     if (kind === "request-help") {
       const existing = (target.pendingHelpRequests ?? []).filter((request) => request.fromCultivatorId !== cultivator.id);
@@ -8402,21 +8515,21 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const messageNotes: Record<string, { title: string; detail: string; replyTitle: string; replyDetail: string }> = {
       greet: {
         title: `向${target.name}问了好`,
-        detail: `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "这里"}跟${target.name}点了下头。`,
+        detail: `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "这里"}跟${target.name}点了下头，说：「${spoken}」`,
         replyTitle: `${cultivator.name}打了招呼`,
-        replyDetail: `${cultivator.name}跟你问了好。人就在眼前。`,
+        replyDetail: `${cultivator.name}跟你问了好：「${spoken}」人就在眼前。`,
       },
       "share-info": {
         title: `把见闻说给${target.name}`,
-        detail: `${cultivator.name}把路上的事说给${target.name}听。对方听完，没有立刻走开。`,
+        detail: `${cultivator.name}把路上的事说给${target.name}听：「${spoken}」对方听完，没有立刻走开。`,
         replyTitle: `${cultivator.name}说了路上的事`,
-        replyDetail: `${cultivator.name}分享了一段见闻。值得记下来。`,
+        replyDetail: `${cultivator.name}分享了一段见闻：「${spoken}」值得记下来。`,
       },
       "request-help": {
         title: `向${target.name}求了一手`,
-        detail: `${cultivator.name}向${target.name}开口求助。人情还没落地，话已经说出去了。`,
+        detail: `${cultivator.name}向${target.name}开口求助：「${spoken}」人情还没落地，话已经说出去了。`,
         replyTitle: `${cultivator.name}来求助`,
-        replyDetail: `${cultivator.name}向你求了一手。帮或不帮，都会被记住。`,
+        replyDetail: `${cultivator.name}向你求了一手：「${spoken}」帮或不帮，都会被记住。`,
       },
     };
     const note = messageNotes[kind];
@@ -10001,7 +10114,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   return resolveJob(world, job);
 }
 
-export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId): ActionExecutionResult {
+export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   if (isAbortDungeonExpeditionAction(actionId)) {
@@ -10557,7 +10670,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     if (actionId === "heal" && !canHealAtLocation(location)) throw new Error("Heal requires a safe location.");
     return startJob(world, cultivator, actionId as TimedActionId, actionId);
   }
-  return immediateAction(world, cultivator, actionId);
+  return immediateAction(world, cultivator, actionId, speechLine);
 }
 
 function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown): string {

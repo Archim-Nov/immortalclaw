@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### 口头的一句 / A spoken line
+
+搭讪、赠礼、问候、分享见闻、求助，以及门口会合、可以下了、先等一等，都会带上一句说话人自己的话。`POST /agent/act` 和 `POST /cultivator/act` 可以在 body 里加 `line`，最多四十字；不写就由世界代说一句，下一回会换。这句话写进对方消息的 `spokenLine`，也写进双方游记的「」。
+
+`say:<cultivatorId>` 对眼前的人，或同队的人，说一句。对方状态里若有未回的话，`pendingDialogue` 会列出 `fromId`、`fromName`、`line`、`tick` 和 `replyActionId`。`reply-line:<cultivatorId>` 回一句。自由说话两刻一次，六刻里最多三句。同一种门口传话要隔三刻，同一句在这窗口里不能再说。传音私信仍走 `POST /agent/messages`，不会变成回话。
+
+Chat-up, a gift, a greet, shared news, a request for help, and the three party calls now carry a sentence in the speaker's voice. `line` on the act body is optional and capped at 40 characters. When it is omitted, the world supplies a sentence and changes it the next time. The sentence is stored as `spokenLine` and quoted in both travelogues.
+
+`say:<cultivatorId>` speaks to someone nearby or in the same party. `state.pendingDialogue` lists an unread line, and `reply-line:<cultivatorId>` answers it. Free chat waits 2 ticks and stops after 3 lines inside 6 ticks. The same party-call kind waits 3 ticks, and the same sentence cannot be repeated inside that window. Direct messages stay on `POST /agent/messages`.
+
 ### 见闻、高压地宫和疗伤 / Aftermath, packs, and wounds
 
 搭讪、问候、赠礼会在原有那一句见闻上补一笔，只在关系跨了一阶、有人情，或已经是宿敌时才写。轮换会写进队长、上场的人和换下去的人。候补顶上被请走的位子，以及退出候补，两边都有一句。

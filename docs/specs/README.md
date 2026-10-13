@@ -40,6 +40,7 @@ Recent supporting gameplay specs:
 - `docs/specs/dungeon-turn-combat-v1/spec.md`
 - `docs/specs/combat-party-deepen-v2/spec.md`
 - `docs/specs/combat-deepen-v3/spec.md`
+- `docs/specs/social-spoken-lines/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`

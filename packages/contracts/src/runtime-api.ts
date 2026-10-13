@@ -107,6 +107,8 @@ export interface CultivatorActionsResponse {
 export interface PerformActionRequest {
   cultivatorId: string;
   actionId: ActionId;
+  /** Optional spoken line, at most 40 characters. Social actions use it when present. */
+  line?: string;
 }
 
 export type PerformActionResponse = ActionExecutionResult;
