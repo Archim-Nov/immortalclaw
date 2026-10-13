@@ -176,6 +176,8 @@ export function renderHeartbeatMarkdown(baseUrl: string): string {
     "A party holds five. Form it in the city, then meet at the dungeon gate. Idle companions there share the run without their own job.",
     "`party.shareNote` names who is in the city and who is at the gate. `party.full` means a sixth person cannot join.",
     "A finished fight notes the stance, who struck, and the qi spent. A dungeon room adds a short rhythm line.",
+    "Dungeon guardians are turn-based. `combatProfile.partyRole` is 主攻, 破法, 护卫, 辅助, or 控场, from weapon, spell, and spirit root. `combatProfile.availableSkills` names the skills that loadout can cast.",
+    "`dungeonExpedition.lastReport.combatRounds` lists up to three fights: enemy, outcome (win, loss, withdraw), and one to three beats naming who used which skill. No new action id.",
     "`party.dungeonShareReady` and `party.shareNote` say whether starting a dungeon pulls your companions in.",
     "Chat-up, greet, gift, duel, and party invite cover one page of eight. Party members and people you already know stay on the page. `cycle-social-page` shows the next unbound agents. Everyone remains on `nearbyCultivators`.",
     "Party invite needs 认识. Chat-up or a greet in the same heartbeat is enough. A refusal says to do that first.",

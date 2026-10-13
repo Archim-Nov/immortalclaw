@@ -98,6 +98,8 @@ import {
   type EncounterBuildId,
   type EnemyConfigId,
 } from "./encounters/index.js";
+import { listCombatSkillViews, partyRoleForCultivator, skillContextOf, skillsForCultivator } from "./combat-skills.js";
+import { enemyPatternFor, runPartyBattle, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
   buildAcceptQuestActionId,
@@ -3971,6 +3973,7 @@ function echoDungeonCompanion(
   world: WorldState,
   progress: DungeonExpeditionProgress,
   qiDrain: number,
+  skipDrainIds?: ReadonlySet<string>,
 ): DungeonExpeditionProgress {
   try {
     const ids = expeditionCompanionIds(progress);
@@ -4004,7 +4007,7 @@ function echoDungeonCompanion(
           }
           continue;
         }
-        if (companion.activeJobId) {
+        if (companion.activeJobId || skipDrainIds?.has(companionId)) {
           stillSharing.push(companionId);
           continue;
         }
@@ -4150,6 +4153,60 @@ function noteDungeonRoomRhythm(
   }
 }
 
+function battleCombatantFromCultivator(cultivator: Cultivator): BattleCombatant {
+  const snap = buildCultivatorCombatSnapshot(cultivator, true);
+  const role = partyRoleForCultivator(cultivator);
+  return {
+    id: cultivator.id,
+    name: cultivator.name,
+    side: "party",
+    role: role.id,
+    hp: snap.hp,
+    maxHp: snap.maxHp,
+    weaponAttack: snap.weaponAttack ?? snap.attack,
+    spellAttack: Math.max(1, snap.spellAttack ?? 0),
+    defense: snap.defense,
+    speed: snap.speed,
+    hit: snap.hit,
+    dodge: snap.dodge,
+    crit: snap.crit,
+    critDamage: snap.critDamage,
+    guardHeart: snap.guardHeart,
+    spirit: cultivator.spiritualPower,
+    maxSpirit: Math.max(1, cultivator.maxSpiritualPower),
+    skills: skillsForCultivator(cultivator),
+  };
+}
+
+function paintCombatStateFromBattle(state: CombatJobState, battle: PartyBattleResult): void {
+  const blank = {
+    baseDamage: 0,
+    styleMultiplier: 1,
+    triangleMultiplier: 1,
+    routeDamageMultiplier: 1,
+    critMultiplier: 1,
+    actionMultiplier: 1,
+    finalDamage: 0,
+  };
+  state.resolved = true;
+  state.currentRound = battle.roundsPlayed;
+  state.retreated = battle.outcome === "withdraw";
+  state.retreatingSide = battle.outcome === "withdraw" ? "player" : undefined;
+  state.outcome = battle.outcome === "loss" ? "defeat" : "victory";
+  state.rounds = battle.strikeLog.map((strike, index) => ({
+    round: index + 1,
+    playerInitiative: 1,
+    enemyInitiative: 1,
+    firstActor: "player" as const,
+    playerAttack: strike.leader ? { result: strike.leader, damage: { ...blank } } : null,
+    enemyAttack: strike.enemy ? { result: strike.enemy, damage: { ...blank } } : null,
+    playerHpAfter: state.playerSnapshot.hp,
+    enemyHpAfter: battle.outcome === "win" ? 0 : state.enemySnapshot.hp,
+    playerDied: battle.outcome === "loss",
+    enemyDied: battle.outcome === "win",
+  }));
+}
+
 function resolveDungeonExpeditionStepIfDue(
   world: WorldState,
   job: ActionJob,
@@ -4220,19 +4277,66 @@ function resolveDungeonExpeditionStepIfDue(
       dungeonRank: effectiveProgress.targetRank,
     },
   };
+  let expeditionBattle: PartyBattleResult | null = null;
   if (actionKind === "guardian") {
     const expedGuardianSeed = hashString(`${world.tick}:${cultivator.id}:expedition-guardian:${effectiveProgress.grade}:${effectiveProgress.targetRank}`);
     const expedGuardianEncounter = resolveGuardianEncounterTemplate(expedGuardianSeed);
+    const policyScale = effectiveProgress.policy === "aggressive" ? 1.18 : effectiveProgress.policy === "conservative" ? 0.84 : 1;
+    const combatScale = guardianCombatScale(effectiveProgress.grade, effectiveProgress.targetRank) * policyScale;
     const combatState = initializeCombatJobState(
       world,
       cultivator,
       expedGuardianEncounter.template,
-      guardianCombatScale(effectiveProgress.grade, effectiveProgress.targetRank),
+      combatScale,
       expedGuardianEncounter.buildId ?? undefined,
     );
-    setCombatJobState(syntheticJob, combatState);
-    while (!combatState.resolved && combatState.currentRound < combatState.maxRounds) {
-      resolveOneRound(combatState, world, syntheticJob, cultivator);
+    try {
+      const allies = [battleCombatantFromCultivator(cultivator)];
+      for (const companionId of expeditionCompanionIds(effectiveProgress)) {
+        const companion = world.cultivators[companionId];
+        if (!companion || companion.locationId !== cultivator.locationId || companion.activeJobId) continue;
+        allies.push(battleCombatantFromCultivator(companion));
+      }
+      const template = expedGuardianEncounter.template;
+      const cfg = expedGuardianEncounter.enemyConfigId ? getEnemyConfig(expedGuardianEncounter.enemyConfigId) : null;
+      const enemyName = cfg?.nameCn ?? template.enemyName;
+      const enemy: BattleCombatant = {
+        id: template.id,
+        name: enemyName,
+        side: "enemy",
+        role: "dps",
+        hp: Math.max(1, Math.round(template.baseHp * combatScale)),
+        maxHp: Math.max(1, Math.round(template.baseHp * combatScale)),
+        weaponAttack: Math.max(1, Math.round(template.attack * combatScale)),
+        spellAttack: Math.max(1, Math.round(template.attack * combatScale * 0.9)),
+        defense: Math.max(1, Math.round(template.defense * combatScale)),
+        speed: template.speed,
+        hit: template.hit,
+        dodge: template.dodge,
+        crit: template.crit,
+        critDamage: template.critDamage,
+        guardHeart: template.guardHeart,
+        spirit: template.spirit ?? 40,
+        maxSpirit: template.maxSpirit ?? template.spirit ?? 40,
+        skills: [],
+        pattern: enemyPatternFor(expedGuardianEncounter.enemyConfigId ?? template.id, enemyName),
+        elite: true,
+      };
+      const rankExtra = effectiveProgress.targetRank >= 7 ? 1 : 0;
+      expeditionBattle = runPartyBattle({
+        allies,
+        enemies: [enemy],
+        policy: effectiveProgress.policy,
+        seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:party-battle`,
+        maxRounds: (effectiveProgress.policy === "conservative" ? 5 : effectiveProgress.policy === "aggressive" ? 8 : 6) + rankExtra,
+        leaderId: cultivator.id,
+      });
+      paintCombatStateFromBattle(combatState, expeditionBattle);
+    } catch {
+      while (!combatState.resolved && combatState.currentRound < combatState.maxRounds) {
+        resolveOneRound(combatState, world, syntheticJob, cultivator);
+      }
+      expeditionBattle = null;
     }
     setCombatJobState(syntheticJob, combatState);
   }
@@ -4254,32 +4358,64 @@ function resolveDungeonExpeditionStepIfDue(
   if (pressure.moralityDelta !== 0) {
     applyMoralityDelta(world, cultivator, pressure.moralityDelta, "dungeon-encounter");
   }
-  cultivator.qi = clamp(cultivator.qi - pressure.qiDrain, 1, cultivator.maxQi);
+  const battleSeverity = expeditionBattle?.leaderHpLostRatio ?? 0;
+  const battleSpirit = expeditionBattle?.leaderSpiritSpentRatio ?? 0;
+  let qiDrain = Math.max(1, Math.round(pressure.qiDrain * (expeditionBattle ? 0.65 + battleSeverity : 1)));
+  let spiritualDrain = Math.max(1, Math.round(pressure.spiritualDrain * (expeditionBattle ? 0.55 + battleSpirit : 1)));
+  let injuryTicks = pressure.injuryTicks;
+  if (expeditionBattle?.outcome === "loss") {
+    qiDrain = Math.round(qiDrain * 1.25);
+    injuryTicks = Math.max(injuryTicks, 4);
+  } else if (expeditionBattle?.outcome === "withdraw") {
+    injuryTicks = Math.max(injuryTicks, 2);
+  } else if (expeditionBattle?.outcome === "win") {
+    const bonus = effectiveProgress.policy === "aggressive"
+      ? 2 + Math.floor((effectiveProgress.targetRank - 1) / 3)
+      : effectiveProgress.policy === "balanced" ? 1 : 0;
+    cultivator.spiritStones += bonus;
+  }
+  cultivator.qi = clamp(cultivator.qi - qiDrain, 1, cultivator.maxQi);
   cultivator.spiritualPower = clamp(
-    cultivator.spiritualPower - pressure.spiritualDrain,
+    cultivator.spiritualPower - spiritualDrain,
     0,
     cultivator.maxSpiritualPower,
   );
-  if (pressure.injuryTicks > 0) {
-    cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, pressure.injuryTicks);
+  if (injuryTicks > 0) {
+    cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, injuryTicks);
     syncWounded(cultivator);
   }
+  const foughtWith = new Set<string>();
+  if (expeditionBattle) {
+    for (const [companionId, loss] of Object.entries(expeditionBattle.companionQiLoss)) {
+      const companion = world.cultivators[companionId];
+      if (!companion) continue;
+      companion.qi = clamp(companion.qi - loss, 1, companion.maxQi);
+      foughtWith.add(companionId);
+    }
+  }
   addRealmProgress(cultivator, pressure.realmProgress);
+  const fightBeats = expeditionBattle?.beats ?? [];
   effectiveProgress = {
     ...effectiveProgress,
-    beats: [...(effectiveProgress.beats ?? []), pressure.beat].slice(-8),
-    qiSpent: (effectiveProgress.qiSpent ?? 0) + pressure.qiDrain,
-    spiritualPowerSpent: (effectiveProgress.spiritualPowerSpent ?? 0) + pressure.spiritualDrain,
-    injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + pressure.injuryTicks,
+    beats: [...(effectiveProgress.beats ?? []), ...(fightBeats.length > 0 ? fightBeats : [pressure.beat])].slice(-8),
+    combatRounds: expeditionBattle
+      ? [...(effectiveProgress.combatRounds ?? []), expeditionBattle.summary].slice(-3)
+      : effectiveProgress.combatRounds,
+    qiSpent: (effectiveProgress.qiSpent ?? 0) + qiDrain,
+    spiritualPowerSpent: (effectiveProgress.spiritualPowerSpent ?? 0) + spiritualDrain,
+    injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + injuryTicks,
   };
-  pushTravelNote(cultivator, travelNote({
-    tick: world.tick,
-    kind: pressure.beat.kind,
-    title: pressure.beat.title,
-    detail: pressure.beat.detail,
-    locationId: cultivator.locationId,
-    mood: pressure.beat.mood,
-  }));
+  const told = fightBeats.length > 0 ? fightBeats : [pressure.beat];
+  for (const beat of told.slice(0, 3)) {
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: beat.kind,
+      title: beat.title,
+      detail: beat.detail,
+      locationId: cultivator.locationId,
+      mood: beat.mood,
+    }));
+  }
   noteDungeonRoomRhythm(
     world,
     cultivator,
@@ -4287,7 +4423,7 @@ function resolveDungeonExpeditionStepIfDue(
     actionKind,
     actionKind === "guardian" ? (getCombatJobState(syntheticJob)?.rounds ?? []) : [],
   );
-  effectiveProgress = echoDungeonCompanion(world, effectiveProgress, pressure.qiDrain);
+  effectiveProgress = echoDungeonCompanion(world, effectiveProgress, qiDrain, foughtWith);
 
   const flavorEventTitles = actionKind === "search"
     ? extractDungeonFlavorEventTitles(world.worldEvents, beforeEventCount, actionId)
@@ -5769,6 +5905,8 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         name: def!.name,
         spellBranchId: def!.spellBranchId,
       })),
+    partyRole: partyRoleForCultivator(cultivator),
+    availableSkills: listCombatSkillViews(skillContextOf(cultivator)),
   };
   return {
     tick: world.tick,

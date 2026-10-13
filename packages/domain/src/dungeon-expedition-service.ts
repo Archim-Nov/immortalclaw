@@ -654,6 +654,14 @@ function outcomeVerb(outcome: DungeonExpeditionReport["outcome"]): string {
   return "barely escaped";
 }
 
+function fightLine(progress: DungeonExpeditionProgress): string | null {
+  const last = progress.combatRounds?.[progress.combatRounds.length - 1];
+  if (!last) return null;
+  const result = last.outcome === "win" ? "胜" : last.outcome === "loss" ? "负" : "撤";
+  const who = last.party.map((member) => `${member.name}（${member.roleLabel}）`).join("、");
+  return `最近一战对上${last.enemyName}，${who ? `${who}上场，` : ""}结果${result}。${last.beats.join("")}`;
+}
+
 function outcomePhrase(outcome: DungeonExpeditionReport["outcome"]): string {
   if (outcome === "completed") {
     return "走完了";
@@ -967,6 +975,7 @@ export function createDungeonExpeditionReport(input: {
     `气血耗去 ${input.progress.qiSpent ?? 0}，灵力耗去 ${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石 ${input.progress.stonesLost}。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
+    fightLine(input.progress),
     `人已回到 ${input.returnLocationId}。`,
     `(${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy})`,
   ].filter((part): part is string => Boolean(part)).join("");
@@ -996,5 +1005,6 @@ export function createDungeonExpeditionReport(input: {
     spiritualPowerSpent: input.progress.spiritualPowerSpent ?? 0,
     injuryTicksGained: input.progress.injuryTicksGained ?? 0,
     stonesLost: input.progress.stonesLost ?? 0,
+    combatRounds: [...(input.progress.combatRounds ?? [])],
   };
 }
