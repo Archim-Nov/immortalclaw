@@ -201,9 +201,12 @@ import {
   adjustFavor,
   forgiveOneFavor,
   markRival,
+  rememberCityDuel,
+  rememberGiftExchange,
   HELP_STONE_GIFT,
   PENDING_HELP_LIMIT,
   BOARD_NOTE_LIMIT,
+  describeSocialBond,
   disbandParty,
   getAffinityLevel,
   getCultivatorsAtLocation,
@@ -3779,13 +3782,27 @@ function applyDungeonWakeSettlement(
   }
 }
 
-function noteCityRivalry(world: WorldState, left: Cultivator, right: Cultivator, detail: string): void {
+function noteCityRivalry(
+  world: WorldState,
+  left: Cultivator,
+  right: Cultivator,
+  detail: string,
+  duel: {
+    left: { result: "win" | "loss" | "draw" | "retreat"; stoneDelta: number };
+    right: { result: "win" | "loss" | "draw" | "retreat"; stoneDelta: number };
+  },
+): void {
   markRival(world, left.id, right.id);
+  rememberCityDuel(world, left.id, right.id, duel.left.result, duel.left.stoneDelta);
+  rememberCityDuel(world, right.id, left.id, duel.right.result, duel.right.stoneDelta);
+  const purse = (name: string, delta: number) =>
+    delta > 0 ? `${name}收下${delta}枚灵石` : delta < 0 ? `${name}落下${-delta}枚灵石` : `${name}灵石没动`;
+  const fullDetail = `${detail}${purse(left.name, duel.left.stoneDelta)}。${purse(right.name, duel.right.stoneDelta)}。`;
   pushTravelNote(left, travelNote({
     tick: world.tick,
     kind: "person",
     title: `与${right.name}结了对手`,
-    detail,
+    detail: fullDetail,
     locationId: left.locationId,
     mood: "这一架会记住",
   }));
@@ -3793,7 +3810,7 @@ function noteCityRivalry(world: WorldState, left: Cultivator, right: Cultivator,
     tick: world.tick,
     kind: "person",
     title: `与${left.name}结了对手`,
-    detail,
+    detail: fullDetail,
     locationId: right.locationId,
     mood: "这一架会记住",
   }));
@@ -5299,19 +5316,102 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
   };
 }
 
-function sharedDungeonOf(world: WorldState, cultivatorId: string): { leaderName: string; rank: number; grade: string } | null {
+const NEARBY_CULTIVATOR_LIMIT = 8;
+
+function sectDisplayName(world: WorldState, sectId: string | null): string | null {
+  if (!sectId) {
+    return null;
+  }
+  return world.sects[sectId]?.name ?? world.neutralSects[sectId]?.name ?? null;
+}
+
+function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
+  const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
+  const partnerId = getPartyPartner(world, cultivator.id)?.id ?? null;
+  return [...getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)]
+    .sort((left, right) => {
+      const rank = (other: Cultivator) => {
+        if (other.id === partnerId) return 0;
+        const link = getSocialLink(world, cultivator.id, other.id);
+        if (link && (link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)) return 1;
+        return 2;
+      };
+      const byRank = rank(left) - rank(right);
+      if (byRank !== 0) return byRank;
+      return left.name.localeCompare(right.name, "zh") || left.id.localeCompare(right.id);
+    })
+    .slice(0, NEARBY_CULTIVATOR_LIMIT)
+    .map((other) => {
+      const link = getSocialLink(world, cultivator.id, other.id);
+      return {
+        cultivatorId: other.id,
+        name: other.name,
+        realm: other.realm,
+        realmLevel: other.realmLevel,
+        sectName: sectDisplayName(world, other.sectId),
+        idle: !other.activeJobId,
+        affinity: link ? link.affinity : null,
+        bondLine: link ? describeSocialBond(link) : null,
+        rival: link?.rival === true,
+        favorBalance: link?.favorBalance ?? 0,
+        placeLine: `${other.name}也在${locationName}。`,
+      };
+    });
+}
+
+function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["party"]> | null {
+  const partner = getPartyPartner(world, cultivator.id);
+  if (!partner) {
+    return null;
+  }
+  const location = world.locations[cultivator.locationId];
+  const here = partner.locationId === cultivator.locationId;
+  const inDungeon = Boolean(location && dungeonMetadataOf(location));
+  const ready = here && !partner.activeJobId && !cultivator.activeJobId && inDungeon;
+  let shareNote: string;
+  if (ready) {
+    shareNote = `${partner.name}就在地宫门口，而且闲着。下地宫会把对方算进这一趟，不另开工。出来时还在身边的人，会分到灵石，也会分到伤。`;
+  } else if (!here) {
+    shareNote = `${partner.name}不在${location?.name ?? "这里"}。这一趟不会分险。`;
+  } else if (partner.activeJobId) {
+    shareNote = `${partner.name}正在做事。这一趟不会把人拖进来。`;
+  } else {
+    shareNote = `${partner.name}在身边。到了地宫门口再下，才会一起分险。`;
+  }
+  return {
+    partnerId: partner.id,
+    partnerName: partner.name,
+    partnerLocationId: partner.locationId,
+    partnerHere: here,
+    partnerIdle: !partner.activeJobId,
+    dungeonShareReady: ready,
+    shareNote,
+  };
+}
+
+function sharedDungeonOf(world: WorldState, cultivatorId: string): CultivatorStateView["sharedDungeon"] {
   for (const progress of Object.values(world.dungeonExpeditions)) {
     if (progress.companionId !== cultivatorId) {
       continue;
     }
     const leader = world.cultivators[progress.cultivatorId];
+    const leaderName = leader?.name ?? "同行的人";
+    const locationName = world.locations[progress.locationId]?.name ?? "地宫";
     return {
-      leaderName: leader?.name ?? "同行的人",
+      leaderId: progress.cultivatorId,
+      leaderName,
       rank: progress.targetRank,
       grade: progress.grade,
+      locationName,
+      stayPut: true,
+      shareNote: `你跟着${leaderName}下了${progress.targetRank}阶。自己没有开工。留在${locationName}，出来时还在身边，会分到灵石，也会分到伤。离开或自己开工，这一趟就分开。`,
     };
   }
   return null;
+}
+
+function itemDisplayName(itemId: string): string {
+  return ITEM_CATALOG[itemId as ItemId]?.name ?? itemId;
 }
 
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
@@ -5513,8 +5613,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     productionQueue: (cultivator.productionQueue ?? []).map((e) => ({ slot: e.slot, recipeId: e.recipeId, ticksRemaining: e.ticksRemaining })),
     pendingGifts: (cultivator.pendingGifts ?? []).map((g) => ({
       messageId: g.messageId,
+      fromCultivatorId: g.fromCultivatorId,
       fromName: world.cultivators[g.fromCultivatorId]?.name ?? "unknown",
       itemId: g.itemId,
+      itemName: itemDisplayName(g.itemId),
       count: g.count,
     })),
     localCommissions: Object.values(world.commissions ?? {})
@@ -5527,6 +5629,8 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         targetCount: c.targetCount,
         rewardSpiritStones: c.rewardSpiritStones,
       })),
+    nearbyCultivators: nearbyCultivatorsOf(world, cultivator),
+    party: partyShareOf(world, cultivator),
     sharedDungeon: sharedDungeonOf(world, cultivator.id),
     localBoard: (world.locationBoards?.[cultivator.locationId] ?? []).map((note) => ({
       authorName: note.authorName,
@@ -6060,13 +6164,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (isDungeonNode(location.nodeType) && highRiskAllowed) {
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
+    const partyShare = partyShareOf(world, cultivator);
+    const shareSuffix = partyShare?.dungeonShareReady ? ` ${partyShare.shareNote}` : "";
     if (dungeonView && !dungeonView.lockReason) {
       for (const rank of dungeonView.availableRanks) {
         for (const posture of ["conservative", "balanced", "aggressive"] as const) {
           actions.push({
             actionId: enterDungeonActionIdOf(rank, posture),
             label: `Enter dungeon (${posture}, rank ${rank})`,
-            description: `Preferred low-wake entry. Uses ${posture} posture strategy with timeout defaults.`,
+            description: `Preferred low-wake entry. Uses ${posture} posture strategy with timeout defaults.${shareSuffix}`,
             durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
           });
@@ -6075,7 +6181,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           actions.push({
             actionId: startDungeonExpeditionActionIdOf(rank, policy),
             label: `Dungeon expedition (${policy}, rank ${rank})`,
-            description: describeDungeonExpeditionAction({ dungeon: dungeonView, rank, policy }),
+            description: `${describeDungeonExpeditionAction({ dungeon: dungeonView, rank, policy })}${shareSuffix}`,
             durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
           });
@@ -6087,7 +6193,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   if (location.kind === "safe") {
     const duelTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
       .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
-    for (const candidate of duelTargets.slice(0, 3)) {
+    for (const candidate of duelTargets.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
       actions.push({
         actionId: `challenge-cultivator:${candidate.id}` as ActionId,
         label: `Challenge ${candidate.name}`,
@@ -6127,8 +6233,11 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   {
     // 搭讪: chat up someone at the same location (must be in safe zone)
     if (location.kind === "safe") {
-      const chatTarget = pickChatUpTarget(world, cultivator.id, `${world.tick}:${cultivator.id}:chat-up`);
-      if (chatTarget) {
+      const chatTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)
+        .filter((candidate) => !candidate.activeJobId)
+        .sort((left, right) => left.name.localeCompare(right.name, "zh") || left.id.localeCompare(right.id))
+        .slice(0, NEARBY_CULTIVATOR_LIMIT);
+      for (const chatTarget of chatTargets) {
         const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
         const onCooldown = existingLink?.lastChatUpTick !== undefined
           && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS;
@@ -6227,7 +6336,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
             const link = getSocialLink(world, cultivator.id, c.id);
             return link !== null && meetsAffinityLevel(link.affinity, PARTY_INVITE_MIN_LEVEL);
           });
-        for (const candidate of inviteCandidates.slice(0, 3)) {
+        for (const candidate of inviteCandidates.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
           const level = getAffinityLevel(getSocialLink(world, cultivator.id, candidate.id)!.affinity);
           actions.push({
             actionId: `party-invite:${candidate.id}` as ActionId,
@@ -6256,7 +6365,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   {
     // send-message to nearby cultivators at same location
     const nearbyTargets = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id);
-    for (const target of nearbyTargets.slice(0, 3)) {
+    for (const target of nearbyTargets.slice(0, NEARBY_CULTIVATOR_LIMIT)) {
       for (const kind of ["greet", "share-info", "request-help"] as const) {
         actions.push({
           actionId: `send-message:${target.id}:${kind}` as ActionId,
@@ -7131,20 +7240,21 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
       if (!giftableEntry) throw new Error("No items to gift.");
       const [giftItemId] = giftableEntry;
+      const giftName = itemDisplayName(giftItemId);
       cultivator.inventory[giftItemId as ItemId] = (cultivator.inventory[giftItemId as ItemId] ?? 0) - 1;
       cultivator.lastGiftTick = world.tick;
-      const giftMsg = addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftItemId}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      const giftMsg = addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftName}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
       const gift: PendingGift = { messageId: giftMsg.id, fromCultivatorId: cultivator.id, itemId: giftItemId as ItemId, count: 1, tick: world.tick };
       if (!target.pendingGifts) target.pendingGifts = [];
       target.pendingGifts.push(gift);
       addMutualAffinity(world, cultivator.id, target.id, 15);
-      addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftItemId}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
-      addDaoLog(world, cultivator.id, "赠礼", `${cultivator.name}向${target.name}赠送了1个${giftItemId}。好感度+15。`, ["social", "gift"]);
+      addMessage(world, target.id, "赠礼", `${cultivator.name}的赠礼`, `${cultivator.name}向你赠送了1个${giftName}。请接受或拒绝。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
+      addDaoLog(world, cultivator.id, "赠礼", `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`, ["social", "gift"]);
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
         kind: "person",
         title: `把东西递给${target.name}`,
-        detail: `${cultivator.name}把1个${giftItemId}塞进${target.name}手里。还没说收不收。`,
+        detail: `${cultivator.name}把1个${giftName}塞进${target.name}手里。还没说收不收。`,
         locationId: cultivator.locationId,
         mood: "东西先离开了自己",
       }));
@@ -7152,7 +7262,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         tick: world.tick,
         kind: "person",
         title: `${cultivator.name}递来一份礼`,
-        detail: `${cultivator.name}递来1个${giftItemId}。收或不收，都得回一句话。`,
+        detail: `${cultivator.name}递来1个${giftName}。收或不收，都得回一句话。`,
         locationId: target.locationId,
         mood: "手里多了别人的东西",
       }));
@@ -7236,12 +7346,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
     const giver = world.cultivators[gift.fromCultivatorId];
     const fromName = giver?.name ?? "unknown";
+    const giftName = itemDisplayName(gift.itemId);
     const forgiven = forgiveOneFavor(world, cultivator.id, gift.fromCultivatorId);
-    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${gift.itemId}。`, { fromCultivatorId: cultivator.id });
-    addResourceGainLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${gift.itemId}。`, ["social", "gift"], [{ itemId: gift.itemId as ItemId, count: gift.count }]);
+    rememberGiftExchange(world, cultivator.id, gift.fromCultivatorId, "accepted", giftName);
+    rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "accepted", giftName);
+    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${giftName}。`, { fromCultivatorId: cultivator.id });
+    addResourceGainLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${giftName}。`, ["social", "gift"], [{ itemId: gift.itemId as ItemId, count: gift.count }]);
     const giftDetail = forgiven
-      ? `${cultivator.name}收下了${fromName}的${gift.itemId}，并勾掉了一份对方欠下的人情。`
-      : `${cultivator.name}收下了${fromName}送来的${gift.count}个${gift.itemId}。`;
+      ? `${cultivator.name}收下了${fromName}的${giftName}，并勾掉了一份对方欠下的人情。`
+      : `${cultivator.name}收下了${fromName}送来的${gift.count}个${giftName}。`;
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "person",
@@ -7275,8 +7388,28 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     sender.inventory[gift.itemId] = (sender.inventory[gift.itemId] ?? 0) + gift.count;
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
     const fromName = sender.name;
-    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼被退还", `${cultivator.name}拒绝了你赠送的${gift.count}个${gift.itemId}，物品已退还。`, { fromCultivatorId: cultivator.id });
-    addDaoLog(world, cultivator.id, "拒绝赠礼", `${cultivator.name}拒绝了${fromName}的赠礼，${gift.count}个${gift.itemId}已退还。`, ["social", "gift"]);
+    const giftName = itemDisplayName(gift.itemId);
+    rememberGiftExchange(world, cultivator.id, gift.fromCultivatorId, "returned", giftName);
+    rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "returned", giftName);
+    const rejectDetail = `${cultivator.name}把${fromName}的${giftName}退了回去。东西回到了原主手里。`;
+    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼被退还", `${cultivator.name}拒绝了你赠送的${gift.count}个${giftName}，物品已退还。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "拒绝赠礼", `${cultivator.name}拒绝了${fromName}的赠礼，${gift.count}个${giftName}已退还。`, ["social", "gift"]);
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `退回了${fromName}的礼`,
+      detail: rejectDetail,
+      locationId: cultivator.locationId,
+      mood: "东西没有留下",
+    }));
+    pushTravelNote(sender, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `${cultivator.name}退回了礼`,
+      detail: rejectDetail,
+      locationId: sender.locationId,
+      mood: "礼被退了回来",
+    }));
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected gift from ${fromName}. Items returned.` };
   }
 
@@ -8363,6 +8496,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
 
     if (retreated) {
       if (retreatingSide === "enemy") {
+        const leftBefore = cultivator.spiritStones;
+        const rightBefore = target?.spiritStones ?? 0;
         if (isCityDuel) {
           cultivator.spiritStones += 8;
           if (target) {
@@ -8371,9 +8506,14 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         }
         addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, {}, `${cultivator.name} won — ${targetName} retreated from the duel.`, false);
         if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} retreated from the duel with ${cultivator.name}.`, true);
-        if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${targetName}从与${cultivator.name}的城中切磋里退了下去。这一架记成了对手。`);
+        if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${targetName}从与${cultivator.name}的城中切磋里退了下去。这一架记成了对手。`, {
+          left: { result: "win", stoneDelta: cultivator.spiritStones - leftBefore },
+          right: { result: "retreat", stoneDelta: target.spiritStones - rightBefore },
+        });
         return `${targetName} retreated from the duel with ${cultivator.name}.`;
       }
+      const leftBefore = cultivator.spiritStones;
+      const rightBefore = target?.spiritStones ?? 0;
       if (isCityDuel) {
         cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 8);
         addCurrentStateReputation(cultivator, -1);
@@ -8381,12 +8521,17 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       }
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} retreated from the duel with ${targetName}.`, true);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, isCityDuel ? { "spirit-stone-reward": 5 } as Partial<Record<ItemId, number>> : {}, `${targetName} won — ${cultivator.name} retreated.`, false);
-      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}从与${targetName}的城中切磋里退了下去。这一架记成了对手。`);
+      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}从与${targetName}的城中切磋里退了下去。这一架记成了对手。`, {
+        left: { result: "retreat", stoneDelta: cultivator.spiritStones - leftBefore },
+        right: { result: "win", stoneDelta: target.spiritStones - rightBefore },
+      });
       return `${cultivator.name} retreated from the duel with ${targetName}.`;
     }
 
     if (outcome === "victory") {
       // Challenger wins
+      const leftBefore = cultivator.spiritStones;
+      const rightBefore = target?.spiritStones ?? 0;
       if (isCityDuel) {
         cultivator.spiritStones += 15;
         addCurrentStateReputation(cultivator, 2);
@@ -8395,12 +8540,17 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "victory", damageTaken, isCityDuel ? {} : {}, `${cultivator.name} defeated ${targetName} in a duel (${totalRounds} rounds).`, false);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} was defeated by ${cultivator.name} in a duel.`, false);
       if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
-      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}在城里赢了${targetName}。这一架记成了对手。`);
+      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}在城里赢了${targetName}。这一架记成了对手。`, {
+        left: { result: "win", stoneDelta: cultivator.spiritStones - leftBefore },
+        right: { result: "loss", stoneDelta: target.spiritStones - rightBefore },
+      });
       return `${cultivator.name} defeated ${targetName} in a duel.`;
     }
 
     if (outcome === "defeat") {
       // Challenger loses
+      const leftBefore = cultivator.spiritStones;
+      const rightBefore = target?.spiritStones ?? 0;
       if (isCityDuel) {
         cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 10);
         if (target) {
@@ -8411,7 +8561,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       addPvpLog(cultivator.id, cultivator.locationId, targetName, targetId, "defeat", damageTaken, {}, `${cultivator.name} was defeated by ${targetName} in a duel (${totalRounds} rounds).`, false);
       if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "victory", enemyDamageTaken, {}, `${targetName} defeated ${cultivator.name} in a duel.`, false);
       if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
-      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}在城里输给了${targetName}。这一架记成了对手。`);
+      if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}在城里输给了${targetName}。这一架记成了对手。`, {
+        left: { result: "loss", stoneDelta: cultivator.spiritStones - leftBefore },
+        right: { result: "win", stoneDelta: target.spiritStones - rightBefore },
+      });
       return `${cultivator.name} was defeated by ${targetName} in a duel.`;
     }
 
@@ -8420,7 +8573,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     if (target) addPvpLog(target.id, target.locationId, cultivator.name, cultivator.id, "defeat", enemyDamageTaken, {}, `${targetName} fought ${cultivator.name} to a draw.`, false);
     // PVP duel grows mutual affinity regardless of outcome
     if (targetId) addMutualAffinity(world, cultivator.id, targetId, AFFINITY_GAINS.pvpDuel);
-    if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}与${targetName}在城里打成平手。这一架记成了对手。`);
+    if (isCityDuel && target) noteCityRivalry(world, cultivator, target, `${cultivator.name}与${targetName}在城里打成平手。这一架记成了对手。`, {
+      left: { result: "draw", stoneDelta: 0 },
+      right: { result: "draw", stoneDelta: 0 },
+    });
     return `${cultivator.name} fought ${targetName} to a draw.`;
   }
   if (parseStartDungeonExpeditionActionId(job.actionId) || parseEnterDungeonActionId(job.actionId)) {
