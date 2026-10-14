@@ -40,6 +40,7 @@ Recent supporting gameplay specs:
 - `docs/specs/dungeon-turn-combat-v1/spec.md`
 - `docs/specs/combat-party-deepen-v2/spec.md`
 - `docs/specs/combat-deepen-v3/spec.md`
+- `docs/specs/combat-weapon-root-aptitude/spec.md`
 - `docs/specs/social-spoken-lines/spec.md`
 - `docs/specs/companion-shared-report/spec.md`
 - `docs/specs/relationship-mood-digest/spec.md`

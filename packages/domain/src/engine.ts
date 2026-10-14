@@ -124,15 +124,17 @@ import {
   PARTY_ROLE_IDS,
   PARTY_ROLE_LABEL,
   SKILL_SLOT_LIMIT,
+  combatLeaningView,
   grantCombatPractice,
   legalPartyRoles,
   listCombatSkillViews,
   listResolvedSkills,
+  loadoutGuidanceFor,
   partyRoleForCultivator,
   skillContextOf,
   skillsForCultivator,
 } from "./combat-skills.js";
-import { buildGuardianPack, companionWoundTicks, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
+import { buildGuardianPack, companionWoundTicks, fightDigestText, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
   buildAcceptQuestActionId,
@@ -4852,6 +4854,14 @@ function resolveDungeonExpeditionStepIfDue(
       }));
     }
   }
+  if (expeditionBattle) {
+    const digestLine = fightDigestText(expeditionBattle.summary);
+    if (digestLine) {
+      for (const person of beatAudience) {
+        recordLife(person, { tick: world.tick, kind: "fight", text: digestLine });
+      }
+    }
+  }
   if (expeditionBattle?.summary.wound) {
     const woundDetail = expeditionBattle.summary.wound;
     const audience = new Set<Cultivator>([cultivator, ...woundedNow]);
@@ -6379,18 +6389,26 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         name: def!.name,
         spellBranchId: def!.spellBranchId,
       })),
-    partyRole: partyRoleForCultivator(cultivator),
-    availableSkills: listCombatSkillViews(skillContextOf(cultivator)),
-    legalPartyRoles: legalPartyRoles(cultivator).map((id) => ({ id, label: PARTY_ROLE_LABEL[id] })),
-    preferredPartyRole: cultivator.preferredPartyRole
-      ? { id: cultivator.preferredPartyRole, label: PARTY_ROLE_LABEL[cultivator.preferredPartyRole] }
-      : null,
-    equippedSkillIds: [...(cultivator.preferredSkillIds ?? [])],
-    equippedSkills: listCombatSkillViews(skillContextOf(cultivator)).filter((skill) =>
-      skillsForCultivator(cultivator).some((ready) => ready.id === skill.id),
-    ),
-    skillProficiency: { ...(cultivator.skillProficiency ?? {}) },
-    roleExperience: { ...(cultivator.roleExperience ?? {}) },
+    ...(() => {
+      const skillViews = listCombatSkillViews(skillContextOf(cultivator));
+      const readyIds = new Set(skillsForCultivator(cultivator).map((skill) => skill.id));
+      return {
+        partyRole: partyRoleForCultivator(cultivator),
+        availableSkills: skillViews,
+        legalPartyRoles: legalPartyRoles(cultivator).map((id) => ({ id, label: PARTY_ROLE_LABEL[id] })),
+        preferredPartyRole: cultivator.preferredPartyRole
+          ? { id: cultivator.preferredPartyRole, label: PARTY_ROLE_LABEL[cultivator.preferredPartyRole] }
+          : null,
+        equippedSkillIds: [...(cultivator.preferredSkillIds ?? [])],
+        equippedSkills: skillViews.filter((skill) => readyIds.has(skill.id)),
+        skillProficiency: { ...(cultivator.skillProficiency ?? {}) },
+        roleExperience: { ...(cultivator.roleExperience ?? {}) },
+        combatLeaning: combatLeaningView(cultivator),
+        weaponSkills: skillViews.filter((skill) => skill.pool === "weapon"),
+        rootSkills: skillViews.filter((skill) => skill.pool === "root"),
+        loadoutGuidance: loadoutGuidanceFor(cultivator),
+      };
+    })(),
   };
   return {
     tick: world.tick,
@@ -7582,12 +7600,18 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   );
   for (const skill of slotSkills) {
     const equipped = readyIds.has(skill.id);
+    const kind = skill.channel === "spell" ? "法术" : "兵器";
+    const fit = skill.aptitude === "off"
+      ? "这一式逆着你的偏向，装上也能用，威力会略收。"
+      : skill.aptitude === "favored"
+        ? "这一式顺着你的偏向。"
+        : "这一式不吃偏向。";
     actions.push({
       actionId: `equip-skill-slot:${skill.id}` as ActionId,
       label: equipped ? `卸下：${skill.name}` : `装上：${skill.name}`,
       description: equipped
-        ? `从随身的${SKILL_SLOT_LIMIT}个招位里卸下${skill.name}。`
-        : `把${skill.name}放进随身招位。最多${SKILL_SLOT_LIMIT}式，寻常一击始终还在。`,
+        ? `从随身的${SKILL_SLOT_LIMIT}个招位里卸下${skill.name}（${kind}）。`
+        : `把${skill.name}（${kind}）放进随身招位。${fit}最多${SKILL_SLOT_LIMIT}式，寻常一击始终还在。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8618,7 +8642,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} set party role to ${PARTY_ROLE_LABEL[roleId]}.`,
+      summary: `${cultivator.name} set party role to ${PARTY_ROLE_LABEL[roleId]}. ${combatLeaningView(cultivator).roleHint}`,
     };
   }
 
@@ -8641,7 +8665,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     current.push(skillId);
     cultivator.preferredSkillIds = current;
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} readied ${known.name}.` };
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name} readied ${known.name}. ${loadoutGuidanceFor(cultivator)}`,
+    };
   }
 
   if (actionId === "clear-skill-loadout") {
@@ -10285,6 +10315,11 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         mood: "城里过了一手",
       }));
       echoPartyWitness(world, [cultivator, target], `听见${cultivator.name}与${targetName}切磋`, report);
+      const digestLine = combatState.duelSummary ? fightDigestText(combatState.duelSummary) : null;
+      if (digestLine) {
+        recordLife(cultivator, { tick: world.tick, kind: "fight", text: digestLine });
+        recordLife(target, { tick: world.tick, kind: "fight", text: digestLine });
+      }
       const practice = combatState.duelPractice ?? {};
       const longFight = combatState.rounds.length >= 5;
       grantCombatPractice(cultivator, practice[cultivator.id] ?? [], outcome === "victory" && longFight ? 2 : 1);

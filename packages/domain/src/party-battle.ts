@@ -267,8 +267,14 @@ function woundedAlly(allies: readonly LiveFighter[], self: LiveFighter): LiveFig
   return hurt.find((ally) => ally.id !== self.id) ?? hurt[0] ?? null;
 }
 
+function aptitudeRank(skill: ResolvedCombatSkill): number {
+  if (skill.aptitude === "favored") return 0;
+  if (skill.aptitude === "off") return 2;
+  return 1;
+}
+
 function pickSkill(skills: readonly ResolvedCombatSkill[], prefer: (skill: ResolvedCombatSkill) => boolean): ResolvedCombatSkill | null {
-  return skills.find(prefer) ?? null;
+  return skills.filter(prefer).sort((a, b) => aptitudeRank(a) - aptitudeRank(b))[0] ?? null;
 }
 
 export function choosePartyAction(
@@ -384,10 +390,15 @@ interface ActRecord {
   note: string;
   leaderStrike: "hit" | "miss" | "crit" | null;
   enemyStrike: "hit" | "miss" | "crit" | null;
+  skillPoolLabel?: "兵器" | "法术";
 }
 
-function noteOf(actor: string, role: string, skill: string, target: string, resultText: string): string {
-  return `${actor}以${role}使出${skill}，${resultText}${target}。`;
+function channelLabel(channel: "weapon" | "spell"): "兵器" | "法术" {
+  return channel === "spell" ? "法术" : "兵器";
+}
+
+function noteOf(actor: string, role: string, skill: string, target: string, resultText: string, kind: "兵器" | "法术"): string {
+  return `${actor}以${role}使出${skill}（${kind}），${resultText}${target}。`;
 }
 
 function applyDamage(
@@ -483,6 +494,7 @@ function actParty(
     };
   }
   spend(fighter, skill);
+  const kind = channelLabel(skill.channel);
   if (skill.healRatio > 0) {
     const target = skill.target === "self" ? fighter : pickAllyTarget(allies, fighter);
     const amount = Math.max(1, Math.round(target.maxHp * skill.healRatio));
@@ -495,9 +507,10 @@ function actParty(
       skillName: skill.name,
       targetName: target.name,
       result: "heal",
-      note: noteOf(fighter.name, roleLabel, skill.name, target.name, "补上了"),
+      note: noteOf(fighter.name, roleLabel, skill.name, target.name, "补上了", kind),
       leaderStrike: null,
       enemyStrike: null,
+      skillPoolLabel: kind,
     };
   }
   if (skill.power <= 0) {
@@ -516,9 +529,10 @@ function actParty(
       skillName: skill.name,
       targetName,
       result: skill.wardRatio < 1 && skill.guardRatio >= 1 ? "ward" : "guard",
-      note: noteOf(fighter.name, roleLabel, skill.name, targetName, skill.focus ? "守住并引开了" : "护住了"),
+      note: noteOf(fighter.name, roleLabel, skill.name, targetName, skill.focus ? "守住并引开了" : "护住了", kind),
       leaderStrike: null,
       enemyStrike: null,
+      skillPoolLabel: kind,
     };
   }
   const targets = skill.target === "all-enemies" ? living(enemies) : [pickPartyTarget(fighter, enemies)].filter((target): target is LiveFighter => Boolean(target));
@@ -540,9 +554,10 @@ function actParty(
     skillName: skill.name,
     targetName,
     result: best,
-    note: noteOf(fighter.name, roleLabel, skill.name, targetName, resultText),
+    note: noteOf(fighter.name, roleLabel, skill.name, targetName, resultText, kind),
     leaderStrike: fighter.id === leaderId ? best : null,
     enemyStrike: fighter.side === "enemy" ? best : null,
+    skillPoolLabel: kind,
   };
 }
 
@@ -555,6 +570,7 @@ function actEnemy(
 ): ActRecord {
   const roleLabel = "敌手";
   const skillName = action.enemyName ?? "进攻";
+  const kind = channelLabel(fighter.spellAttack > fighter.weaponAttack ? "spell" : "weapon");
   if (action.enemyGuard && action.enemyGuard < 1) {
     fighter.guardRatio = Math.min(fighter.guardRatio, action.enemyGuard);
     if (action.enemyFocus) fighter.tauntRounds = 1;
@@ -565,9 +581,10 @@ function actEnemy(
       skillName,
       targetName: fighter.name,
       result: "guard",
-      note: `${fighter.name}以${skillName}封住了自己的门。`,
+      note: `${fighter.name}以${skillName}（${kind}）封住了自己的门。`,
       leaderStrike: null,
       enemyStrike: null,
+      skillPoolLabel: kind,
     };
   }
   fighter.spirit = Math.max(0, fighter.spirit - (action.enemySpirit ?? 0));
@@ -608,9 +625,10 @@ function actEnemy(
     skillName,
     targetName: target.name,
     result,
-    note: `${fighter.name}以${skillName}${resultText}${target.name}。`,
+    note: `${fighter.name}以${skillName}（${kind}）${resultText}${target.name}。`,
     leaderStrike: null,
     enemyStrike: strike.result,
+    skillPoolLabel: kind,
   };
 }
 
@@ -644,6 +662,14 @@ function awaken(combatant: BattleCombatant): LiveFighter {
     skillsUsed: [],
     skills: combatant.skills.map((skill) => ({ ...skill })),
   };
+}
+
+export function fightDigestText(summary: DungeonCombatSummary): string | null {
+  const partyNames = new Set(summary.party.map((member) => member.name));
+  const line = summary.highlights.find((item) => item.skillPoolLabel && partyNames.has(item.actorName))
+    ?? summary.highlights.find((item) => item.skillPoolLabel);
+  if (!line?.skillPoolLabel) return null;
+  return `${line.actorName}对上${summary.enemyName}时使出${line.skillName}，这一式是${line.skillPoolLabel}。`;
 }
 
 export function runPartyBattle(input: {
@@ -766,6 +792,7 @@ export function runPartyBattle(input: {
     targetName: record.targetName,
     result: record.result,
     note: record.note,
+    ...(record.skillPoolLabel ? { skillPoolLabel: record.skillPoolLabel } : {}),
   }));
   const summary: DungeonCombatSummary = {
     enemyName,
@@ -774,7 +801,11 @@ export function runPartyBattle(input: {
     party: allies.map((ally) => ({
       name: ally.name,
       roleLabel: PARTY_ROLE_LABEL[ally.role],
-      skills: ally.skillsUsed.slice(0, 3).map((id) => ally.skills.find((skill) => skill.id === id)?.name ?? id),
+      skills: ally.skillsUsed.slice(0, 3).map((id) => {
+        const skill = ally.skills.find((entry) => entry.id === id);
+        if (!skill) return id;
+        return `${skill.name}（${channelLabel(skill.channel)}）`;
+      }),
     })),
     beats,
     highlights,
