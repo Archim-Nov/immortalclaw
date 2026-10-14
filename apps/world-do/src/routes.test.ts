@@ -29,6 +29,9 @@ interface AgentStateResponse {
   agent: {
     agentId: string;
   };
+  digest?: {
+    summary?: string;
+  };
 }
 
 interface WorldStatusResponse {

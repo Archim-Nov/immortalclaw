@@ -293,7 +293,7 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
   const fights = recent.filter((event) => event.kind === "fight").map((event) => event.text).slice(0, 4);
   const relationships = recent.filter((event) => event.kind === "relationship").map((event) => event.text).slice(0, 4);
   const seenQuotes = new Set<string>();
-  const quotes: CultivatorDigest["quotes"] = [];
+  const quotes: Array<CultivatorDigest["quotes"][number]> = [];
   for (const event of recent) {
     if (event.kind !== "quote" || !event.line || !event.speakerName) continue;
     const key = `${event.tick}:${event.speakerName}:${event.line}`;
