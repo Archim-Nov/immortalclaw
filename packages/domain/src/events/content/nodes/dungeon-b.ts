@@ -109,5 +109,39 @@ export function buildDungeonBEventPack(location: Location): EventTemplate[] {
         statusEffects: [{ effectId: "warded", ticks: 2 }],
       },
     }),
+    ...(rank === 2
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-2-night-token",
+            semanticType: "human",
+            resultType: "resource",
+            nameSuffix: "Rank 2 Night Token",
+            nameCnSuffix: "第二层的值夜名牌",
+            description: "乙二层的壁灯还亮着一盏。灯下压着一张值夜的名牌，名牌主人已经不在，旁边只剩半袋干粮和几枚灵石。",
+            baseWeight: 0.6,
+            dungeonGrade: "乙",
+            minDungeonRank: 2,
+            maxDungeonRank: 2,
+            effects: { spiritStones: 12 },
+          }),
+        ]
+      : []),
+    ...(rank === 6
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-6-charcoal-line",
+            semanticType: "human",
+            resultType: "story",
+            nameSuffix: "Rank 6 Charcoal Line",
+            nameCnSuffix: "第六层的炭字",
+            description: "乙六层有人用炭在地上写了“别跟丢了的人说话”。字还新。你绕开那条回声最重的廊，只在拐角捡到一枚被踩扁的灵石。",
+            baseWeight: 0.55,
+            dungeonGrade: "乙",
+            minDungeonRank: 6,
+            maxDungeonRank: 6,
+            effects: { spiritStones: 6 },
+          }),
+        ]
+      : []),
   ]);
 }

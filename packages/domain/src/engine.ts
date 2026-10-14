@@ -2770,6 +2770,11 @@ const addCombatLog = (world: WorldState, entry: CombatLogInput): CombatLogEntry 
   return world.combatLogs[0]!;
 };
 
+function agentEventLabel(template: { name: string; nameCn?: string }): string {
+  const label = template.nameCn?.trim();
+  return label ? label : template.name;
+}
+
 function triggerLocationEvent(
   world: WorldState,
   cultivator: Cultivator,
@@ -2803,7 +2808,7 @@ function triggerLocationEvent(
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId,
-      title: `[${source}] ${drawn.template.name}`,
+      title: `[${source}] ${agentEventLabel(drawn.template)}`,
       content: drawn.template.description,
       severity: eventSeverityOf(drawn.template),
       tags: ["event-pool", source, drawn.template.semanticType, drawn.template.resultType, `signal-type:${drawn.template.signalType}`],
@@ -2816,7 +2821,7 @@ function triggerLocationEvent(
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
         locationId,
-        title: `[${source}] ${drawn.subEvent.name}`,
+        title: `[${source}] ${agentEventLabel(drawn.subEvent)}`,
         content: drawn.subEvent.description,
         severity: eventSeverityOf(drawn.subEvent),
         tags: ["event-pool", source, "sub-event", drawn.subEvent.semanticType, drawn.subEvent.resultType, `signal-type:${drawn.subEvent.signalType}`],
@@ -2845,7 +2850,7 @@ function triggerNodeSpecificEvent(
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId,
-      title: `[${actionTag}] ${drawn.template.name}`,
+      title: `[${actionTag}] ${agentEventLabel(drawn.template)}`,
       content: drawn.template.description,
       severity: eventSeverityOf(drawn.template),
       tags: ["event-pool", "node-specific", actionTag, drawn.template.semanticType, drawn.template.resultType],

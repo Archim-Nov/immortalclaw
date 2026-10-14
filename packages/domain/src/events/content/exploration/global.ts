@@ -1,6 +1,8 @@
 import type { EventTemplate } from "../../../events.js";
 import { deriveSignalType } from "../../../events.js";
 
+import { createExplorationGlobalMoreRows } from "./global-more.js";
+
 export type ExplorationGlobalRow =
   Omit<EventTemplate, "layer" | "source" | "stateId" | "nodeType" | "minRealm" | "signalType">
   & { readonly minRealm?: EventTemplate["minRealm"] };
@@ -10,6 +12,13 @@ function withSignal(row: ExplorationGlobalRow): ExplorationGlobalRow & { signalT
 }
 
 export function createExplorationGlobalRows(): readonly (ExplorationGlobalRow & { signalType: EventTemplate["signalType"] })[] {
+  return [
+    ...createExplorationGlobalBaseRows(),
+    ...createExplorationGlobalMoreRows(),
+  ];
+}
+
+function createExplorationGlobalBaseRows(): readonly (ExplorationGlobalRow & { signalType: EventTemplate["signalType"] })[] {
   return [
     withSignal({ id: "g-f-01", semanticType: "fortune", resultType: "resource", name: "Roadside Spirit Herb", nameCn: "路边灵草", description: "路旁一丛低矮的灵草藏在碎石堆后面，叶片泛着微弱的荧光。虽是下品药材，摘下来塞进储物袋倒也能换几枚灵石。", baseWeight: 1, effects: { spiritStones: 40 } }),
     withSignal({ id: "g-f-02", semanticType: "fortune", resultType: "resource", name: "Abandoned Pouch", nameCn: "废弃储物袋", description: "树根缝隙里夹着一只破旧的储物袋，袋口的禁制已经失效。打开一看，里面还残存着几十枚灵石和一些碎杂之物。", baseWeight: 1, effects: { spiritStones: 60 } }),
@@ -33,14 +42,14 @@ export function createExplorationGlobalRows(): readonly (ExplorationGlobalRow & 
         effects: {},
       }),
       moralityChoice: {
-        title: "Rogue Request",
-        prompt: "A stranded traveler has spirit stones but no protection. Decide how you respond.",
+        title: "散修求助",
+        prompt: "路边这个散修刚被劫过，身上还剩一点灵石，又不敢一个人走。你是护送他一程，还是把剩下的也拿走？",
         expiresInTicks: 6,
         options: [
           {
             id: "escort",
-            label: "Escort the traveler",
-            summary: "Protect the route and accept only a token thanks.",
+            label: "护送一程",
+            summary: "把他送到下一个有人的地方，只收他硬塞过来的一点谢礼。",
             moralityDelta: 3,
             effectBundle: {
               reputationChange: 1,
@@ -49,8 +58,8 @@ export function createExplorationGlobalRows(): readonly (ExplorationGlobalRow & 
           },
           {
             id: "extort",
-            label: "Extort the traveler",
-            summary: "Take the easy stones and leave before anyone can object.",
+            label: "把灵石拿走",
+            summary: "趁他不敢声张，把袋子里剩下的灵石收下，然后离开。",
             moralityDelta: -3,
             effectBundle: {
               spiritStones: 50,
@@ -73,14 +82,14 @@ export function createExplorationGlobalRows(): readonly (ExplorationGlobalRow & 
         effects: {},
       }),
       moralityChoice: {
-        title: "Road Ambush",
-        prompt: "A caravan is under attack. Do you hold the line or loot the confusion?",
+        title: "路遇劫道",
+        prompt: "前面的商队正在挨打，护卫已经倒了两个。你是上去把场面稳住，还是趁乱从车上摸东西？",
         expiresInTicks: 6,
         options: [
           {
             id: "defend",
-            label: "Defend the caravan",
-            summary: "Spend effort to stabilize the scene and earn trust.",
+            label: "帮商队稳住",
+            summary: "耗一点灵力把劫道的人赶开，商队会记住你。",
             moralityDelta: 5,
             effectBundle: {
               qi: -6,
@@ -89,8 +98,8 @@ export function createExplorationGlobalRows(): readonly (ExplorationGlobalRow & 
           },
           {
             id: "plunder",
-            label: "Plunder the wreckage",
-            summary: "Grab what you can while everyone is distracted.",
+            label: "趁乱拿走货物",
+            summary: "谁也顾不上你的时候，从翻倒的箱子里拿走一包灵石。",
             moralityDelta: -5,
             effectBundle: {
               spiritStones: 70,

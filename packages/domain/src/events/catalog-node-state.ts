@@ -1,6 +1,7 @@
 import type { EventTemplate } from "../events.js";
 import type { Location } from "../model.js";
 
+import { buildDungeonStateSingletons } from "./content/nodes/dungeon-singletons.js";
 import { buildCangzhouDungeonEventPack } from "./content/nodes/states/cangzhou.js";
 import { buildLeizhouDungeonEventPack } from "./content/nodes/states/leizhou.js";
 import { buildLiangzhouDungeonEventPack } from "./content/nodes/states/liangzhou.js";
@@ -24,5 +25,6 @@ const STATE_DUNGEON_PACK_BUILDERS: Record<string, (location: Location) => EventT
 };
 
 export function buildDungeonStateOverlayEvents(location: Location): EventTemplate[] {
-  return STATE_DUNGEON_PACK_BUILDERS[location.stateId]?.(location) ?? [];
+  const pack = STATE_DUNGEON_PACK_BUILDERS[location.stateId]?.(location) ?? [];
+  return [...pack, ...buildDungeonStateSingletons(location)];
 }

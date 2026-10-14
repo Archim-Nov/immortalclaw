@@ -7,7 +7,7 @@ const ROWS = [
     resultType: "resource",
     title: "Fallen Thunder Shard",
     titleCn: "坠雷碎片",
-    description: "A fresh shard left by a thunder strike still hums with saleable energy.",
+    description: "雷刚停，地上有一块还热的碎渣。它不值钱，旁边震出来的灵石可以换一点路费。",
     effects: { spiritStones: 45 },
   },
   {
@@ -16,7 +16,7 @@ const ROWS = [
     resultType: "progression",
     title: "Storm-Riven Glyph",
     titleCn: "雷蚀纹印",
-    description: "A charred glyph left after a storm offers unstable but valuable insight.",
+    description: "被雷打过的石面上留着半个纹。你对着它把气息走了一遍，只推进了一点。",
     effects: { realmProgress: 4 },
   },
   {
@@ -25,7 +25,7 @@ const ROWS = [
     resultType: "status",
     title: "Skyfire Baptism",
     titleCn: "霆火淬神",
-    description: "Residual thunderfire drives your circulation into a short violent peak.",
+    description: "空气里还残留着雷火。你没有往里闯，只在边上站到那股劲过去，气息被带得发紧又松开。",
     baseWeight: 1.15,
     effects: { statusEffects: [{ effectId: "qi-surge", ticks: 3 }] },
   },
@@ -35,7 +35,7 @@ const ROWS = [
     resultType: "progression",
     title: "Stormstep Practice",
     titleCn: "逐电脚力",
-    description: "Timing your movement between bursts of static trains both nerve and body.",
+    description: "你在两声静电之间挪了一步。挪对了，进境很少，脚没有被打到。",
     baseWeight: 1.1,
     effects: { realmProgress: 3 },
   },
@@ -45,7 +45,7 @@ const ROWS = [
     resultType: "combat",
     title: "Thunderfiend Spark",
     titleCn: "雷煞迸发",
-    description: "An unstable fiend core flashes alive and forces an abrupt collision.",
+    description: "一块不稳的煞核突然亮了一下，逼得你侧身。亮过以后，地上有十几枚灵石。",
     baseWeight: 1.1,
     effects: { qi: -9, spiritStones: 20 },
   },
@@ -55,7 +55,7 @@ const ROWS = [
     resultType: "resource",
     title: "Conductive Sand Harvest",
     titleCn: "引雷砂采",
-    description: "Collecting storm-touched sand pays well if you can work quickly.",
+    description: "你在雨停的空档里收了一小把被雷打过的沙。收得不多，换到的灵石也不多。",
     effects: { spiritStones: 35 },
   },
   {
@@ -64,7 +64,7 @@ const ROWS = [
     resultType: "resource",
     title: "Jingxiao Warning",
     titleCn: "惊霄示警",
-    description: "A warning patrol pays for help keeping civilians away from the next anomaly.",
+    description: "惊霄宫的人让你帮着把闲人拦在这一段外面。拦完，他给了很少的灵石。",
     effects: { spiritStones: 35, reputationChange: 1 },
   },
   {
@@ -73,17 +73,17 @@ const ROWS = [
     resultType: "story",
     title: "Seal or Chase",
     titleCn: "异象追索",
-    description: "A patrol wants the anomaly sealed, but its exposed core is tempting and close.",
+    description: "异象裂开一条缝，巡查的人要把它封上。缝里的东西离你很近。",
     effects: {},
     moralityChoice: {
-      title: "Leizhou Anomaly Core",
-      prompt: "A thunder anomaly cracks open in front of you. Do you help seal it or rush the core for yourself?",
+      title: "雷州的裂缝",
+      prompt: "雷异象在你面前裂开。你是帮着封上，还是先伸手去取缝里的东西？",
       expiresInTicks: 6,
       options: [
         {
           id: "seal",
-          label: "Help seal it",
-          summary: "Reduce the danger and earn the patrol's trust.",
+          label: "帮着封上",
+          summary: "缝合上了，你没有拿到里面的东西。",
           moralityDelta: 3,
           effectBundle: {
             reputationChange: 1,
@@ -91,8 +91,8 @@ const ROWS = [
         },
         {
           id: "chase",
-          label: "Rush the core",
-          summary: "Take the dangerous gain before the field closes.",
+          label: "先取缝里的东西",
+          summary: "你拿到一点灵石，缝还没有封上。",
           moralityDelta: -3,
           effectBundle: {
             spiritStones: 35,
@@ -107,7 +107,7 @@ const ROWS = [
     resultType: "status",
     title: "Shelter Under Banner",
     titleCn: "避雷符棚",
-    description: "A warded storm shelter grants both pay and a brief buffer against the next strike.",
+    description: "避雷棚让你站到下一声过去，又给了几枚灵石。棚里的位子仍归他们的人。",
     baseWeight: 1.1,
     effects: {
       spiritStones: 30,

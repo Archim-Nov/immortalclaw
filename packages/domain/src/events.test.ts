@@ -35,8 +35,8 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
   const world = createSeedWorld();
 
   assert.ok(world.eventPools);
-  assert.equal(world.eventPools.globalCommon.length, 15);
-  assert.equal(world.eventPools.travelPool.length, 14);
+  assert.equal(world.eventPools.globalCommon.length, 45);
+  assert.equal(world.eventPools.travelPool.length, 42);
   assert.equal(Object.keys(world.eventPools.stateSpecific).length, 9);
   assert.equal(Object.keys(world.eventPools.travelStateSpecific).length, 9);
 
@@ -46,7 +46,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(totalStateEvents, 81);
+  assert.equal(totalStateEvents, 135);
 
   const totalTravelStateEvents = Object.values(
     world.eventPools.travelStateSpecific as Record<string, readonly EventTemplate[]>,
@@ -54,7 +54,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(totalTravelStateEvents, 90);
+  assert.equal(totalTravelStateEvents, 135);
 
   const nodeSpecificCount = Object.values(
     world.eventPools.nodeSpecific as Record<string, readonly EventTemplate[]>,
@@ -62,14 +62,15 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(nodeSpecificCount, 3033);
+  assert.equal(nodeSpecificCount, 3258);
 
   for (const stateId of STATE_IDS) {
-    assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 10);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 10);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 111);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 108);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 108);
+    assert.equal(world.eventPools.stateSpecific[stateId]?.length, 15);
+    assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 15);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 16);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 118);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 114);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 114);
     assert.equal(
       (world.eventPools.nodeSpecific[`${stateId}:dungeon-c`] ?? []).filter((event) => event.id.includes("-band-")).length,
       54,
@@ -100,7 +101,7 @@ test("hydrateWorldState rebuilds event pools from persisted world state", () => 
   const hydrated = hydrateWorldState(persisted);
 
   assert.ok(hydrated.eventPools.travelStateSpecific.qingzhou);
-  assert.equal(hydrated.eventPools.travelPool.length, 14);
+  assert.equal(hydrated.eventPools.travelPool.length, 42);
 });
 
 test("drawEvent exploration path returns a merged event candidate", () => {
@@ -479,5 +480,79 @@ test("single travel emits at most two flavor events even across many travel tick
       flavorTravelEvents.length <= 2,
       `seed ${seed} emitted ${flavorTravelEvents.length} travel flavor events`,
     );
+  }
+});
+
+const CJK = /[\u4e00-\u9fff]/;
+const GATED_MATS = new Set([
+  "mystic-jade-stone",
+  "jade-marrow-sand",
+  "purple-palace-earth",
+  "foundation-spirit-amber",
+  "cold-moon-crystal",
+  "still-cloud-wood",
+  "tranquil-bamboo",
+  "wind-control-crystal",
+  "nine-turn-core-sand",
+  "golden-spirit-flower",
+  "purple-celestial-leaf",
+  "star-fall-sand",
+  "moon-glory-jade",
+  "flowing-aurora-core",
+  "dragon-radiance-crystal",
+  "nine-turn-golden-marrow",
+  "nurture-nascent-dew",
+  "anchor-nascent-sand",
+  "shatter-nascent-lotus",
+  "divine-embryo-dew",
+  "divine-transformation-seal",
+]);
+const REALM_RANK: Record<string, number> = { 炼气: 0, 筑基: 1, 金丹: 2, 元婴: 3, 化神: 4 };
+
+test("thickened pools keep two-way choices, Chinese copy, and early material gates", () => {
+  const world = createSeedWorld();
+  const pools = [
+    ...world.eventPools.globalCommon,
+    ...world.eventPools.travelPool,
+    ...Object.values(world.eventPools.stateSpecific).flat(),
+    ...Object.values(world.eventPools.travelStateSpecific).flat(),
+    ...Object.values(world.eventPools.nodeSpecific).flat(),
+  ];
+  const byId = new Map(pools.map((event) => [event.id, event]));
+
+  for (const id of ["g-h-06", "g-h-09", "g-h-12", "g-h-15", "tr-h-05", "tr-h-09", "qz-h-04", "wz-tr-h-04"]) {
+    const event = byId.get(id);
+    assert.ok(event?.moralityChoice, `${id} should offer a choice`);
+    assert.equal(event?.moralityChoice?.options.length, 2);
+    assert.ok(CJK.test(event?.description ?? ""), `${id} description should be Chinese`);
+    assert.ok(CJK.test(event?.nameCn ?? ""), `${id} title should be Chinese`);
+  }
+
+  const choices = pools.filter((event) => event.moralityChoice);
+  assert.ok(choices.length >= 20);
+  for (const event of choices) {
+    const [left, right] = event.moralityChoice!.options;
+    assert.ok(left && right);
+    assert.notEqual(Math.sign(left.moralityDelta), Math.sign(right.moralityDelta));
+    assert.ok(CJK.test(event.moralityChoice!.prompt));
+    const stones = [left, right].map((option) => option.effectBundle.spiritStones ?? 0);
+    assert.ok(Math.max(...stones) <= 80, `${event.id} choice stones are too high`);
+  }
+
+  for (const event of pools) {
+    if (event.id.startsWith("g-f-1") || event.id.startsWith("g-h-1") || event.id.includes("-once-") || event.id.includes("-wild-")) {
+      assert.ok(CJK.test(event.description), `${event.id} should be written in Chinese`);
+    }
+    if (event.dungeonGrade) continue;
+    const rank = event.minRealm ? REALM_RANK[event.minRealm] : 0;
+    for (const reward of event.effects.itemRewards ?? []) {
+      if (!GATED_MATS.has(reward.itemId)) continue;
+      const needs = reward.itemId === "star-fall-sand" || reward.itemId === "moon-glory-jade"
+        || reward.itemId === "golden-spirit-flower"
+        || reward.itemId === "purple-celestial-leaf"
+        ? 2
+        : 1;
+      assert.ok(rank >= needs, `${event.id} drops ${reward.itemId} below its realm gate`);
+    }
   }
 });

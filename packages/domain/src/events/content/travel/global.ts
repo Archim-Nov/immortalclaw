@@ -1,6 +1,8 @@
 import type { EventTemplate } from "../../../events.js";
 import { deriveSignalType } from "../../../events.js";
 
+import { createTravelGlobalMoreRows } from "./global-more.js";
+
 export type TravelGlobalRow =
   Omit<EventTemplate, "layer" | "source" | "stateId" | "nodeType" | "minRealm" | "signalType">
   & { readonly minRealm?: EventTemplate["minRealm"] };
@@ -10,6 +12,13 @@ function withSignal(row: TravelGlobalRow): TravelGlobalRow & { signalType: Event
 }
 
 export function createTravelGlobalRows(): readonly (TravelGlobalRow & { signalType: EventTemplate["signalType"] })[] {
+  return [
+    ...createTravelGlobalBaseRows(),
+    ...createTravelGlobalMoreRows(),
+  ];
+}
+
+function createTravelGlobalBaseRows(): readonly (TravelGlobalRow & { signalType: EventTemplate["signalType"] })[] {
   return [
     withSignal({ id: "tr-f-01", semanticType: "fortune", resultType: "resource", name: "Roadside Pickup", nameCn: "路边捡漏", description: "道旁的草丛里露出半截储物袋的角，里头还剩几枚灵石和碎银，大概是哪位赶路的散修不慎遗落的。捡起来掂了掂，虽不多，聊胜于无。", baseWeight: 1, effects: { spiritStones: 20 } }),
     withSignal({ id: "tr-f-02", semanticType: "fortune", resultType: "status", name: "Tailwind", nameCn: "顺风赶路", description: "山谷间忽来一阵清风，恰好顺着行路方向吹拂，灵气借风势渗入经脉，步伐轻快了不少，气息运转也比平时顺畅。", baseWeight: 1, effects: { statusEffects: [{ effectId: "qi-surge", ticks: 2 }] } }),
