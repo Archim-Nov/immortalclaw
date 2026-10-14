@@ -14,7 +14,7 @@ export function buildWildernessEventPack(location: Location): EventTemplate[] {
       nameSuffix: "Ore Seam",
       nameCnSuffix: "矿脉裂缝",
       description: `${location.name}附近的石缝裂开一条，里面不是矿脉，只嵌着一小块能换灵石的矿和几枚碎石。`,
-      baseWeight: 1.2,
+      baseWeight: 0.88,
       effects: {
         spiritStones: 28,
         itemRewards: [{ itemId: "spirit-ore", count: 1 }],

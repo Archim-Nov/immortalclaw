@@ -45,7 +45,7 @@ export function buildStateEventPack(
     name: row.title,
     nameCn: row.titleCn,
     description: row.description,
-    baseWeight: row.baseWeight ?? 1,
+    baseWeight: row.baseWeight ?? 0.82,
     stateId,
     nodeType: null,
     minRealm: row.minRealm ?? null,

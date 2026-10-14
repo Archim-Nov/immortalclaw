@@ -35,8 +35,8 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
   const world = createSeedWorld();
 
   assert.ok(world.eventPools);
-  assert.equal(world.eventPools.globalCommon.length, 57);
-  assert.equal(world.eventPools.travelPool.length, 54);
+  assert.equal(world.eventPools.globalCommon.length, 87);
+  assert.equal(world.eventPools.travelPool.length, 84);
   assert.equal(Object.keys(world.eventPools.stateSpecific).length, 9);
   assert.equal(Object.keys(world.eventPools.travelStateSpecific).length, 9);
 
@@ -46,7 +46,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(totalStateEvents, 153);
+  assert.equal(totalStateEvents, 189);
 
   const totalTravelStateEvents = Object.values(
     world.eventPools.travelStateSpecific as Record<string, readonly EventTemplate[]>,
@@ -54,7 +54,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(totalTravelStateEvents, 153);
+  assert.equal(totalTravelStateEvents, 189);
 
   const nodeSpecificCount = Object.values(
     world.eventPools.nodeSpecific as Record<string, readonly EventTemplate[]>,
@@ -62,15 +62,15 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(nodeSpecificCount, 3258);
+  assert.equal(nodeSpecificCount, 3330);
 
   for (const stateId of STATE_IDS) {
-    assert.equal(world.eventPools.stateSpecific[stateId]?.length, 17);
-    assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 17);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 16);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 118);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 114);
-    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 114);
+    assert.equal(world.eventPools.stateSpecific[stateId]?.length, 21);
+    assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 21);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 18);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 120);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 116);
+    assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-a`]?.length, 116);
     assert.equal(
       (world.eventPools.nodeSpecific[`${stateId}:dungeon-c`] ?? []).filter((event) => event.id.includes("-band-")).length,
       54,
@@ -101,7 +101,7 @@ test("hydrateWorldState rebuilds event pools from persisted world state", () => 
   const hydrated = hydrateWorldState(persisted);
 
   assert.ok(hydrated.eventPools.travelStateSpecific.qingzhou);
-  assert.equal(hydrated.eventPools.travelPool.length, 54);
+  assert.equal(hydrated.eventPools.travelPool.length, 84);
 });
 
 test("drawEvent exploration path returns a merged event candidate", () => {
@@ -566,19 +566,29 @@ test("scene choices offer three or four thin options without touching morality p
     ...Object.values(world.eventPools.travelStateSpecific).flat(),
     ...Object.values(world.eventPools.nodeSpecific).flat(),
   ];
+  const byId = new Map(pools.map((event) => [event.id, event]));
   const scenes = pools.filter((event) => event.sceneChoice);
   const broad = scenes.filter((event) => (event.sceneChoice?.options.length ?? 0) >= 3);
   assert.equal(broad.length, scenes.length);
-  assert.ok(scenes.length >= 48, `expected dozens of scene choices, got ${scenes.length}`);
+  assert.ok(scenes.length >= 120, `expected the scene pool to double past 60, got ${scenes.length}`);
   assert.ok(scenes.some((event) => event.sceneChoice?.options.length === 3));
-  assert.ok(scenes.filter((event) => event.sceneChoice?.options.length === 4).length >= 36);
+  assert.ok(scenes.filter((event) => event.sceneChoice?.options.length === 4).length >= 70);
 
   const exploration = scenes.filter((event) => event.source === "exploration");
   const travel = scenes.filter((event) => event.source === "travel");
   const human = scenes.filter((event) => event.semanticType === "human");
-  assert.ok(exploration.length >= 20);
-  assert.ok(travel.length >= 20);
-  assert.ok(human.length >= 20);
+  assert.ok(exploration.length >= 60);
+  assert.ok(travel.length >= 60);
+  assert.ok(human.length >= 70);
+
+  for (const id of ["g-sc-13", "g-sc-30", "tr-sc-18", "tr-sc-26", "qz-sc-h-03", "yz-tr-sc-04", "g-fl-01", "tr-fl-15", "qz-f-06", "qz-tr-h-06"]) {
+    assert.ok(byId.has(id), `${id} should be in the thickened pools`);
+  }
+  assert.equal(byId.get("g-f-01")?.baseWeight, 0.7);
+  assert.equal(byId.get("g-sc-01")?.baseWeight, 1.05);
+  assert.equal(byId.get("qz-sc-h-01")?.baseWeight, 1.02);
+  const sceneTitles = scenes.map((event) => event.nameCn);
+  assert.equal(new Set(sceneTitles).size, sceneTitles.length, "scene titles should stay distinct");
 
   for (const event of scenes) {
     assert.equal(event.moralityChoice, undefined, `${event.id} should stay off the morality pair`);
