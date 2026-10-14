@@ -113,5 +113,39 @@ export function buildDungeonAEventPack(location: Location): EventTemplate[] {
         statusEffects: [{ effectId: "insight", ticks: 2 }],
       },
     }),
+    ...(rank === 4
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-4-missing-stone",
+            semanticType: "training",
+            resultType: "status",
+            nameSuffix: "Rank 4 Missing Stone",
+            nameCnSuffix: "第四层缺了的石头",
+            description: "甲四层的阵脚缺了一块石头。你没有补上，阵纹只轻轻刮过袖口，并不伤人。石缝里卡着一小片残符，没有别的东西。",
+            baseWeight: 0.5,
+            dungeonGrade: "甲",
+            minDungeonRank: 4,
+            maxDungeonRank: 4,
+            effects: { statusEffects: [{ effectId: "warded", ticks: 2 }] },
+          }),
+        ]
+      : []),
+    ...(rank === 7
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-7-warm-flask",
+            semanticType: "human",
+            resultType: "story",
+            nameSuffix: "Rank 7 Warm Flask",
+            nameCnSuffix: "第七层还温的水壶",
+            description: "甲七层的平台上，前一支队伍留下的水壶还是温的。壶盖里面刻着一个名字，和一句“先出去的人把伤者带走”。",
+            baseWeight: 0.5,
+            dungeonGrade: "甲",
+            minDungeonRank: 7,
+            maxDungeonRank: 7,
+            effects: { reputationChange: 1 },
+          }),
+        ]
+      : []),
   ]);
 }

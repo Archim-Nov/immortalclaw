@@ -7,7 +7,7 @@ const ROWS = [
     resultType: "resource",
     title: "Cliffside Herb Shelf",
     titleCn: "峭壁灵药",
-    description: "A risky cliff ledge hides concentrated herbs prized across mountain markets.",
+    description: "峭壁的石缝里长着一小丛药。你只摘了够得着的几枝，下山以后换到的灵石并不多。",
     baseWeight: 1.1,
     effects: { spiritStones: 45 },
   },
@@ -17,7 +17,7 @@ const ROWS = [
     resultType: "progression",
     title: "Woodgrain Rune Fragment",
     titleCn: "木纹残刻",
-    description: "Ancient carvings cut into old timber reveal a patient route of refinement.",
+    description: "老木上的纹路被刻过几刀。你对着那几刀把气息放慢，进境只有一点。",
     effects: { realmProgress: 4 },
   },
   {
@@ -26,7 +26,7 @@ const ROWS = [
     resultType: "status",
     title: "Mist Hollow Stillness",
     titleCn: "雾谷澄心",
-    description: "A mist-laden hollow muffles the world and lets your mind settle fully.",
+    description: "雾谷里外面的声音听不清。你站到雾薄一点再走，心里比进谷时静。",
     baseWeight: 1.1,
     effects: { statusEffects: [{ effectId: "clear-mind", ticks: 4 }] },
   },
@@ -36,7 +36,7 @@ const ROWS = [
     resultType: "progression",
     title: "Ridge Path Focus",
     titleCn: "栈道凝息",
-    description: "Careful breathing on narrow paths turns balance into practical growth.",
+    description: "窄栈上不能大步。你把呼吸和落脚对上，走到宽处时进境很少，脚是稳的。",
     effects: { realmProgress: 3 },
   },
   {
@@ -45,7 +45,7 @@ const ROWS = [
     resultType: "combat",
     title: "Vine Python Clash",
     titleCn: "藤蟒突袭",
-    description: "A mountain predator lashes out from the tree line and tests your footing.",
+    description: "林子边上一条藤蟒扫过来，你退了两步才站稳。把它逼开以后，地上有十几枚灵石。",
     effects: { qi: -9, spiritStones: 20 },
   },
   {
@@ -54,7 +54,7 @@ const ROWS = [
     resultType: "resource",
     title: "Spiritwood Pruning",
     titleCn: "灵木采枝",
-    description: "Pruning old spiritwood grants usable material and a feel for mountain rhythms.",
+    description: "一棵老灵木需要剪掉枯枝。你剪完，主人给了很少的灵石，枝子他自己留下。",
     effects: { spiritStones: 35 },
   },
   {
@@ -63,7 +63,7 @@ const ROWS = [
     resultType: "resource",
     title: "Poyun Scout",
     titleCn: "破云巡山",
-    description: "A mountain scout pays for route reports and quiet cooperation.",
+    description: "破云门的巡山人要你告诉他哪一段栈道松了。你说了，他按规矩给了几枚灵石。",
     effects: { spiritStones: 35, reputationChange: 1 },
   },
   {
@@ -72,18 +72,18 @@ const ROWS = [
     resultType: "story",
     title: "Mountain Guide's Shortcut",
     titleCn: "山径引路",
-    description: "A local guide offers a hidden path that would cut across villagers' herb slopes.",
+    description: "向导说有一条快路，会从村民的药坡上穿过去。慢路绕开那些坡，要多走一截。",
     baseWeight: 1.05,
     effects: {},
     moralityChoice: {
-      title: "Shuzhou Mountain Shortcut",
-      prompt: "You can save time by using the hidden path, but it will ruin nearby herb terraces. What do you choose?",
+      title: "蜀州的两条路",
+      prompt: "快路会踏坏村民的药坡，慢路不会。你走哪一条？",
       expiresInTicks: 6,
       options: [
         {
           id: "detour",
-          label: "Protect the terraces",
-          summary: "Take the longer route and keep the local livelihood intact.",
+          label: "走不踩药坡的路",
+          summary: "你晚到一步，坡上的药还在。",
           moralityDelta: 3,
           effectBundle: {
             reputationChange: 1,
@@ -91,8 +91,8 @@ const ROWS = [
         },
         {
           id: "cut-through",
-          label: "Take the shortcut",
-          summary: "Claim the mountain's advantage before someone else does.",
+          label: "从药坡上穿过去",
+          summary: "你先到了，坡上被踩过的那一截不归你管。",
           moralityDelta: -3,
           effectBundle: {
             spiritStones: 35,
@@ -107,7 +107,7 @@ const ROWS = [
     resultType: "status",
     title: "Herbalist Exchange",
     titleCn: "药农换购",
-    description: "A mountain herbalist trades stock and leaves you briefly saturated with clean spirit.",
+    description: "山里的药户换走你手里的普通叶子，又让你在他的棚里坐了一会儿。灵石不多，气倒平了。",
     effects: {
       spiritStones: 30,
       statusEffects: [{ effectId: "spirit-saturated", ticks: 2 }],

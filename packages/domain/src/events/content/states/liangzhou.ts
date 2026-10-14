@@ -7,7 +7,7 @@ const ROWS = [
     resultType: "resource",
     title: "Red Sand Ore Vein",
     titleCn: "赤沙矿脉",
-    description: "Wind-scoured rock in Liangzhou reveals ore worth fighting over.",
+    description: "风把石面吹开一条缝，里面只有一小块矿和几枚灵石，不够让人动手抢。",
     baseWeight: 1.1,
     effects: { spiritStones: 45 },
   },
@@ -17,7 +17,7 @@ const ROWS = [
     resultType: "progression",
     title: "Buried Caravan Tablet",
     titleCn: "埋沙商碑",
-    description: "A half-buried route tablet teaches the patience needed for long desert travel.",
+    description: "半埋在沙里的路碑只露出一行字。你把沙拨开读完，气息比赶路时慢了一点。",
     effects: { realmProgress: 4 },
   },
   {
@@ -26,7 +26,7 @@ const ROWS = [
     resultType: "status",
     title: "Dry Well Essence",
     titleCn: "枯井凝息",
-    description: "A hidden desert well restores a short burst of usable spiritual density.",
+    description: "一口看着枯了的井，下去仍有一点湿气。你在井沿坐了一会儿，再走时没那么燥。",
     effects: { statusEffects: [{ effectId: "spirit-saturated", ticks: 2 }] },
   },
   {
@@ -35,7 +35,7 @@ const ROWS = [
     resultType: "progression",
     title: "Dustroad Endurance",
     titleCn: "戈路熬炼",
-    description: "Only repeated marches under a hard sun teach this kind of body control.",
+    description: "太阳底下这一段没有影子。你走完才停，进境比喝到的那口水更清楚。",
     baseWeight: 1.1,
     effects: { realmProgress: 3 },
   },
@@ -45,7 +45,7 @@ const ROWS = [
     resultType: "combat",
     title: "Scorpion Beast Nest",
     titleCn: "沙蝎袭营",
-    description: "A nest hidden under hot sand erupts into a quick, punishing fight.",
+    description: "烫沙下面窜出几只沙蝎，你退开时小腿被扫到。蝎子走了，沙里留下十几枚灵石。",
     baseWeight: 1.05,
     effects: { qi: -9, spiritStones: 20 },
   },
@@ -55,7 +55,7 @@ const ROWS = [
     resultType: "resource",
     title: "Scrap Ore Picking",
     titleCn: "荒垒捡矿",
-    description: "Even exhausted mining camps leave enough scrap for careful hands.",
+    description: "废弃的矿棚里只剩别人不要的碎渣。你拣了一小把，换到的灵石很少。",
     effects: { spiritStones: 35 },
   },
   {
@@ -64,7 +64,7 @@ const ROWS = [
     resultType: "resource",
     title: "Supply Tallier",
     titleCn: "军驿点料",
-    description: "A frontier supply yard pays you to keep ledgers and stock moving.",
+    description: "军驿的人让你把点过的料数抄到下一页。抄完，他从公账里给了几枚灵石。",
     effects: { spiritStones: 35, reputationChange: 1 },
   },
   {
@@ -73,18 +73,18 @@ const ROWS = [
     resultType: "story",
     title: "Water Ration Choice",
     titleCn: "水袋取舍",
-    description: "A caravan runs short and one hidden waterskin could change who makes it through.",
+    description: "车队的水不够了。你自己还有一袋，押车的人还不知道。",
     baseWeight: 1.05,
     effects: {},
     moralityChoice: {
-      title: "Liangzhou Water Ration",
-      prompt: "The convoy is short on water. Do you share your reserve or keep your own margin?",
+      title: "凉州的水",
+      prompt: "车队的水不够，你手里还有一袋。你是分下去，还是自己留着？",
       expiresInTicks: 6,
       options: [
         {
           id: "share",
-          label: "Share the ration",
-          summary: "Keep the group moving even if it costs your own comfort.",
+          label: "把水分下去",
+          summary: "你自己只剩底，车还在往前走。",
           moralityDelta: 3,
           effectBundle: {
             reputationChange: 1,
@@ -92,8 +92,8 @@ const ROWS = [
         },
         {
           id: "stash",
-          label: "Hide the waterskin",
-          summary: "Preserve your safety and let the weaker hands take the loss.",
+          label: "把水囊藏起来",
+          summary: "水还在你袋里，后面的人没有分到。",
           moralityDelta: -3,
           effectBundle: {
             spiritStones: 35,
@@ -108,7 +108,7 @@ const ROWS = [
     resultType: "status",
     title: "Ore Convoy Contract",
     titleCn: "矿队雇约",
-    description: "A guarded ore convoy brings pay and a short window of safer travel.",
+    description: "矿队让你跟在车尾走到下一根旗杆。这一段有人看着，灵石按说好的给。",
     effects: {
       spiritStones: 30,
       statusEffects: [{ effectId: "warded", ticks: 2 }],

@@ -1,5 +1,8 @@
+import type { StateId } from "../constants.js";
 import type { EventTemplate } from "../events.js";
 
+import { buildStateEventPack } from "./content/states/template.js";
+import { TRAVEL_STATE_MORE } from "./content/travel/state-more.js";
 import { buildCangzhouTravelEventPack } from "./content/travel/states/cangzhou.js";
 import { buildLeizhouTravelEventPack } from "./content/travel/states/leizhou.js";
 import { buildLiangzhouTravelEventPack } from "./content/travel/states/liangzhou.js";
@@ -23,5 +26,10 @@ const STATE_TRAVEL_PACK_BUILDERS: Record<string, () => EventTemplate[]> = {
 };
 
 export function buildTravelStateSpecificEvents(stateId: string): EventTemplate[] {
-  return STATE_TRAVEL_PACK_BUILDERS[stateId]?.() ?? [];
+  const base = STATE_TRAVEL_PACK_BUILDERS[stateId]?.() ?? [];
+  const extra = TRAVEL_STATE_MORE[stateId];
+  if (!extra?.length) {
+    return base;
+  }
+  return [...base, ...buildStateEventPack(stateId as StateId, extra, "travel")];
 }

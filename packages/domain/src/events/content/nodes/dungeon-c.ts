@@ -157,5 +157,56 @@ export function buildDungeonCEventPack(location: Location): EventTemplate[] {
           }),
         ]
       : []),
+    ...(rank === 3
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-3-unfinished-letter",
+            semanticType: "human",
+            resultType: "resource",
+            nameSuffix: "Rank 3 Unfinished Letter",
+            nameCnSuffix: "第三层没写完的信",
+            description: "丙三层的石缝里卡着半封没写完的信，收信人是城里的药铺。你把信抽出来的时候，角落里还滚出十几枚碎灵石。",
+            baseWeight: 0.7,
+            dungeonGrade: "丙",
+            minDungeonRank: 3,
+            maxDungeonRank: 3,
+            effects: { spiritStones: 14 },
+          }),
+        ]
+      : []),
+    ...(rank === 5
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-5-torn-map",
+            semanticType: "human",
+            resultType: "story",
+            nameSuffix: "Rank 5 Torn Map",
+            nameCnSuffix: "第五层撕开的地图",
+            description: "丙五层的岔路上，两个散修为了一张画到一半的地图吵得停不下来。谁也没赢，地图被撕成两半，其中半张飘到你脚边。",
+            baseWeight: 0.65,
+            dungeonGrade: "丙",
+            minDungeonRank: 5,
+            maxDungeonRank: 5,
+            effects: { reputationChange: 1 },
+          }),
+        ]
+      : []),
+    ...(rank === 8
+      ? [
+          buildNodeEvent(location, {
+            idSuffix: "rank-8-outer-message",
+            semanticType: "human",
+            resultType: "status",
+            nameSuffix: "Rank 8 Outer Message",
+            nameCnSuffix: "第八层带出去的话",
+            description: "丙八层的风口处，一个外门弟子坐在石阶上喘气，托你出关以后带一句话：这一层的水不能喝。他只把一枚还热的清心符塞给你。",
+            baseWeight: 0.6,
+            dungeonGrade: "丙",
+            minDungeonRank: 8,
+            maxDungeonRank: 8,
+            effects: { statusEffects: [{ effectId: "clear-mind", ticks: 2 }] },
+          }),
+        ]
+      : []),
   ]);
 }

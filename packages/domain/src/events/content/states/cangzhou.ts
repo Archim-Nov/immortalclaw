@@ -7,7 +7,7 @@ const ROWS = [
     resultType: "resource",
     title: "Tidal Spirit Sand",
     titleCn: "潮汐灵砂",
-    description: "A shifting shoreline exposes rare sand useful to both trade and craft.",
+    description: "潮水改道以后，岸上露出一小片灵砂。你只收了能捧住的一把，换到的灵石很少。",
     baseWeight: 1.1,
     effects: { spiritStones: 45 },
   },
@@ -17,7 +17,7 @@ const ROWS = [
     resultType: "progression",
     title: "Reef Stele Fragment",
     titleCn: "礁碑残字",
-    description: "A fragment from a reef ruin offers insight once the salt is cleaned away.",
+    description: "礁石上的残字被盐糊住。你擦开以后读到半句，照着把气息走慢了一点。",
     effects: { realmProgress: 4 },
   },
   {
@@ -26,7 +26,7 @@ const ROWS = [
     resultType: "status",
     title: "Sea Breeze Clarity",
     titleCn: "海风澄心",
-    description: "A clean wind off the sea washes away static thought and lingering strain.",
+    description: "海上的风把衣袖吹干。你在埠头站了一会儿，心里比刚才清楚。",
     effects: { statusEffects: [{ effectId: "clear-mind", ticks: 4 }] },
   },
   {
@@ -35,7 +35,7 @@ const ROWS = [
     resultType: "progression",
     title: "Deck Balance Drill",
     titleCn: "甲板稳步",
-    description: "A rolling deck turns simple stance work into honest training.",
+    description: "甲板在晃。你站完这一程没有扶栏，进境很少，脚是自己的。",
     effects: { realmProgress: 3 },
   },
   {
@@ -44,7 +44,7 @@ const ROWS = [
     resultType: "combat",
     title: "Reef Beast Surge",
     titleCn: "暗礁妖袭",
-    description: "A reef beast bursts from the surf before the salvage line can react.",
+    description: "浪里窜出一头不大的礁兽，在人反应过来之前撞了你一下。它退回水里，岸上留下十几枚灵石。",
     effects: { qi: -9, spiritStones: 20 },
   },
   {
@@ -53,7 +53,7 @@ const ROWS = [
     resultType: "resource",
     title: "Wreck Salvage",
     titleCn: "沉船打捞",
-    description: "A careful pull from a broken wreck leaves you with more than wet hands.",
+    description: "你从破船里拉出一只小匣。匣里没有值钱的东西，只有几枚灵石。",
     baseWeight: 1.1,
     effects: { spiritStones: 35 },
   },
@@ -63,7 +63,7 @@ const ROWS = [
     resultType: "resource",
     title: "Harbor Factor's Request",
     titleCn: "港埠信牌",
-    description: "A harbor factor pays for reliable movement between docks, seals, and storehouses.",
+    description: "港埠的人让你把一枚封好的牌送到对面库房。牌没有打开，送到就有一点灵石。",
     baseWeight: 1.1,
     effects: { spiritStones: 35, reputationChange: 1 },
   },
@@ -73,18 +73,18 @@ const ROWS = [
     resultType: "story",
     title: "Ruins Diver's Claim",
     titleCn: "遗迹分润",
-    description: "A diver wants to split a relic quietly rather than report the full find to the harbor office.",
+    description: "潜水的人想把礁里的东西私下分掉，不进撼海堡的账。",
     baseWeight: 1.05,
     effects: {},
     moralityChoice: {
-      title: "Cangzhou Ruins Diver",
-      prompt: "A diver offers you a private share from a reef ruin. Do you file the relic properly or take the hidden cut?",
+      title: "沧州的这一网",
+      prompt: "潜水的人要把这一网私下分给你。你是补进港账，还是现在把那一份拿走？",
       expiresInTicks: 6,
       options: [
         {
           id: "report",
-          label: "File the relic",
-          summary: "Keep the port ledger clean and protect the route's trust.",
+          label: "补进港账",
+          summary: "账上有了这一网，你只拿了记账的那一点。",
           moralityDelta: 3,
           effectBundle: {
             reputationChange: 1,
@@ -92,8 +92,8 @@ const ROWS = [
         },
         {
           id: "split",
-          label: "Take the hidden cut",
-          summary: "Accept the quiet profit and leave the office guessing.",
+          label: "拿走那一份",
+          summary: "你的那一份离开了埠头，账上仍是空的。",
           moralityDelta: -3,
           effectBundle: {
             spiritStones: 35,
@@ -108,7 +108,7 @@ const ROWS = [
     resultType: "status",
     title: "Sea Trade Purchase Order",
     titleCn: "海贸收单",
-    description: "A port buyer pays fast and points you toward the next lucrative rumor chain.",
+    description: "港里收货的人当场给了灵石，又说了下一处还在问的货。数目不大。",
     effects: {
       spiritStones: 30,
       statusEffects: [{ effectId: "fortune-marked", ticks: 2 }],

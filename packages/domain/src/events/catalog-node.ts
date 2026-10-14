@@ -6,11 +6,12 @@ import { buildDungeonAEventPack } from "./content/nodes/dungeon-a.js";
 import { buildDungeonBEventPack } from "./content/nodes/dungeon-b.js";
 import { buildDungeonCEventPack } from "./content/nodes/dungeon-c.js";
 import { buildWildernessEventPack } from "./content/nodes/wilderness.js";
+import { buildWildernessStateOverlay } from "./content/nodes/wilderness-states.js";
 
 function buildSharedNodeEventPack(location: Location): EventTemplate[] {
   switch (location.nodeType) {
     case "wilderness":
-      return buildWildernessEventPack(location);
+      return [...buildWildernessEventPack(location), ...buildWildernessStateOverlay(location)];
     case "dungeon-c":
       return buildDungeonCEventPack(location);
     case "dungeon-b":
