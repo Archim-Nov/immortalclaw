@@ -1,6 +1,7 @@
 import type { EventTemplate } from "../../../events.js";
 import type { Location } from "../../../model.js";
 
+import { DUNGEON_FLAVOR_ROWS } from "./dungeon-flavor.js";
 import { buildNodeEvent } from "./shared.js";
 
 interface OnceRow {
@@ -73,7 +74,7 @@ const ROWS: Record<string, readonly OnceRow[]> = {
 
 export function buildDungeonStateSingletons(location: Location): EventTemplate[] {
   const dungeonGrade = location.dungeon?.grade ?? null;
-  const rows = ROWS[location.stateId] ?? [];
+  const rows = [...(ROWS[location.stateId] ?? []), ...(DUNGEON_FLAVOR_ROWS[location.stateId] ?? [])];
   return rows.map((row) => buildNodeEvent(location, {
     ...row,
     dungeonGrade,

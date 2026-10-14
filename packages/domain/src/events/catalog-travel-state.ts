@@ -3,6 +3,7 @@ import type { EventTemplate } from "../events.js";
 
 import { travelSceneRowsFor } from "./content/scene-choices.js";
 import { buildStateEventPack } from "./content/states/template.js";
+import { TRAVEL_FLAVOR } from "./content/travel/flavor-rows.js";
 import { TRAVEL_STATE_MORE } from "./content/travel/state-more.js";
 import { buildCangzhouTravelEventPack } from "./content/travel/states/cangzhou.js";
 import { buildLeizhouTravelEventPack } from "./content/travel/states/leizhou.js";
@@ -29,10 +30,12 @@ const STATE_TRAVEL_PACK_BUILDERS: Record<string, () => EventTemplate[]> = {
 export function buildTravelStateSpecificEvents(stateId: string): EventTemplate[] {
   const base = STATE_TRAVEL_PACK_BUILDERS[stateId]?.() ?? [];
   const extra = TRAVEL_STATE_MORE[stateId];
+  const flavor = TRAVEL_FLAVOR[stateId];
   const scene = travelSceneRowsFor(stateId);
   return [
     ...base,
     ...(extra?.length ? buildStateEventPack(stateId as StateId, extra, "travel") : []),
+    ...(flavor?.length ? buildStateEventPack(stateId as StateId, flavor, "travel") : []),
     ...(scene.length ? buildStateEventPack(stateId as StateId, scene, "travel") : []),
   ];
 }

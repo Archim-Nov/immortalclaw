@@ -1,10 +1,16 @@
 import type { EventEffect, SceneChoiceOption, SceneChoiceTemplate } from "../../model.js";
 import type { EventTemplate } from "../../events.js";
 import type { StateEventRow } from "./states/template.js";
+import {
+  EXPLORATION_BEATS_MORE,
+  STATE_EXPLORATION_MORE,
+  STATE_TRAVEL_MORE,
+  TRAVEL_BEATS_MORE,
+} from "./scene-choices-more.js";
 
 type Semantic = EventTemplate["semanticType"];
 
-interface Beat {
+export interface Beat {
   readonly id: string;
   readonly name: string;
   readonly nameCn: string;
@@ -18,7 +24,7 @@ interface Beat {
   readonly risk?: readonly [string, string, number?];
 }
 
-interface StateBeat extends Beat {
+export interface StateBeat extends Beat {
   readonly stateId: string;
   readonly slot: string;
 }
@@ -112,7 +118,7 @@ function toGlobalRow(beat: Beat): EventTemplate {
     name: beat.name,
     nameCn: beat.nameCn,
     description: beat.description,
-    baseWeight: 0.82,
+    baseWeight: 1.05,
     stateId: null,
     nodeType: null,
     minRealm: null,
@@ -129,7 +135,7 @@ function toStateRow(beat: StateBeat): StateEventRow {
     title: beat.name,
     titleCn: beat.nameCn,
     description: beat.description,
-    baseWeight: 0.78,
+    baseWeight: 1.02,
     effects: {},
     sceneChoice: buildSceneChoice(beat),
   };
@@ -991,17 +997,17 @@ function rowsFor(beats: readonly StateBeat[], stateId: string): StateEventRow[] 
 }
 
 export function createExplorationSceneRows(): EventTemplate[] {
-  return EXPLORATION_BEATS.map(toGlobalRow);
+  return [...EXPLORATION_BEATS, ...EXPLORATION_BEATS_MORE].map(toGlobalRow);
 }
 
 export function createTravelSceneRows(): EventTemplate[] {
-  return TRAVEL_BEATS.map(toGlobalRow);
+  return [...TRAVEL_BEATS, ...TRAVEL_BEATS_MORE].map(toGlobalRow);
 }
 
 export function explorationSceneRowsFor(stateId: string): StateEventRow[] {
-  return rowsFor(STATE_EXPLORATION, stateId);
+  return rowsFor([...STATE_EXPLORATION, ...STATE_EXPLORATION_MORE], stateId);
 }
 
 export function travelSceneRowsFor(stateId: string): StateEventRow[] {
-  return rowsFor(STATE_TRAVEL, stateId);
+  return rowsFor([...STATE_TRAVEL, ...STATE_TRAVEL_MORE], stateId);
 }
