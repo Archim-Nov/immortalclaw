@@ -7,10 +7,12 @@ import {
   WEAPON_LOADOUT_DEFINITIONS,
   WEAPON_TYPE_DEFINITIONS,
 } from "./combat-loadouts.js";
+import { mysteryForTier } from "./high-realm.js";
 import type {
   CombatNextGear,
   Cultivator,
   FiveElementId,
+  GearPath,
   ItemId,
   SpellBranchId,
   SpellLoadoutId,
@@ -86,16 +88,88 @@ const ELEMENT_BRANCH: Record<FiveElementId, SpellBranchId> = {
 export function seekLine(channel: "weapon" | "spell", tier: number): string {
   const band = bandForTier(tier);
   const thing = channel === "weapon" ? "兵器" : "功法";
+  const errand = channel === "weapon" ? "band-errand:weapon" : "band-errand:manual";
+  const exchange = channel === "weapon" ? "exchange-sect-weapon" : "exchange-sect-manual";
   if (tier >= 5) {
-    return `化神这一阶${thing}，先得自己破进化神。洞府破境要的灵材在甲级地宫七层到九层。兵器和功法的锻造材料也从七层起。到了化神，坊市和宗门才卖这一阶，宗门要贡献 220，不扣。`;
+    return `化神这一阶${thing}，坊市不卖。先得自己破进化神，再去甲级七层到九层的神纹天隙拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑 ${errand}。贡献到 220 可以用 ${exchange} 直接换，贡献不扣。破境时会留下一页功法残页。`;
   }
   if (tier >= 4) {
-    return `元婴这一阶${thing}，先得自己破进元婴。洞府破境要的灵材从甲级地宫四层起。四层往上也能出大圆满的锻造材料，七层往上才是化神。到了元婴，坊市和宗门才卖这一阶，宗门要贡献 140，不扣。`;
+    return `元婴这一阶${thing}，坊市不卖。先得自己破进元婴，再去甲级四层到六层的婴火莲池拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑 ${errand}。贡献到 140 可以用 ${exchange} 直接换，贡献不扣。破境时会留下一页功法残页。`;
   }
   const where = tier <= 2
     ? "丙级地宫六层往上、坊市，或宗门"
     : "乙级地宫五层往上、坊市，或宗门";
   return `${band.realm}这一阶${thing}，${where}。坊市和宗门只卖你这把兵器、这门功法还缺的下一阶，不让你跳阶。破境会悟到一点，护送或守关办成，有时留下一页残页。把功法或兵器送给别人，对方用掉才会学会。`;
+}
+
+function hashValue(seed: string): number {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function gearPaths(kind: "weapon" | "spell", id: string, tier: ContentTier): GearPath[] {
+  const thing = kind === "weapon" ? "兵器" : "功法";
+  const material = kind === "weapon" ? "锻材" : "残页";
+  const recipe = kind === "weapon"
+    ? `residence-produce:recipe-forge-${id}`
+    : `residence-produce:recipe-synthesize-${id}`;
+  const exchange = kind === "weapon" ? "exchange-sect-weapon" : "exchange-sect-manual";
+  const errand = kind === "weapon" ? "band-errand:weapon" : "band-errand:manual";
+  const buy = kind === "weapon" ? "buy-next-weapon" : "buy-next-manual";
+  const mystery = mysteryForTier(tier);
+  const place = mystery
+    ? mystery.line
+    : tier <= 2
+      ? "丙级地宫六层往上会掉这一阶的锻材和残页。"
+      : "乙级地宫五层往上会掉这一阶的锻材和残页。";
+  const paths: GearPath[] = [
+    { kind: "秘境", actionId: null, line: place },
+    {
+      kind: "配方",
+      actionId: recipe,
+      line: `带回洞府，用 ${recipe} 把${material}做成能学的${thing}。用掉才会学会，不会自动换上。`,
+    },
+    {
+      kind: "宗门",
+      actionId: exchange,
+      line: `宗门贡献到 ${CONTRIBUTION_GATE[tier]} 以后，在安全的地方用 ${exchange} 直接换。贡献不扣，只要门槛。`,
+    },
+  ];
+  if (tier >= 4) {
+    paths.push({
+      kind: "任务",
+      actionId: errand,
+      line: `在自己宗门的驻地用 ${errand} 跑一趟差事，带回一份${material}。同一趟要隔六个时辰。`,
+    });
+    paths.push({
+      kind: "破境",
+      actionId: null,
+      line: kind === "spell"
+        ? "大境界破过去的时候，会留下一页这一阶的功法残页。残页拿回洞府合成。"
+        : "大境界破过去会把入门招再顺一顺。兵器本身不跟着破境到手，还是要去秘境拿锻材。",
+    });
+  } else {
+    paths.push({
+      kind: "坊市",
+      actionId: buy,
+      line: `境界到了，坊市用 ${buy} 就能买下一阶。不让跳阶。`,
+    });
+  }
+  return paths;
+}
+
+export function preferredHighTierDrop(cultivator: Cultivator, tier: ContentTier, seed: string): ItemId | null {
+  if (tier < 4) return null;
+  const options = (["weapon", "spell"] as const)
+    .map((kind) => gearOffer(cultivator, kind))
+    .filter((offer): offer is GearOffer => offer !== null && offer.tier === tier);
+  if (options.length === 0) return null;
+  const offer = options[hashValue(seed) % options.length]!;
+  if (offer.reachable && hashValue(`${seed}:form`) % 4 === 0) return offer.itemId;
+  return (offer.kind === "weapon" ? `weapon-material-${offer.id}` : `spell-fragment-${offer.id}`) as ItemId;
 }
 
 export function weaponNameAtTier(typeId: WeaponTypeId, tier: number): string | null {
@@ -158,6 +232,8 @@ function offerFrom(kind: "weapon" | "spell", id: string, name: string, tier: Con
     sectPrice: kind === "weapon" ? SECT_WEAPON[tier] : SECT_SPELL[tier],
     contributionGate: CONTRIBUTION_GATE[tier],
     seek: seekLine(kind, tier),
+    soldAtShop: tier < 4,
+    paths: gearPaths(kind, id, tier),
     itemId: (kind === "weapon" ? `weapon-item-${id}` : `spell-manual-${id}`) as ItemId,
     kind,
   };
@@ -198,6 +274,9 @@ export function purchaseNextGear(
   if (!offer) throw new Error(kind === "weapon" ? "这把兵器没有更高的一阶了。" : "这门功法没有更高的一阶了。");
   if (!offer.reachable) {
     throw new Error(`要到${offer.realm}才能拿${offer.name}。现在买回去也装备不上。`);
+  }
+  if (path === "shop" && offer.soldAtShop === false) {
+    throw new Error(`这一阶坊市不卖。${offer.seek}`);
   }
   if (path === "sect") {
     if (!cultivator.sectId && !cultivator.neutralSectId) throw new Error("得先入一门宗，才能用贡献换。");

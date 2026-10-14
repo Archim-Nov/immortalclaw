@@ -1,3 +1,4 @@
+import { mysteryForRank } from "./high-realm.js";
 import type {
   ActionJob,
   Cultivator,
@@ -125,9 +126,15 @@ function yieldBandForRank(rank: DungeonRank): "1-3" | "4-6" | "7-9" {
 export function buildDungeonRankYieldHints(
   availableRanks: DungeonRank[],
   primaryMaterial: ItemId,
+  grade?: DungeonGrade,
 ): DungeonRankYieldHint[] {
   return availableRanks.map((rank) => {
     const band = yieldBandForRank(rank);
+    const mystery = grade ? mysteryForRank(grade, rank) : null;
+    const notableSecondaryDrops = [...SECONDARY_DROPS_BY_BAND[band]];
+    if (mystery && !notableSecondaryDrops.includes(mystery.cultivationItemId)) {
+      notableSecondaryDrops.push(mystery.cultivationItemId);
+    }
     return {
       rank,
       primaryMaterial,
@@ -136,7 +143,10 @@ export function buildDungeonRankYieldHints(
         balanced: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].balanced },
         aggressive: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].aggressive },
       },
-      notableSecondaryDrops: [...SECONDARY_DROPS_BY_BAND[band]],
+      notableSecondaryDrops,
+      ...(mystery
+        ? { mysteryName: mystery.name, mysteryLine: mystery.line, entryMinLevel: mystery.minLevel }
+        : {}),
     };
   });
 }

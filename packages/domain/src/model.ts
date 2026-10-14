@@ -424,6 +424,10 @@ export type LegacyItemId =
   | "divine-thought-crystal"
   | "heaven-soul-silk"
   | "divine-pattern-stone"
+  // High-realm meditation materials. Not spent on breakthrough.
+  | "core-nourish-dew"
+  | "nascent-nourish-sand"
+  | "spirit-nourish-dust"
   // Breakthrough special materials (1 per stage)
   | "condensed-qi-dew"
   | "azure-stone-marrow"
@@ -494,6 +498,8 @@ export type TimedActionId =
   | "mine-spirit-stones"
   | `search-fortune:rank-${DungeonRank}`
   | "take-sect-errand"
+  | "band-errand:weapon"
+  | "band-errand:manual"
   | "take-neutral-duty"
   | `sect-task:${string}`
   | "hunt-mine-beast"
@@ -637,6 +643,16 @@ export interface DungeonRankYieldHint {
   primaryMaterial: ItemId;
   estimatedExpeditionYieldByPolicy: Record<DungeonExpeditionPolicy, DungeonYieldEstimate>;
   notableSecondaryDrops: ItemId[];
+  /** Named 秘境 on 甲级. Absent on 丙级 and 乙级. */
+  mysteryName?: string;
+  mysteryLine?: string;
+  entryMinLevel?: number;
+}
+
+export interface GearPath {
+  kind: "秘境" | "配方" | "宗门" | "任务" | "破境" | "坊市";
+  line: string;
+  actionId: string | null;
 }
 
 export interface CombatSkillView {
@@ -684,6 +700,10 @@ export interface CombatNextGear {
   sectPrice: number;
   contributionGate: number;
   seek: string;
+  /** False for 大圆满 and 化神. The shop price stays as a reference and the buy action is absent. */
+  soldAtShop?: boolean;
+  /** How to actually get this tier. Present once the gear view is built. */
+  paths?: GearPath[];
 }
 
 export interface DungeonCombatHighlight {
@@ -1432,6 +1452,8 @@ export interface Cultivator {
   heardGossip?: HeardGossip[];
   /** Last tick of a social action, keyed so the same ask cannot be spammed. */
   socialCooldowns?: Record<string, number>;
+  /** World tick when the next 宗门兵器功法差事 can start. Absent until one has been run. */
+  bandErrandReadyTick?: number;
   /** Set when someone stands watch for a breakthrough. Absent until then. */
   breakthroughWatch?: { guardId: string; guardName: string; untilTick: number };
   /** Open soul-lamp or divine-pattern step. Absent until the first step finishes, and on older saves. */
@@ -2218,6 +2240,8 @@ export interface RealmPathView {
   methodName?: string | null;
   /** Complete sentences: where, with whom, and in what order. */
   sequence?: string[];
+  /** High-realm materials and places. Omitted before 金丹. */
+  resources?: string[];
 }
 
 export interface BreakthroughMaterialSourceView {

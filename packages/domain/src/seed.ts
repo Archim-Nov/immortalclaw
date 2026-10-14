@@ -750,6 +750,9 @@ export function hydrateWorldState(
       (cultivator.residence as any).description = (cultivator.residence as any).description ?? "";
     }
 
+    for (const itemId of ["core-nourish-dew", "nascent-nourish-sand", "spirit-nourish-dust"] as const) {
+      if (cultivator.inventory[itemId] === undefined) cultivator.inventory[itemId] = 0;
+    }
     cultivator.activeQuests = (cultivator.activeQuests ?? []).map((quest, index) => ({
       ...quest,
       type: quest.type ?? backfillQuestType(quest.templateId, quest.instanceId ?? quest.id),

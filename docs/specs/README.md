@@ -43,6 +43,7 @@ Recent supporting gameplay specs:
 - `docs/specs/combat-weapon-root-aptitude/spec.md`
 - `docs/specs/combat-content-deepen-v1/spec.md`
 - `docs/specs/realm-ladder-past-core/spec.md`
+- `docs/specs/high-realm-resources/spec.md`
 - `docs/specs/social-spoken-lines/spec.md`
 - `docs/specs/companion-shared-report/spec.md`
 - `docs/specs/relationship-mood-digest/spec.md`

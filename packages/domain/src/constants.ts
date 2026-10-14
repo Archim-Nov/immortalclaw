@@ -126,6 +126,8 @@ export const DEFAULT_ACTION_DURATIONS: Record<string, number> = {
   "search-fortune": 3,
   "start-dungeon-expedition": 30,
   "take-sect-errand": 2,
+  "band-errand:weapon": 3,
+  "band-errand:manual": 3,
   "take-neutral-duty": 2,
   "sect-task-resource-tribute": 1,
   "sect-task-sect-liaison": 2,
