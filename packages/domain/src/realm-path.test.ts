@@ -22,6 +22,30 @@ function give(cultivator: Cultivator, ids: readonly ItemId[]) {
   for (const id of ids) cultivator.inventory[id] = (cultivator.inventory[id] ?? 0) + 1;
 }
 
+function breakRealm(world: ReturnType<typeof createSeedWorld>, cultivator: Cultivator) {
+  const level = cultivator.realmLevel;
+  if (level <= 6) {
+    performAction(world, cultivator.id, "residence-breakthrough");
+    finish(world, cultivator.id);
+    return;
+  }
+  if (level === 9) {
+    cultivator.locationId = "qingzhou:dungeon-a";
+    performAction(world, cultivator.id, "infant-fire-temper");
+    finish(world, cultivator.id);
+    return;
+  }
+  if (level <= 11) {
+    performAction(world, cultivator.id, "begin-soul-vigil");
+    finish(world, cultivator.id);
+    performAction(world, cultivator.id, "seal-soul-vigil");
+    return;
+  }
+  cultivator.locationId = "qingzhou:wilderness";
+  performAction(world, cultivator.id, "face-tribulation");
+  finish(world, cultivator.id);
+}
+
 const NASCENT_GATE: readonly ItemId[] = ["infant-fire-lotus", "nascent-jade", "soul-lamp-wick", "nine-turn-golden-marrow"];
 const SPIRIT_GATE: readonly ItemId[] = ["divine-thought-crystal", "heaven-soul-silk", "divine-pattern-stone", "shatter-nascent-lotus"];
 
@@ -56,6 +80,7 @@ test("炼气仍走坊市，金丹后期才把下一境写成元婴", () => {
   assert.equal(early.cultivator.realm, "炼气");
   assert.equal(early.breakthrough?.specialRequirement.itemId, "meridian-lotus-essence");
   assert.match(early.realmPath.goals.join(""), /坊市/);
+  assert.equal(early.realmPath.method, "residence");
   assert.equal(early.realmPath.goals.join("").includes("元婴"), false);
   assert.equal(early.realmPath.risk.includes("走火"), false);
   assert.equal(early.digest?.nextStep, undefined);
@@ -71,8 +96,11 @@ test("炼气仍走坊市，金丹后期才把下一境写成元婴", () => {
   assert.equal(late.breakthrough?.specialRequirement.itemId, "nine-turn-golden-marrow");
   assert.match(late.breakthrough?.materialSources.map((source) => source.note).join(""), /四层/);
   assert.equal(late.realmPath.catalogTier, "大圆满");
+  assert.equal(late.realmPath.method, "infant-fire");
+  assert.match(late.realmPath.sequence?.join("") ?? "", /infant-fire-temper/);
   assert.match(late.realmPath.goals.join(""), /婴火莲/);
   assert.match(late.realmPath.risk, /走火/);
+  assert.match(late.digest?.nextStep ?? "", /婴火淬体/);
   assert.match(late.digest?.nextStep ?? "", /元婴/);
   assert.match(late.digest?.summary ?? "", /过得平常/);
   assert.match(late.digest?.summary ?? "", /元婴/);
@@ -135,8 +163,7 @@ test("金丹后期能破进元婴，失败会受伤，小突破必成，化神�
   for (let tick = 1; tick < 40 && (!success || !failure); tick += 1) {
     const attempt = prepared(tick, 9, "金丹", NASCENT_GATE);
     const beforeReputation = getCultivatorState(attempt.world, attempt.cultivator.id).cultivator.reputation;
-    performAction(attempt.world, attempt.cultivator.id, "residence-breakthrough");
-    finish(attempt.world, attempt.cultivator.id);
+    breakRealm(attempt.world, attempt.cultivator);
     if (attempt.cultivator.realmLevel === 10 && !success) {
       success = attempt;
       assert.equal(attempt.cultivator.realm, "元婴");
@@ -156,8 +183,7 @@ test("金丹后期能破进元婴，失败会受伤，小突破必成，化神�
 
   const minor = prepared(3, 10, "元婴", ["infant-fire-lotus", "nascent-jade", "soul-lamp-wick", "nurture-nascent-dew"]);
   const qiBefore = minor.cultivator.maxQi;
-  performAction(minor.world, minor.cultivator.id, "residence-breakthrough");
-  finish(minor.world, minor.cultivator.id);
+  breakRealm(minor.world, minor.cultivator);
   assert.equal(minor.cultivator.realmLevel, 11);
   assert.equal(minor.cultivator.maxQi, qiBefore + 24);
 
@@ -189,8 +215,7 @@ test("金丹后期能破进元婴，失败会受伤，小突破必成，化神�
   let spirit: ReturnType<typeof prepared> | null = null;
   for (let tick = 1; tick < 40 && !spirit; tick += 1) {
     const attempt = prepared(tick + 80, 12, "元婴", SPIRIT_GATE);
-    performAction(attempt.world, attempt.cultivator.id, "residence-breakthrough");
-    finish(attempt.world, attempt.cultivator.id);
+    breakRealm(attempt.world, attempt.cultivator);
     if (attempt.cultivator.realm === "化神") spirit = attempt;
   }
   assert.ok(spirit);

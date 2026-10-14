@@ -65,6 +65,10 @@ import {
 } from "./events.js";
 import { repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import {
+  breakthroughMethodIdForLevel,
+  breakthroughMethodNarrative,
+} from "./breakthrough-methods.js";
+import {
   breakthroughDropPool,
   isRiskyLateMajor,
   rankBandForRealmLevel,
@@ -5114,9 +5118,7 @@ function breakthroughRecommendedActionOf(
   const readyByMaterials = hasBreakthroughMaterials(cultivator, definition);
 
   if (readyByProgress && readyByMaterials) {
-    return isAtResidence(cultivator)
-      ? "residence-breakthrough"
-      : (travelActionIdOf(cultivator.residence.locationId) as ActionId);
+    return breakthroughReadyActionOf(world, cultivator, definition);
   }
 
   if (readyByProgress) {
@@ -5159,6 +5161,14 @@ function breakthroughViewOf(
     })
     .filter((item) => item.missing > 0);
   const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
+  const narrative = breakthroughMethodNarrative({
+    realmLevel: cultivator.realmLevel,
+    successRate: rateInfo.successRate,
+    category: definition.category,
+  });
+  const openRite = cultivator.breakthroughRite && cultivator.breakthroughRite.untilTick >= world.tick
+    ? cultivator.breakthroughRite
+    : null;
 
   const view: BreakthroughStateView = {
     targetRealm: definition.targetRealm,
@@ -5166,7 +5176,8 @@ function breakthroughViewOf(
     category: definition.category,
     readyByProgress: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED,
     readyByMaterials: missingItems.length === 0,
-    requiresResidence: true,
+    requiresResidence: breakthroughMethodIdForLevel(cultivator.realmLevel) === "residence"
+      || breakthroughMethodIdForLevel(cultivator.realmLevel) === "soul-vigil",
     genericRequirements,
     specialRequirement,
     materialSources: materialSourcesOf(definition),
@@ -5175,6 +5186,11 @@ function breakthroughViewOf(
     majorSuccessRate: rateInfo.successRate,
     rateBreakdown: rateInfo.rateBreakdown,
     recommendedAction: breakthroughRecommendedActionOf(world, cultivator, definition),
+    method: narrative?.id,
+    methodName: narrative?.name,
+    sequence: narrative?.sequence,
+    help: narrative?.help,
+    rite: openRite ? { method: openRite.method, untilTick: openRite.untilTick } : null,
     previewMainAttributeGrowth: null,
     previewFiveElementGrowth: null,
     previewPercentageBonus: null,
@@ -5220,6 +5236,414 @@ function buildBreakthroughAction(cultivator: Cultivator): AvailableAction | null
   };
 }
 
+function breakthroughCompany(world: WorldState, cultivator: Cultivator): { id: string; name: string } | null {
+  const watch = cultivator.breakthroughWatch;
+  if (watch && watch.untilTick >= world.tick) {
+    const guard = world.cultivators[watch.guardId];
+    if (guard && guard.locationId === cultivator.locationId) {
+      return { id: guard.id, name: guard.name };
+    }
+  }
+  const other = Object.values(world.cultivators).find(
+    (candidate) => candidate.id !== cultivator.id && candidate.locationId === cultivator.locationId,
+  );
+  return other ? { id: other.id, name: other.name } : null;
+}
+
+function activeBreakthroughRite(cultivator: Cultivator, tick: number, method: "soul-vigil" | "divine-pattern") {
+  const rite = cultivator.breakthroughRite;
+  if (!rite || rite.method !== method || rite.untilTick < tick) return null;
+  return rite;
+}
+
+function nearestPlaceAction(world: WorldState, fromLocationId: string, nodeType: string): ActionId {
+  const nearest = findNearestLocationId(world, fromLocationId, (candidate) => candidate.nodeType === nodeType);
+  return nearest ? travelActionIdOf(nearest) as ActionId : "meditate";
+}
+
+function breakthroughReadyActionOf(
+  world: WorldState,
+  cultivator: Cultivator,
+  definition: BreakthroughDefinition,
+): ActionId {
+  const method = breakthroughMethodIdForLevel(cultivator.realmLevel);
+  const nodeType = world.locations[cultivator.locationId]?.nodeType ?? "";
+  const company = breakthroughCompany(world, cultivator);
+  if (method === "residence" || !method) {
+    return isAtResidence(cultivator)
+      ? "residence-breakthrough"
+      : (travelActionIdOf(cultivator.residence.locationId) as ActionId);
+  }
+  if (method === "core-rite") {
+    if (nodeType === "sect-outpost") return "core-rite:steady";
+    if (company && isAtResidence(cultivator)) return "core-rite:press";
+    return nearestPlaceAction(world, cultivator.locationId, "sect-outpost");
+  }
+  if (method === "infant-fire") {
+    if (nodeType === "sect-outpost" || nodeType === "dungeon-a") return "infant-fire-temper";
+    return nearestPlaceAction(world, cultivator.locationId, "sect-outpost");
+  }
+  if (method === "soul-vigil") {
+    if (!isAtResidence(cultivator)) return travelActionIdOf(cultivator.residence.locationId) as ActionId;
+    return activeBreakthroughRite(cultivator, world.tick, "soul-vigil") ? "seal-soul-vigil" : "begin-soul-vigil";
+  }
+  if (method === "tribulation") {
+    if (nodeType === "wilderness" || nodeType === "dungeon-a") return "face-tribulation";
+    return nearestPlaceAction(world, cultivator.locationId, "wilderness");
+  }
+  if (!definition) return "meditate";
+  if (nodeType === "sect-outpost") {
+    return activeBreakthroughRite(cultivator, world.tick, "divine-pattern") ? "seal-divine-step" : "begin-divine-step";
+  }
+  return nearestPlaceAction(world, cultivator.locationId, "sect-outpost");
+}
+
+function breakthroughCostAction(definition: BreakthroughDefinition, actionId: ActionId, label: string, description: string, durationTicks: number, kind: "timed" | "immediate"): AvailableAction {
+  return {
+    actionId,
+    label,
+    description,
+    durationTicks,
+    kind,
+    costs: { itemConsumes: breakthroughConsumedItemsOf(definition) },
+  };
+}
+
+function listBreakthroughMethodActions(world: WorldState, cultivator: Cultivator): AvailableAction[] {
+  const definition = breakthroughDefinitionOf(cultivator);
+  const method = breakthroughMethodIdForLevel(cultivator.realmLevel);
+  if (!definition || !method) return [];
+  if (cultivator.injuryTicksRemaining > 0 && method !== "residence") return [];
+  const nodeType = world.locations[cultivator.locationId]?.nodeType ?? "";
+  const company = breakthroughCompany(world, cultivator);
+  if (method === "residence") {
+    return isAtResidence(cultivator) ? [buildBreakthroughAction(cultivator)].filter((action): action is AvailableAction => action !== null) : [];
+  }
+  if (method === "core-rite") {
+    const actions: AvailableAction[] = [];
+    if (nodeType === "sect-outpost") {
+      actions.push(breakthroughCostAction(
+        definition,
+        "core-rite:steady",
+        "结丹仪（稳妥）",
+        "在宗门驻地把这一层金丹走稳。材料会在仪成时耗掉。这一档没有额外代价。",
+        DEFAULT_ACTION_DURATIONS["core-rite:steady"] ?? 8,
+        "timed",
+      ));
+    }
+    if (company && (nodeType === "sect-outpost" || isAtResidence(cultivator))) {
+      actions.push(breakthroughCostAction(
+        definition,
+        "core-rite:press",
+        "结丹仪（催丹）",
+        `有${company.name}看着，可以把这一层催成。比稳妥快，大约四分之一的机会留下一段短走火。境界仍然会过去。`,
+        DEFAULT_ACTION_DURATIONS["core-rite:press"] ?? 6,
+        "timed",
+      ));
+    }
+    return actions;
+  }
+  if (method === "infant-fire" && (nodeType === "sect-outpost" || nodeType === "dungeon-a")) {
+    const help = company ? ` ${company.name}在这一处，成功率会高一截。` : " 一个人也能淬。有同伴在同一处，成功率会高一截。";
+    return [breakthroughCostAction(
+      definition,
+      "infant-fire-temper",
+      "婴火淬体",
+      `在这里用婴火把金丹淬开。可能失败。失败会没材料、进度退到六成，婴火反噬会让人受伤。${help}`,
+      DEFAULT_ACTION_DURATIONS["infant-fire-temper"] ?? 10,
+      "timed",
+    )];
+  }
+  if (method === "soul-vigil" && isAtResidence(cultivator)) {
+    if (activeBreakthroughRite(cultivator, world.tick, "soul-vigil")) {
+      const named = company ? ` ${company.name}也在这洞府里，收口时会记下这个人。` : "";
+      return [breakthroughCostAction(
+        definition,
+        "seal-soul-vigil",
+        "魂灯收口",
+        `魂灯还亮着。这一步把元婴收口，材料现在才耗。灯灭了就要重新点。${named}`,
+        0,
+        "immediate",
+      )];
+    }
+    return [{
+      actionId: "begin-soul-vigil",
+      label: "点上魂灯",
+      description: "在自己的洞府点上魂灯，守六个时辰。灯亮以后的八个时辰里，用 seal-soul-vigil 收口。这一步不耗材料。",
+      durationTicks: DEFAULT_ACTION_DURATIONS["begin-soul-vigil"] ?? 6,
+      kind: "timed",
+    }];
+  }
+  if (method === "tribulation" && (nodeType === "wilderness" || nodeType === "dungeon-a")) {
+    const help = company
+      ? ` ${company.name}在这一处，雷会分掉一点，成功率也高一点。失败时对方也会挂一点伤。`
+      : " 一个人迎的话，失败时伤更重。有同伴在同一处，雷会分掉一点。";
+    return [breakthroughCostAction(
+      definition,
+      "face-tribulation",
+      "迎天劫",
+      `在这里迎一道雷。可能失败。材料会耗，进度会退到六成。${help}`,
+      DEFAULT_ACTION_DURATIONS["face-tribulation"] ?? 8,
+      "timed",
+    )];
+  }
+  if (method === "divine-pattern" && nodeType === "sect-outpost") {
+    if (activeBreakthroughRite(cultivator, world.tick, "divine-pattern")) {
+      const help = company
+        ? ` ${company.name}在场看着，印会落稳。`
+        : " 现在没有旁人。一个人落印也能成，神纹会反噬，人会挂一点伤。";
+      return [breakthroughCostAction(
+        definition,
+        "seal-divine-step",
+        "神纹落印",
+        `神纹还铺着。这一步落印，材料现在才耗。${help}`,
+        0,
+        "immediate",
+      )];
+    }
+    return [{
+      actionId: "begin-divine-step",
+      label: "铺开神纹",
+      description: "在宗门驻地把神纹铺开，六个时辰。纹还在的时候用 seal-divine-step 落印。这一步不耗材料。",
+      durationTicks: DEFAULT_ACTION_DURATIONS["begin-divine-step"] ?? 6,
+      kind: "timed",
+    }];
+  }
+  return [];
+}
+
+function assertBreakthroughReady(cultivator: Cultivator, definition: BreakthroughDefinition): void {
+  if (cultivator.injuryTicksRemaining > 0) {
+    throw new GameplayRejection("身上有伤，这一阶的破境做不了。先把伤养好，再来。");
+  }
+  if (cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED) {
+    throw new GameplayRejection("修为还没顶满。满了一百再破。");
+  }
+  if (!hasBreakthroughMaterials(cultivator, definition)) {
+    throw new GameplayRejection("突破材料还没齐。");
+  }
+}
+
+function startBreakthroughJob(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: TimedActionId,
+  label: string,
+  definition: BreakthroughDefinition,
+  extra?: { companionId?: string; rateBonus?: number; press?: boolean },
+): ActionExecutionResult {
+  const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
+  const rateBreakdown = [...rateInfo.rateBreakdown];
+  let successRate = rateInfo.successRate;
+  if (successRate !== null && extra?.rateBonus) {
+    rateBreakdown.push({ source: "companion", delta: extra.rateBonus });
+    successRate = clamp(successRate + extra.rateBonus, BREAKTHROUGH_MIN_RATE, BREAKTHROUGH_MAX_RATE);
+  }
+  return startJob(
+    world,
+    cultivator,
+    actionId,
+    label,
+    {
+      breakthroughCategory: definition.category,
+      breakthroughTargetRealm: definition.targetRealm,
+      breakthroughTargetLevel: definition.targetLevel,
+      breakthroughCommonItemId: definition.genericMaterials[0]?.itemId,
+      breakthroughCommonCount: definition.genericMaterials[0]?.count,
+      breakthroughSpecialItemId: definition.specialMaterial.itemId,
+      breakthroughSpecialCount: definition.specialMaterial.count,
+      breakthroughSuccessRate: successRate ?? undefined,
+      breakthroughRateBreakdown: rateBreakdown,
+      breakthroughCompanionId: extra?.companionId,
+      breakthroughMethod: breakthroughMethodIdForLevel(cultivator.realmLevel) ?? undefined,
+      breakthroughPress: extra?.press,
+    },
+    DEFAULT_ACTION_DURATIONS[actionId] ?? definition.durationTicks,
+  );
+}
+
+function openBreakthroughRite(world: WorldState, cultivator: Cultivator, method: "soul-vigil" | "divine-pattern"): string {
+  cultivator.breakthroughRite = { method, stage: "open", untilTick: world.tick + 8 };
+  const sentence = method === "soul-vigil"
+    ? `${cultivator.name}在洞府里点上了魂灯。八个时辰之内用 seal-soul-vigil 收口。灯灭了就要重新点，材料还在身上。`
+    : `${cultivator.name}在宗门驻地把神纹铺开了。八个时辰之内用 seal-divine-step 落印。材料还在身上。`;
+  addDaoLog(world, cultivator.id, method === "soul-vigil" ? "点上魂灯" : "铺开神纹", sentence, ["breakthrough", method]);
+  recordLife(cultivator, { tick: world.tick, kind: "growth", text: sentence });
+  return sentence;
+}
+
+function performBreakthroughMethodAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: ActionId,
+): ActionExecutionResult | null {
+  const timed = actionId === "core-rite:steady"
+    || actionId === "core-rite:press"
+    || actionId === "infant-fire-temper"
+    || actionId === "begin-soul-vigil"
+    || actionId === "face-tribulation"
+    || actionId === "begin-divine-step";
+  const immediate = actionId === "seal-soul-vigil" || actionId === "seal-divine-step";
+  if (!timed && !immediate) return null;
+  const definition = breakthroughDefinitionOf(cultivator);
+  if (!definition) throw new GameplayRejection("这一阶没有下一道门槛。");
+  const method = breakthroughMethodIdForLevel(cultivator.realmLevel);
+  if (!method) throw new GameplayRejection("这一阶没有下一道门槛。");
+  assertBreakthroughReady(cultivator, definition);
+  const nodeType = world.locations[cultivator.locationId]?.nodeType ?? "";
+  const company = breakthroughCompany(world, cultivator);
+  const refusal = breakthroughMethodNarrative({
+    realmLevel: cultivator.realmLevel,
+    successRate: definition.baseSuccessRate,
+    category: definition.category,
+  })?.refusal;
+
+  if (actionId === "core-rite:steady") {
+    if (method !== "core-rite") throw new GameplayRejection(refusal ?? "这一阶不走结丹仪。");
+    if (nodeType !== "sect-outpost") throw new GameplayRejection("结丹仪要在宗门驻地里走。你现在不在驻地。");
+    return startBreakthroughJob(world, cultivator, actionId, "结丹仪（稳妥）", definition);
+  }
+  if (actionId === "core-rite:press") {
+    if (method !== "core-rite") throw new GameplayRejection(refusal ?? "这一阶不走结丹仪。");
+    if (nodeType !== "sect-outpost" && !isAtResidence(cultivator)) {
+      throw new GameplayRejection("催丹要在宗门驻地，或自己的洞府里，并且有人看着。");
+    }
+    if (!company) throw new GameplayRejection("催丹要有人看着。请一位修士来护法，或等眼前有人，再用 core-rite:press。一个人的话，去宗门驻地用 core-rite:steady。");
+    return startBreakthroughJob(world, cultivator, actionId, "结丹仪（催丹）", definition, { companionId: company.id, press: true });
+  }
+  if (actionId === "infant-fire-temper") {
+    if (method !== "infant-fire") throw new GameplayRejection(refusal ?? "这一阶不走婴火淬体。");
+    if (nodeType !== "sect-outpost" && nodeType !== "dungeon-a") {
+      throw new GameplayRejection("婴火淬体要在宗门驻地，或甲级地宫门口。洞府里淬不开这颗丹。");
+    }
+    return startBreakthroughJob(world, cultivator, actionId, "婴火淬体", definition, company ? { companionId: company.id, rateBonus: 10 } : undefined);
+  }
+  if (actionId === "begin-soul-vigil") {
+    if (method !== "soul-vigil") throw new GameplayRejection(refusal ?? "这一阶不点魂灯。");
+    if (!isAtResidence(cultivator)) throw new GameplayRejection("魂灯要在自己的洞府里点。先回去。");
+    return startBreakthroughJob(world, cultivator, actionId, "点上魂灯", definition);
+  }
+  if (actionId === "seal-soul-vigil") {
+    if (method !== "soul-vigil") throw new GameplayRejection(refusal ?? "这一阶不收魂灯。");
+    if (!isAtResidence(cultivator)) throw new GameplayRejection("魂灯要在自己的洞府里收口。先回去。");
+    if (!activeBreakthroughRite(cultivator, world.tick, "soul-vigil")) {
+      throw new GameplayRejection(cultivator.breakthroughRite
+        ? "魂灯已经灭了。材料还在，重新用 begin-soul-vigil 点一次。"
+        : "魂灯还没点上。先用 begin-soul-vigil。");
+    }
+    const named = company ? `${company.name}也守在这洞府里。` : "";
+    const result = startJob(world, cultivator, "residence-breakthrough", "魂灯收口", {
+      breakthroughCategory: definition.category,
+      breakthroughTargetRealm: definition.targetRealm,
+      breakthroughTargetLevel: definition.targetLevel,
+      breakthroughSuccessRate: undefined,
+      breakthroughMethod: "soul-vigil",
+    }, 1);
+    if (result.job) {
+      resolveResidenceBreakthrough(world, cultivator, result.job, {
+        tag: "seal-soul-vigil",
+        successLife: `${cultivator.name}在魂灯下把这一层收了口。${named}元婴又稳了一层。`,
+      });
+      cultivator.activeJobId = null;
+      delete world.jobs[result.job.id];
+    }
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: `${cultivator.name}在魂灯下把这一层收了口。`,
+    };
+  }
+  if (actionId === "face-tribulation") {
+    if (method !== "tribulation") throw new GameplayRejection(refusal ?? "这一阶不迎天劫。");
+    if (nodeType !== "wilderness" && nodeType !== "dungeon-a") {
+      throw new GameplayRejection("天劫要在荒野或甲级地宫门口迎。城里和洞府接不住这一道雷。");
+    }
+    return startBreakthroughJob(world, cultivator, actionId, "迎天劫", definition, company ? { companionId: company.id, rateBonus: 8 } : undefined);
+  }
+  if (actionId === "begin-divine-step") {
+    if (method !== "divine-pattern") throw new GameplayRejection(refusal ?? "这一阶不铺神纹。");
+    if (nodeType !== "sect-outpost") throw new GameplayRejection("神纹要在宗门驻地铺开。先到驻地。");
+    return startBreakthroughJob(world, cultivator, actionId, "铺开神纹", definition);
+  }
+  if (method !== "divine-pattern") throw new GameplayRejection(refusal ?? "这一阶不落神纹。");
+  if (nodeType !== "sect-outpost") throw new GameplayRejection("神纹要在宗门驻地落印。先到驻地。");
+  if (!activeBreakthroughRite(cultivator, world.tick, "divine-pattern")) {
+    throw new GameplayRejection(cultivator.breakthroughRite
+      ? "神纹已经散了。材料还在，重新用 begin-divine-step 铺一次。"
+      : "神纹还没铺开。先用 begin-divine-step。");
+  }
+  const result = startJob(world, cultivator, "residence-breakthrough", "神纹落印", {
+    breakthroughCategory: definition.category,
+    breakthroughTargetRealm: definition.targetRealm,
+    breakthroughTargetLevel: definition.targetLevel,
+    breakthroughMethod: "divine-pattern",
+  }, 1);
+  if (result.job) {
+    resolveResidenceBreakthrough(world, cultivator, result.job, {
+      tag: "seal-divine-step",
+      successInjuryTicks: company ? 0 : 4,
+      successLife: company
+        ? `${cultivator.name}在${company.name}看着的时候把神纹落了印。化神又往前了一层。`
+        : `${cultivator.name}一个人把神纹落了印。印是成了，反噬也挂上了一点伤。`,
+    });
+    cultivator.activeJobId = null;
+    delete world.jobs[result.job.id];
+  }
+  return {
+    tick: world.tick,
+    cultivatorId: cultivator.id,
+    actionId,
+    accepted: true,
+    summary: `${cultivator.name}把神纹落了印。`,
+  };
+}
+
+function resolveTimedBreakthrough(world: WorldState, cultivator: Cultivator, job: ActionJob): string {
+  if (job.actionId === "begin-soul-vigil" || job.actionId === "begin-divine-step") {
+    const definition = breakthroughDefinitionOf(cultivator);
+    if (!definition || cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED || !hasBreakthroughMaterials(cultivator, definition)) {
+      throw new Error("Breakthrough materials are missing.");
+    }
+    return openBreakthroughRite(world, cultivator, job.actionId === "begin-soul-vigil" ? "soul-vigil" : "divine-pattern");
+  }
+  if (job.actionId === "core-rite:steady" || job.actionId === "core-rite:press") {
+    return resolveResidenceBreakthrough(world, cultivator, job, {
+      tag: job.actionId,
+      successDeviationChance: job.actionId === "core-rite:press" ? 25 : 0,
+      successLife: job.actionId === "core-rite:press"
+        ? `${cultivator.name}把这一层金丹催成了。人还在金丹里，只是往前了一层。`
+        : `${cultivator.name}在宗门驻地把结丹仪走完了。这一层金丹落稳，人还在金丹里。`,
+    });
+  }
+  if (job.actionId === "infant-fire-temper") {
+    return resolveResidenceBreakthrough(world, cultivator, job, {
+      tag: "infant-fire-temper",
+      injuryTicks: 8,
+      deviationTicks: 8,
+      failureLife: `${cultivator.name}的婴火反噬了。材料已经耗了，进度退到六成，身上的伤比寻常大境界更重，气息也乱了一阵。`,
+      successLife: `${cultivator.name}的金丹在婴火里裂开，元婴成形。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`,
+    });
+  }
+  if (job.actionId === "face-tribulation") {
+    const companion = job.meta?.breakthroughCompanionId ? world.cultivators[job.meta.breakthroughCompanionId] : undefined;
+    const shared = Boolean(companion && companion.locationId === cultivator.locationId);
+    return resolveResidenceBreakthrough(world, cultivator, job, {
+      tag: "face-tribulation",
+      injuryTicks: shared ? 6 : 10,
+      deviationTicks: 8,
+      companionId: shared ? companion?.id : null,
+      companionInjuryTicks: shared ? 2 : 0,
+      failureLife: shared
+        ? `${cultivator.name}没能把天劫挨过去。${companion?.name ?? "同伴"}在旁边分了一道雷。材料没了，进度退到六成，两个人都挂了伤，气息也乱了一阵。`
+        : `${cultivator.name}没能把天劫挨过去。雷是一个人扛的，材料没了，进度退到六成，伤得很重，气息也乱了一阵。`,
+      successLife: `${cultivator.name}把天劫挨了过去，进了化神。雷过之后，气血和灵力都涨了一截，化神的兵器和功法这才装备得上。`,
+    });
+  }
+  return resolveResidenceBreakthrough(world, cultivator, job);
+}
+
 function recordBreakthrough(
   cultivator: Cultivator,
   record: BreakthroughRecord,
@@ -5227,7 +5651,22 @@ function recordBreakthrough(
   cultivator.breakthroughRecords.push(record);
 }
 
-function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator, job: ActionJob): string {
+function resolveResidenceBreakthrough(
+  world: WorldState,
+  cultivator: Cultivator,
+  job: ActionJob,
+  flavor?: {
+    tag?: string;
+    successLife?: string;
+    failureLife?: string;
+    injuryTicks?: number;
+    deviationTicks?: number;
+    successDeviationChance?: number;
+    successInjuryTicks?: number;
+    companionId?: string | null;
+    companionInjuryTicks?: number;
+  },
+): string {
   const definition = breakthroughDefinitionOf(cultivator);
   if (!definition) {
     throw new Error("No breakthrough is available at the current realm level.");
@@ -5245,6 +5684,7 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
   for (const item of consumedItems) {
     cultivator.inventory[item.itemId] -= item.count;
   }
+  delete cultivator.breakthroughRite;
 
   const rateInfo = breakthroughRateBreakdownOf(cultivator, definition);
   const successRate = job.meta?.breakthroughSuccessRate ?? rateInfo.successRate;
@@ -5253,6 +5693,8 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
     definition.category === "minor"
       ? true
       : (hashString(`${world.tick}:${job.id}:breakthrough`) % 100) < (successRate ?? definition.baseSuccessRate ?? 0);
+  const flavorTag = flavor?.tag ?? "residence-breakthrough";
+  const lateWound = isRiskyLateMajor(definition.targetRealm, definition.category);
 
   if (!success) {
     cultivator.realmProgress = BREAKTHROUGH_FAILURE_PROGRESS;
@@ -5273,7 +5715,7 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
       cultivator.id,
       "Breakthrough Failed",
       `${cultivator.name} failed the breakthrough to level ${definition.targetLevel} and fell back to 60 progress.`,
-      ["breakthrough", "failure", "residence-breakthrough", definition.category],
+      ["breakthrough", "failure", flavorTag, definition.category],
     );
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
@@ -5284,23 +5726,34 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
       tags: ["breakthrough", "failure", definition.category],
     });
     shiftCultivatorMood(world, cultivator, "loss", "破境没有成，心气沉了一下，还得再攒。");
-    if (isRiskyLateMajor(definition.targetRealm, definition.category)) {
-      raiseInjury(world, cultivator, 6);
+    const injuryTicks = flavor && typeof flavor.injuryTicks === "number" ? flavor.injuryTicks : lateWound ? 6 : 0;
+    const deviationTicks = flavor && typeof flavor.deviationTicks === "number" ? flavor.deviationTicks : lateWound ? 6 : 0;
+    if (injuryTicks > 0) raiseInjury(world, cultivator, injuryTicks);
+    if (deviationTicks > 0) {
       upsertEffect(cultivator, {
         id: "deviation",
         name: "Qi Deviation",
         description: "Cultivation becomes unstable and risky.",
         source: "breakthrough",
-        remainingTicks: 6,
+        remainingTicks: deviationTicks,
         intensity: 1,
+      });
+    }
+    const companion = flavor?.companionId ? world.cultivators[flavor.companionId] : undefined;
+    if (companion && (flavor?.companionInjuryTicks ?? 0) > 0 && companion.locationId === cultivator.locationId) {
+      raiseInjury(world, companion, flavor?.companionInjuryTicks ?? 0);
+      recordLife(companion, {
+        tick: world.tick,
+        kind: "growth",
+        text: `${companion.name}在${cultivator.name}的天劫里分了一道雷，挂了一点伤。`,
       });
     }
     recordLife(cultivator, {
       tick: world.tick,
       kind: "growth",
-      text: isRiskyLateMajor(definition.targetRealm, definition.category)
+      text: flavor?.failureLife ?? (lateWound
         ? `${cultivator.name}撞${definition.targetRealm}没有成。材料已经耗了，进度退到六成，身上还挂着伤，气息也乱了一阵。`
-        : `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`,
+        : `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`),
     });
     return `${cultivator.name} failed the breakthrough to level ${definition.targetLevel}.`;
   }
@@ -5374,7 +5827,7 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
     cultivator.id,
     "Breakthrough Success",
     `${cultivator.name} advanced to level ${cultivator.realmLevel}.`,
-    ["breakthrough", "success", "residence-breakthrough", definition.category, "action-complete"],
+    ["breakthrough", "success", flavorTag, definition.category, "action-complete"],
   );
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
@@ -5385,13 +5838,32 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
     tags: ["breakthrough", "success", definition.category],
   });
   shiftCultivatorMood(world, cultivator, "breakthrough");
+  if ((flavor?.successInjuryTicks ?? 0) > cultivator.injuryTicksRemaining) {
+    cultivator.injuryTicksRemaining = flavor?.successInjuryTicks ?? 0;
+    syncWounded(cultivator);
+  }
   recordLife(cultivator, {
     tick: world.tick,
     kind: "growth",
-    text: openedLateRealm
+    text: flavor?.successLife ?? (openedLateRealm
       ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`
-      : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`,
+      : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`),
   });
+  if ((flavor?.successDeviationChance ?? 0) > 0 && (hashString(`${world.tick}:${job.id}:core-rite-press`) % 100) < (flavor?.successDeviationChance ?? 0)) {
+    upsertEffect(cultivator, {
+      id: "deviation",
+      name: "Qi Deviation",
+      description: "Cultivation becomes unstable and risky.",
+      source: "core-rite-press",
+      remainingTicks: 3,
+      intensity: 1,
+    });
+    recordLife(cultivator, {
+      tick: world.tick,
+      kind: "growth",
+      text: `${cultivator.name}这一层催成了，只是丹火急了一点，气息乱了片刻。`,
+    });
+  }
   if (definition.category === "major") {
     const insight = applyBreakthroughInsight(cultivator);
     const fragmentName = insight.fragmentId ? (ITEM_CATALOG[insight.fragmentId]?.name ?? "功法残页") : "";
@@ -6736,10 +7208,10 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
   const registration = registrationModifiersOf(cultivator);
   const breakthrough = breakthroughViewOf(world, cultivator);
-  const breakthroughAction =
+  const methodActions =
     breakthrough?.readyByProgress && breakthrough.readyByMaterials
-      ? buildBreakthroughAction(cultivator)
-      : null;
+      ? listBreakthroughMethodActions(world, cultivator)
+      : [];
   const localSect = getLocalSect(world, cultivator.locationId);
   const localNeutralSect = getLocalNeutralSect(world, cultivator.locationId);
   const joinedNeutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -6901,9 +7373,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         ...recipeActions,
         ...queueActions,
       );
-      if (breakthroughAction) {
-        actions.push(breakthroughAction);
-      }
+      actions.push(...methodActions);
       return ensureSafetyNetActions(world, cultivator, location, actions);
     }
     if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
@@ -6920,7 +7390,6 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
             kind: "timed" as const,
           }]
         : []),
-      ...(breakthroughAction ? [breakthroughAction] : []),
       {
         actionId: "residence-heal",
         label: "Residence heal",
@@ -6945,6 +7414,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         kind: "timed",
       },
     );
+  }
+  if (!activeWilderness && !activeBahuang) {
+    actions.push(...methodActions);
   }
   if (!breakthrough?.readyByProgress) {
     actions.push({ actionId: "cultivate", label: "Cultivate", description: "Spend spirit stones to gain progress.", durationTicks: DEFAULT_ACTION_DURATIONS.cultivate, kind: "timed" });
@@ -7767,6 +8239,16 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
   const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "buy-current-breakthrough-material", "buy-next-weapon", "buy-next-manual", "exchange-sect-weapon", "exchange-sect-manual", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
+  if (
+    actionId === "core-rite:steady"
+    || actionId === "core-rite:press"
+    || actionId === "infant-fire-temper"
+    || actionId === "begin-soul-vigil"
+    || actionId === "seal-soul-vigil"
+    || actionId === "face-tribulation"
+    || actionId === "begin-divine-step"
+    || actionId === "seal-divine-step"
+  ) return;
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
@@ -9825,8 +10307,16 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     return `${cultivator.name} recovered qi at residence.`;
   }
-  if (job.actionId === "residence-breakthrough") {
-    return resolveResidenceBreakthrough(world, cultivator, job);
+  if (
+    job.actionId === "residence-breakthrough"
+    || job.actionId === "core-rite:steady"
+    || job.actionId === "core-rite:press"
+    || job.actionId === "infant-fire-temper"
+    || job.actionId === "begin-soul-vigil"
+    || job.actionId === "face-tribulation"
+    || job.actionId === "begin-divine-step"
+  ) {
+    return resolveTimedBreakthrough(world, cultivator, job);
   }
   if (job.actionId === "residence-produce") {
     const residence = getActiveResidence(cultivator);
@@ -10832,6 +11322,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
+  const breakthroughMethodResult = performBreakthroughMethodAction(world, cultivator, actionId);
+  if (breakthroughMethodResult) return breakthroughMethodResult;
   const socialDeepenResult = performSocialDeepenAction(world, cultivator, actionId, speechLine);
   if (socialDeepenResult) return socialDeepenResult;
   // ---- Buy Residence ----
@@ -10974,6 +11466,17 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     return startJob(world, cultivator, normalizedActionId, normalizedActionId, { residenceRecoverQiUsePill: usePill });
   }
   if (isResidenceAction(actionId)) {
+    if (actionId === "residence-breakthrough") {
+      const method = breakthroughMethodIdForLevel(cultivator.realmLevel);
+      if (method && method !== "residence") {
+        const narrative = breakthroughMethodNarrative({
+          realmLevel: cultivator.realmLevel,
+          successRate: null,
+          category: null,
+        });
+        throw new GameplayRejection(narrative?.refusal ?? "这一阶不在洞府里破。");
+      }
+    }
     requireResidenceActionAllowed(cultivator, actionId);
     if (actionId === "residence-produce") {
       const recipe = getFirstCraftableResidenceRecipe(cultivator);
@@ -10994,6 +11497,15 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       const definition = breakthroughDefinitionOf(cultivator);
       if (!definition) {
         throw new Error("No breakthrough is available at the current realm level.");
+      }
+      const method = breakthroughMethodIdForLevel(cultivator.realmLevel);
+      if (method && method !== "residence") {
+        const narrative = breakthroughMethodNarrative({
+          realmLevel: cultivator.realmLevel,
+          successRate: definition.baseSuccessRate,
+          category: definition.category,
+        });
+        throw new GameplayRejection(narrative?.refusal ?? "这一阶不在洞府里破。");
       }
       if (cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED) {
         throw new Error("Breakthrough requires full realm progress.");

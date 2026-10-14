@@ -1,3 +1,4 @@
+import { breakthroughMethodNarrative, quietMethodStep } from "./breakthrough-methods.js";
 import type { ItemId, RealmPathView, RealmStage } from "./model.js";
 import { realmPhaseForLevel, realmStageForLevel } from "./realms.js";
 
@@ -84,18 +85,7 @@ export function isRiskyLateMajor(targetRealm: RealmStage, category: "minor" | "m
 }
 
 export function quietRealmStep(realmLevel: number): string | null {
-  const level = Math.max(1, Math.floor(realmLevel));
-  if (level < 9) return null;
-  if (level >= 15) {
-    return "化神后期是眼下这条梯子的顶。甲级地宫七层到九层仍是这一档的去处，兵器和功法也停在化神。";
-  }
-  if (level >= 12) {
-    return "下一阶是化神。甲级地宫七层到九层拿神纹石和破婴神莲，回洞府破境。这一次可能失败，材料会没，人会受伤，气息也会乱一阵。成了才能装备化神的兵器和功法。";
-  }
-  if (level >= 10) {
-    return "已经是元婴。养婴露和固婴砂仍在甲级四层往上。元婴后期再去七层，准备化神。";
-  }
-  return "下一阶是元婴。甲级地宫四层往上拿婴火莲和九转紫金髓，回洞府破境。这一次可能失败，材料会没，人会受伤。成了才开大圆满的兵器和功法。";
+  return quietMethodStep(realmLevel);
 }
 
 function earlyWhere(level: number): string {
@@ -119,6 +109,11 @@ export function realmPathView(input: {
   const stage = input.realm || realmStageForLevel(level);
   const phase = realmPhaseForLevel(level);
   const next = input.next;
+  const narrative = breakthroughMethodNarrative({
+    realmLevel: level,
+    successRate: next?.successRate ?? null,
+    category: next?.category ?? null,
+  });
   const base: RealmPathView = {
     stage,
     phase,
@@ -131,6 +126,9 @@ export function realmPathView(input: {
     outcome: "",
     catalogTier: null,
     goals: [],
+    method: narrative?.id ?? null,
+    methodName: narrative?.name ?? null,
+    sequence: narrative?.sequence ?? [],
   };
   if (!next) {
     return {
@@ -139,27 +137,43 @@ export function realmPathView(input: {
       risk: "没有下一道门槛。",
       outcome: "化神后期是目前这条梯子的顶。",
       catalogTier: "化神",
+      method: null,
+      methodName: null,
+      sequence: ["化神后期暂时没有更高的境界。甲级七层到九层还能拿这一档的灵材，兵器和功法也停在化神。"],
       goals: ["化神后期暂时没有更高的境界。甲级七层到九层还能拿这一档的灵材，兵器和功法也停在化神。"],
     };
   }
-  if (level < 9) {
+  if (level <= 6) {
     const where = earlyWhere(level);
-    const risk = next.category === "major"
-      ? `这一次是大境界，基础成功率大约 ${next.successRate ?? 0}。失败会丢掉材料，进度退到六成。`
-      : "这一阶是小突破，材料齐了就会成。";
     const outcome = next.category === "major"
       ? `进入${next.targetRealm}。气血和灵力按原来的幅度涨。`
       : `仍在${next.targetRealm}里往前一层。`;
     return {
       ...base,
       where,
-      risk,
+      risk: narrative?.risk ?? "",
       outcome,
       catalogTier: null,
       goals: [
         `修为 ${input.realmProgress}/100。`,
         where,
-        "材料齐了，回自己的洞府用 residence-breakthrough。",
+        ...(narrative?.sequence ?? []),
+      ],
+    };
+  }
+  if (level < 9) {
+    const where = earlyWhere(level);
+    return {
+      ...base,
+      where,
+      risk: narrative?.risk ?? "",
+      outcome: `仍在${next.targetRealm}里往前一层。`,
+      catalogTier: null,
+      goals: [
+        `修为 ${input.realmProgress}/100。`,
+        where,
+        ...(narrative?.sequence ?? []),
+        narrative?.risk ?? "",
       ],
     };
   }
@@ -168,14 +182,14 @@ export function realmPathView(input: {
   return {
     ...base,
     where: late.where,
-    risk: late.risk,
+    risk: narrative?.risk ?? late.risk,
     outcome: late.outcome,
     catalogTier: late.catalogTier,
     goals: [
-      `修为 ${input.realmProgress}/100。满了才够资格回洞府。`,
+      `修为 ${input.realmProgress}/100。`,
       late.where,
-      late.risk,
-      "材料齐了，站在自己的洞府里用 residence-breakthrough。",
+      ...(narrative?.sequence ?? []),
+      narrative?.risk ?? late.risk,
       late.outcome,
     ],
   };

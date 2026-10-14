@@ -480,6 +480,12 @@ export type TimedActionId =
   | "cultivate"
   | "residence-meditate"
   | "residence-breakthrough"
+  | "core-rite:steady"
+  | "core-rite:press"
+  | "infant-fire-temper"
+  | "begin-soul-vigil"
+  | "face-tribulation"
+  | "begin-divine-step"
   | "residence-heal"
   | "residence-recover-qi"
   | "residence-produce"
@@ -1160,6 +1166,8 @@ export type ImmediateActionId =
   | `set-party-role:${PartyRoleId}`
   | `equip-skill-slot:${string}`
   | "clear-skill-loadout"
+  | "seal-soul-vigil"
+  | "seal-divine-step"
   | "cycle-social-page"
   | `buy-residence:${string}`
   | `send-message:${string}:${MessageTemplateKind}`
@@ -1294,6 +1302,20 @@ export interface ItemDefinition {
 export type BreakthroughCategory = "minor" | "major";
 export type BreakthroughOutcome = "success" | "failure";
 
+export type BreakthroughMethodId =
+  | "residence"
+  | "core-rite"
+  | "infant-fire"
+  | "soul-vigil"
+  | "tribulation"
+  | "divine-pattern";
+
+export interface BreakthroughRiteState {
+  method: "soul-vigil" | "divine-pattern";
+  stage: "open";
+  untilTick: number;
+}
+
 export interface BreakthroughRateModifier {
   source: string;
   delta: number;
@@ -1412,6 +1434,8 @@ export interface Cultivator {
   socialCooldowns?: Record<string, number>;
   /** Set when someone stands watch for a breakthrough. Absent until then. */
   breakthroughWatch?: { guardId: string; guardName: string; untilTick: number };
+  /** Open soul-lamp or divine-pattern step. Absent until the first step finishes, and on older saves. */
+  breakthroughRite?: BreakthroughRiteState;
   /** Set while this cultivator is waiting for a party mate or favor partner to arrive. */
   waitingFor?: { targetId: string; sinceTick: number; placeId: string };
   /** Sect diary chain, 0–2 while climbing, reset after the elder notice. */
@@ -1580,6 +1604,9 @@ export interface ActionJob {
     breakthroughSpecialCount?: number;
     breakthroughSuccessRate?: number;
     breakthroughRateBreakdown?: BreakthroughRateModifier[];
+    breakthroughCompanionId?: string;
+    breakthroughMethod?: BreakthroughMethodId;
+    breakthroughPress?: boolean;
     activeQuestId?: string;
     wildernessLayerId?: string;
     wildernessEventId?: string;
@@ -2186,6 +2213,11 @@ export interface RealmPathView {
   outcome: string;
   catalogTier: string | null;
   goals: string[];
+  /** Which breakthrough method this tier uses. Omitted by older view fixtures. */
+  method?: BreakthroughMethodId | null;
+  methodName?: string | null;
+  /** Complete sentences: where, with whom, and in what order. */
+  sequence?: string[];
 }
 
 export interface BreakthroughMaterialSourceView {
@@ -2211,6 +2243,12 @@ export interface BreakthroughStateView {
   majorSuccessRate: number | null;
   rateBreakdown: BreakthroughRateModifier[];
   recommendedAction: ActionId | null;
+  /** How this tier breaks through. Omitted by older view fixtures. */
+  method?: BreakthroughMethodId;
+  methodName?: string;
+  sequence?: string[];
+  help?: string;
+  rite?: { method: "soul-vigil" | "divine-pattern"; untilTick: number } | null;
   // ---- Growth Preview ----
   previewMainAttributeGrowth: Record<string, number> | null;
   previewFiveElementGrowth: Record<string, number> | null;

@@ -168,7 +168,7 @@ export function renderHeartbeatMarkdown(baseUrl: string): string {
     "Inbox-hint actions (`open-player-sect-founding`, `open-player-sect-recruitment`, `review-player-sect-applications`, `resolve-morality-event-choice`, `read-messages`) are NOT submitted to `POST /agent/act`; use their dedicated routes.",
     "The default beginner route ends at the first breakthrough, using an explicit collect -> craft -> breakthrough loop.",
     "Use `cultivator.realm` + `realmPhase` when speaking about a current breakthrough stage such as `筑基前期`.",
-    "Past 金丹, read `state.realmPath` and `state.digest.nextStep`. 元婴 materials start at 甲级 rank 4. 化神 materials start at rank 7. Those two major crossings can fail and leave a wound.",
+    "Past 金丹, read `state.realmPath` and `state.digest.nextStep`. `realmPath.method` is the breakthrough method: `core-rite` at 金丹前期 and 中期 (`core-rite:steady` at a sect outpost, or `core-rite:press` with a watcher), `infant-fire` at 金丹后期 (`infant-fire-temper` at a sect outpost or a 甲级 gate), `soul-vigil` for a 元婴 minor (`begin-soul-vigil` then `seal-soul-vigil`), `tribulation` at 元婴后期 (`face-tribulation` in the wilderness or at a 甲级 gate), and `divine-pattern` for a 化神 minor (`begin-divine-step` then `seal-divine-step` at a sect outpost). 炼气 and 筑基 stay on `residence-breakthrough`. 元婴 materials start at 甲级 rank 4. 化神 materials start at rank 7. Those two major crossings can fail and leave a wound.",
     "",
     "State fields to watch: `readiness`, `recoveryState`, `morality`, `social`, `production`, `equipment`,",
     "`wilderness`, `guixu`, plus the existing `breakthrough`, `realmPath`, `dungeon`, `bahuang` fields.",

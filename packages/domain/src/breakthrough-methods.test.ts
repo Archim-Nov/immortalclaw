@@ -1,0 +1,253 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createCultivator } from "./engine.js";
+import { advanceWorld, createSeedWorld, getCultivatorState, listAvailableActions, performAction } from "./index.js";
+import type { Cultivator, ItemId } from "./model.js";
+
+function finish(world: ReturnType<typeof createSeedWorld>, id: string) {
+  for (let step = 0; step < 16 && world.cultivators[id]?.activeJobId; step += 1) {
+    advanceWorld(world, 1);
+  }
+}
+
+function give(cultivator: Cultivator, ids: readonly ItemId[]) {
+  for (const id of ids) cultivator.inventory[id] = (cultivator.inventory[id] ?? 0) + 1;
+}
+
+function outpostId(world: ReturnType<typeof createSeedWorld>): string {
+  const found = Object.values(world.locations).find((location) => location.nodeType === "sect-outpost");
+  if (!found) throw new Error("seed world has no sect outpost");
+  return found.id;
+}
+
+function prepare(level: number, realm: Cultivator["realm"], items: readonly ItemId[]) {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "破境的人" });
+  const cultivator = world.cultivators[created.id]!;
+  cultivator.realm = realm;
+  cultivator.realmLevel = level;
+  cultivator.realmProgress = 100;
+  cultivator.spiritStones = 2000;
+  give(cultivator, items);
+  return { world, cultivator };
+}
+
+const CORE_ITEMS = ["golden-spirit-flower", "purple-celestial-leaf", "star-fall-sand", "flowing-aurora-core"] as const;
+const NASCENT_GATE = ["infant-fire-lotus", "nascent-jade", "soul-lamp-wick", "nine-turn-golden-marrow"] as const;
+const VIGIL_ITEMS = ["infant-fire-lotus", "nascent-jade", "soul-lamp-wick", "nurture-nascent-dew"] as const;
+const SPIRIT_GATE = ["divine-thought-crystal", "heaven-soul-silk", "divine-pattern-stone", "shatter-nascent-lotus"] as const;
+const DIVINE_ITEMS = ["divine-thought-crystal", "heaven-soul-silk", "divine-pattern-stone", "divine-embryo-dew"] as const;
+
+test("炼气仍在洞府破境，金丹以后的做法各不相同", () => {
+  const early = prepare(1, "炼气", ["cloud-heart-grass", "moon-dew-flower", "clear-zhi-leaf", "condensed-qi-dew"]);
+  const earlyState = getCultivatorState(early.world, early.cultivator.id);
+  assert.equal(earlyState.realmPath.method, "residence");
+  assert.equal(earlyState.breakthrough?.method, "residence");
+  assert.match(earlyState.realmPath.sequence?.join("") ?? "", /residence-breakthrough/);
+  assert.equal((earlyState.realmPath.sequence ?? []).join("").includes("结丹仪"), false);
+  assert.ok(listAvailableActions(early.world, early.cultivator.id).some((action) => action.actionId === "residence-breakthrough"));
+  performAction(early.world, early.cultivator.id, "residence-breakthrough");
+  finish(early.world, early.cultivator.id);
+  assert.equal(early.cultivator.realmLevel, 2);
+
+  const core = prepare(7, "金丹", CORE_ITEMS);
+  const coreState = getCultivatorState(core.world, core.cultivator.id);
+  assert.equal(coreState.realmPath.method, "core-rite");
+  assert.equal(coreState.realmPath.methodName, "结丹仪");
+  assert.match(coreState.realmPath.sequence?.join("") ?? "", /core-rite:steady/);
+  assert.match(coreState.breakthrough?.help ?? "", /护法/);
+  assert.equal(listAvailableActions(core.world, core.cultivator.id).some((action) => action.actionId === "residence-breakthrough"), false);
+  assert.notEqual(coreState.breakthrough?.recommendedAction, "residence-breakthrough");
+
+  const fire = prepare(9, "金丹", NASCENT_GATE);
+  const fireState = getCultivatorState(fire.world, fire.cultivator.id);
+  assert.equal(fireState.realmPath.method, "infant-fire");
+  assert.match(fireState.realmPath.sequence?.join("") ?? "", /infant-fire-temper/);
+  assert.match(fireState.realmPath.sequence?.join("") ?? "", /甲级/);
+  assert.match(fireState.digest?.nextStep ?? "", /婴火淬体/);
+
+  const vigil = prepare(10, "元婴", VIGIL_ITEMS);
+  assert.equal(getCultivatorState(vigil.world, vigil.cultivator.id).realmPath.method, "soul-vigil");
+  assert.match(getCultivatorState(vigil.world, vigil.cultivator.id).realmPath.sequence?.join("") ?? "", /begin-soul-vigil/);
+  assert.match(getCultivatorState(vigil.world, vigil.cultivator.id).realmPath.sequence?.join("") ?? "", /seal-soul-vigil/);
+
+  const bolt = prepare(12, "元婴", SPIRIT_GATE);
+  assert.equal(getCultivatorState(bolt.world, bolt.cultivator.id).realmPath.method, "tribulation");
+  assert.match(getCultivatorState(bolt.world, bolt.cultivator.id).realmPath.sequence?.join("") ?? "", /face-tribulation/);
+  assert.match(getCultivatorState(bolt.world, bolt.cultivator.id).digest?.nextStep ?? "", /天劫/);
+
+  const pattern = prepare(13, "化神", DIVINE_ITEMS);
+  assert.equal(getCultivatorState(pattern.world, pattern.cultivator.id).realmPath.method, "divine-pattern");
+  assert.match(getCultivatorState(pattern.world, pattern.cultivator.id).realmPath.sequence?.join("") ?? "", /begin-divine-step/);
+  assert.match(getCultivatorState(pattern.world, pattern.cultivator.id).realmPath.sequence?.join("") ?? "", /seal-divine-step/);
+});
+
+test("金丹在宗门驻地走稳妥结丹仪，催丹要有人看着", () => {
+  const steady = prepare(7, "金丹", CORE_ITEMS);
+  steady.world.cultivators["yun-zhong-he"]!.locationId = "qingzhou:wilderness";
+  assert.throws(
+    () => performAction(steady.world, steady.cultivator.id, "residence-breakthrough"),
+    /结丹仪/,
+  );
+  assert.throws(
+    () => performAction(steady.world, steady.cultivator.id, "core-rite:steady"),
+    /宗门驻地/,
+  );
+  assert.throws(
+    () => performAction(steady.world, steady.cultivator.id, "core-rite:press"),
+    /看着/,
+  );
+
+  steady.cultivator.locationId = outpostId(steady.world);
+  const listed = listAvailableActions(steady.world, steady.cultivator.id);
+  const steadyAction = listed.find((action) => action.actionId === "core-rite:steady");
+  assert.ok(steadyAction);
+  assert.match(steadyAction?.description ?? "", /结丹仪|走稳/);
+  assert.equal(listed.some((action) => action.actionId === "core-rite:press"), false);
+  performAction(steady.world, steady.cultivator.id, "core-rite:steady");
+  finish(steady.world, steady.cultivator.id);
+  assert.equal(steady.cultivator.realmLevel, 8);
+  assert.equal(steady.cultivator.inventory["flowing-aurora-core"], 0);
+
+  const pressed = prepare(7, "金丹", CORE_ITEMS);
+  const witness = createCultivator(pressed.world, { name: "护法的人" });
+  pressed.world.cultivators[witness.id]!.locationId = pressed.cultivator.locationId;
+  assert.ok(listAvailableActions(pressed.world, pressed.cultivator.id).some((action) => action.actionId === "core-rite:press"));
+  let hurried = false;
+  let calm = false;
+  for (let tick = 1; tick < 80 && (!hurried || !calm); tick += 1) {
+    const attempt = prepare(7, "金丹", CORE_ITEMS);
+    attempt.world.tick = tick;
+    const other = createCultivator(attempt.world, { name: "护法的人" });
+    attempt.world.cultivators[other.id]!.locationId = attempt.cultivator.locationId;
+    performAction(attempt.world, attempt.cultivator.id, "core-rite:press");
+    finish(attempt.world, attempt.cultivator.id);
+    assert.equal(attempt.cultivator.realmLevel, 8);
+    if (attempt.cultivator.statusEffects.some((effect) => effect.id === "deviation")) hurried = true;
+    else calm = true;
+  }
+  assert.ok(hurried);
+  assert.ok(calm);
+});
+
+test("婴火淬体在甲级门口，失败会反噬，元婴守魂灯再收口", () => {
+  const blocked = prepare(9, "金丹", NASCENT_GATE);
+  assert.equal(listAvailableActions(blocked.world, blocked.cultivator.id).some((action) => action.actionId === "infant-fire-temper"), false);
+  assert.throws(
+    () => performAction(blocked.world, blocked.cultivator.id, "residence-breakthrough"),
+    /婴火/,
+  );
+
+  let failed = false;
+  for (let tick = 1; tick < 40 && !failed; tick += 1) {
+    const attempt = prepare(9, "金丹", NASCENT_GATE);
+    attempt.world.tick = tick;
+    attempt.cultivator.locationId = "qingzhou:dungeon-a";
+    performAction(attempt.world, attempt.cultivator.id, "infant-fire-temper");
+    finish(attempt.world, attempt.cultivator.id);
+    if (attempt.cultivator.realmLevel === 9) {
+      failed = true;
+      assert.equal(attempt.cultivator.realmProgress, 60);
+      assert.ok(attempt.cultivator.injuryTicksRemaining >= 8);
+      assert.ok(attempt.cultivator.statusEffects.some((effect) => effect.id === "deviation"));
+      assert.match(attempt.cultivator.lifeLog?.map((event) => event.text).join("") ?? "", /婴火反噬/);
+    }
+  }
+  assert.ok(failed);
+
+  const vigil = prepare(10, "元婴", VIGIL_ITEMS);
+  assert.throws(
+    () => performAction(vigil.world, vigil.cultivator.id, "residence-breakthrough"),
+    /魂灯/,
+  );
+  const before = vigil.cultivator.inventory["nurture-nascent-dew"];
+  performAction(vigil.world, vigil.cultivator.id, "begin-soul-vigil");
+  finish(vigil.world, vigil.cultivator.id);
+  assert.equal(vigil.cultivator.realmLevel, 10);
+  assert.equal(vigil.cultivator.inventory["nurture-nascent-dew"], before);
+  assert.equal(getCultivatorState(vigil.world, vigil.cultivator.id).breakthrough?.rite?.method, "soul-vigil");
+  performAction(vigil.world, vigil.cultivator.id, "seal-soul-vigil");
+  assert.equal(vigil.cultivator.realmLevel, 11);
+  assert.equal(vigil.cultivator.inventory["nurture-nascent-dew"], before - 1);
+  assert.match(vigil.cultivator.lifeLog?.map((event) => event.text).join("") ?? "", /魂灯/);
+
+  const expired = prepare(10, "元婴", VIGIL_ITEMS);
+  performAction(expired.world, expired.cultivator.id, "begin-soul-vigil");
+  finish(expired.world, expired.cultivator.id);
+  advanceWorld(expired.world, 9);
+  assert.throws(
+    () => performAction(expired.world, expired.cultivator.id, "seal-soul-vigil"),
+    /灭了/,
+  );
+  assert.equal(expired.cultivator.inventory["nurture-nascent-dew"], 1);
+  performAction(expired.world, expired.cultivator.id, "begin-soul-vigil");
+  finish(expired.world, expired.cultivator.id);
+  performAction(expired.world, expired.cultivator.id, "seal-soul-vigil");
+  assert.equal(expired.cultivator.realmLevel, 11);
+});
+
+test("天劫在荒野迎，化神在驻地分两步落印", () => {
+  const blocked = prepare(12, "元婴", SPIRIT_GATE);
+  assert.throws(
+    () => performAction(blocked.world, blocked.cultivator.id, "face-tribulation"),
+    /荒野|甲级/,
+  );
+
+  let soloFailure = false;
+  let sharedFailure = false;
+  let success = false;
+  for (let tick = 1; tick < 50 && (!soloFailure || !sharedFailure || !success); tick += 1) {
+    const alone = prepare(12, "元婴", SPIRIT_GATE);
+    alone.world.tick = tick;
+    alone.cultivator.locationId = "qingzhou:wilderness";
+    performAction(alone.world, alone.cultivator.id, "face-tribulation");
+    finish(alone.world, alone.cultivator.id);
+    if (alone.cultivator.realm === "化神") {
+      success = true;
+      assert.match(alone.cultivator.lifeLog?.map((event) => event.text).join("") ?? "", /天劫/);
+    } else if (!soloFailure) {
+      soloFailure = true;
+      assert.ok(alone.cultivator.injuryTicksRemaining >= 10);
+      assert.match(alone.cultivator.lifeLog?.map((event) => event.text).join("") ?? "", /一个人扛/);
+    }
+
+    const shared = prepare(12, "元婴", SPIRIT_GATE);
+    shared.world.tick = tick + 200;
+    shared.cultivator.locationId = "qingzhou:wilderness";
+    const mate = createCultivator(shared.world, { name: "分雷的人" });
+    const companion = shared.world.cultivators[mate.id]!;
+    companion.locationId = "qingzhou:wilderness";
+    performAction(shared.world, shared.cultivator.id, "face-tribulation");
+    finish(shared.world, shared.cultivator.id);
+    if (shared.cultivator.realmLevel === 12 && !sharedFailure) {
+      sharedFailure = true;
+      assert.equal(shared.cultivator.injuryTicksRemaining, 6);
+      assert.ok(companion.injuryTicksRemaining >= 2);
+      assert.match(companion.lifeLog?.map((event) => event.text).join("") ?? "", /分了一道雷/);
+    }
+  }
+  assert.ok(soloFailure);
+  assert.ok(sharedFailure);
+  assert.ok(success);
+
+  const alone = prepare(13, "化神", DIVINE_ITEMS);
+  alone.cultivator.locationId = outpostId(alone.world);
+  performAction(alone.world, alone.cultivator.id, "begin-divine-step");
+  finish(alone.world, alone.cultivator.id);
+  assert.equal(alone.cultivator.inventory["divine-embryo-dew"], 1);
+  performAction(alone.world, alone.cultivator.id, "seal-divine-step");
+  assert.equal(alone.cultivator.realmLevel, 14);
+  assert.equal(alone.cultivator.injuryTicksRemaining, 4);
+  assert.match(alone.cultivator.lifeLog?.map((event) => event.text).join("") ?? "", /反噬/);
+
+  const watched = prepare(13, "化神", DIVINE_ITEMS);
+  watched.cultivator.locationId = outpostId(watched.world);
+  const witness = createCultivator(watched.world, { name: "看印的人" });
+  watched.world.cultivators[witness.id]!.locationId = watched.cultivator.locationId;
+  performAction(watched.world, watched.cultivator.id, "begin-divine-step");
+  finish(watched.world, watched.cultivator.id);
+  performAction(watched.world, watched.cultivator.id, "seal-divine-step");
+  assert.equal(watched.cultivator.realmLevel, 14);
+  assert.equal(watched.cultivator.injuryTicksRemaining, 0);
+  assert.match(watched.cultivator.lifeLog?.map((event) => event.text).join("") ?? "", /看印的人/);
+});
