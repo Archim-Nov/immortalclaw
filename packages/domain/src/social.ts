@@ -18,7 +18,7 @@
  *   - 响应道侣 (respond-dao-companion) — accept/reject proposal
  */
 
-import type { BondArc, Cultivator, GrudgeArc, WorldState } from "./model.js";
+import type { BondArc, Cultivator, GrudgeArc, OwedFavorView, WorldState } from "./model.js";
 import {
   bondArcOf,
   grudgeArcOf,
@@ -68,6 +68,15 @@ export interface SocialLink {
   readonly lastSparTeachTick?: number;
   /** Tick of the last 知己 spirit-stone share between this pair. */
   readonly lastShareTick?: number;
+  /** Reasons this cultivator is owed, oldest first. Absent on older saves. */
+  readonly owedFavors?: readonly OwedFavorEntry[];
+}
+
+export interface OwedFavorEntry {
+  readonly id: string;
+  readonly reason: string;
+  readonly tick: number;
+  readonly source: string;
 }
 
 export type CityDuelResult = "win" | "loss" | "draw" | "retreat";
@@ -262,18 +271,62 @@ export function adjustFavor(
   });
 }
 
+export function repaymentQuote(reason: string): string {
+  return `上回你${reason}，这次我来还这份人情。`;
+}
+
+function clipReason(reason: string): string {
+  return Array.from(reason.replace(/[。！？]/g, "")).slice(0, 18).join("");
+}
+
+/** Creditor is owed one more favor, and the debtor can later quote the reason. */
+export function grantOwedFavor(
+  world: WorldState,
+  creditorId: string,
+  debtorId: string,
+  reason: string,
+  source: string,
+): OwedFavorEntry {
+  adjustFavor(world, creditorId, debtorId, 1);
+  const credit = getSocialLink(world, creditorId, debtorId);
+  const entry: OwedFavorEntry = {
+    id: `owed-${world.tick}-${creditorId}-${debtorId}-${credit?.owedFavors?.length ?? 0}`,
+    reason: clipReason(reason) || "帮过我一回",
+    tick: world.tick,
+    source,
+  };
+  if (credit) {
+    writeSocialLink(world, creditorId, {
+      ...credit,
+      owedFavors: [...(credit.owedFavors ?? []), entry].slice(-6),
+    });
+  }
+  return entry;
+}
+
 /** Drop one favor the debtor owes the creditor, when one is actually owed. */
 export function forgiveOneFavor(
   world: WorldState,
   creditorId: string,
   debtorId: string,
-): boolean {
+): OwedFavorEntry | null {
   const credit = getSocialLink(world, creditorId, debtorId);
   if (!credit || (credit.favorBalance ?? 0) <= 0) {
-    return false;
+    return null;
   }
+  const stack = [...(credit.owedFavors ?? [])];
+  const taken = stack.shift() ?? {
+    id: `owed-legacy-${world.tick}-${debtorId}`,
+    reason: "帮过我一回",
+    tick: credit.lastInteractionTick,
+    source: "legacy",
+  };
   adjustFavor(world, creditorId, debtorId, -1);
-  return true;
+  const updated = getSocialLink(world, creditorId, debtorId);
+  if (updated) {
+    writeSocialLink(world, creditorId, { ...updated, owedFavors: stack });
+  }
+  return taken;
 }
 
 export function rememberCityDuel(
@@ -339,8 +392,9 @@ export function describeSocialBond(link: SocialLink): string {
     parts.push("退过礼");
   }
   const favor = link.favorBalance ?? 0;
+  const reason = link.owedFavors?.[0]?.reason;
   if (favor > 0) {
-    parts.push(`对方欠你${favor}份人情`);
+    parts.push(reason ? `对方欠你${favor}份人情，事由是${reason}` : `对方欠你${favor}份人情`);
   } else if (favor < 0) {
     parts.push(`你欠对方${-favor}份人情`);
   }
@@ -521,6 +575,8 @@ export interface SocialLinkView {
   readonly bondLine: string;
   /** Full sentence naming the current arc and what it unlocks. */
   readonly arcLine: string;
+  /** Short reasons the other cultivator still owes, oldest first. Omitted when none were recorded. */
+  readonly owedReasons?: readonly string[];
   readonly lastDuel: { tick: number; result: CityDuelResult; stoneDelta: number } | null;
   readonly lastGift: { tick: number; result: GiftExchangeResult; itemName: string } | null;
 }
@@ -532,7 +588,7 @@ export function getSocialLinksView(
   const links = world.socialLinks?.[cultivatorId];
   if (!links) return [];
   return Object.values(links)
-    .filter((link) => link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0 || (link.grudge ?? 0) > 0)
+    .filter((link) => link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0 || (link.grudge ?? 0) > 0 || (link.owedFavors?.length ?? 0) > 0)
     .sort((a, b) => b.affinity - a.affinity || (b.grudge ?? 0) - (a.grudge ?? 0))
     .map((link) => {
       const targetName = world.cultivators[link.targetCultivatorId]?.name ?? "unknown";
@@ -550,6 +606,7 @@ export function getSocialLinksView(
       grudgeArc: grudgeArcOf(link.grudge ?? 0),
       bondLine: describeSocialBond(link),
       arcLine: describeArcLine(link, selfName, targetName),
+      ...((link.owedFavors?.length ?? 0) > 0 ? { owedReasons: (link.owedFavors ?? []).map((row) => row.reason) } : {}),
       lastDuel: link.lastDuelResult
         ? {
             tick: link.lastDuelTick ?? 0,
@@ -566,6 +623,40 @@ export function getSocialLinksView(
         : null,
     };
     });
+}
+
+export function listOwedFavorViews(world: WorldState, cultivatorId: string): OwedFavorView[] {
+  const rows: OwedFavorView[] = [];
+  for (const link of Object.values(world.socialLinks?.[cultivatorId] ?? {})) {
+    const other = world.cultivators[link.targetCultivatorId];
+    for (const owed of link.owedFavors ?? []) {
+      rows.push({
+        id: owed.id,
+        otherId: link.targetCultivatorId,
+        otherName: other?.name ?? "某人",
+        direction: "they-owe",
+        reason: owed.reason,
+        tick: owed.tick,
+      });
+    }
+  }
+  for (const [otherId, links] of Object.entries(world.socialLinks ?? {})) {
+    if (otherId === cultivatorId) continue;
+    const link = links[cultivatorId];
+    if (!link) continue;
+    const other = world.cultivators[otherId];
+    for (const owed of link.owedFavors ?? []) {
+      rows.push({
+        id: owed.id,
+        otherId,
+        otherName: other?.name ?? "某人",
+        direction: "you-owe",
+        reason: owed.reason,
+        tick: owed.tick,
+      });
+    }
+  }
+  return rows;
 }
 
 /**

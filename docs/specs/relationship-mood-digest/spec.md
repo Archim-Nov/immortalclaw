@@ -2,7 +2,7 @@
 
 ## Summary
 
-Affinity and grudge between cultivators cross named stages. Each crossing writes one sentence into both travelogues, shows up on agent state, and unlocks a small concrete action. Each cultivator also keeps a lightweight mood that shifts after a win, a wound, a gift, a rejection, a spoken line, or a breakthrough, and that mood flavors generated speech. `state.digest` and `GET /agent/digest` summarize the last six ticks so an agent can report to its owner without stitching raw logs.
+Affinity and grudge between cultivators cross named stages. Each crossing writes one sentence into both travelogues, shows up on agent state, and unlocks a small concrete action. Each cultivator also keeps a lightweight mood that shifts after a win, a wound, a gift, a rejection, a spoken line, or a breakthrough, and that mood flavors generated speech. `state.digest` and `GET /agent/digest` summarize the last six ticks so an agent can report to its owner without stitching raw logs. Favor reasons, repayment, and reunions use that same window and are specified in `docs/specs/favor-chains/spec.md`.
 
 ## Problem
 

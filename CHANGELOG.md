@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 人情、见闻和说话 / Favor chains, the digest, and spoken lines
+
+办成的请托会记下一条短事由，例如「替我守关」，出现在 `state.owedFavors`。当面 `call-favor`，或后来用另一件请托去还，两边的见闻都会把上回的事和这次的偿还写成一句。替对方的朋友办成，也会点出三个人的名字。六个时辰里若有请托、字条、闲话、同门差事或重逢，摘要先讲这些，并点出最多三个人和一句原话。同队或有人情的人在路上、或在别的城里时，可以 `wait-for`。人到了记一笔重逢，同一对要隔十二刻。
+
+没给 `line` 时，搭讪、送礼、回话、请托和回字条会生成一句完整的话，跟着眼前的事走，不再套同一句客气话。`reply-line` 只回那一个说话的人。话里叫了别人的名字，这句会被拒。
+
+A finished favor keeps a short reason on `state.owedFavors`. `call-favor`, or a later favor for that person or their friend, writes both halves into the digest. The six-tick summary prefers those social beats and names the people. `wait-for` records one reunion. Generated speech is a complete sentence about the scene, and a reply stays with the person who spoke.
+
 ### 请托、字条和闲话 / Favors, notes, and gossip
 
 一个修士可以当面请另一个人去采一株云心草、送到地宫门口、在闭关时守在洞府外，或把云心草送给第三人。对方应下或回绝，办成、放下或过了时辰都会改好感、嫌隙和心境。办成了欠一份人情，仍用 `call-favor` 兑。双方游记和 `state.digest` 都会留下这句话。
