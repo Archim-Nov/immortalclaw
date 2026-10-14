@@ -1,3 +1,4 @@
+import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
 import type {
   ActionJob,
@@ -145,7 +146,11 @@ export function buildDungeonRankYieldHints(
       },
       notableSecondaryDrops,
       ...(mystery
-        ? { mysteryName: mystery.name, mysteryLine: mystery.line, entryMinLevel: mystery.minLevel }
+        ? {
+            mysteryName: mystery.name,
+            mysteryLine: `${mystery.line}${jiaFightWarning(rank)}`,
+            entryMinLevel: mystery.minLevel,
+          }
         : {}),
     };
   });

@@ -1,4 +1,5 @@
 import { breakthroughMethodNarrative, quietMethodStep } from "./breakthrough-methods.js";
+import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { resourceGoals } from "./high-realm.js";
 import type { ItemId, RealmPathView, RealmStage } from "./model.js";
 import { realmPhaseForLevel, realmStageForLevel } from "./realms.js";
@@ -90,14 +91,16 @@ export function isRiskyLateMajor(targetRealm: RealmStage, category: "minor" | "m
 export function quietRealmStep(realmLevel: number): string | null {
   const method = quietMethodStep(realmLevel);
   if (!method) return null;
-  const extra = resourceGoals(realmLevel)[0];
-  return extra ? `${method}${extra}` : method;
+  const level = Math.max(1, Math.floor(realmLevel));
+  const extra = resourceGoals(level)[0];
+  const warning = level >= 12 ? jiaFightWarning(7) : jiaFightWarning(4);
+  return `${method}${extra ?? ""}${warning}`;
 }
 
 function earlyWhere(level: number): string {
   if (level <= 3) return "炼气的材料坊市买得到，丙级地宫和城镇差事也会掉。";
   if (level <= 6) return "筑基的材料坊市买得到，荒野和乙级地宫也会掉。";
-  return "金丹前期和中期的材料坊市不卖，甲级地宫哪一层的探宝和守关都会掉。";
+  return `金丹前期和中期的材料坊市不卖，甲级一到三层的丹霞内府，探宝和守关都会掉。${jiaFightWarning(1)}四层的婴火莲池要金丹后期才开。`;
 }
 
 export function realmPathView(input: {
@@ -215,7 +218,7 @@ function lateCopy(level: number, successRate: number | null): {
 } {
   if (level === 12) {
     return {
-      where: "化神的灵材坊市不卖。甲级七到九层的神纹天隙，探宝和守关会掉神念晶、天魂丝、神纹石、破婴神莲，还有闭关用的神纹尘。",
+      where: `化神的灵材坊市不卖。甲级七到九层的神纹天隙，探宝和守关会掉神念晶、天魂丝、神纹石、破婴神莲，还有闭关用的神纹尘。${jiaFightWarning(7)}`,
       risk: `这是大境界，基础成功率大约 ${successRate ?? 30}。失败会耗掉材料，进度退到六成，并留下伤和一段走火。`,
       outcome: "进入化神前期。气血和灵力会再涨一截，化神兵器和功法可以装备。本州的名声会动一动。宗门贡献到 220 可以换这一阶，贡献本身不扣。",
       catalogTier: "化神",
@@ -224,7 +227,7 @@ function lateCopy(level: number, successRate: number | null): {
   if (level >= 13) {
     const special = level === 13 ? "神胎露" : "化神金章";
     return {
-      where: `化神这一层的${special}，以及神念晶、天魂丝、神纹石和神纹尘，都在甲级七到九层的神纹天隙。坊市不卖。`,
+      where: `化神这一层的${special}，以及神念晶、天魂丝、神纹石和神纹尘，都在甲级七到九层的神纹天隙。坊市不卖。${jiaFightWarning(7)}`,
       risk: "这一阶是小突破，材料齐了就会成。",
       outcome: "仍在化神里往前一层。气血和灵力继续涨，化神兵器和功法保持能装备。",
       catalogTier: "化神",
@@ -233,14 +236,14 @@ function lateCopy(level: number, successRate: number | null): {
   if (level >= 10) {
     const special = level === 10 ? "养婴露" : "固婴砂";
     return {
-      where: `元婴这一层的${special}，以及婴火莲、元胎玉、魂灯芯和养魂砂，都在甲级四到六层的婴火莲池。坊市不卖。`,
+      where: `元婴这一层的${special}，以及婴火莲、元胎玉、魂灯芯和养魂砂，都在甲级四到六层的婴火莲池。坊市不卖。${jiaFightWarning(4)}`,
       risk: "这一阶是小突破，材料齐了就会成。",
       outcome: "仍在元婴里往前一层。大圆满兵器和功法可以装备。宗门贡献到 140 能换这一阶，贡献本身不扣。元婴后期再去甲级七层准备化神。",
       catalogTier: "大圆满",
     };
   }
   return {
-    where: "元婴的灵材坊市不卖。甲级四到六层的婴火莲池，探宝和守关会掉婴火莲、元胎玉、魂灯芯、九转紫金髓，还有闭关用的养魂砂。七层的神纹天隙要元婴后期才开。",
+    where: `元婴的灵材坊市不卖。甲级四到六层的婴火莲池，探宝和守关会掉婴火莲、元胎玉、魂灯芯、九转紫金髓，还有闭关用的养魂砂。七层的神纹天隙要元婴后期才开。${jiaFightWarning(4)}`,
     risk: `这是大境界，基础成功率大约 ${successRate ?? 40}。失败会耗掉材料，进度退到六成，并留下伤和一段走火。`,
     outcome: "进入元婴前期。气血和灵力会比前面的小突破涨得更多，大圆满兵器和功法可以装备。本州的名声会动一动。宗门贡献到 140 可以换这一阶，贡献本身不扣。",
     catalogTier: "大圆满",

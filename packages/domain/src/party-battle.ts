@@ -1,4 +1,23 @@
-import type { DungeonCombatSummary, DungeonExpeditionPolicy, DungeonGrade, PartyRoleId } from "./model.js";
+import {
+  applyOrRefreshStatus,
+  decayAndCleanStatuses,
+  gatherPassiveModifiers,
+  getCombatStatusDefinition,
+  processRoundEndTicks,
+} from "./combat-statuses.js";
+import {
+  jiaCompanionInjury,
+  jiaInjuryFloor,
+  jiaPackShape,
+  type GuardianThreat,
+} from "./high-realm-dungeon.js";
+import type {
+  CombatStatusInstance,
+  DungeonCombatSummary,
+  DungeonExpeditionPolicy,
+  DungeonGrade,
+  PartyRoleId,
+} from "./model.js";
 import {
   PARTY_ROLE_LABEL,
   type ResolvedCombatSkill,
@@ -27,6 +46,8 @@ export interface BattleCombatant {
   skills: ResolvedCombatSkill[];
   pattern?: EnemyPattern;
   elite?: boolean;
+  /** Set on 甲级 guardians. 丙 and 乙 leave this empty. */
+  threat?: GuardianThreat;
 }
 
 interface LiveFighter extends BattleCombatant {
@@ -36,6 +57,9 @@ interface LiveFighter extends BattleCombatant {
   slowRounds: number;
   tauntRounds: number;
   skillsUsed: string[];
+  combatStatuses: CombatStatusInstance[];
+  /** Spell attack of whoever hung a burn on this fighter. Zero when nobody has. */
+  tickSpellAttack: number;
 }
 
 export interface PartyBattleResult {
@@ -170,6 +194,32 @@ export function buildGuardianPack(input: {
       elite,
     };
   };
+  const jia = jiaPackShape(input.grade, input.rank);
+  if (jia) {
+    const shaped = (
+      suffix: string,
+      factor: number,
+      elite: boolean,
+      pattern: EnemyPattern,
+    ): BattleCombatant => {
+      const body = make(suffix, factor, elite, pattern);
+      return {
+        ...body,
+        hp: Math.max(1, Math.round(body.hp * jia.stats.hp)),
+        maxHp: Math.max(1, Math.round(body.maxHp * jia.stats.hp)),
+        weaponAttack: Math.max(1, Math.round(body.weaponAttack * jia.stats.attack)),
+        spellAttack: Math.max(1, Math.round(body.spellAttack * jia.stats.attack)),
+        defense: Math.max(1, Math.round(body.defense * jia.stats.defense)),
+        speed: body.speed + (pattern === "swift" ? 6 : 0),
+        threat: elite ? jia.threat : { ...jia.threat, selfStatusId: undefined },
+      };
+    };
+    return [
+      shaped("", 1, true, jia.patterns[0]),
+      shaped(jia.addNames[0], jia.addFactors[0], false, jia.patterns[1]),
+      shaped(jia.addNames[1], jia.addFactors[1], false, jia.patterns[2]),
+    ];
+  }
   const pack = [make("", 1, true, enemyPatternFor(input.patternKey, input.name))];
   if (!hard) return pack;
   const start = hashString(`${input.patternKey}:${input.grade}:${input.rank}`) % ADD_PATTERNS.length;
@@ -196,7 +246,7 @@ export function woundTicksForGuardian(input: {
     if (input.leaderHpLostRatio >= 0.4) ticks = Math.max(ticks, 3);
     else if (input.policy === "aggressive" && input.leaderHpLostRatio > 0.22) ticks = Math.max(ticks, 2);
   }
-  return ticks;
+  return Math.max(ticks, jiaInjuryFloor(input.grade, input.rank, input.outcome));
 }
 
 export function companionWoundTicks(input: {
@@ -206,6 +256,10 @@ export function companionWoundTicks(input: {
   qiLoss: number;
 }): number {
   const hard = guardianPackIsHard(input.grade, input.rank);
+  if (input.outcome === "loss" || input.outcome === "withdraw") {
+    const band = jiaCompanionInjury(input.grade, input.rank, input.outcome);
+    if (band !== null) return band;
+  }
   if (input.outcome === "loss") return 4;
   if (hard && input.outcome === "win" && input.qiLoss >= 4) return 2;
   return 0;
@@ -225,7 +279,8 @@ function tickCooldowns(fighter: LiveFighter): void {
 
 function initiative(fighter: LiveFighter, seed: string): number {
   const slow = fighter.slowRounds > 0 ? 8 : 0;
-  return fighter.speed - slow + (hashString(seed) % 11);
+  const mods = gatherPassiveModifiers(fighter.combatStatuses);
+  return fighter.speed - slow + mods.initiativeFlat + (hashString(seed) % 11);
 }
 
 function fleeThreshold(policy: DungeonExpeditionPolicy): number {
@@ -452,18 +507,22 @@ function applyDamage(
   shred: number,
   seed: string,
 ): { result: "hit" | "miss" | "crit"; damage: number } {
-  const hitChance = clamp(75 + ((attacker.hit + hitBonus - defender.dodge) * 0.2), 35, 97);
+  const atkMods = gatherPassiveModifiers(attacker.combatStatuses);
+  const defMods = gatherPassiveModifiers(defender.combatStatuses);
+  const hitChance = clamp(75 + ((attacker.hit + hitBonus + atkMods.accuracyFlat - defender.dodge) * 0.2), 35, 97);
   if ((hashString(`${seed}:hit`) % 100) >= hitChance) {
     return { result: "miss", damage: 0 };
   }
-  const critChance = clamp(attacker.crit + critBonus - defender.guardHeart * 0.7, 0, 55);
+  const critChance = clamp(attacker.crit + critBonus + atkMods.critPercent - (defender.guardHeart + defMods.guardHeartFlat) * 0.7, 0, 55);
   const isCrit = (hashString(`${seed}:crit`) % 100) < critChance;
   const attack = channel === "spell" ? attacker.spellAttack : attacker.weaponAttack;
-  const defense = Math.max(0, Math.round(defender.defense * shred));
+  const defense = Math.max(0, Math.round(defender.defense * (1 + defMods.defensePercent / 100) * shred));
   const base = Math.max(1, attack - defense * 0.5);
   const critMult = isCrit ? Math.max(1.1, attacker.critDamage / 100) : 1;
   const taken = defender.guardRatio * defender.wardRatio;
-  const damage = Math.max(1, Math.round(base * power * critMult * taken));
+  const dealt = Math.max(0, 1 + atkMods.damageDealtPercent / 100);
+  const takenStatus = Math.max(0, 1 + defMods.damageTakenPercent / 100);
+  const damage = Math.max(1, Math.round(base * power * critMult * taken * dealt * takenStatus));
   defender.guardRatio = 1;
   defender.wardRatio = 1;
   defender.hp = Math.max(0, defender.hp - damage);
@@ -604,6 +663,70 @@ function actParty(
   };
 }
 
+function hangThreat(attacker: LiveFighter, target: LiveFighter): string {
+  const threat = attacker.threat;
+  if (!threat) return "";
+  const status = getCombatStatusDefinition(threat.statusId);
+  if (!status) return "";
+  const applied = applyOrRefreshStatus(
+    target.combatStatuses,
+    status,
+    threat.tier,
+    threat.spellLoadoutId,
+    "basic_attack",
+  );
+  target.combatStatuses = applied.statuses;
+  if (status.effectKind === "damage_over_time") {
+    target.tickSpellAttack = Math.max(target.tickSpellAttack, attacker.spellAttack);
+  }
+  return status.name;
+}
+
+function refreshSelfThreat(fighter: LiveFighter): void {
+  const statusId = fighter.threat?.selfStatusId;
+  if (!statusId || !fighter.threat) return;
+  const status = getCombatStatusDefinition(statusId);
+  if (!status) return;
+  const applied = applyOrRefreshStatus(
+    fighter.combatStatuses,
+    status,
+    fighter.threat.tier,
+    fighter.threat.spellLoadoutId,
+    "basic_attack",
+  );
+  fighter.combatStatuses = applied.statuses;
+}
+
+function tickStatusDamage(fighter: LiveFighter, round: number): ActRecord | null {
+  if (fighter.hp <= 0 || fighter.combatStatuses.length === 0) return null;
+  const spellAttack = fighter.tickSpellAttack > 0 ? fighter.tickSpellAttack : fighter.spellAttack;
+  const ticked = processRoundEndTicks(
+    fighter.combatStatuses,
+    fighter.hp,
+    fighter.maxHp,
+    fighter.spirit,
+    fighter.maxSpirit,
+    spellAttack,
+  );
+  fighter.hp = ticked.hp;
+  fighter.spirit = ticked.spirit;
+  const decayed = decayAndCleanStatuses(fighter.combatStatuses);
+  fighter.combatStatuses = decayed.remaining;
+  const burn = ticked.ticks.find((tick) => tick.effectKind === "damage_over_time" && tick.value > 0);
+  if (!burn) return null;
+  return {
+    round,
+    actorName: fighter.name,
+    roleLabel: fighter.side === "enemy" ? "敌手" : PARTY_ROLE_LABEL[fighter.role],
+    skillName: burn.statusName,
+    targetName: fighter.name,
+    result: "hit",
+    note: `${fighter.name}身上的${burn.statusName}还在烧。`,
+    leaderStrike: null,
+    enemyStrike: null,
+  };
+}
+
 function actEnemy(
   fighter: LiveFighter,
   allies: LiveFighter[],
@@ -611,6 +734,7 @@ function actEnemy(
   round: number,
   seed: string,
 ): ActRecord {
+  refreshSelfThreat(fighter);
   const roleLabel = "敌手";
   const rawName = action.enemyName ?? "进攻";
   const kind = channelLabel(fighter.spellAttack > fighter.weaponAttack ? "spell" : "weapon");
@@ -656,12 +780,13 @@ function actEnemy(
     1,
     seed,
   );
-  if (action.enemyDrain && strike.result !== "miss") {
-    target.spirit = Math.max(0, target.spirit - action.enemyDrain);
-  }
+  const pulled = strike.result === "miss" ? 0 : (action.enemyDrain ?? 0) + (fighter.threat?.extraSpiritDrain ?? 0);
+  if (pulled > 0) target.spirit = Math.max(0, target.spirit - pulled);
   if (action.enemySlow && strike.result !== "miss") target.slowRounds = 1;
-  const result = action.enemyDrain && strike.result !== "miss" ? "drain" as const : strike.result;
+  const hung = strike.result === "miss" ? "" : hangThreat(fighter, target);
+  const result = pulled > 0 && strike.result !== "miss" ? "drain" as const : strike.result;
   const resultText = result === "crit" ? "会心打在" : result === "drain" ? "抽走灵力，打在" : result === "hit" ? "击中" : "没打中";
+  const hungText = hung ? `，${hung}挂上了` : "";
   return {
     round,
     actorName: fighter.name,
@@ -669,7 +794,7 @@ function actEnemy(
     skillName,
     targetName: target.name,
     result,
-    note: `${fighter.name}以${rawName}（${kind}）${resultText}${target.name}。`,
+    note: `${fighter.name}以${rawName}（${kind}）${resultText}${target.name}${hungText}。`,
     leaderStrike: null,
     enemyStrike: strike.result,
     skillPoolLabel: kind,
@@ -690,6 +815,11 @@ function readableBeats(records: readonly ActRecord[], enemyName: string, outcome
         ? `${enemyName}和这边都还站着，这一场算平手。`
         : `有人撤步，这一场退出${enemyName}。`;
   if (beats.length < 3) beats.push(ending);
+  const marked = records.find((record) => /焚灼|幻惑|镇压/.test(record.note));
+  if (marked && !beats.some((beat) => /焚灼|幻惑|镇压/.test(beat))) {
+    if (beats.length >= 3) beats[1] = marked.note;
+    else beats.splice(1, 0, marked.note);
+  }
   return beats.slice(0, 3);
 }
 
@@ -704,6 +834,8 @@ function awaken(combatant: BattleCombatant): LiveFighter {
     slowRounds: 0,
     tauntRounds: 0,
     skillsUsed: [],
+    combatStatuses: [],
+    tickSpellAttack: 0,
     skills: combatant.skills.map((skill) => ({ ...skill })),
   };
 }
@@ -810,6 +942,14 @@ export function runPartyBattle(input: {
       }
     }
     strikeLog.push({ leader: leaderStrike, enemy: enemyStrike });
+    if (!outcome) {
+      for (const fighter of [...allies, ...enemies]) {
+        const burn = tickStatusDamage(fighter, round);
+        if (burn) records.push(burn);
+      }
+      if (living(enemies).length === 0) outcome = "win";
+      else if (living(allies).length === 0) outcome = "loss";
+    }
     for (const fighter of [...allies, ...enemies]) tickCooldowns(fighter);
   }
 
