@@ -1,6 +1,7 @@
 import type { StateId } from "../constants.js";
 import type { EventTemplate } from "../events.js";
 
+import { travelSceneRowsFor } from "./content/scene-choices.js";
 import { buildStateEventPack } from "./content/states/template.js";
 import { TRAVEL_STATE_MORE } from "./content/travel/state-more.js";
 import { buildCangzhouTravelEventPack } from "./content/travel/states/cangzhou.js";
@@ -28,8 +29,10 @@ const STATE_TRAVEL_PACK_BUILDERS: Record<string, () => EventTemplate[]> = {
 export function buildTravelStateSpecificEvents(stateId: string): EventTemplate[] {
   const base = STATE_TRAVEL_PACK_BUILDERS[stateId]?.() ?? [];
   const extra = TRAVEL_STATE_MORE[stateId];
-  if (!extra?.length) {
-    return base;
-  }
-  return [...base, ...buildStateEventPack(stateId as StateId, extra, "travel")];
+  const scene = travelSceneRowsFor(stateId);
+  return [
+    ...base,
+    ...(extra?.length ? buildStateEventPack(stateId as StateId, extra, "travel") : []),
+    ...(scene.length ? buildStateEventPack(stateId as StateId, scene, "travel") : []),
+  ];
 }

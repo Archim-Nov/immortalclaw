@@ -35,8 +35,8 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
   const world = createSeedWorld();
 
   assert.ok(world.eventPools);
-  assert.equal(world.eventPools.globalCommon.length, 45);
-  assert.equal(world.eventPools.travelPool.length, 42);
+  assert.equal(world.eventPools.globalCommon.length, 57);
+  assert.equal(world.eventPools.travelPool.length, 54);
   assert.equal(Object.keys(world.eventPools.stateSpecific).length, 9);
   assert.equal(Object.keys(world.eventPools.travelStateSpecific).length, 9);
 
@@ -46,7 +46,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(totalStateEvents, 135);
+  assert.equal(totalStateEvents, 153);
 
   const totalTravelStateEvents = Object.values(
     world.eventPools.travelStateSpecific as Record<string, readonly EventTemplate[]>,
@@ -54,7 +54,7 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
     (sum, events) => sum + events.length,
     0,
   );
-  assert.equal(totalTravelStateEvents, 135);
+  assert.equal(totalTravelStateEvents, 153);
 
   const nodeSpecificCount = Object.values(
     world.eventPools.nodeSpecific as Record<string, readonly EventTemplate[]>,
@@ -65,8 +65,8 @@ test("event pool shape satisfies Phase 2 minimum structure", () => {
   assert.equal(nodeSpecificCount, 3258);
 
   for (const stateId of STATE_IDS) {
-    assert.equal(world.eventPools.stateSpecific[stateId]?.length, 15);
-    assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 15);
+    assert.equal(world.eventPools.stateSpecific[stateId]?.length, 17);
+    assert.equal(world.eventPools.travelStateSpecific[stateId]?.length, 17);
     assert.equal(world.eventPools.nodeSpecific[`${stateId}:wilderness`]?.length, 16);
     assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-c`]?.length, 118);
     assert.equal(world.eventPools.nodeSpecific[`${stateId}:dungeon-b`]?.length, 114);
@@ -101,7 +101,7 @@ test("hydrateWorldState rebuilds event pools from persisted world state", () => 
   const hydrated = hydrateWorldState(persisted);
 
   assert.ok(hydrated.eventPools.travelStateSpecific.qingzhou);
-  assert.equal(hydrated.eventPools.travelPool.length, 42);
+  assert.equal(hydrated.eventPools.travelPool.length, 54);
 });
 
 test("drawEvent exploration path returns a merged event candidate", () => {
@@ -554,5 +554,58 @@ test("thickened pools keep two-way choices, Chinese copy, and early material gat
         : 1;
       assert.ok(rank >= needs, `${event.id} drops ${reward.itemId} below its realm gate`);
     }
+  }
+});
+
+test("scene choices offer three or four thin options without touching morality pairs", () => {
+  const world = createSeedWorld();
+  const pools = [
+    ...world.eventPools.globalCommon,
+    ...world.eventPools.travelPool,
+    ...Object.values(world.eventPools.stateSpecific).flat(),
+    ...Object.values(world.eventPools.travelStateSpecific).flat(),
+    ...Object.values(world.eventPools.nodeSpecific).flat(),
+  ];
+  const scenes = pools.filter((event) => event.sceneChoice);
+  const broad = scenes.filter((event) => (event.sceneChoice?.options.length ?? 0) >= 3);
+  assert.equal(broad.length, scenes.length);
+  assert.ok(scenes.length >= 48, `expected dozens of scene choices, got ${scenes.length}`);
+  assert.ok(scenes.some((event) => event.sceneChoice?.options.length === 3));
+  assert.ok(scenes.filter((event) => event.sceneChoice?.options.length === 4).length >= 36);
+
+  const exploration = scenes.filter((event) => event.source === "exploration");
+  const travel = scenes.filter((event) => event.source === "travel");
+  const human = scenes.filter((event) => event.semanticType === "human");
+  assert.ok(exploration.length >= 20);
+  assert.ok(travel.length >= 20);
+  assert.ok(human.length >= 20);
+
+  for (const event of scenes) {
+    assert.equal(event.moralityChoice, undefined, `${event.id} should stay off the morality pair`);
+    assert.equal(event.minRealm, null, `${event.id} should stay 炼气-safe`);
+    assert.ok(CJK.test(event.description), `${event.id} description`);
+    assert.ok(CJK.test(event.nameCn), `${event.id} title`);
+    assert.ok(CJK.test(event.sceneChoice?.prompt ?? ""), `${event.id} prompt`);
+    const ids = new Set<string>();
+    for (const option of event.sceneChoice?.options ?? []) {
+      assert.ok(!ids.has(option.id), `${event.id} repeats ${option.id}`);
+      ids.add(option.id);
+      assert.ok(CJK.test(option.label), `${event.id} ${option.id} label`);
+      assert.ok(CJK.test(option.summary), `${event.id} ${option.id} summary`);
+      assert.equal(option.effectBundle.itemRewards, undefined, `${event.id} should not drop materials`);
+      const stones = option.effectBundle.spiritStones ?? 0;
+      assert.ok(stones <= 16, `${event.id} ${option.id} stones ${stones}`);
+    }
+    const help = event.sceneChoice?.options.find((option) => option.id === "help");
+    const walk = event.sceneChoice?.options.find((option) => option.id === "walk");
+    assert.equal(help?.effectBundle.reputationChange, 1);
+    assert.equal(help?.effectBundle.spiritStones, 4);
+    assert.ok(help?.summary.includes("薄人情"));
+    assert.equal(walk?.effectBundle.spiritStones, undefined);
+  }
+
+  for (const event of pools.filter((entry) => entry.moralityChoice)) {
+    assert.equal(event.moralityChoice?.options.length, 2, `${event.id} morality pair`);
+    assert.equal(event.sceneChoice, undefined);
   }
 });

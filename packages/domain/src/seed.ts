@@ -353,6 +353,7 @@ const cultivators: Record<string, Cultivator> = {
     moralityScore: 0,
     pendingSectApplicationId: null,
     pendingMoralityChoiceId: null,
+    pendingSceneChoiceId: null,
     pendingPvpChallengeId: null,
     totalContribution: 0,
     neutralContribution: 0,
@@ -622,6 +623,7 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     questBoards: {},
     pendingSectApplications: {},
     pendingMoralityChoices: {},
+    pendingSceneChoices: {},
     pendingPvpChallenges: {},
     sectReapplyCooldowns: {},
     wildernessLayers: structuredClone(WILDERNESS_LAYERS),
@@ -664,6 +666,7 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     nextCombatSequence: 1,
     nextSectApplicationSequence: 1,
     nextMoralityChoiceSequence: 1,
+    nextSceneChoiceSequence: 1,
     nextPvpChallengeSequence: 1,
     nextSectCooldownSequence: 1,
     nextDaoCompanionProposalSequence: 1,
@@ -713,6 +716,10 @@ export function hydrateWorldState(
   hydrated.states = buildAllStates(hydrated.locations, geographyRegistry);
   hydrated.topology = buildFullTopology(hydrated.locations, { geographyRegistry });
   hydrated.eventPools = createEventPools(hydrated.locations, { geographyRegistry });
+  hydrated.pendingSceneChoices ??= {};
+  if (typeof hydrated.nextSceneChoiceSequence !== "number") {
+    hydrated.nextSceneChoiceSequence = 1;
+  }
 
   // Migrate old cultivators: backfill missing combat loadout fields
   for (const cultivator of Object.values(hydrated.cultivators)) {

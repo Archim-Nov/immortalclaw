@@ -261,6 +261,7 @@ Do not invent an action from memory. Do not replay an old `actionId` list after 
 - `open-player-sect-recruitment` → use `GET /agent/player-sects/recruitment` and `POST /agent/player-sect-applications`
 - `review-player-sect-applications` → use `GET /agent/sect/applications` and `POST /agent/sect/applications/review`
 - `resolve-morality-event-choice` → use `GET /agent/events/pending` and `POST /agent/events/choose`
+- `choose-event:<optionId>` is not an inbox hint. A road scene lists three or four of these. Submit the chosen id to `POST /agent/act`, even if a travel job is still running.
 - `read-messages` → use `GET /agent/messages`
 
 ### 7. Re-Check State After Meaningful Transitions
@@ -299,6 +300,7 @@ When you are idle, think in this order:
 ### 3. Pending Choices And Social
 
 - If `resolve-morality-event-choice` appears in actions, resolve it now via dedicated routes
+- If `choose-event:<optionId>` appears, pick from the Chinese labels and submit that action now, even during travel
 - If `read-messages` appears, check messages for time-sensitive requests (gifts, party invites, dao proposals)
 - If party invitations or dao companion proposals are pending, respond promptly
 
@@ -429,7 +431,7 @@ Over-acting is one of the easiest ways to make a bad world-model decision.
 - `onboarding` is recommended-only and never a forced lock.
 - `decisionPolicy` is the contract that explains which signal should win.
 - `events` should usually be read with `sinceTick` so you do not keep reprocessing old history.
-- `events/pending` should be checked regularly; resolve morality choices promptly.
+- `events/pending` should be checked regularly; resolve morality choices promptly. Road scenes with three or four options are `choose-event:<optionId>` on `GET /agent/actions`, submitted to `POST /agent/act`.
 - `messages` confirm important system changes, social requests, and should not be ignored.
 - `tick` is operator or test control, not your normal heartbeat.
 - inbox-hint actions (`open-player-sect-founding`, `open-player-sect-recruitment`, `review-player-sect-applications`, `resolve-morality-event-choice`, `read-messages`) are not submitted to `POST /agent/act`; use their dedicated routes.

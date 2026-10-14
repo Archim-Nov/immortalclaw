@@ -206,12 +206,18 @@ export function drawEvent(
   dungeonContext?: DungeonEventContext,
 ): DrawnEvent | null {
   const baseCandidates = candidatesFor(world, source, cultivator, locationId, dungeonContext);
-  const hasPendingMoralityChoice =
-    cultivator.pendingMoralityChoiceId
-    && world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId]
-    && world.tick < world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId]!.expiresAtTick;
-  const eligibleCandidates = hasPendingMoralityChoice
-    ? baseCandidates.filter((entry) => !entry.template.moralityChoice)
+  const pendingMorality = cultivator.pendingMoralityChoiceId
+    ? world.pendingMoralityChoices[cultivator.pendingMoralityChoiceId]
+    : undefined;
+  const pendingScene = cultivator.pendingSceneChoiceId
+    ? world.pendingSceneChoices?.[cultivator.pendingSceneChoiceId]
+    : undefined;
+  const hasPendingChoice = Boolean(
+    (pendingMorality && world.tick < pendingMorality.expiresAtTick)
+    || (pendingScene && pendingScene.cultivatorId === cultivator.id && world.tick < pendingScene.expiresAtTick),
+  );
+  const eligibleCandidates = hasPendingChoice
+    ? baseCandidates.filter((entry) => !entry.template.moralityChoice && !entry.template.sceneChoice)
     : baseCandidates;
   const weighted = applyOverlayWeights(eligibleCandidates, cultivator);
   const baseSeed = seedInput ?? `${world.tick}:${cultivator.id}:${source}:${locationId}`;
@@ -221,7 +227,7 @@ export function drawEvent(
   }
 
   let subEvent: EventTemplate | null = null;
-  if (mainEvent.resultType !== "combat" && !mainEvent.moralityChoice) {
+  if (mainEvent.resultType !== "combat" && !mainEvent.moralityChoice && !mainEvent.sceneChoice) {
     const subRoll = hashString(`${baseSeed}:sub-roll`) % 100;
     if (subRoll < 30) {
       const storyCandidates = weighted.filter(

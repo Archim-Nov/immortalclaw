@@ -25,6 +25,7 @@ export interface StateEventRow {
   readonly minRealm?: EventTemplate["minRealm"];
   readonly effects: EventTemplate["effects"];
   readonly moralityChoice?: EventTemplate["moralityChoice"];
+  readonly sceneChoice?: EventTemplate["sceneChoice"];
 }
 
 export function buildStateEventPack(
@@ -50,5 +51,6 @@ export function buildStateEventPack(
     minRealm: row.minRealm ?? null,
     effects: row.effects,
     ...(row.moralityChoice ? { moralityChoice: row.moralityChoice } : {}),
+    ...(row.sceneChoice ? { sceneChoice: row.sceneChoice } : {}),
   }));
 }

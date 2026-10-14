@@ -1,6 +1,7 @@
 import type { EventTemplate } from "../../../events.js";
 import { deriveSignalType } from "../../../events.js";
 
+import { createTravelSceneRows } from "../scene-choices.js";
 import { createTravelGlobalMoreRows } from "./global-more.js";
 
 export type TravelGlobalRow =
@@ -15,6 +16,7 @@ export function createTravelGlobalRows(): readonly (TravelGlobalRow & { signalTy
   return [
     ...createTravelGlobalBaseRows(),
     ...createTravelGlobalMoreRows(),
+    ...createTravelSceneRows(),
   ];
 }
 

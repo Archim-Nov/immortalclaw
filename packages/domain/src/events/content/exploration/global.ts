@@ -1,6 +1,7 @@
 import type { EventTemplate } from "../../../events.js";
 import { deriveSignalType } from "../../../events.js";
 
+import { createExplorationSceneRows } from "../scene-choices.js";
 import { createExplorationGlobalMoreRows } from "./global-more.js";
 
 export type ExplorationGlobalRow =
@@ -15,6 +16,7 @@ export function createExplorationGlobalRows(): readonly (ExplorationGlobalRow & 
   return [
     ...createExplorationGlobalBaseRows(),
     ...createExplorationGlobalMoreRows(),
+    ...createExplorationSceneRows(),
   ];
 }
 
