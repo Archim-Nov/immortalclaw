@@ -433,10 +433,10 @@ export function describeArcLine(link: SocialLink, selfName: string, otherName: s
     return `${selfName}与${otherName}是点头之交。在城里碰见，会互相招呼一声。`;
   }
   if (feud === "宿怨") {
-    return `${selfName}与${otherName}结成了宿怨。可以公开下挑战书。`;
+    return `${selfName}与${otherName}结成了宿怨。见面剑拔弩张，可以公开下挑战书，也可以把礼拒了。`;
   }
   if (feud === "嫌隙") {
-    return `${selfName}与${otherName}之间有了嫌隙。话还没有撕破，心里已经不痛快。`;
+    return `${selfName}与${otherName}之间有了嫌隙。下次见面剑拔弩张，话会很硬。`;
   }
   return `${selfName}与${otherName}目前是${getAffinityLevel(link.affinity)}，还没有跨过点头之交，也没有结下嫌隙。`;
 }

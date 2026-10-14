@@ -100,6 +100,20 @@ import {
 } from "./inner-life.js";
 import { expireSocialDeepen, listSocialDeepenActions, noteArrivalReunion, performSocialDeepenAction, socialDeepenView } from "./social-deepen.js";
 import {
+  beginSectTimed,
+  buildSectLifeView,
+  clearSectPost,
+  ensureSpiritVeins,
+  grantSectMerit,
+  isSectTimedAction,
+  listSectLifeActions,
+  performSectImmediate,
+  resolveSectTimed,
+  sameSectBond,
+  sectLifeGuidance,
+  settleVeinYields,
+} from "./sect-life.js";
+import {
   getWeaponLoadoutsByFamily,
   getSpellLoadoutsByElement,
   getAllWeaponLoadouts,
@@ -3078,6 +3092,8 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
       ? executeQuest.durationTicks
       : guixuNodeId
         ? (getGuixuNodeById(world, guixuNodeId)?.explorationDurationTicks ?? NaN)
+      : isSectTimedAction(actionId)
+        ? 1
       : DEFAULT_ACTION_DURATIONS[normalizedActionId];
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error(`Invalid action duration for ${actionId}.`);
@@ -6288,6 +6304,12 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     }
   }
 
+  const sectHint = sectLifeGuidance(world, cultivator);
+  if (sectHint) {
+    locationPriorities.unshift(sectHint.priority);
+    locationActions.unshift(sectHint.actionId);
+  }
+
   // ── Merge layers: recovery > breakthrough > location ──
   const warnings = [...recoveryWarnings, ...breakthroughWarnings];
   const priorities = [...recoveryPriorities, ...breakthroughPriorities, ...locationPriorities];
@@ -6637,6 +6659,7 @@ function ensureOptionalProgressMaps(world: WorldState): void {
   if (typeof (world as unknown as Record<string, unknown>).nextCommissionSequence !== "number") {
     (world as unknown as Record<string, unknown>).nextCommissionSequence = 1;
   }
+  ensureSpiritVeins(world);
   reconcileBusyState(world);
 }
 
@@ -6799,7 +6822,9 @@ function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNull
         arcLine: link ? describeArcLine(link, cultivator.name, other.name) : null,
         rival: link?.rival === true,
         favorBalance: link?.favorBalance ?? 0,
-        placeLine: `${other.name}也在${locationName}。`,
+        placeLine: link && grudgeArcOf(link.grudge ?? 0)
+          ? `${other.name}也在${locationName}。你们有${grudgeArcOf(link.grudge ?? 0)}，见面剑拔弩张。`
+          : `${other.name}也在${locationName}。`,
       };
     });
 }
@@ -7064,6 +7089,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
     combatProfile,
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
+    ...(buildSectLifeView(world, cultivator) ? { sectLife: buildSectLifeView(world, cultivator)! } : {}),
     sect: sectView,
     inventory: cultivator.inventory,
     inventoryDetails: Object.entries(cultivator.inventory)
@@ -7514,6 +7540,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       return ensureSafetyNetActions(world, cultivator, location, actions);
     }
     if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
+    actions.push(...listSectLifeActions(world, cultivator));
     return ensureSafetyNetActions(world, cultivator, location, actions);
   }
   if (isAtResidence(cultivator)) {
@@ -7805,10 +7832,13 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     const duelTargets = socialActionTargets(world, cultivator)
       .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
     for (const candidate of duelTargets) {
+      const feud = grudgeArcOf(getSocialLink(world, cultivator.id, candidate.id)?.grudge ?? 0);
       actions.push({
         actionId: `challenge-cultivator:${candidate.id}` as ActionId,
-        label: `Challenge ${candidate.name}`,
-        description: `Challenge ${candidate.name} to a city duel.`,
+        label: feud ? `再战：${candidate.name}（剑拔弩张）` : `Challenge ${candidate.name}`,
+        description: feud
+          ? `${candidate.name}和你有${feud}。再战一场，话可以之后再说。`
+          : `Challenge ${candidate.name} to a city duel.`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -7862,13 +7892,28 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS;
         if (!onCooldown) {
           const levelLabel = existingLink ? getAffinityLevel(existingLink.affinity) : "陌生人";
+          const feud = grudgeArcOf(existingLink?.grudge ?? 0);
+          const fellow = sameSectBond(cultivator, chatTarget);
           actions.push({
             actionId: `chat-up:${chatTarget.id}` as ActionId,
-            label: `搭讪：${chatTarget.name}（${levelLabel}）`,
-            description: `与${chatTarget.name}攀谈，增进好感度。认识之后才能组队，同一心跳里可以接着邀请。`,
+            label: feud ? `攀谈：${chatTarget.name}（${feud}，剑拔弩张）` : fellow ? `攀谈：${chatTarget.name}（同门）` : `搭讪：${chatTarget.name}（${levelLabel}）`,
+            description: feud
+              ? `${chatTarget.name}和你有${feud}，见面剑拔弩张。这句话会很硬。不想给面子，就拒礼，或者再战。`
+              : fellow
+                ? `${chatTarget.name}是同门。话可以直说，赠礼也更顺。认识之后才能组队。`
+                : `与${chatTarget.name}攀谈，增进好感度。认识之后才能组队，同一心跳里可以接着邀请。`,
             durationTicks: 0,
             kind: "immediate",
           });
+          if (feud) {
+            actions.push({
+              actionId: `refuse-gift:${chatTarget.id}` as ActionId,
+              label: `拒礼：${chatTarget.name}`,
+              description: `${chatTarget.name}就在眼前，你们剑拔弩张。礼不必收。这句话说出去，对方听得见。`,
+              durationTicks: 0,
+              kind: "immediate",
+            });
+          }
         }
       }
     }
@@ -8095,10 +8140,18 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if ((cultivator.lastGiftTick ?? -1) < world.tick) {
         const giftableItems = Object.entries(cultivator.inventory).filter(([, count]) => count > 0);
         for (const [itemId] of giftableItems.slice(0, 2)) {
+          const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
+          const fellow = sameSectBond(cultivator, target);
           actions.push({
             actionId: `send-message:${target.id}:gift-item` as ActionId,
             label: `赠送物品：${itemId} → ${target.name}`,
-            description: `将1个${itemId}赠予${target.name}，增进好感。`,
+            description: feud === "宿怨"
+              ? `${target.name}和你是宿怨，礼递过去也会被拒。要说话就当面拒礼，或者再战。`
+              : feud
+                ? `${target.name}和你有嫌隙。礼可以递，但对方未必收。`
+                : fellow
+                  ? `把1个${itemId}递给同门${target.name}。同门之间，这份礼更顺。`
+                  : `将1个${itemId}赠予${target.name}，增进好感。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -8349,6 +8402,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     });
   }
   actions.push(...listSocialDeepenActions(world, cultivator));
+  actions.push(...listSectLifeActions(world, cultivator));
 
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
@@ -8404,6 +8458,12 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
   if (actionId.startsWith("chat-up:")) return;
+  if (actionId.startsWith("take-post:")) return;
+  if (actionId === "resign-post") return;
+  if (actionId.startsWith("refuse-gift:")) return;
+  if (actionId === "post-duty") return;
+  if (actionId.startsWith("gather-vein:")) return;
+  if (actionId.startsWith("sect-chain:recruit-chore")) return;
   if (actionId.startsWith("voice-transmit:")) return;
   if (actionId.startsWith("propose-dao-companion:")) return;
   if (actionId.startsWith("accept-dao-companion:")) return;
@@ -8596,6 +8656,32 @@ const parseUnlockLoadoutItemId = (actionId: ActionId): ItemId | null =>
   actionId.startsWith("unlock-loadout:") ? actionId.slice("unlock-loadout:".length) as ItemId : null;
 
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
+  const sectSummary = performSectImmediate(world, cultivator, actionId);
+  if (sectSummary) {
+    addDaoLog(world, cultivator.id, "宗门职位", sectSummary, ["sect", "sect-life"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: sectSummary };
+  }
+  if (actionId.startsWith("refuse-gift:")) {
+    const otherId = actionId.slice("refuse-gift:".length);
+    const other = getCultivatorOrThrow(world, otherId);
+    if (other.locationId !== cultivator.locationId) throw new GameplayRejection("拒礼要当面。人现在不在一处。");
+    const feud = grudgeArcOf(getSocialLink(world, cultivator.id, other.id)?.grudge ?? 0);
+    if (!feud) throw new GameplayRejection(`${other.name}和你还没有嫌隙。礼若是不想收，等对方递过来再拒。`);
+    const pending = (cultivator.pendingGifts ?? []).filter((gift) => gift.fromCultivatorId === other.id);
+    for (const gift of pending) {
+      other.inventory[gift.itemId] = (other.inventory[gift.itemId] ?? 0) + gift.count;
+    }
+    if (pending.length > 0) {
+      cultivator.pendingGifts = (cultivator.pendingGifts ?? []).filter((gift) => gift.fromCultivatorId !== other.id);
+      addMutualGrudge(world, cultivator.id, other.id, GRUDGE_FROM_REJECTION);
+    }
+    const line = "东西我不要。上次那一架还没算完。";
+    const detail = `${cultivator.name}当着${other.name}的面把礼拒了：「${line}」两个人剑拔弩张。`;
+    recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail, names: [other.name] });
+    recordLife(other, { tick: world.tick, kind: "relationship", text: detail, names: [cultivator.name] });
+    addDaoLog(world, cultivator.id, "拒礼", detail, ["social", "feud"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: detail };
+  }
   const registration = registrationModifiersOf(cultivator);
   if (
     actionId === "buy-next-weapon"
@@ -8782,6 +8868,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     neutralSect.memberIds = neutralSect.memberIds.filter((memberId) => memberId !== cultivator.id);
     cultivator.neutralSectId = null;
     cultivator.neutralContribution = 0;
+    clearSectPost(cultivator);
     addDaoLog(world, cultivator.id, "Left Neutral Sect", `${cultivator.name} left ${neutralSect.name}.`, ["neutral-sect", "leave-neutral-sect"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left ${neutralSect.name}.` };
   }
@@ -8946,8 +9033,19 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       throw new GameplayRejection(`刚与${target.name}说过话，再过 ${wait} 刻。同一句话重复多了，情分涨得很慢。`);
     }
     const previousLevel = existingLink ? getAffinityLevel(existingLink.affinity) : null;
+    const feud = grudgeArcOf(existingLink?.grudge ?? 0);
     const spoken = openSpokenLine(world, cultivator.id, target.id, "chat-up", world.tick, speechLine);
-    const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.chatUp);
+    const chatGain = feud ? 0 : (sameSectBond(cultivator, target) ? AFFINITY_GAINS.chatUp + 4 : AFFINITY_GAINS.chatUp);
+    const linkAB = chatGain > 0
+      ? addMutualAffinity(world, cultivator.id, target.id, chatGain).linkAB
+      : (getSocialLink(world, cultivator.id, target.id) ?? existingLink);
+    if (!linkAB) throw new GameplayRejection("这句没送出去。");
+    if (feud) {
+      const place = world.locations[cultivator.locationId]?.name ?? "这里";
+      const tense = `${cultivator.name}和${target.name}在${place}碰了面。话没热，剑拔弩张。`;
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: tense, names: [target.name] });
+      recordLife(target, { tick: world.tick, kind: "relationship", text: tense, names: [cultivator.name] });
+    }
     const current = getSocialLink(world, cultivator.id, target.id) ?? linkAB;
     writeSocialLink(world, cultivator.id, { ...current, lastChatUpTick: world.tick });
     const reverse = getSocialLink(world, target.id, cultivator.id);
@@ -9738,6 +9836,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (kind === "gift-item") {
       // gift-item: deduct 1 of the first available item in inventory, create PendingGift
       if ((cultivator.lastGiftTick ?? -1) >= world.tick) throw new Error("Already gifted this tick.");
+      if (grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0) === "宿怨") {
+        throw new GameplayRejection(`${target.name}和你剑拔弩张，礼没收下。你可以当面拒礼，或者先再战。`);
+      }
       // find an item to gift — use the first item with count > 0
       const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
       if (!giftableEntry) throw new Error("No items to gift.");
@@ -9751,9 +9852,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       const gift: PendingGift = { messageId: giftMsg.id, fromCultivatorId: cultivator.id, itemId: giftItemId as ItemId, count: 1, tick: world.tick };
       if (!target.pendingGifts) target.pendingGifts = [];
       target.pendingGifts.push(gift);
-      addMutualAffinity(world, cultivator.id, target.id, 15);
+      const fellowGift = sameSectBond(cultivator, target);
+      addMutualAffinity(world, cultivator.id, target.id, fellowGift ? 21 : 15);
       addMessage(world, target.id, cultivator.name, `${cultivator.name}的赠礼`, giftContent, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: giftSpoken });
-      addDaoLog(world, cultivator.id, "赠礼", `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`, ["social", "gift"]);
+      addDaoLog(world, cultivator.id, "赠礼", fellowGift ? `${cultivator.name}把1个${giftName}递给同门${target.name}。好感度+21。` : `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`, ["social", "gift"]);
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
         kind: "person",
@@ -10234,6 +10336,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
 }
 function resolveJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId); cultivator.activeJobId = null;
+  if (isSectTimedAction(job.actionId)) {
+    const summary = resolveSectTimed(world, cultivator, job.actionId);
+    addDaoLog(world, cultivator.id, "宗门事务", summary, ["sect", "sect-life"]);
+    return summary;
+  }
   const registration = registrationModifiersOf(cultivator);
   const questAction = parseQuestActionId(job.actionId);
   const activeQuestId = typeof job.meta?.activeQuestId === "string" ? job.meta.activeQuestId : null;
@@ -10555,6 +10662,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.spiritStones += 120;
     addCurrentStateReputation(cultivator, 4);
     cultivator.neutralContribution += 40;
+    grantSectMerit(world, cultivator, 4);
     addFactionReputation(cultivator, neutralSect.id, 8);
     upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "neutral-sect", remainingTicks: 2, intensity: 1 });
     addDaoLog(world, cultivator.id, "Neutral Duty", `${cultivator.name} completed a duty for ${neutralSect.name}.`, ["neutral-sect", "neutral-duty"]);
@@ -10584,6 +10692,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 2 : -2, "take-sect-errand");
     }
     cultivator.totalContribution += contributionDelta;
+    grantSectMerit(world, cultivator, Math.max(4, Math.floor(contributionDelta / 5)));
     if (cultivator.totalContribution > previousContribution) {
       cultivator.contributionReachedAt = world.tick;
     }
@@ -10622,6 +10731,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     addFactionReputation(cultivator, sect.id, reward.reputation * 2 + Math.floor(resourceBonus / 2));
     applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 1 : -1, `sect-task:${sectTaskId}`);
     cultivator.totalContribution += reward.contribution;
+    grantSectMerit(world, cultivator, Math.max(4, Math.floor(reward.contribution / 5)));
     if (cultivator.totalContribution > previousContribution) {
       cultivator.contributionReachedAt = world.tick;
     }
@@ -11413,6 +11523,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       });
     };
 
+    if (target) {
+      addMutualGrudge(world, cultivator.id, target.id, GRUDGE_FROM_DUEL);
+    }
+
     if (retreated) {
       if (retreatingSide === "enemy") {
         cultivator.spiritStones += 10;
@@ -11730,7 +11844,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   const enterDungeon = parseEnterDungeonActionId(actionId);
   const searchFortuneRank = parseSearchFortuneRank(actionId);
   const challengeGuardianRank = parseChallengeGuardianRank(actionId);
-  if (travelDestination || questAction?.phase === "execute" || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || parseSectTaskId(actionId) || TIMED_ACTION_IDS.has(actionId)) {
+  if (travelDestination || questAction?.phase === "execute" || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || parseSectTaskId(actionId) || isSectTimedAction(actionId) || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
@@ -12062,6 +12176,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       }
     }
     if (actionId === "heal" && !canHealAtLocation(location)) throw new Error("Heal requires a safe location.");
+    if (isSectTimedAction(actionId)) {
+      const spec = beginSectTimed(world, cultivator, actionId);
+      return startJob(world, cultivator, actionId as TimedActionId, spec.label, undefined, spec.ticks);
+    }
     return startJob(world, cultivator, actionId as TimedActionId, actionId);
   }
   return immediateAction(world, cultivator, actionId, speechLine);
@@ -12118,6 +12236,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
   const safeSteps = clamp(Math.floor(steps), 1, 200); const completedJobs: TickSummary["completedJobs"] = []; const triggeredEvents: WorldEvent[] = [];
   for (let i = 0; i < safeSteps; i += 1) {
     world.tick += 1;
+    settleVeinYields(world);
     for (const cultivator of Object.values(world.cultivators)) {
       const location = world.locations[cultivator.locationId];
       cultivator.age += 1 / TICKS_PER_YEAR; if (!cultivator.activeJobId && cultivator.injuryTicksRemaining > 0) cultivator.injuryTicksRemaining -= 1; if (location?.kind === "safe" && !cultivator.activeJobId) { cultivator.qi = clamp(cultivator.qi + 3, 1, cultivator.maxQi); cultivator.spiritualPower = clamp(cultivator.spiritualPower + 3, 0, cultivator.maxSpiritualPower); }

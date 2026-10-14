@@ -216,6 +216,15 @@ function situationalLines(
   const listener = world.cultivators[listenerId];
   if (!speaker || !listener) return [];
   const place = shortPlace(world.locations[speaker.locationId]?.name);
+  const grudge = getSocialLink(world, speakerId, listenerId)?.grudge ?? 0;
+  if (grudge >= 8 && (kind === "chat-up" || kind === "greet")) {
+    return fit([
+      "上次那一架还没算完。",
+      "你再靠近，我就当是来再战的。",
+      "礼你留着。我这边不收。",
+      "话先说硬的。你要打，现在就行。",
+    ]);
+  }
   const wounded = speaker.injuryTicksRemaining > 0 || listener.injuryTicksRemaining > 0;
   const atGate = Boolean(world.locations[speaker.locationId]?.nodeType.startsWith("dungeon") || world.locations[speaker.locationId]?.dungeon);
   const favor = context?.favorReason ?? favorReasonBetween(world, speakerId, listenerId);
