@@ -64,6 +64,13 @@ import {
   type EventSourceType,
 } from "./events.js";
 import { repairCultivatorRealm, realmStageForLevel } from "./realms.js";
+import {
+  breakthroughDropPool,
+  isRiskyLateMajor,
+  rankBandForRealmLevel,
+  realmPathView,
+  vitalGainForBreakthrough,
+} from "./realm-path.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import { openSpokenLine, type SpeechKind } from "./spoken-lines.js";
 import { describeMood, noteSpam, pushTravelNote, settledMoment, spamRewardMultiplier, travelNote } from "./travelogue.js";
@@ -396,27 +403,8 @@ const DUNGEON_META_BY_NODE_TYPE: Record<DungeonNodeType, {
   "dungeon-a": { grade: "甲", minRealm: REALM_CORE, materialBand: "golden-spirit-flower" },
 };
 
-const BREAKTHROUGH_TIER_POOL: Partial<Record<ItemId, ReadonlyArray<ItemId>>> = {
-  "cloud-heart-grass": [
-    "cloud-heart-grass", "moon-dew-flower", "clear-zhi-leaf",
-    "spirit-brook-bamboo", "pure-heart-orchid", "mist-vine",
-    "condensed-qi-dew", "azure-stone-marrow", "meridian-lotus-essence",
-  ],
-  "mystic-jade-stone": [
-    "mystic-jade-stone", "jade-marrow-sand", "purple-palace-earth",
-    "cold-moon-crystal", "still-cloud-wood", "tranquil-bamboo",
-    "foundation-spirit-amber", "wind-control-crystal", "nine-turn-core-sand",
-  ],
-  "golden-spirit-flower": [
-    "golden-spirit-flower", "purple-celestial-leaf", "star-fall-sand",
-    "moon-glory-jade", "clear-mystic-wood", "chaos-moss",
-    "flowing-aurora-core", "dragon-radiance-crystal", "nine-turn-golden-marrow",
-  ],
-};
-
-function pickBreakthroughDrop(bandKey: ItemId, seed: string): ItemId {
-  const pool = BREAKTHROUGH_TIER_POOL[bandKey];
-  if (!pool) return bandKey;
+function pickBreakthroughDrop(bandKey: ItemId, seed: string, rank = 1): ItemId {
+  const pool = breakthroughDropPool(bandKey, rank);
   return pool[hashString(seed) % pool.length]!;
 }
 const REALM_ORDER = {
@@ -1968,10 +1956,8 @@ const unlockedDungeonRanksOf = (cultivator: Cultivator, grade: DungeonGrade): Du
   return DUNGEON_RANKS.filter((rank) => rank <= highestUnlockedRank);
 };
 const rankBandForLevel = (realmLevel: number) => {
-  const relativeLevel = ((realmLevel - 1) % 3) + 1;
-  const minRank = ((relativeLevel - 1) * 3) + 1;
-  const maxRank = minRank + 2;
-  return { minRank: minRank as DungeonRank, maxRank: maxRank as DungeonRank };
+  const band = rankBandForRealmLevel(realmLevel);
+  return { minRank: band.minRank as DungeonRank, maxRank: band.maxRank as DungeonRank };
 };
 const recommendedDungeonRankOf = (cultivator: Cultivator, grade: DungeonGrade): DungeonRank => {
   const { minRank, maxRank } = rankBandForLevel(cultivator.realmLevel);
@@ -3616,38 +3602,38 @@ function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinitio
     case 9:
       return {
         category: "major", targetRealm: "元婴", targetLevel: 10, marketBuyable: false, durationTicks: 8, baseSuccessRate: 40,
-        genericMaterials: [{ itemId: "golden-spirit-flower", count: 2 }, { itemId: "purple-celestial-leaf", count: 1 }, { itemId: "star-fall-sand", count: 1 }],
+        genericMaterials: [{ itemId: "infant-fire-lotus", count: 1 }, { itemId: "nascent-jade", count: 1 }, { itemId: "soul-lamp-wick", count: 1 }],
         specialMaterial: { itemId: "nine-turn-golden-marrow", count: 1 },
       };
     case 10:
       return {
         category: "minor", targetRealm: "元婴", targetLevel: 11, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
-        genericMaterials: [{ itemId: "moon-glory-jade", count: 1 }, { itemId: "clear-mystic-wood", count: 1 }, { itemId: "chaos-moss", count: 1 }],
-        specialMaterial: { itemId: "flowing-aurora-core", count: 1 },
+        genericMaterials: [{ itemId: "infant-fire-lotus", count: 1 }, { itemId: "nascent-jade", count: 1 }, { itemId: "soul-lamp-wick", count: 1 }],
+        specialMaterial: { itemId: "nurture-nascent-dew", count: 1 },
       };
     case 11:
       return {
         category: "minor", targetRealm: "元婴", targetLevel: 12, marketBuyable: false, durationTicks: 4, baseSuccessRate: null,
-        genericMaterials: [{ itemId: "golden-spirit-flower", count: 1 }, { itemId: "purple-celestial-leaf", count: 1 }, { itemId: "star-fall-sand", count: 1 }],
-        specialMaterial: { itemId: "dragon-radiance-crystal", count: 1 },
+        genericMaterials: [{ itemId: "infant-fire-lotus", count: 1 }, { itemId: "nascent-jade", count: 1 }, { itemId: "soul-lamp-wick", count: 1 }],
+        specialMaterial: { itemId: "anchor-nascent-sand", count: 1 },
       };
     case 12:
       return {
         category: "major", targetRealm: "化神", targetLevel: 13, marketBuyable: false, durationTicks: 8, baseSuccessRate: 30,
-        genericMaterials: [{ itemId: "moon-glory-jade", count: 2 }, { itemId: "clear-mystic-wood", count: 1 }, { itemId: "chaos-moss", count: 1 }],
-        specialMaterial: { itemId: "nine-turn-golden-marrow", count: 2 },
+        genericMaterials: [{ itemId: "divine-thought-crystal", count: 1 }, { itemId: "heaven-soul-silk", count: 1 }, { itemId: "divine-pattern-stone", count: 1 }],
+        specialMaterial: { itemId: "shatter-nascent-lotus", count: 1 },
       };
     case 13:
       return {
         category: "minor", targetRealm: "化神", targetLevel: 14, marketBuyable: false, durationTicks: 5, baseSuccessRate: null,
-        genericMaterials: [{ itemId: "golden-spirit-flower", count: 2 }, { itemId: "star-fall-sand", count: 1 }, { itemId: "chaos-moss", count: 1 }],
-        specialMaterial: { itemId: "flowing-aurora-core", count: 1 },
+        genericMaterials: [{ itemId: "divine-thought-crystal", count: 1 }, { itemId: "heaven-soul-silk", count: 1 }, { itemId: "divine-pattern-stone", count: 1 }],
+        specialMaterial: { itemId: "divine-embryo-dew", count: 1 },
       };
     case 14:
       return {
         category: "minor", targetRealm: "化神", targetLevel: 15, marketBuyable: false, durationTicks: 5, baseSuccessRate: null,
-        genericMaterials: [{ itemId: "purple-celestial-leaf", count: 2 }, { itemId: "moon-glory-jade", count: 1 }, { itemId: "clear-mystic-wood", count: 1 }],
-        specialMaterial: { itemId: "dragon-radiance-crystal", count: 1 },
+        genericMaterials: [{ itemId: "divine-thought-crystal", count: 1 }, { itemId: "heaven-soul-silk", count: 1 }, { itemId: "divine-pattern-stone", count: 1 }],
+        specialMaterial: { itemId: "divine-transformation-seal", count: 1 },
       };
     default:
       return null;
@@ -4930,7 +4916,7 @@ function resolveDungeonExpeditionStepIfDue(
   cultivator.pendingMoralityChoiceId = beforePendingMoralityChoiceId;
 
   const inventoryDelta = positiveInventoryDelta(beforeInventory, cultivator.inventory);
-  const tierPool = BREAKTHROUGH_TIER_POOL[metadata.materialBand] ?? [metadata.materialBand];
+  const tierPool = breakthroughDropPool(metadata.materialBand, effectiveProgress.targetRank);
   let primaryMaterialCount = 0;
   for (const matId of tierPool) {
     primaryMaterialCount += inventoryDelta[matId] ?? 0;
@@ -5108,9 +5094,11 @@ function materialSourcesOf(
       channel: "dungeon",
       locationHint: "dungeon-a",
       actionId: null,
-      note: realmLevel >= 9
-        ? "元婴与化神的突破灵材不在坊市出售，得到甲级地宫里用更高的姿态去换。"
-        : "金丹期突破灵材主要来自甲级地宫高风险探索与守关。",
+      note: realmLevel >= 12
+        ? "化神的突破灵材不在坊市出售。甲级地宫七层到九层，探宝和守关都会掉。"
+        : realmLevel >= 9
+          ? "元婴的突破灵材不在坊市出售。甲级地宫四层往上才有，七层也出。探宝和守关都会掉。"
+          : "金丹期突破灵材主要来自甲级地宫高风险探索与守关。",
     });
   }
 
@@ -5296,10 +5284,23 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
       tags: ["breakthrough", "failure", definition.category],
     });
     shiftCultivatorMood(world, cultivator, "loss", "破境没有成，心气沉了一下，还得再攒。");
+    if (isRiskyLateMajor(definition.targetRealm, definition.category)) {
+      raiseInjury(world, cultivator, 6);
+      upsertEffect(cultivator, {
+        id: "deviation",
+        name: "Qi Deviation",
+        description: "Cultivation becomes unstable and risky.",
+        source: "breakthrough",
+        remainingTicks: 6,
+        intensity: 1,
+      });
+    }
     recordLife(cultivator, {
       tick: world.tick,
       kind: "growth",
-      text: `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`,
+      text: isRiskyLateMajor(definition.targetRealm, definition.category)
+        ? `${cultivator.name}撞${definition.targetRealm}没有成。材料已经耗了，进度退到六成，身上还挂着伤，气息也乱了一阵。`
+        : `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`,
     });
     return `${cultivator.name} failed the breakthrough to level ${definition.targetLevel}.`;
   }
@@ -5307,11 +5308,16 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
   cultivator.realmLevel = definition.targetLevel;
   cultivator.realm = realmOfLevel(definition.targetLevel);
   cultivator.realmProgress = 0;
-  cultivator.maxQi += 12;
-  cultivator.maxSpiritualPower += 12;
+  const vitalGain = vitalGainForBreakthrough(fromLevel);
+  cultivator.maxQi += vitalGain.qi;
+  cultivator.maxSpiritualPower += vitalGain.spirit;
   cultivator.qi = cultivator.maxQi;
   cultivator.spiritualPower = cultivator.maxSpiritualPower;
-  cultivator.lifespan += 12;
+  cultivator.lifespan += vitalGain.lifespan;
+  const openedLateRealm = definition.category === "major" && (cultivator.realm === "元婴" || cultivator.realm === "化神");
+  if (openedLateRealm) {
+    addCurrentStateReputation(cultivator, cultivator.realm === "元婴" ? 8 : 14);
+  }
 
   // ---- Breakthrough Growth Package ----
   const growthEntry = BREAKTHROUGH_GROWTH_TABLE.find(e => e.slot === fromLevel);
@@ -5382,7 +5388,9 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
   recordLife(cultivator, {
     tick: world.tick,
     kind: "growth",
-    text: `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`,
+    text: openedLateRealm
+      ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`
+      : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`,
   });
   if (definition.category === "major") {
     const insight = applyBreakthroughInsight(cultivator);
@@ -6505,7 +6513,25 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     registration: registrationViewOf(cultivator),
     registrationEffects: registrationEffectsViewOf(cultivator),
     registrationProfile: cultivator.registrationRecord ? buildRegistrationProfile(cultivator.registrationRecord) : null,
-    breakthrough: breakthroughViewOf(world, cultivator),
+    ...(() => {
+      const breakthrough = breakthroughViewOf(world, cultivator);
+      return {
+        breakthrough,
+        realmPath: realmPathView({
+          realm: cultivator.realm,
+          realmLevel: cultivator.realmLevel,
+          realmProgress: cultivator.realmProgress,
+          next: breakthrough
+            ? {
+                targetRealm: breakthrough.targetRealm,
+                targetLevel: breakthrough.targetLevel,
+                category: breakthrough.category,
+                successRate: breakthrough.majorSuccessRate,
+              }
+            : null,
+        }),
+      };
+    })(),
     dungeon: dungeonViewForLocation(world, cultivator, location),
     dungeonExpedition: {
       ...buildDungeonExpeditionStateView(
@@ -10013,7 +10039,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.spiritStones += 220 + ((registration?.fortuneBonus ?? 0) * 10);
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
     }
-    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:search-fortune-material`)] += 1;
+    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:search-fortune-material`, fallbackSearchFortuneRank)] += 1;
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, fallbackSearchFortuneRank, `${world.tick}:${job.id}:loadout-source`);
     return `${cultivator.name} searched the ruins.`;
   }
@@ -10222,7 +10248,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         if (ward > 0) {
           cultivator.inventory["ward-talisman"] += ward;
         }
-        cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`)] += 1;
+        cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`, challengeGuardianRank)] += 1;
         cultivator.spiritStones += spiritStones;
         addRealmProgress(cultivator, tuning.realmProgressReward);
         grantLoadoutSourceDrop(world, cultivator, metadata.grade, challengeGuardianRank, `${world.tick}:${job.id}:guardian-loadout-source`);
@@ -10252,7 +10278,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           loot: {
             "ruin-fragment": fragment,
             ...(ward > 0 ? { "ward-talisman": ward } : {}),
-            [pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`)]: 1,
+            [pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`, challengeGuardianRank)]: 1,
           },
           summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.`,
           encounterTemplateId: guardianEncId,
@@ -10584,6 +10610,9 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       upsertEffect(cultivator, { id: "deviation", name: "Qi Deviation", description: "Cultivation becomes unstable and risky.", source: "cultivation", remainingTicks: 4, intensity: 1 });
       addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Qi Deviation", content: "A forced cycle disturbed the qi flow and left a deviation behind.", severity: "high", tags: ["event", "cultivation", "deviation"] });
     }
+    if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && cultivator.realmLevel >= 9) {
+      return `${cultivator.name}的修为顶在门槛上。下一阶要回洞府破境，灵材得到甲级地宫里拿。`;
+    }
     return `${cultivator.name} gained cultivation progress.`;
   }
   if (job.actionId === "take-sect-errand") {
@@ -10644,7 +10673,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       if (metadata.grade === "乙" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
       if (metadata.grade === "甲") cultivator.inventory["ward-talisman"] += 1;
     }
-    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:enhanced-search-material`)] += 1;
+    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:enhanced-search-material`, searchFortuneRank)] += 1;
     triggerNodeSpecificEvent(
       world,
       cultivator,

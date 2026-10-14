@@ -85,12 +85,16 @@ const ELEMENT_BRANCH: Record<FiveElementId, SpellBranchId> = {
 
 export function seekLine(channel: "weapon" | "spell", tier: number): string {
   const band = bandForTier(tier);
+  const thing = channel === "weapon" ? "兵器" : "功法";
+  if (tier >= 5) {
+    return `化神这一阶${thing}，先得自己破进化神。洞府破境要的灵材在甲级地宫七层到九层。兵器和功法的锻造材料也从七层起。到了化神，坊市和宗门才卖这一阶，宗门要贡献 220，不扣。`;
+  }
+  if (tier >= 4) {
+    return `元婴这一阶${thing}，先得自己破进元婴。洞府破境要的灵材从甲级地宫四层起。四层往上也能出大圆满的锻造材料，七层往上才是化神。到了元婴，坊市和宗门才卖这一阶，宗门要贡献 140，不扣。`;
+  }
   const where = tier <= 2
     ? "丙级地宫六层往上、坊市，或宗门"
-    : tier === 3
-      ? "乙级地宫五层往上、坊市，或宗门"
-      : "甲级地宫四层往上出元婴材料，七层往上出化神材料，坊市和宗门也能换到下一阶";
-  const thing = channel === "weapon" ? "兵器" : "功法";
+    : "乙级地宫五层往上、坊市，或宗门";
   return `${band.realm}这一阶${thing}，${where}。坊市和宗门只卖你这把兵器、这门功法还缺的下一阶，不让你跳阶。破境会悟到一点，护送或守关办成，有时留下一页残页。把功法或兵器送给别人，对方用掉才会学会。`;
 }
 

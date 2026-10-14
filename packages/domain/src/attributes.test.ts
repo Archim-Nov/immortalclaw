@@ -282,8 +282,9 @@ test("BREAKTHROUGH_GROWTH_TABLE has 14 entries for slots 1-14", () => {
   }
 });
 
-test("BREAKTHROUGH_GROWTH_TABLE — minor slots have 50/5/2, major slots have 100/10/5", () => {
+test("BREAKTHROUGH_GROWTH_TABLE keeps early slots and steps up after 金丹", () => {
   for (const entry of BREAKTHROUGH_GROWTH_TABLE) {
+    if (entry.slot > 8) continue;
     if (entry.category === "minor") {
       assert.strictEqual(entry.mainAttributeTotal, 50);
       assert.strictEqual(entry.fiveElementTotal, 5);
@@ -294,4 +295,13 @@ test("BREAKTHROUGH_GROWTH_TABLE — minor slots have 50/5/2, major slots have 10
       assert.strictEqual(entry.percentageBonus, 5);
     }
   }
+  const bySlot = Object.fromEntries(BREAKTHROUGH_GROWTH_TABLE.map((entry) => [entry.slot, entry]));
+  assert.strictEqual(bySlot[9]?.mainAttributeTotal, 160);
+  assert.strictEqual(bySlot[9]?.percentageBonus, 8);
+  assert.strictEqual(bySlot[10]?.mainAttributeTotal, 80);
+  assert.strictEqual(bySlot[11]?.mainAttributeTotal, 80);
+  assert.strictEqual(bySlot[12]?.mainAttributeTotal, 220);
+  assert.strictEqual(bySlot[12]?.percentageBonus, 10);
+  assert.strictEqual(bySlot[13]?.mainAttributeTotal, 110);
+  assert.strictEqual(bySlot[14]?.mainAttributeTotal, 110);
 });

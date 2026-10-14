@@ -21,6 +21,12 @@ type BreakthroughGenericId = Extract<
   | "moon-glory-jade"
   | "clear-mystic-wood"
   | "chaos-moss"
+  | "infant-fire-lotus"
+  | "nascent-jade"
+  | "soul-lamp-wick"
+  | "divine-thought-crystal"
+  | "heaven-soul-silk"
+  | "divine-pattern-stone"
 >;
 
 function genericMaterial(
@@ -30,7 +36,7 @@ function genericMaterial(
   description: string,
   descriptionEn: string,
   baseValue: number,
-  realmTag: "qi" | "foundation" | "core",
+  realmTag: "qi" | "foundation" | "core" | "nascent" | "spirit",
 ): ItemDefinition {
   return {
     id,
@@ -159,5 +165,45 @@ export const BREAKTHROUGH_GENERICS: Record<BreakthroughGenericId, ItemDefinition
     "生于灵脉交汇混沌之处的奇苔，兼具阴阳之气。金丹修士以之调和丹田阴阳失衡。",
     "Grows where spiritual veins converge in chaos, balancing yin and yang. Core-formation cultivators use it to harmonize dantian imbalances.",
     230, "core",
+  ),
+
+  // ── 元婴 ──────────────────────────────────────────
+  "infant-fire-lotus": genericMaterial(
+    "infant-fire-lotus", "婴火莲", "Infant Fire Lotus",
+    "丹火里开出的小莲。金丹后期要拿它把那一点灵火护住，才能往元婴里送。甲级地宫四层往上才遇得到。",
+    "A small lotus opened in core fire. Late golden-core cultivators use it to keep that flame intact on the way to nascent soul. It shows up in 甲级 dungeons from rank 4.",
+    420, "nascent",
+  ),
+  "nascent-jade": genericMaterial(
+    "nascent-jade", "元胎玉", "Nascent Jade",
+    "温的玉，里面像有一团还没长开的胎息。破元婴和温养元婴时，拿它把那口气稳住。",
+    "Warm jade with a breath that has not finished forming. It steadies the qi used to form and nurse a nascent soul.",
+    440, "nascent",
+  ),
+  "soul-lamp-wick": genericMaterial(
+    "soul-lamp-wick", "魂灯芯", "Soul Lamp Wick",
+    "灯芯很细。点着以后神识不那么容易散，元婴这一段的小突破和破境都用得上。",
+    "A thin wick. Once lit, it keeps divine sense from scattering through the nascent-soul steps.",
+    430, "nascent",
+  ),
+
+  // ── 化神 ──────────────────────────────────────────
+  "divine-thought-crystal": genericMaterial(
+    "divine-thought-crystal", "神念晶", "Divine Thought Crystal",
+    "神识在晶体里走了一圈才会停。元婴后期撞化神，以及化神里的小层，都要它压住念头。甲级七层往上才有。",
+    "Divine sense has to circle inside the crystal before it settles. Needed from the step into spirit transformation, and found from 甲级 rank 7.",
+    620, "spirit",
+  ),
+  "heaven-soul-silk": genericMaterial(
+    "heaven-soul-silk", "天魂丝", "Heaven Soul Silk",
+    "细丝看着轻，绕在识海里却沉。化神这一段用来把散开的神识收回来。",
+    "The thread looks light and sits heavy in the sea of consciousness. Spirit-transformation cultivators use it to draw scattered sense back in.",
+    640, "spirit",
+  ),
+  "divine-pattern-stone": genericMaterial(
+    "divine-pattern-stone", "神纹石", "Divine Pattern Stone",
+    "石头上的纹路自己在走。化神之前按不住，破境和化神里的小层都用它把纹压定。",
+    "The lines on the stone move on their own. Before spirit transformation they will not hold still. The breakthrough uses the stone to set them.",
+    660, "spirit",
   ),
 };

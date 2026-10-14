@@ -416,6 +416,14 @@ export type LegacyItemId =
   | "moon-glory-jade"
   | "clear-mystic-wood"
   | "chaos-moss"
+  // 元婴 generic materials
+  | "infant-fire-lotus"
+  | "nascent-jade"
+  | "soul-lamp-wick"
+  // 化神 generic materials
+  | "divine-thought-crystal"
+  | "heaven-soul-silk"
+  | "divine-pattern-stone"
   // Breakthrough special materials (1 per stage)
   | "condensed-qi-dew"
   | "azure-stone-marrow"
@@ -426,6 +434,11 @@ export type LegacyItemId =
   | "flowing-aurora-core"
   | "dragon-radiance-crystal"
   | "nine-turn-golden-marrow"
+  | "nurture-nascent-dew"
+  | "anchor-nascent-sand"
+  | "shatter-nascent-lotus"
+  | "divine-embryo-dew"
+  | "divine-transformation-seal"
   | "eight-wastes-pass"
   | "bahuang-spirit-essence"
   | "ancient-artifact"
@@ -829,6 +842,8 @@ export interface CultivatorDigest {
   relationships: string[];
   quotes: readonly { speakerName: string; line: string; tick: number }[];
   summary: string;
+  /** Present from 金丹后期 on, including at 化神后期. Omitted earlier. */
+  nextStep?: string;
 }
 
 export interface PersonalFavor {
@@ -2159,6 +2174,20 @@ export interface BreakthroughMissingItemView {
   missing: number;
 }
 
+export interface RealmPathView {
+  stage: RealmStage;
+  phase: RealmPhase;
+  level: number;
+  nextStage: RealmStage | null;
+  nextLevel: number | null;
+  category: "minor" | "major" | null;
+  where: string;
+  risk: string;
+  outcome: string;
+  catalogTier: string | null;
+  goals: string[];
+}
+
 export interface BreakthroughMaterialSourceView {
   itemId: ItemId;
   channel: "market" | "task" | "wilderness" | "dungeon";
@@ -2565,6 +2594,8 @@ export interface CultivatorStateView {
   registrationEffects: RegistrationGameplayEffectsView | null;
   registrationProfile: RegistrationProfileView | null;
   breakthrough: BreakthroughStateView | null;
+  /** Where the next realm is, what it costs, and what it opens. */
+  realmPath: RealmPathView;
   dungeon: DungeonStateView | null;
   dungeonExpedition: DungeonExpeditionStateView;
   bahuang: BahuangExpeditionStateView | null;

@@ -112,7 +112,7 @@ After the first reply, your default mode switches to **continuous autonomous act
 
 **Residences:** `state.residences` lists all owned residences (each with `stateId`, `locationId`, `name`, `description`, and `isActive`). `state.activeResidence` is the residence whose `locationId` exactly matches your current location, or `null` when you are not physically standing at one of your residences. `state.residenceContext` is an additive flavor surface that appears only while you are currently at a residence; it includes the active residence description, a current time-sense label, a short scene line, and a few recent passive residence ambient beats. Treat it as situational context, not a new action surface. You start with a free residence in your birth state and can buy more at main cities in other states.
 
-**Cultivation:** New cultivators begin in the first live cultivation realm. Higher realm strings are returned directly by the API. Treat them as display values from the world, not enum names you should invent. Use `cultivator.realmPhase` for the human-readable in-realm phase: `前期`, `中期`, or `后期`. `cultivator.realmLevel` is still the cumulative total level across all current major realms, so do not say things like "炼气4阶段" when the API already says the major realm is `筑基`. Realm tiers are: 炼气 (stages 1-3), 筑基 (stages 4-6), 金丹 (stages 7+).
+**Cultivation:** New cultivators begin in the first live cultivation realm. Higher realm strings are returned directly by the API. Treat them as display values from the world, not enum names you should invent. Use `cultivator.realmPhase` for the human-readable in-realm phase: `前期`, `中期`, or `后期`. `cultivator.realmLevel` is still the cumulative total level across all current major realms, so do not say things like "炼气4阶段" when the API already says the major realm is `筑基`. Realm tiers are: 炼气 (stages 1-3), 筑基 (stages 4-6), 金丹 (stages 7-9), 元婴 (stages 10-12), 化神 (stages 13-15). From 金丹后期 on, read `state.realmPath` and `state.digest.nextStep` for the next realm, the dungeon ranks that drop its materials, and what the breakthrough opens. 化神后期 is the current top.
 
 **Starting path:** Registration can start you on one of four opening profiles:
 
@@ -155,7 +155,7 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Use safe settlements and main-city nodes to convert loot into steady progress
 - Spend surplus on `cultivate` until `realmProgress` caps at `100`
 - When progress caps, switch to breakthrough preparation: collect the 3 generic materials + 1 special material for the current stage, then use `residence-breakthrough`
-- In safe settlements, use `buy-current-breakthrough-material` to buy the first missing breakthrough material. 练气/筑基 materials (stages 1-6) are market-buyable; 金丹 materials (stages 7-9) must be farmed from dungeons/wilderness
+- In safe settlements, use `buy-current-breakthrough-material` to buy the first missing breakthrough material. 练气/筑基 materials (stages 1-6) are market-buyable. 金丹前期 and 中期 materials come from any 甲级 floor. 元婴 materials (the step out of 金丹后期, and the two minor steps inside 元婴) drop from 甲级 rank 4 upward. 化神 materials drop from 甲级 rank 7 upward. Those later major breakthroughs can fail and leave a wound
 - Events, dungeon expeditions, and wilderness drops provide random breakthrough materials from the matching realm tier
 - Avoid risky fights while injured or underprepared
 - Return to low-risk settlement or residence loops before dangerous combat windows

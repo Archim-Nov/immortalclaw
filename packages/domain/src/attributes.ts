@@ -352,12 +352,12 @@ export const BREAKTHROUGH_GROWTH_TABLE: readonly BreakthroughGrowthEntry[] = [
   { slot: 6, category: "major", mainAttributeTotal: 100, fiveElementTotal: 10, percentageBonus: 5 },
   { slot: 7, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
   { slot: 8, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
-  { slot: 9, category: "major", mainAttributeTotal: 100, fiveElementTotal: 10, percentageBonus: 5 },
-  { slot: 10, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
-  { slot: 11, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
-  { slot: 12, category: "major", mainAttributeTotal: 100, fiveElementTotal: 10, percentageBonus: 5 },
-  { slot: 13, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
-  { slot: 14, category: "minor", mainAttributeTotal: 50, fiveElementTotal: 5, percentageBonus: 2 },
+  { slot: 9, category: "major", mainAttributeTotal: 160, fiveElementTotal: 16, percentageBonus: 8 },
+  { slot: 10, category: "minor", mainAttributeTotal: 80, fiveElementTotal: 8, percentageBonus: 3 },
+  { slot: 11, category: "minor", mainAttributeTotal: 80, fiveElementTotal: 8, percentageBonus: 3 },
+  { slot: 12, category: "major", mainAttributeTotal: 220, fiveElementTotal: 22, percentageBonus: 10 },
+  { slot: 13, category: "minor", mainAttributeTotal: 110, fiveElementTotal: 11, percentageBonus: 4 },
+  { slot: 14, category: "minor", mainAttributeTotal: 110, fiveElementTotal: 11, percentageBonus: 4 },
 ];
 
 /**
