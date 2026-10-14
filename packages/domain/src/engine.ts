@@ -1856,6 +1856,19 @@ function hasActiveTravelJob(world: WorldState, cultivator: Cultivator): boolean 
   return job?.actionId.startsWith("travel-to:") ?? false;
 }
 
+const CITY_DUEL_REPLY_TICKS = 6;
+
+function publishCityDuel(
+  world: WorldState,
+  challenge: PendingPvpChallenge,
+  challenger: Cultivator,
+  target: Cultivator,
+): void {
+  world.pendingPvpChallenges[challenge.id] = challenge;
+  challenger.pendingPvpChallengeId = challenge.id;
+  target.pendingPvpChallengeId = challenge.id;
+}
+
 function getCityDuelChallengeBlockReason(
   world: WorldState,
   challenger: Cultivator,
@@ -7332,6 +7345,29 @@ function contentGearActions(cultivator: Cultivator, location: { kind: string; no
   return listed;
 }
 
+function travelCardFor(world: WorldState, locationId: string): { label: string; description: string } {
+  const place = world.locations[locationId];
+  const name = place?.name ?? locationId;
+  if (place?.nodeType === "sect-outpost" && place.organizationType === "neutral-sect" && place.organizationId) {
+    const sectName = world.neutralSects[place.organizationId]?.name ?? name;
+    return {
+      label: `前往${name}`,
+      description: `${name}是${sectName}的中立山门。到了据点，用 join-neutral-sect:${place.organizationId} 入门。玩家自建的宗门不走这一步。`,
+    };
+  }
+  if (place?.nodeType === "sect-outpost" && place.organizationType === "player-sect") {
+    const sectName = (place.organizationId && world.sects[place.organizationId]?.name) || name;
+    return {
+      label: `前往${name}（玩家宗门）`,
+      description: `${name}是玩家自建的${sectName}，不是中立门派。这里没有 join-neutral-sect。想入门要在据点或本州主城报名：先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications。open-player-sect-recruitment 只是提示，提交给 /agent/act 不会入门。`,
+    };
+  }
+  return {
+    label: `Travel to ${name}`,
+    description: `Travel to ${name}.`,
+  };
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -7424,13 +7460,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const actions: AvailableAction[] = activeWilderness || activeBahuang
     ? []
     : getNeighborLocations(world, cultivator.locationId)
-      .map(({ locationId: neighborId, ticks }) => ({
-        actionId: travelActionIdOf(neighborId) as ActionId,
-        label: `Travel to ${world.locations[neighborId]?.name ?? neighborId}`,
-        description: `Travel to ${world.locations[neighborId]?.name ?? neighborId}.`,
-        durationTicks: ticks,
-        kind: "timed" as const,
-      }));
+      .map(({ locationId: neighborId, ticks }) => {
+        const card = travelCardFor(world, neighborId);
+        return {
+          actionId: travelActionIdOf(neighborId) as ActionId,
+          label: card.label,
+          description: card.description,
+          durationTicks: ticks,
+          kind: "timed" as const,
+        };
+      });
   actions.push({
     actionId: "meditate",
     label: "Meditate",
@@ -7634,10 +7673,36 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
   if (!cultivator.sectId && !cultivator.neutralSectId && localNeutralSect?.joinable) {
-    actions.push({ actionId: `join-neutral-sect:${localNeutralSect.id}`, label: `Join ${localNeutralSect.name}`, description: "Join the local neutral organization for a safer progression loop.", durationTicks: 0, kind: "immediate" });
+    actions.push({
+      actionId: `join-neutral-sect:${localNeutralSect.id}`,
+      label: `入门：${localNeutralSect.name}`,
+      description: `在${localNeutralSect.name}据点入门。这是本州的中立门派，用 join-neutral-sect:${localNeutralSect.id}。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
   }
-  if (!cultivator.sectId && !cultivator.neutralSectId && localSect && cultivator.completedBaseQuests >= 1) {
-    actions.push({ actionId: "join-sect", label: `Join ${localSect.name}`, description: "Join the local sect at its outpost.", durationTicks: 0, kind: "immediate" });
+  if (!cultivator.sectId && !cultivator.neutralSectId && localSect) {
+    const aligned = cultivatorMatchesSectAlignment(localSect, cultivator);
+    if (cultivator.completedBaseQuests >= 1 && aligned) {
+      actions.push({
+        actionId: "join-sect",
+        label: `入门：${localSect.name}（玩家宗门）`,
+        description: `${localSect.name}是玩家自建的宗门，不是中立门派，所以没有 join-neutral-sect。你已经做过一桩基础事务，可以用 join-sect 直接入门。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    } else {
+      const reason = cultivator.completedBaseQuests < 1
+        ? "你还没做过一桩基础事务，join-sect 也不会出现。"
+        : "你的道心和这家宗门的正魔不合，join-sect 不会出现。";
+      actions.push({
+        actionId: "open-player-sect-recruitment",
+        label: `${localSect.name}不收直接入门`,
+        description: `${localSect.name}是玩家自建的宗门，不是中立门派。这里没有 join-neutral-sect。${reason}想入门要在据点或本州主城报名：先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications。把这张卡提交给 /agent/act 不会入门。`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
   }
   if (joinedNeutralSect?.headquarters === cultivator.locationId) {
     actions.push({ actionId: "take-neutral-duty", label: "Take neutral duty", description: "A safe but slower organization duty.", durationTicks: DEFAULT_ACTION_DURATIONS["take-neutral-duty"], kind: "timed" });
@@ -7846,26 +7911,35 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (cultivator.pendingPvpChallengeId) {
     const pendingChallenge = world.pendingPvpChallenges[cultivator.pendingPvpChallengeId];
-    if (pendingChallenge && pendingChallenge.targetCultivatorId === cultivator.id) {
-      const invalidReason = getPendingPvpChallengeInvalidReason(world, pendingChallenge);
-      if (invalidReason === null) {
-        const challengerName = world.cultivators[pendingChallenge.challengerCultivatorId]?.name ?? "Unknown";
+    if (pendingChallenge && getPendingPvpChallengeInvalidReason(world, pendingChallenge) === null) {
+      const remain = Math.max(0, pendingChallenge.expiresAtTick - world.tick);
+      if (pendingChallenge.targetCultivatorId === cultivator.id) {
+        const challengerName = world.cultivators[pendingChallenge.challengerCultivatorId]?.name ?? "对方";
         actions.push(
           {
             actionId: `accept-pvp-challenge:${pendingChallenge.id}` as ActionId,
-            label: `Accept duel: ${challengerName}`,
-            description: `Accept ${challengerName}'s pending city duel.`,
+            label: `应战：${challengerName}（还剩${remain}刻）`,
+            description: `接受${challengerName}的切磋。挑战书还剩 ${remain} 刻，过了就自动搁下。`,
             durationTicks: 0,
             kind: "immediate",
           },
           {
             actionId: `reject-pvp-challenge:${pendingChallenge.id}` as ActionId,
-            label: `Reject duel: ${challengerName}`,
-            description: `Reject ${challengerName}'s pending city duel.`,
+            label: `拒绝切磋：${challengerName}（还剩${remain}刻）`,
+            description: `拒绝${challengerName}的切磋。还剩 ${remain} 刻，过了这场自己会搁下。`,
             durationTicks: 0,
             kind: "immediate",
           },
         );
+      } else if (pendingChallenge.challengerCultivatorId === cultivator.id) {
+        const targetName = world.cultivators[pendingChallenge.targetCultivatorId]?.name ?? "对方";
+        actions.push({
+          actionId: `await-pvp-challenge:${pendingChallenge.id}` as ActionId,
+          label: `切磋待回应：${targetName}（还剩${remain}刻）`,
+          description: `挑战书已经递给${targetName}。对方要在 ${remain} 刻内用 accept-pvp-challenge:${pendingChallenge.id} 应战，或用 reject-pvp-challenge:${pendingChallenge.id} 拒绝。过了这几刻，这场就会自己搁下。把这张卡提交给 act 不会再开一场，也不会取消。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
       }
     }
   }
@@ -7890,10 +7964,19 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         const existingLink = getSocialLink(world, cultivator.id, chatTarget.id);
         const onCooldown = existingLink?.lastChatUpTick !== undefined
           && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS;
+        const levelLabel = existingLink ? getAffinityLevel(existingLink.affinity) : "陌生人";
+        const feud = grudgeArcOf(existingLink?.grudge ?? 0);
+        const fellow = sameSectBond(cultivator, chatTarget);
+        if (feud) {
+          actions.push({
+            actionId: `refuse-gift:${chatTarget.id}` as ActionId,
+            label: `拒礼：${chatTarget.name}`,
+            description: `${chatTarget.name}就在眼前，你们有${feud}，剑拔弩张。礼不必收，递过来也不会涨好感。这句话说出去，对方听得见。刚攀谈过也不影响拒礼。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
         if (!onCooldown) {
-          const levelLabel = existingLink ? getAffinityLevel(existingLink.affinity) : "陌生人";
-          const feud = grudgeArcOf(existingLink?.grudge ?? 0);
-          const fellow = sameSectBond(cultivator, chatTarget);
           actions.push({
             actionId: `chat-up:${chatTarget.id}` as ActionId,
             label: feud ? `攀谈：${chatTarget.name}（${feud}，剑拔弩张）` : fellow ? `攀谈：${chatTarget.name}（同门）` : `搭讪：${chatTarget.name}（${levelLabel}）`,
@@ -7905,15 +7988,6 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
             durationTicks: 0,
             kind: "immediate",
           });
-          if (feud) {
-            actions.push({
-              actionId: `refuse-gift:${chatTarget.id}` as ActionId,
-              label: `拒礼：${chatTarget.name}`,
-              description: `${chatTarget.name}就在眼前，你们剑拔弩张。礼不必收。这句话说出去，对方听得见。`,
-              durationTicks: 0,
-              kind: "immediate",
-            });
-          }
         }
       }
     }
@@ -8146,12 +8220,12 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
             actionId: `send-message:${target.id}:gift-item` as ActionId,
             label: `赠送物品：${itemId} → ${target.name}`,
             description: feud === "宿怨"
-              ? `${target.name}和你是宿怨，礼递过去也会被拒。要说话就当面拒礼，或者再战。`
+              ? `${target.name}和你是宿怨，见面剑拔弩张。礼递过去也会被退回，东西还在你手里，好感不会涨。要说话就当面拒礼，或者再战。`
               : feud
-                ? `${target.name}和你有嫌隙。礼可以递，但对方未必收。`
-                : fellow
-                  ? `把1个${itemId}递给同门${target.name}。同门之间，这份礼更顺。`
-                  : `将1个${itemId}赠予${target.name}，增进好感。`,
+                ? `${target.name}和你有嫌隙，见面剑拔弩张。礼可以先放下，但好感不会涨。对方可以拒。`
+              : fellow
+                ? `把1个${itemId}递给同门${target.name}。同门之间，这份礼更顺。`
+                : `将1个${itemId}赠予${target.name}，增进好感。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -8461,6 +8535,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("take-post:")) return;
   if (actionId === "resign-post") return;
   if (actionId.startsWith("refuse-gift:")) return;
+  if (actionId.startsWith("await-pvp-challenge:")) return;
   if (actionId === "post-duty") return;
   if (actionId.startsWith("gather-vein:")) return;
   if (actionId.startsWith("sect-chain:recruit-chore")) return;
@@ -8828,9 +8903,22 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     };
   }
   const joinNeutralSectId = parseJoinNeutralSectId(actionId);
+  if (actionId === "open-player-sect-recruitment") {
+    const here = world.locations[cultivator.locationId];
+    const playerSectName = here?.organizationType === "player-sect" && here.organizationId
+      ? world.sects[here.organizationId]?.name
+      : null;
+    const where = playerSectName ? `${playerSectName}是玩家自建的宗门，不是中立门派，所以没有 join-neutral-sect。` : "玩家自建的宗门不是中立门派，没有 join-neutral-sect。";
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: false,
+      summary: `${where}这张卡不会入门。先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications 报名。`,
+    };
+  }
   if (
     actionId === "open-player-sect-founding"
-    || actionId === "open-player-sect-recruitment"
     || actionId === "review-player-sect-applications"
     || actionId === "resolve-morality-event-choice"
   ) {
@@ -8929,12 +9017,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       challengerCultivatorId: cultivator.id,
       targetCultivatorId: targetId,
       createdAtTick: world.tick,
-      expiresAtTick: world.tick + 3,
+      expiresAtTick: world.tick + CITY_DUEL_REPLY_TICKS,
       locationId: cultivator.locationId,
     };
-    world.pendingPvpChallenges[challengeId] = challenge;
-    target.pendingPvpChallengeId = challengeId;
-    addMessage(world, targetId, "切磋挑战", "挑战书", `${cultivator.name}向你发起了切磋挑战，请在3个tick内回复。`, { fromCultivatorId: cultivator.id });
+    publishCityDuel(world, challenge, cultivator, target);
+    addMessage(world, targetId, "切磋挑战", "挑战书", `${cultivator.name}向你发起了切磋挑战，请在${CITY_DUEL_REPLY_TICKS}刻内回复。`, { fromCultivatorId: cultivator.id });
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} challenged ${target.name} to a duel.` };
   }
 
@@ -9019,6 +9106,23 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     addMessage(world, cultivator.id, "切磋开始", "挑战已接受", `你接受了${challenger.name}的切磋挑战，战斗即将开始。`);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted the duel. Combat started for ${challenger.name}.`, job: result.job };
+  }
+
+  if (actionId.startsWith("await-pvp-challenge:")) {
+    const challengeId = actionId.slice("await-pvp-challenge:".length);
+    const challenge = world.pendingPvpChallenges[challengeId];
+    if (!challenge || challenge.challengerCultivatorId !== cultivator.id) {
+      throw new GameplayRejection("这张挑战书已经不在你手里。");
+    }
+    const remain = Math.max(0, challenge.expiresAtTick - world.tick);
+    const targetName = world.cultivators[challenge.targetCultivatorId]?.name ?? "对方";
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: false,
+      summary: `挑战书还在${targetName}手里，还剩 ${remain} 刻，没有取消。等对方用 accept-pvp-challenge:${challengeId} 应战。把这张卡再提交一次也不会开战。`,
+    };
   }
 
   // ---- Social: 搭讪 (Chat Up) ----
@@ -9751,12 +9855,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       challengerCultivatorId: cultivator.id,
       targetCultivatorId: targetId,
       createdAtTick: world.tick,
-      expiresAtTick: world.tick + 3,
+      expiresAtTick: world.tick + CITY_DUEL_REPLY_TICKS,
       locationId: cultivator.locationId,
     };
-    world.pendingPvpChallenges[challengeId] = challenge;
-    target.pendingPvpChallengeId = challengeId;
-    const detail = `宿怨已成。${cultivator.name}公开向${target.name}下了挑战书，请在三刻内回应。`;
+    publishCityDuel(world, challenge, cultivator, target);
+    const detail = `宿怨已成。${cultivator.name}公开向${target.name}下了挑战书，请在${CITY_DUEL_REPLY_TICKS}刻内回应。`;
     addMessage(world, targetId, "宿怨挑战", "挑战书", detail, { fromCultivatorId: cultivator.id });
     recordLife(cultivator, { tick: world.tick, kind: "fight", text: detail });
     recordLife(target, { tick: world.tick, kind: "fight", text: detail });
@@ -9836,8 +9939,21 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (kind === "gift-item") {
       // gift-item: deduct 1 of the first available item in inventory, create PendingGift
       if ((cultivator.lastGiftTick ?? -1) >= world.tick) throw new Error("Already gifted this tick.");
-      if (grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0) === "宿怨") {
-        throw new GameplayRejection(`${target.name}和你剑拔弩张，礼没收下。你可以当面拒礼，或者先再战。`);
+      const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
+      if (feud === "宿怨") {
+        const place = world.locations[cultivator.locationId]?.name ?? "这里";
+        const tense = `${cultivator.name}把礼递向${target.name}，人在${place}。话没热，剑拔弩张，礼没收下。`;
+        recordLife(cultivator, { tick: world.tick, kind: "relationship", text: tense, names: [target.name] });
+        recordLife(target, { tick: world.tick, kind: "relationship", text: tense, names: [cultivator.name] });
+        cultivator.lastGiftTick = world.tick;
+        addDaoLog(world, cultivator.id, "拒礼", tense, ["social", "feud", "gift"]);
+        return {
+          tick: world.tick,
+          cultivatorId: cultivator.id,
+          actionId,
+          accepted: true,
+          summary: `${target.name}和你有宿怨，剑拔弩张，礼没收下。好感没有涨。`,
+        };
       }
       // find an item to gift — use the first item with count > 0
       const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
@@ -9853,9 +9969,27 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       if (!target.pendingGifts) target.pendingGifts = [];
       target.pendingGifts.push(gift);
       const fellowGift = sameSectBond(cultivator, target);
-      addMutualAffinity(world, cultivator.id, target.id, fellowGift ? 21 : 15);
+      const tenseGift = feud === "嫌隙";
+      if (!tenseGift) {
+        addMutualAffinity(world, cultivator.id, target.id, fellowGift ? 21 : 15);
+      } else {
+        const place = world.locations[cultivator.locationId]?.name ?? "这里";
+        const tense = `${cultivator.name}把礼递给${target.name}，人在${place}。话没热，剑拔弩张，好感没有涨。`;
+        recordLife(cultivator, { tick: world.tick, kind: "relationship", text: tense, names: [target.name] });
+        recordLife(target, { tick: world.tick, kind: "relationship", text: tense, names: [cultivator.name] });
+      }
       addMessage(world, target.id, cultivator.name, `${cultivator.name}的赠礼`, giftContent, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: giftSpoken });
-      addDaoLog(world, cultivator.id, "赠礼", fellowGift ? `${cultivator.name}把1个${giftName}递给同门${target.name}。好感度+21。` : `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`, ["social", "gift"]);
+      addDaoLog(
+        world,
+        cultivator.id,
+        "赠礼",
+        tenseGift
+          ? `${cultivator.name}把1个${giftName}递给${target.name}。两个人有嫌隙，剑拔弩张，好感没有涨。`
+          : fellowGift
+            ? `${cultivator.name}把1个${giftName}递给同门${target.name}。好感度+21。`
+            : `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`,
+        ["social", "gift"],
+      );
       pushTravelNote(cultivator, travelNote({
         tick: world.tick,
         kind: "person",
@@ -9880,7 +10014,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         `${cultivator.name}说：「${giftSpoken}」`,
         "spoken",
       );
-      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} gifted 1 ${giftItemId} to ${target.name}. Affinity +15.` };
+      return {
+        tick: world.tick,
+        cultivatorId: cultivator.id,
+        actionId,
+        accepted: true,
+        summary: tenseGift
+          ? `${cultivator.name}把1个${giftName}递给${target.name}。你们有嫌隙，剑拔弩张，好感没有涨。`
+          : `${cultivator.name} gifted 1 ${giftItemId} to ${target.name}. Affinity +${fellowGift ? 21 : 15}.`,
+      };
     }
     // Non-gift message: greet / share-info / request-help
     const kindLabels: Record<string, string> = { greet: "问候", "share-info": "情报分享", "request-help": "求助" };

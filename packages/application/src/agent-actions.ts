@@ -38,10 +38,13 @@ export async function buildAuthenticatedAgentActions(options: {
   if (cultivator && !cultivator.sectId && !cultivator.neutralSectId) {
     const recruitment = listRecruitablePlayerSects(snapshot, agent.selectedCultivatorId, { limit: 1 });
     if (recruitment.sects.length > 0) {
+      const joinListed = baseActions.some((action) => action.actionId === "join-sect");
       genericActions.push({
         actionId: "open-player-sect-recruitment",
-        label: "Open player sect recruitment",
-        description: "Inspect player sects in the current state and decide whether to apply.",
+        label: "玩家宗门在收人",
+        description: joinListed
+          ? "行动里若有 join-sect，那就是眼前这家玩家宗门的直接入门，不是 join-neutral-sect。这张卡本身不要提交给 /agent/act。"
+          : "本州有玩家自建的宗门在收人。这不是中立门派，没有 join-neutral-sect。先 GET /agent/player-sects/recruitment 看名单，再 POST /agent/player-sect-applications 报名。不要把这张卡提交给 /agent/act。",
         durationTicks: 0,
         kind: "immediate",
       });

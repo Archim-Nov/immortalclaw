@@ -9,8 +9,8 @@ import {
   performAction,
   syncCultivatorFromPersona,
 } from "./index.js";
-import { GameplayRejection } from "./gameplay-error.js";
 import { getSocialLink, writeSocialLink } from "./social.js";
+import { buildFullTopology } from "./topology.js";
 
 const QI_ITEMS = ["condensed-qi-dew", "azure-stone-marrow", "meridian-lotus-essence"] as const;
 const CORE_ITEMS = ["flowing-aurora-core", "dragon-radiance-crystal", "core-nourish-dew"] as const;
@@ -176,9 +176,21 @@ test("a duel leaves 嫌隙, and the next meeting is tense", () => {
   second.injuryTicksRemaining = 0;
   second.activeJobId = null;
 
+  const challengedAt = world.tick;
   performAction(world, first.id, `challenge-cultivator:${second.id}`);
   const challengeId = second.pendingPvpChallengeId;
   assert.ok(challengeId);
+  assert.equal(first.pendingPvpChallengeId, challengeId);
+  assert.equal(world.pendingPvpChallenges[challengeId]?.expiresAtTick, challengedAt + 6);
+  const waiting = listAvailableActions(world, first.id).find((action) => action.actionId === `await-pvp-challenge:${challengeId}`);
+  assert.match(waiting?.description ?? "", /6 刻/);
+  assert.match(waiting?.label ?? "", /还剩6刻/);
+  const accept = listAvailableActions(world, second.id).find((action) => action.actionId === `accept-pvp-challenge:${challengeId}`);
+  assert.match(accept?.label ?? "", /还剩6刻/);
+  const held = performAction(world, first.id, `await-pvp-challenge:${challengeId}`);
+  assert.equal(held.accepted, false);
+  assert.match(held.summary, /没有取消/);
+  assert.equal(world.pendingPvpChallenges[challengeId]?.id, challengeId);
   performAction(world, second.id, `accept-pvp-challenge:${challengeId}`);
   runUntilIdle(world, first.id);
 
@@ -197,17 +209,117 @@ test("a duel leaves 嫌隙, and the next meeting is tense", () => {
   const said = (first.travelNotes ?? []).map((note) => note.detail).join("");
   assert.match(said, /那一架|再战|不收|说硬/);
   assert.match(getCultivatorState(world, first.id).digest?.summary ?? "", /剑拔弩张/);
+  assert.equal(actionIds(world, first.id).has(`refuse-gift:${second.id}`), true);
+
+  const beforeAffinity = getSocialLink(world, first.id, second.id)?.affinity ?? 0;
+  const beforePills = first.inventory["healing-pill"] ?? 0;
+  first.inventory["healing-pill"] = beforePills + 1;
+  first.lastGiftTick = -1;
+  const cooled = performAction(world, first.id, `send-message:${second.id}:gift-item`);
+  assert.equal(cooled.accepted, true);
+  assert.match(cooled.summary, /嫌隙/);
+  assert.match(cooled.summary, /剑拔弩张/);
+  assert.match(cooled.summary, /好感没有涨/);
+  assert.equal(getSocialLink(world, first.id, second.id)?.affinity, beforeAffinity);
+  assert.equal(first.inventory["healing-pill"], beforePills);
+  assert.equal((second.pendingGifts ?? []).some((gift) => gift.fromCultivatorId === first.id), true);
+  assert.match(getCultivatorState(world, first.id).digest?.summary ?? "", /剑拔弩张/);
+  assert.match(getCultivatorState(world, first.id).digest?.summary ?? "", /好感没有涨/);
+  assert.equal(actionIds(world, first.id).has(`refuse-gift:${second.id}`), true);
 
   const fresh = getSocialLink(world, first.id, second.id);
-  if (fresh && (fresh.grudge ?? 0) < 18) {
+  if (fresh) {
     writeSocialLink(world, first.id, { ...fresh, grudge: 18 });
     const back = getSocialLink(world, second.id, first.id);
     if (back) writeSocialLink(world, second.id, { ...back, grudge: 18 });
   }
   first.inventory["healing-pill"] = (first.inventory["healing-pill"] ?? 0) + 1;
+  const pillsBeforeFeud = first.inventory["healing-pill"] ?? 0;
   first.lastGiftTick = -1;
-  assert.throws(
-    () => performAction(world, first.id, `send-message:${second.id}:gift-item`),
-    (error: unknown) => error instanceof GameplayRejection && /剑拔弩张|拒/.test((error as Error).message),
-  );
+  const feudGift = performAction(world, first.id, `send-message:${second.id}:gift-item`);
+  assert.match(feudGift.summary, /宿怨/);
+  assert.match(feudGift.summary, /礼没收下/);
+  assert.match(feudGift.summary, /好感没有涨/);
+  assert.equal(getSocialLink(world, first.id, second.id)?.affinity, beforeAffinity);
+  assert.equal(first.inventory["healing-pill"], pillsBeforeFeud);
+  assert.match(getCultivatorState(world, first.id).digest?.summary ?? "", /礼没收下/);
+});
+
+test("a player-sect outpost does not offer a neutral join", () => {
+  const world = createSeedWorld();
+  const sectId = "天南散修盟";
+  const headquarters = "yangzhou:sect-outpost:天南散修盟";
+  world.sects[sectId] = {
+    id: sectId,
+    name: "天南散修盟",
+    alignment: "正道",
+    stateId: "yangzhou",
+    founderCultivatorId: "yun-zhong-he",
+    treasury: 8000,
+    memberIds: [],
+    spiritVeins: [],
+    headquarters,
+    titleSlots: [
+      { title: "外门", threshold: 0, maxSlots: Number.POSITIVE_INFINITY },
+      { title: "内门", threshold: 200, maxSlots: 32 },
+      { title: "精英", threshold: 600, maxSlots: 16 },
+      { title: "长老", threshold: 1500, maxSlots: 4 },
+      { title: "宗主", threshold: Number.POSITIVE_INFINITY, maxSlots: 1 },
+    ],
+    titleUpdateInterval: 2880,
+    lastTitleUpdateTick: 0,
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+    admissionPolicyUpdatedAtTick: 0,
+  };
+  world.locations[headquarters] = {
+    id: headquarters,
+    stateId: "yangzhou",
+    nodeType: "sect-outpost",
+    name: "天南散修盟据点",
+    kind: "safe",
+    risk: "low",
+    description: "玩家自建的天南散修盟据点。",
+    organizationId: sectId,
+    organizationType: "player-sect",
+  };
+  if (!world.states.yangzhou.locationIds.includes(headquarters)) {
+    world.states.yangzhou.locationIds.push(headquarters);
+  }
+  world.topology = buildFullTopology(world.locations) as typeof world.topology;
+
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.locationId = "yangzhou:main-city";
+  cultivator.activeJobId = null;
+  const fromCity = listAvailableActions(world, cultivator.id);
+  const playerTravel = fromCity.find((action) => action.actionId === `travel-to:${headquarters}`);
+  const neutralTravel = fromCity.find((action) => action.actionId === "travel-to:yangzhou:sect-outpost:ting-chao-ge");
+  assert.match(playerTravel?.label ?? "", /玩家宗门/);
+  assert.match(playerTravel?.description ?? "", /没有 join-neutral-sect/);
+  assert.match(playerTravel?.description ?? "", /报名/);
+  assert.match(neutralTravel?.description ?? "", /join-neutral-sect:ting-chao-ge/);
+
+  cultivator.locationId = headquarters;
+  const stuck = listAvailableActions(world, cultivator.id);
+  assert.equal(stuck.some((action) => action.actionId.startsWith("join-neutral-sect:")), false);
+  assert.equal(stuck.some((action) => action.actionId === "join-sect"), false);
+  const card = stuck.find((action) => action.actionId === "open-player-sect-recruitment");
+  assert.match(card?.description ?? "", /玩家自建/);
+  assert.match(card?.description ?? "", /没有 join-neutral-sect/);
+  assert.match(card?.description ?? "", /基础事务/);
+  const posted = performAction(world, cultivator.id, "open-player-sect-recruitment");
+  assert.equal(posted.accepted, false);
+  assert.match(posted.summary, /天南散修盟/);
+  assert.match(posted.summary, /不会入门/);
+  assert.equal(cultivator.sectId, null);
+  assert.equal(cultivator.neutralSectId, null);
+
+  cultivator.completedBaseQuests = 1;
+  const ready = listAvailableActions(world, cultivator.id);
+  const join = ready.find((action) => action.actionId === "join-sect");
+  assert.match(join?.description ?? "", /玩家自建/);
+  assert.match(join?.description ?? "", /没有 join-neutral-sect/);
+  assert.equal(ready.some((action) => action.actionId.startsWith("join-neutral-sect:")), false);
 });
