@@ -771,6 +771,7 @@ export interface CultivatorMood {
 }
 
 export type LifeEventKind = "growth" | "fight" | "relationship" | "mood" | "quote";
+export type LifeTopic = "favor" | "note" | "gossip" | "sect" | "bond" | "repay" | "reunite";
 
 export interface LifeEvent {
   tick: number;
@@ -778,6 +779,8 @@ export interface LifeEvent {
   text: string;
   speakerName?: string;
   line?: string;
+  topic?: LifeTopic;
+  names?: string[];
 }
 
 export interface CultivatorDigest {
@@ -905,6 +908,15 @@ export interface GossipView {
   kind: GossipKind;
   text: string;
   shortLine: string;
+  tick: number;
+}
+
+export interface OwedFavorView {
+  id: string;
+  otherId: string;
+  otherName: string;
+  direction: "they-owe" | "you-owe";
+  reason: string;
   tick: number;
 }
 
@@ -1133,6 +1145,7 @@ export type ImmediateActionId =
   | `join-sect-task:${string}`
   | `guide-junior:${string}`
   | `mention-gossip:${string}:${string}`
+  | `wait-for:${string}`
   | `dungeon-wake-decision:${string}`
   | `bahuang-wake-decision:${string}`;
 
@@ -1345,6 +1358,8 @@ export interface Cultivator {
   socialCooldowns?: Record<string, number>;
   /** Set when someone stands watch for a breakthrough. Absent until then. */
   breakthroughWatch?: { guardId: string; guardName: string; untilTick: number };
+  /** Set while this cultivator is waiting for a party mate or favor partner to arrive. */
+  waitingFor?: { targetId: string; sinceTick: number; placeId: string };
   /** Sect diary chain, 0–2 while climbing, reset after the elder notice. */
   sectDiaryStep?: number;
   /** Chosen party role, kept only while the loadout can still stand there. */
@@ -1575,6 +1590,8 @@ export interface Message {
   content: string;
   /** The words actually spoken, when this message carries a line. */
   spokenLine?: string;
+  /** Set once this spoken line has been answered, so a later reply cannot pick it up. */
+  spokenAnswered?: boolean;
 }
 
 export interface WorldEvent {
@@ -2474,6 +2491,8 @@ export interface CultivatorStateView {
   sectBoard?: SectNoticeView[];
   /** Gossip heard from nearby cultivators. Omitted when empty. */
   gossip?: GossipView[];
+  /** Favors still owed, with a short reason an agent can quote. Omitted when empty. */
+  owedFavors?: OwedFavorView[];
   /** Unanswered spoken lines. Omitted by older view fixtures. */
   pendingDialogue?: Array<{
     fromId: string;

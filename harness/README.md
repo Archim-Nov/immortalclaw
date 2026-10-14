@@ -34,6 +34,8 @@ Named aftermath notes, harder rank 3 packs, and a wound a teammate can tend: `ha
 A spoken line on chat, gift, and a doorway call, plus one reply: `harness/scenarios/social-spoken-lines.md`.
 A shared dungeon copies `combatRounds` onto each companion, and the closing note names a role, a skill, a spoken line, and a tended wound: `harness/scenarios/companion-shared-report.md`.
 A personal favor, a note left for someone away, and a rumor a neighbor can repeat: `harness/scenarios/social-deepen.md`.
+
+A favor repaid in words, a digest that names the people, and a reunion after travel: `harness/scenarios/favor-chains.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

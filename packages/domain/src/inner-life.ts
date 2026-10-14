@@ -213,6 +213,7 @@ function writePairNote(
   title: string,
   detail: string,
   mood: string,
+  topic: "bond" | "repay" = "bond",
 ): void {
   for (const person of [a, b]) {
     pushTravelNote(person, travelNote({
@@ -223,7 +224,7 @@ function writePairNote(
       locationId: person.locationId,
       mood,
     }));
-    recordLife(person, { tick: world.tick, kind: "relationship", text: detail });
+    recordLife(person, { tick: world.tick, kind: "relationship", text: detail, topic, names: [a.name, b.name] });
   }
 }
 
@@ -285,7 +286,10 @@ export function spreadNearbyGossip(
       locationId: person.locationId,
       mood: "耳朵里多了一句",
     }));
-    recordLife(person, { tick: world.tick, kind: "relationship", text });
+    const names = aboutIds
+      .map((id) => world.cultivators[id]?.name)
+      .filter((name): name is string => Boolean(name));
+    recordLife(person, { tick: world.tick, kind: "relationship", text, topic: "gossip", names });
   }
 }
 
@@ -364,7 +368,8 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
   const recent = (cultivator.lifeLog ?? []).filter((event) => event.tick > windowStart && event.tick <= world.tick);
   const growth = recent.filter((event) => event.kind === "growth").map((event) => event.text).slice(0, 4);
   const fights = recent.filter((event) => event.kind === "fight").map((event) => event.text).slice(0, 4);
-  const relationships = recent.filter((event) => event.kind === "relationship").map((event) => event.text).slice(0, 4);
+  const relationshipEvents = recent.filter((event) => event.kind === "relationship");
+  const relationships = relationshipEvents.map((event) => event.text).slice(0, 4);
   const seenQuotes = new Set<string>();
   const quotes: Array<CultivatorDigest["quotes"][number]> = [];
   for (const event of recent) {
@@ -385,7 +390,7 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
     fights,
     relationships,
     quotes,
-    summary: summarizeDigest(cultivator.name, mood, growth, fights, relationships, quotes),
+    summary: summarizeDigest(cultivator.name, mood, growth, fights, relationshipEvents, quotes),
   };
 }
 
@@ -394,15 +399,35 @@ function summarizeDigest(
   mood: CultivatorMood,
   growth: readonly string[],
   fights: readonly string[],
-  relationships: readonly string[],
+  relationshipEvents: readonly LifeEvent[],
   quotes: readonly { speakerName: string; line: string }[],
 ): string {
-  const news = [...relationships, ...fights, ...growth].slice(0, 4);
-  const said = quotes.slice(0, 2).map((quote) => `${quote.speakerName}说过：「${quote.line}」`);
-  if (news.length === 0 && said.length === 0) {
+  const socialTexts = relationshipEvents.map((event) => event.text).slice(0, 3);
+  const named: string[] = [];
+  for (const event of relationshipEvents) {
+    for (const person of event.names ?? []) {
+      if (!person || person === name || named.includes(person)) continue;
+      named.push(person);
+      if (named.length >= 3) break;
+    }
+    if (named.length >= 3) break;
+  }
+  const quote = quotes[0];
+  if (socialTexts.length === 0 && fights.length === 0 && growth.length === 0 && !quote) {
     return `${name}最近六个时辰过得平常，没有特别要报的事。${mood.sentence}`;
   }
-  return [`${name}最近六个时辰里有这些事。`, ...news, ...said, mood.sentence].join("");
+  const parts = [`${name}最近六个时辰里有这些事。`];
+  if (named.length > 0) parts.push(`说到的人有${named.join("、")}。`);
+  if (socialTexts.length > 0) {
+    parts.push(...socialTexts);
+    if (fights[0]) parts.push(fights[0]);
+  } else {
+    if (fights[0]) parts.push(fights[0]);
+    if (growth[0]) parts.push(growth[0]);
+  }
+  if (quote) parts.push(`${quote.speakerName}说过：「${quote.line}」`);
+  parts.push(mood.sentence);
+  return parts.join("");
 }
 
 export function crossedBondStages(before: number, after: number): BondArc[] {
