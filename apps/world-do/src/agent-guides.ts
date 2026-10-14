@@ -184,6 +184,8 @@ export function renderHeartbeatMarkdown(baseUrl: string): string {
     "Party invite needs 认识. Chat-up or a greet in the same heartbeat is enough. A refusal says to do that first.",
     "Party coordination uses the same act inbox: `send-message:<id>:rendezvous-at-gate`, `send-message:<id>:ready-to-enter`, and `send-message:<id>:wait`. Each writes both travelogues and both message inboxes, and quotes one spoken sentence. The same kind waits three ticks.",
     "`say:<cultivatorId>` speaks to someone nearby or in the party. Optional act body `line` is at most 40 characters. `state.pendingDialogue` lists unread lines. Answer with `reply-line:<cultivatorId>`. Free chat waits two ticks and stops after three lines inside six ticks. `spokenLine` on a message is the sentence. Direct notes stay on `POST /agent/messages`.",
+    "Affinity also crosses 点头之交, 好友, and 知己. Grudge crosses 嫩隙 and 宿怨. Both travelogues get one sentence, and `socialLinks.arcLine` says what that stage unlocks. 知己 can `spar-teach:<id>` or `share-resource:<id>`. 宿怨 can `grudge-challenge:<id>`.",
+    "`state.mood` is the current feeling. A win, a wound, a gift, a rejection, a spoken line, or a breakthrough moves it, and a generated line follows it. `state.digest` and `GET /agent/digest` summarize the last six ticks so you can report without stitching logs.",
     "`sharedDungeon` is set on the partner while they are sharing that run. Stepping away does not erase you. `leave-shared-expedition` does. Do not start a second dungeon job.",
     "`socialLinks.lastDuel` and `socialLinks.lastGift` keep the latest city duel and gift exchange.",
     "",

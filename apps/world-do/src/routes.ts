@@ -509,6 +509,20 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     return context.json(await buildAuthenticatedAgentState({ world, agent }));
   });
 
+  app.get("/agent/digest", async (context) => {
+    const world = context.get("world");
+    const auth = context.get("auth");
+    const agent = await readAuthenticatedAgent(context.req.raw, auth);
+    const state = await buildAuthenticatedAgentState({ world, agent });
+    return context.json(state.digest ?? {
+      windowTicks: 6,
+      windowHours: 12,
+      fromTick: state.tick,
+      toTick: state.tick,
+      summary: "最近六个时辰过得平常。",
+    });
+  });
+
   app.get("/agent/actions", async (context) => {
     const world = context.get("world");
     const auth = context.get("auth");
