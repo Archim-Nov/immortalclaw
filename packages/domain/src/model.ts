@@ -174,6 +174,24 @@ export interface MoralityChoiceTemplate {
   options: readonly [MoralityChoiceOption, MoralityChoiceOption];
 }
 
+export interface SceneChoiceOption {
+  id: string;
+  label: string;
+  summary: string;
+  effectBundle: EventEffect;
+}
+
+export type SceneChoiceOptionList =
+  | readonly [SceneChoiceOption, SceneChoiceOption, SceneChoiceOption]
+  | readonly [SceneChoiceOption, SceneChoiceOption, SceneChoiceOption, SceneChoiceOption];
+
+export interface SceneChoiceTemplate {
+  title: string;
+  prompt: string;
+  expiresInTicks: number;
+  options: SceneChoiceOptionList;
+}
+
 export interface EventTemplate {
   id: string;
   layer: "global-common" | "state-specific" | "node-specific" | "special-overlay";
@@ -193,6 +211,7 @@ export interface EventTemplate {
   maxDungeonRank?: DungeonRank | null;
   effects: EventEffect;
   moralityChoice?: MoralityChoiceTemplate;
+  sceneChoice?: SceneChoiceTemplate;
   encounterBuildId?: import("./encounters/catalog.js").EncounterBuildId | null;
   combatMode?: "light" | "full" | null;
 }
@@ -1216,6 +1235,7 @@ export type ImmediateActionId =
   | "open-player-sect-recruitment"
   | "review-player-sect-applications"
   | "resolve-morality-event-choice"
+  | `choose-event:${string}`
   | `unlock-loadout:${string}`
   | "buy-healing-pill"
   | "buy-qi-pill"
@@ -1495,6 +1515,8 @@ export interface Cultivator {
   moralityScore: number;
   pendingSectApplicationId: string | null;
   pendingMoralityChoiceId: string | null;
+  /** Set while a 3–4 option road scene is waiting. Absent on older saves. */
+  pendingSceneChoiceId?: string | null;
   pendingPvpChallengeId: string | null;
   totalContribution: number;
   neutralContribution: number;
@@ -1809,6 +1831,17 @@ export interface PendingMoralityChoice {
   title: string;
   prompt: string;
   options: [MoralityChoiceOption, MoralityChoiceOption];
+}
+
+export interface PendingSceneChoice {
+  id: string;
+  cultivatorId: string;
+  eventId: string;
+  createdAtTick: number;
+  expiresAtTick: number;
+  title: string;
+  prompt: string;
+  options: SceneChoiceOption[];
 }
 
 export interface PendingMoralityChoiceView {
@@ -2879,6 +2912,8 @@ export interface WorldState {
   questBoards: Record<string, QuestBoard>;
   pendingSectApplications: Record<string, SectApplication>;
   pendingMoralityChoices: Record<string, PendingMoralityChoice>;
+  pendingSceneChoices?: Record<string, PendingSceneChoice>;
+  nextSceneChoiceSequence?: number;
   pendingPvpChallenges: Record<string, PendingPvpChallenge>;
   sectReapplyCooldowns: Record<string, SectReapplyCooldown>;
   wildernessLayers: Record<string, WildernessLayer>;

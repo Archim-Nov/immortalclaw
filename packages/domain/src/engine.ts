@@ -2315,7 +2315,7 @@ function maybeQueueMoralityChoice(
     return null;
   }
   cleanupCultivatorPendingMoralityChoice(world, cultivator);
-  if (cultivator.pendingMoralityChoiceId) {
+  if (cultivator.pendingMoralityChoiceId || hasOpenSceneChoice(world, cultivator)) {
     return [];
   }
   const choiceId = `morality-choice-${world.nextMoralityChoiceSequence++}`;
@@ -2343,6 +2343,148 @@ function maybeQueueMoralityChoice(
       tags: ["event-pool", "morality-choice", "pending"],
     }),
   ];
+}
+
+function ensureSceneChoiceMap(world: WorldState): void {
+  if (!world.pendingSceneChoices) {
+    world.pendingSceneChoices = {};
+  }
+  if (typeof world.nextSceneChoiceSequence !== "number") {
+    world.nextSceneChoiceSequence = 1;
+  }
+}
+
+function cleanupCultivatorPendingSceneChoice(world: WorldState, cultivator: Cultivator): void {
+  ensureSceneChoiceMap(world);
+  if (!cultivator.pendingSceneChoiceId) {
+    return;
+  }
+  const choice = world.pendingSceneChoices?.[cultivator.pendingSceneChoiceId];
+  if (!choice || choice.cultivatorId !== cultivator.id || world.tick >= choice.expiresAtTick) {
+    if (cultivator.pendingSceneChoiceId) {
+      delete world.pendingSceneChoices?.[cultivator.pendingSceneChoiceId];
+    }
+    cultivator.pendingSceneChoiceId = null;
+  }
+}
+
+function hasOpenSceneChoice(world: WorldState, cultivator: Cultivator): boolean {
+  cleanupCultivatorPendingSceneChoice(world, cultivator);
+  return Boolean(cultivator.pendingSceneChoiceId);
+}
+
+function maybeQueueSceneChoice(
+  world: WorldState,
+  cultivator: Cultivator,
+  locationId: string,
+  template: WorldState["eventPools"]["globalCommon"][number],
+): WorldEvent[] | null {
+  if (!template.sceneChoice) {
+    return null;
+  }
+  const optionCount = template.sceneChoice.options.length;
+  if (optionCount < 3 || optionCount > 4) {
+    return null;
+  }
+  cleanupCultivatorPendingMoralityChoice(world, cultivator);
+  cleanupCultivatorPendingSceneChoice(world, cultivator);
+  if (cultivator.pendingMoralityChoiceId || cultivator.pendingSceneChoiceId) {
+    return [];
+  }
+  ensureSceneChoiceMap(world);
+  const choiceId = `scene-choice-${world.nextSceneChoiceSequence!++}`;
+  const choice = template.sceneChoice;
+  world.pendingSceneChoices![choiceId] = {
+    id: choiceId,
+    cultivatorId: cultivator.id,
+    eventId: template.id,
+    createdAtTick: world.tick,
+    expiresAtTick: world.tick + Math.max(1, choice.expiresInTicks || SCENE_EVENT_TTL),
+    title: choice.title,
+    prompt: choice.prompt,
+    options: choice.options.map((option) => ({
+      ...option,
+      effectBundle: { ...option.effectBundle },
+    })),
+  };
+  cultivator.pendingSceneChoiceId = choiceId;
+  return [
+    addWorldEvent(world, {
+      cultivatorId: cultivator.id,
+      locationId,
+      title: `[choice] ${choice.title}`,
+      content: choice.prompt,
+      severity: "medium",
+      tags: ["event-pool", "scene-choice", "pending"],
+    }),
+  ];
+}
+
+function sceneChoiceActions(world: WorldState, cultivator: Cultivator): AvailableAction[] {
+  cleanupCultivatorPendingSceneChoice(world, cultivator);
+  const pendingId = cultivator.pendingSceneChoiceId;
+  if (!pendingId) {
+    return [];
+  }
+  const choice = world.pendingSceneChoices?.[pendingId];
+  if (!choice || choice.cultivatorId !== cultivator.id) {
+    return [];
+  }
+  return choice.options.map((option) => ({
+    actionId: `choose-event:${option.id}` as ActionId,
+    label: option.label,
+    description: `${choice.prompt}${option.summary}`,
+    durationTicks: 0,
+    kind: "immediate" as const,
+  }));
+}
+
+function parseChooseEventOption(actionId: string): string | null {
+  if (!actionId.startsWith("choose-event:")) {
+    return null;
+  }
+  const optionId = actionId.slice("choose-event:".length).trim();
+  return optionId.length > 0 ? optionId : null;
+}
+
+function resolveSceneChoiceAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: ActionId,
+  optionId: string,
+): ActionExecutionResult {
+  cleanupCultivatorPendingSceneChoice(world, cultivator);
+  const pendingId = cultivator.pendingSceneChoiceId;
+  const choice = pendingId ? world.pendingSceneChoices?.[pendingId] : undefined;
+  if (!choice || choice.cultivatorId !== cultivator.id) {
+    throw new GameplayRejection("眼前没有待决的场面。");
+  }
+  const option = choice.options.find((entry) => entry.id === optionId);
+  if (!option) {
+    throw new GameplayRejection("这个选择不在当前场面上。");
+  }
+  const beforeMorality = cultivator.moralityScore;
+  applyEventEffectBundle(cultivator, option.effectBundle, `scene-choice:${choice.id}`);
+  cultivator.moralityScore = beforeMorality;
+  cultivator.pendingSceneChoiceId = null;
+  delete world.pendingSceneChoices?.[choice.id];
+  const summary = `${cultivator.name}在${choice.title}里选了「${option.label}」。${option.summary}`;
+  addWorldEvent(world, {
+    cultivatorId: cultivator.id,
+    locationId: cultivator.locationId,
+    title: `[choice] ${choice.title}`,
+    content: summary,
+    severity: "low",
+    tags: ["event-pool", "scene-choice", option.id],
+  });
+  addDaoLog(world, cultivator.id, choice.title, summary, ["event-pool", "scene-choice", option.id]);
+  return {
+    tick: world.tick,
+    cultivatorId: cultivator.id,
+    actionId,
+    accepted: true,
+    summary,
+  };
 }
 
 function policyMatchesCultivator(sect: Sect, cultivator: Cultivator): boolean {
@@ -2706,6 +2848,7 @@ const addMessage = (
 const MORALITY_SCORE_MIN = -100;
 const MORALITY_SCORE_MAX = 100;
 const MORALITY_EVENT_TTL = 6;
+const SCENE_EVENT_TTL = 12;
 
 const addWorldEvent = (world: WorldState, event: Omit<WorldEvent, "id" | "tick">): WorldEvent =>
   (world.worldEvents.unshift({ id: `event-${world.nextEventSequence++}`, tick: world.tick, ...event }), world.worldEvents[0]!);
@@ -2784,6 +2927,7 @@ function triggerLocationEvent(
   options?: { flavorBudget?: number },
 ): WorldEvent[] {
   cleanupCultivatorPendingMoralityChoice(world, cultivator);
+  cleanupCultivatorPendingSceneChoice(world, cultivator);
   const drawn = drawEvent(world, source, cultivator, locationId, seed);
   if (!drawn) {
     return [];
@@ -2797,7 +2941,8 @@ function triggerLocationEvent(
     remainingFlavorBudget -= 1;
   }
 
-  const queuedChoiceEvents = maybeQueueMoralityChoice(world, cultivator, locationId, drawn.template);
+  const queuedChoiceEvents = maybeQueueMoralityChoice(world, cultivator, locationId, drawn.template)
+    ?? maybeQueueSceneChoice(world, cultivator, locationId, drawn.template);
   if (queuedChoiceEvents) {
     return queuedChoiceEvents;
   }
@@ -3288,6 +3433,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
     moralityScore: 0,
     pendingSectApplicationId: null,
     pendingMoralityChoiceId: null,
+    pendingSceneChoiceId: null,
     pendingPvpChallengeId: null,
     totalContribution: 0,
     neutralContribution: 0,
@@ -4785,6 +4931,8 @@ function resolveDungeonExpeditionStepIfDue(
   const beforeCombatCount = world.combatLogs.length;
   const beforePendingMoralityChoiceId = cultivator.pendingMoralityChoiceId;
   const beforePendingChoiceIds = new Set(Object.keys(world.pendingMoralityChoices));
+  const beforePendingSceneChoiceId = cultivator.pendingSceneChoiceId ?? null;
+  const beforeSceneChoiceIds = new Set(Object.keys(world.pendingSceneChoices ?? {}));
 
   const actionKind = chooseDungeonExpeditionStepKind({
     targetRank: effectiveProgress.targetRank,
@@ -5082,6 +5230,12 @@ function resolveDungeonExpeditionStepIfDue(
     }
   }
   cultivator.pendingMoralityChoiceId = beforePendingMoralityChoiceId;
+  for (const choiceId of Object.keys(world.pendingSceneChoices ?? {})) {
+    if (!beforeSceneChoiceIds.has(choiceId)) {
+      delete world.pendingSceneChoices?.[choiceId];
+    }
+  }
+  cultivator.pendingSceneChoiceId = beforePendingSceneChoiceId;
 
   const inventoryDelta = positiveInventoryDelta(beforeInventory, cultivator.inventory);
   const tierPool = breakthroughDropPool(metadata.materialBand, effectiveProgress.targetRank);
@@ -7385,7 +7539,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
   if (cultivator.activeJobId) {
     if (!activeDungeonExpedition) {
-      return [];
+      return sceneChoiceActions(world, cultivator);
     }
     const busyActions: AvailableAction[] = [{
       actionId: "abort-dungeon-expedition",
@@ -7406,7 +7560,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         });
       }
     }
-    return busyActions;
+    return [...busyActions, ...sceneChoiceActions(world, cultivator)];
   }
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
@@ -7559,6 +7713,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         durationTicks: 0,
         kind: "immediate",
       });
+      actions.push(...sceneChoiceActions(world, cultivator));
       return actions;
     }
     if (isAtResidence(cultivator)) {
@@ -7821,6 +7976,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         }
       }
     }
+    actions.push(...sceneChoiceActions(world, cultivator));
     return actions;
   } else if (wildernessLayer) {
     actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
@@ -8482,6 +8638,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   actions.push(...listSocialDeepenActions(world, cultivator));
   actions.push(...listSectLifeActions(world, cultivator));
+  actions.unshift(...sceneChoiceActions(world, cultivator));
 
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
@@ -11766,6 +11923,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       ? `${cultivator.name}在地宫里选择了${settlement.beat.title}。`
       : `${cultivator.name}在地宫岔路做出了选择。`;
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
+  }
+  const sceneOptionId = parseChooseEventOption(actionId);
+  if (sceneOptionId) {
+    return resolveSceneChoiceAction(world, cultivator, actionId, sceneOptionId);
   }
   requireIdle(cultivator);
   requireSafeIfInjured(cultivator, actionId);

@@ -3,6 +3,7 @@ import type {
   DungeonRank,
   ItemId,
   MoralityChoiceTemplate,
+  SceneChoiceTemplate,
   RealmStage,
   StatusEffectId,
 } from "./model.js";
@@ -45,6 +46,7 @@ export interface EventTemplate {
   readonly maxDungeonRank?: DungeonRank | null;
   readonly effects: EventEffect;
   readonly moralityChoice?: MoralityChoiceTemplate;
+  readonly sceneChoice?: SceneChoiceTemplate;
   readonly encounterBuildId?: EncounterBuildId | null;
   readonly combatMode?: "light" | "full" | null;
 }

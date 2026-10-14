@@ -1,6 +1,7 @@
 import type { StateId } from "../constants.js";
 import type { EventTemplate } from "../events.js";
 
+import { explorationSceneRowsFor } from "./content/scene-choices.js";
 import { buildStateEventPack } from "./content/states/template.js";
 import { EXPLORATION_MORE } from "./content/states/exploration-more.js";
 import { buildCangzhouEventPack } from "./content/states/cangzhou.js";
@@ -28,8 +29,10 @@ const STATE_PACK_BUILDERS: Record<string, () => EventTemplate[]> = {
 export function buildStateSpecificEvents(stateId: string): EventTemplate[] {
   const base = STATE_PACK_BUILDERS[stateId]?.() ?? [];
   const extra = EXPLORATION_MORE[stateId];
-  if (!extra?.length) {
-    return base;
-  }
-  return [...base, ...buildStateEventPack(stateId as StateId, extra)];
+  const scene = explorationSceneRowsFor(stateId);
+  return [
+    ...base,
+    ...(extra?.length ? buildStateEventPack(stateId as StateId, extra) : []),
+    ...(scene.length ? buildStateEventPack(stateId as StateId, scene) : []),
+  ];
 }
