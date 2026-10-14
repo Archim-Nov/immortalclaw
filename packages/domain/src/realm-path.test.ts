@@ -69,7 +69,9 @@ test("甲级掉落按层分开，炼气池不跟着层数变", () => {
   assert.equal(breakthroughDropPool("cloud-heart-grass", 9).includes("infant-fire-lotus"), false);
 
   assert.deepEqual(rankBandForRealmLevel(3), { minRank: 7, maxRank: 9 });
-  assert.deepEqual(rankBandForRealmLevel(9), { minRank: 7, maxRank: 9 });
+  assert.deepEqual(rankBandForRealmLevel(7), { minRank: 1, maxRank: 3 });
+  assert.deepEqual(rankBandForRealmLevel(8), { minRank: 1, maxRank: 3 });
+  assert.deepEqual(rankBandForRealmLevel(9), { minRank: 4, maxRank: 6 });
   assert.deepEqual(rankBandForRealmLevel(10), { minRank: 4, maxRank: 6 });
   assert.deepEqual(rankBandForRealmLevel(12), { minRank: 7, maxRank: 9 });
 });
@@ -140,6 +142,9 @@ test("甲级一层不掉元婴灵材，四层和七层会掉", () => {
   assert.equal([...rankFour].some((id) => (SPIRIT_DROP_IDS as readonly string[]).includes(id)), false);
 
   for (const id of [...NASCENT_DROP_IDS, ...SPIRIT_DROP_IDS]) cultivator.inventory[id] = 0;
+  assert.throws(() => performAction(world, cultivator.id, "search-fortune:rank-7"), /神纹天隙/);
+  cultivator.realm = "元婴";
+  cultivator.realmLevel = 12;
   const rankSeven = seen(7);
   assert.ok([...rankSeven].some((id) => (SPIRIT_DROP_IDS as readonly string[]).includes(id)));
 });
@@ -162,7 +167,7 @@ test("金丹后期能破进元婴，失败会受伤，小突破必成，化神�
   let failure: ReturnType<typeof prepared> | null = null;
   for (let tick = 1; tick < 40 && (!success || !failure); tick += 1) {
     const attempt = prepared(tick, 9, "金丹", NASCENT_GATE);
-    const beforeReputation = getCultivatorState(attempt.world, attempt.cultivator.id).cultivator.reputation;
+    const beforeQingzhou = attempt.cultivator.stateReputation.qingzhou;
     breakRealm(attempt.world, attempt.cultivator);
     if (attempt.cultivator.realmLevel === 10 && !success) {
       success = attempt;
@@ -170,7 +175,8 @@ test("金丹后期能破进元婴，失败会受伤，小突破必成，化神�
       assert.equal(attempt.cultivator.maxQi, 148);
       assert.equal(attempt.cultivator.maxSpiritualPower, 140);
       assert.equal(attempt.cultivator.mainAttributePercentageBonus, 8);
-      assert.equal(getCultivatorState(attempt.world, attempt.cultivator.id).cultivator.reputation, beforeReputation + 8);
+      assert.equal(attempt.cultivator.stateReputation.qingzhou, beforeQingzhou + 8);
+      assert.equal(getCultivatorState(attempt.world, attempt.cultivator.id).cultivator.reputation, beforeQingzhou + 8);
     } else if (attempt.cultivator.realmLevel === 9 && !failure) {
       failure = attempt;
       assert.equal(attempt.cultivator.realmProgress, 60);
@@ -271,7 +277,12 @@ test("已通关的甲级地宫把元婴指向四到六层，不送回一层", ()
   cultivator.realm = "金丹";
   cultivator.realmLevel = 9;
   const core = getCultivatorState(world, cultivator.id).dungeon?.recommendedRank ?? 0;
-  assert.ok(core >= 7 && core <= 9);
+  assert.ok(core >= 4 && core <= 6);
+
+  cultivator.realm = "元婴";
+  cultivator.realmLevel = 12;
+  const lateNascent = getCultivatorState(world, cultivator.id).dungeon?.recommendedRank ?? 0;
+  assert.ok(lateNascent >= 7 && lateNascent <= 9);
 
   cultivator.locationId = "qingzhou:dungeon-c";
   cultivator.realm = "炼气";

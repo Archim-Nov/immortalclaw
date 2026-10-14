@@ -1,4 +1,5 @@
 import { breakthroughMethodNarrative, quietMethodStep } from "./breakthrough-methods.js";
+import { resourceGoals } from "./high-realm.js";
 import type { ItemId, RealmPathView, RealmStage } from "./model.js";
 import { realmPhaseForLevel, realmStageForLevel } from "./realms.js";
 
@@ -7,8 +8,9 @@ import { realmPhaseForLevel, realmStageForLevel } from "./realms.js";
  *
  * 甲级 ranks 1–3 still drop the 金丹 herbs. 九转紫金髓 and the 元婴 herbs start at rank 4.
  * 化神 herbs start at rank 7. 炼气 and 筑基 pools do not change with rank.
- * A cultivator at 元婴 is pointed at 甲级 4–6. From 元婴后期 on, the hint stays on 7–9
- * instead of sending them back to rank 1.
+ * A cultivator at 金丹后期 or 元婴前中期 is pointed at 甲级 4–6, the 婴火莲池.
+ * From 元婴后期 on, the hint stays on 7–9, the 神纹天隙.
+ * 金丹前期 and 中期 stay on 1–3, the 丹霞内府.
  */
 
 const QI_POOL = [
@@ -66,7 +68,8 @@ export function breakthroughDropPool(band: ItemId, rank = 1): readonly ItemId[] 
 export function rankBandForRealmLevel(realmLevel: number): { minRank: number; maxRank: number } {
   const level = Math.max(1, Math.floor(realmLevel));
   if (level >= 12) return { minRank: 7, maxRank: 9 };
-  if (level >= 10) return { minRank: 4, maxRank: 6 };
+  if (level >= 9) return { minRank: 4, maxRank: 6 };
+  if (level >= 7) return { minRank: 1, maxRank: 3 };
   const relativeLevel = ((level - 1) % 3) + 1;
   const minRank = ((relativeLevel - 1) * 3) + 1;
   return { minRank, maxRank: minRank + 2 };
@@ -85,7 +88,10 @@ export function isRiskyLateMajor(targetRealm: RealmStage, category: "minor" | "m
 }
 
 export function quietRealmStep(realmLevel: number): string | null {
-  return quietMethodStep(realmLevel);
+  const method = quietMethodStep(realmLevel);
+  if (!method) return null;
+  const extra = resourceGoals(realmLevel)[0];
+  return extra ? `${method}${extra}` : method;
 }
 
 function earlyWhere(level: number): string {
@@ -130,17 +136,19 @@ export function realmPathView(input: {
     methodName: narrative?.name ?? null,
     sequence: narrative?.sequence ?? [],
   };
+  const resources = resourceGoals(level);
   if (!next) {
     return {
       ...base,
-      where: "甲级地宫七层到九层仍是这一档。",
+      where: "甲级地宫七层到九层的神纹天隙仍是这一档。",
       risk: "没有下一道门槛。",
       outcome: "化神后期是目前这条梯子的顶。",
       catalogTier: "化神",
       method: null,
       methodName: null,
-      sequence: ["化神后期暂时没有更高的境界。甲级七层到九层还能拿这一档的灵材，兵器和功法也停在化神。"],
-      goals: ["化神后期暂时没有更高的境界。甲级七层到九层还能拿这一档的灵材，兵器和功法也停在化神。"],
+      sequence: ["化神后期暂时没有更高的境界。神纹天隙还能拿这一档的灵材，兵器和功法也停在化神。"],
+      goals: ["化神后期暂时没有更高的境界。神纹天隙还能拿这一档的灵材，兵器和功法也停在化神。", ...resources],
+      resources,
     };
   }
   if (level <= 6) {
@@ -174,7 +182,9 @@ export function realmPathView(input: {
         where,
         ...(narrative?.sequence ?? []),
         narrative?.risk ?? "",
+        ...resources,
       ],
+      resources,
     };
   }
 
@@ -191,7 +201,9 @@ export function realmPathView(input: {
       ...(narrative?.sequence ?? []),
       narrative?.risk ?? late.risk,
       late.outcome,
+      ...resources,
     ],
+    resources,
   };
 }
 
@@ -203,7 +215,7 @@ function lateCopy(level: number, successRate: number | null): {
 } {
   if (level === 12) {
     return {
-      where: "化神的灵材坊市不卖。甲级地宫七层到九层，探宝和守关会掉神念晶、天魂丝、神纹石、破婴神莲。",
+      where: "化神的灵材坊市不卖。甲级七到九层的神纹天隙，探宝和守关会掉神念晶、天魂丝、神纹石、破婴神莲，还有闭关用的神纹尘。",
       risk: `这是大境界，基础成功率大约 ${successRate ?? 30}。失败会耗掉材料，进度退到六成，并留下伤和一段走火。`,
       outcome: "进入化神前期。气血和灵力会再涨一截，化神兵器和功法可以装备。本州的名声会动一动。宗门贡献到 220 可以换这一阶，贡献本身不扣。",
       catalogTier: "化神",
@@ -212,7 +224,7 @@ function lateCopy(level: number, successRate: number | null): {
   if (level >= 13) {
     const special = level === 13 ? "神胎露" : "化神金章";
     return {
-      where: `化神这一层的${special}，以及神念晶、天魂丝、神纹石，都在甲级地宫七层到九层。坊市不卖。`,
+      where: `化神这一层的${special}，以及神念晶、天魂丝、神纹石和神纹尘，都在甲级七到九层的神纹天隙。坊市不卖。`,
       risk: "这一阶是小突破，材料齐了就会成。",
       outcome: "仍在化神里往前一层。气血和灵力继续涨，化神兵器和功法保持能装备。",
       catalogTier: "化神",
@@ -221,14 +233,14 @@ function lateCopy(level: number, successRate: number | null): {
   if (level >= 10) {
     const special = level === 10 ? "养婴露" : "固婴砂";
     return {
-      where: `元婴这一层的${special}，以及婴火莲、元胎玉、魂灯芯，从甲级地宫四层起才有。坊市不卖。`,
+      where: `元婴这一层的${special}，以及婴火莲、元胎玉、魂灯芯和养魂砂，都在甲级四到六层的婴火莲池。坊市不卖。`,
       risk: "这一阶是小突破，材料齐了就会成。",
       outcome: "仍在元婴里往前一层。大圆满兵器和功法可以装备。宗门贡献到 140 能换这一阶，贡献本身不扣。元婴后期再去甲级七层准备化神。",
       catalogTier: "大圆满",
     };
   }
   return {
-    where: "元婴的灵材坊市不卖。甲级地宫四层往上，探宝和守关会掉婴火莲、元胎玉、魂灯芯、九转紫金髓。七层也出，同时会出化神的东西。",
+    where: "元婴的灵材坊市不卖。甲级四到六层的婴火莲池，探宝和守关会掉婴火莲、元胎玉、魂灯芯、九转紫金髓，还有闭关用的养魂砂。七层的神纹天隙要元婴后期才开。",
     risk: `这是大境界，基础成功率大约 ${successRate ?? 40}。失败会耗掉材料，进度退到六成，并留下伤和一段走火。`,
     outcome: "进入元婴前期。气血和灵力会比前面的小突破涨得更多，大圆满兵器和功法可以装备。本州的名声会动一动。宗门贡献到 140 可以换这一阶，贡献本身不扣。",
     catalogTier: "大圆满",

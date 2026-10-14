@@ -152,9 +152,15 @@ import {
   dungeonSourceTier,
   gearOffer,
   nextGearViews,
+  preferredHighTierDrop,
   purchaseNextGear,
   tierAllowed,
 } from "./combat-content.js";
+import {
+  cultivationAidForLevel,
+  cultivationDropForRank,
+  mysteryEntry,
+} from "./high-realm.js";
 import { buildGuardianPack, companionWoundTicks, fightDigestText, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
@@ -3716,19 +3722,23 @@ function dungeonViewForLocation(
   }
   const highestClearedRank = highestClearedRankOf(cultivator, metadata.grade);
   const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
-  const availableRanks = meetsRealmRequirement(cultivator, metadata.minRealm)
+  const unlockedRanks = meetsRealmRequirement(cultivator, metadata.minRealm)
     ? unlockedDungeonRanksOf(cultivator, metadata.grade)
     : [];
+  const availableRanks = unlockedRanks.filter((rank) => mysteryEntry(metadata.grade, rank, cultivator.realmLevel).ok);
+  const frontierRank = availableRanks.length > 0
+    ? availableRanks[availableRanks.length - 1]!
+    : highestUnlockedRank;
   return {
     grade: metadata.grade,
     minRealm: metadata.minRealm,
     highestClearedRank,
     highestUnlockedRank,
     availableRanks,
-    frontierRank: highestUnlockedRank,
+    frontierRank,
     recommendedRank: recommendedDungeonRankOf(cultivator, metadata.grade),
     materialBand: metadata.materialBand,
-    rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand),
+    rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand, metadata.grade),
     lockReason: dungeonLockReasonOf(cultivator, location!),
   };
 }
@@ -4348,6 +4358,40 @@ function settleDungeonCompanion(
   }
 }
 
+function assertMysteryRank(cultivator: Cultivator, grade: DungeonGrade, rank: number): void {
+  const gate = mysteryEntry(grade, rank, cultivator.realmLevel);
+  if (!gate.ok) throw new GameplayRejection(gate.line);
+}
+
+function grantCultivationDrop(
+  world: WorldState,
+  cultivator: Cultivator,
+  grade: "丙" | "乙" | "甲",
+  rank: number,
+): void {
+  const itemId = cultivationDropForRank(grade, rank);
+  if (!itemId) return;
+  cultivator.inventory[itemId] = (cultivator.inventory[itemId] ?? 0) + 1;
+  addResourceGainLog(
+    world,
+    cultivator.id,
+    "秘境灵材",
+    `${cultivator.name}在这一层拿到了${ITEM_CATALOG[itemId]?.name ?? itemId}。闭关时用上一份，修为会涨得快一点。`,
+    ["cultivation", "dungeon"],
+    [{ itemId, count: 1 }],
+  );
+}
+
+function consumeCultivationAid(cultivator: Cultivator): { name: string; bonus: number } | null {
+  if (cultivator.realmProgress >= 100) return null;
+  const aid = cultivationAidForLevel(cultivator.realmLevel);
+  if (!aid) return null;
+  const owned = cultivator.inventory[aid.itemId] ?? 0;
+  if (owned <= 0) return null;
+  cultivator.inventory[aid.itemId] = owned - 1;
+  return { name: aid.name, bonus: aid.bonus };
+}
+
 function grantLoadoutSourceDrop(
   world: WorldState,
   cultivator: Cultivator,
@@ -4355,7 +4399,8 @@ function grantLoadoutSourceDrop(
   rank: number,
   seed: string,
 ): void {
-  const drop = pickLoadoutSourceDrop(dungeonSourceTier(grade, rank), seed);
+  const tier = dungeonSourceTier(grade, rank);
+  const drop = preferredHighTierDrop(cultivator, tier, seed) ?? pickLoadoutSourceDrop(tier, seed);
   cultivator.inventory[drop] = (cultivator.inventory[drop] ?? 0) + 1;
   addResourceGainLog(
     world,
@@ -4392,6 +4437,7 @@ function finalizeDungeonExpedition(
   // ---- Loadout source drop (dungeon expedition) ----
   if (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0)) {
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
+    grantCultivationDrop(world, cultivator, metadata.grade, progress.targetRank);
   }
 
   world.dungeonExpeditionReports[cultivator.id] = report;
@@ -7137,6 +7183,13 @@ function ensureSafetyNetActions(
   return actions;
 }
 
+function atOwnSectHall(world: WorldState, cultivator: Cultivator): boolean {
+  const sect = cultivator.sectId ? world.sects[cultivator.sectId] : null;
+  if (sect && cultivator.locationId === sect.headquarters) return true;
+  const neutral = getCultivatorNeutralSect(world, cultivator);
+  return Boolean(neutral && cultivator.locationId === neutral.headquarters);
+}
+
 function contentGearActions(cultivator: Cultivator, location: { kind: string; nodeType: string }): AvailableAction[] {
   const listed: AvailableAction[] = [];
   const shop = canTradeAtLocation(location);
@@ -7145,7 +7198,7 @@ function contentGearActions(cultivator: Cultivator, location: { kind: string; no
   for (const kind of ["weapon", "spell"] as const) {
     const offer = gearOffer(cultivator, kind);
     if (!offer?.reachable) continue;
-    if (shop) {
+    if (shop && offer.soldAtShop !== false) {
       listed.push({
         actionId: kind === "weapon" ? "buy-next-weapon" : "buy-next-manual",
         label: kind === "weapon" ? `坊市买${offer.name}` : `坊市买${offer.name}`,
@@ -7502,6 +7555,20 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           kind: "timed",
         });
       }
+    }
+  }
+  if (atOwnSectHall(world, cultivator) && (cultivator.bandErrandReadyTick ?? 0) <= world.tick) {
+    for (const kind of ["weapon", "spell"] as const) {
+      const offer = gearOffer(cultivator, kind);
+      if (!offer || offer.tier < 4 || !offer.reachable) continue;
+      const actionId = kind === "weapon" ? "band-errand:weapon" as const : "band-errand:manual" as const;
+      actions.push({
+        actionId,
+        label: kind === "weapon" ? `宗门差事：取${offer.name}的锻材` : `宗门差事：取${offer.name}的残页`,
+        description: `${offer.seek}这趟差事带回一份锻材或残页，不直接学会。隔六个时辰才能再跑。`,
+        durationTicks: DEFAULT_ACTION_DURATIONS[actionId],
+        kind: "timed",
+      });
     }
   }
   const board = getQuestBoard(world, cultivator.locationId);
@@ -10198,6 +10265,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     return `${cultivator.name} recovered from injuries.`;
   }
   if (job.actionId === "cultivate") {
+    const aid = consumeCultivationAid(cultivator);
     const progressBefore = cultivator.realmProgress;
     addRealmProgress(
       cultivator,
@@ -10206,11 +10274,14 @@ function resolveJob(world: WorldState, job: ActionJob): string {
         (hasEffect(cultivator, "clear-mind") ? 8 : 0) +
         (hasEffect(cultivator, "qi-surge") ? 6 : 0) +
         (registration?.cultivateBonus ?? 0) -
-        (hasEffect(cultivator, "poisoned") ? 8 : 0),
+        (hasEffect(cultivator, "poisoned") ? 8 : 0) +
+        (aid?.bonus ?? 0),
     );
     noteCultivationMark(world, cultivator, progressBefore);
     rememberSettledMoment(world, cultivator, "cultivate");
-    return `${cultivator.name} gained cultivation progress.`;
+    return aid
+      ? `${cultivator.name}闭关时用了一份${aid.name}，修为多涨了一截。`
+      : `${cultivator.name} gained cultivation progress.`;
   }
   if (job.actionId === "residence-meditate") {
     const residence = getActiveResidence(cultivator);
@@ -10219,11 +10290,13 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (!fallback) {
       cultivator.spiritStones -= 80;
     }
+    const aid = consumeCultivationAid(cultivator);
     const gain =
       (fallback ? 4 : 10) +
       (hashString(`${world.tick}:${job.id}:residence-meditate`) % (fallback ? 3 : 5)) +
       (hasEffect(cultivator, "clear-mind") ? 4 : 0) +
-      (registration?.cultivateBonus ?? 0);
+      (registration?.cultivateBonus ?? 0) +
+      (aid?.bonus ?? 0);
     const progressBefore = cultivator.realmProgress;
     addRealmProgress(cultivator, gain);
     noteCultivationMark(world, cultivator, progressBefore);
@@ -10251,7 +10324,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       world,
       cultivator.id,
       "闭关修炼",
-      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}闭关修炼，消耗 ${fallback ? 0 : 80} 灵石，修为增加 ${gain}。`,
+      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}闭关修炼，消耗 ${fallback ? 0 : 80} 灵石，修为增加 ${gain}。${aid ? `用了一份${aid.name}。` : ""}`,
       ["cultivation", "residence"],
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
@@ -10531,6 +10604,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     }
     cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:search-fortune-material`, fallbackSearchFortuneRank)] += 1;
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, fallbackSearchFortuneRank, `${world.tick}:${job.id}:loadout-source`);
+    grantCultivationDrop(world, cultivator, metadata.grade, fallbackSearchFortuneRank);
     return `${cultivator.name} searched the ruins.`;
   }
   if (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null) {
@@ -10548,6 +10622,20 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   if (power >= threat) { if (job.actionId === "hunt-mine-beast") { cultivator.inventory["spirit-ore"] += 2 + (roll % 2); cultivator.spiritStones += 120 + (roll % 60); if (roll % 2 === 0) cultivator.inventory["beast-core"] += 1; upsertEffect(cultivator, { id: "qi-surge", name: "Qi Surge", description: "Better combat and cultivation.", source: "battle", remainingTicks: 4, intensity: 1 }); } else { cultivator.inventory["ruin-fragment"] += 1 + (roll % 2); cultivator.inventory["ward-talisman"] += 1; cultivator.realmProgress = clamp(cultivator.realmProgress + 12, 0, 200); upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "guardian", remainingTicks: 6, intensity: 1 }); } addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "victory", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} won the encounter.` }); return `${cultivator.name} won a combat encounter.`; }
   cultivator.qi = clamp(cultivator.qi - (job.actionId === "hunt-mine-beast" ? 24 + (roll % 10) : 32 + (roll % 12)), 1, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, job.actionId === "hunt-mine-beast" ? 5 : 7); if (job.actionId === "challenge-guardian") upsertEffect(cultivator, { id: "poisoned", name: "Poisoned", description: "Loses qi each tick.", source: "guardian", remainingTicks: 4, intensity: 1 }); syncWounded(cultivator); addCombatLog(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, encounterId, enemyName: encounterId === "mine-beast" ? "Mine Beast" : "Ruins Guardian", outcome: "defeat", damageTaken: 0, spiritualPowerSpent: job.actionId === "hunt-mine-beast" ? 16 : 24, loot: {}, summary: `${cultivator.name} lost the encounter.` }); return `${cultivator.name} lost a combat encounter.`; }
   */
+  if (job.actionId === "band-errand:weapon" || job.actionId === "band-errand:manual") {
+    const kind = job.actionId === "band-errand:weapon" ? "weapon" as const : "spell" as const;
+    const offer = gearOffer(cultivator, kind);
+    if (!offer || offer.tier < 4) {
+      return `${cultivator.name}跑了一趟宗门差事，这一阶没有要带回来的东西。`;
+    }
+    const itemId = (kind === "weapon" ? `weapon-material-${offer.id}` : `spell-fragment-${offer.id}`) as ItemId;
+    cultivator.inventory[itemId] = (cultivator.inventory[itemId] ?? 0) + 1;
+    cultivator.bandErrandReadyTick = world.tick + 6;
+    const name = ITEM_CATALOG[itemId]?.name ?? offer.name;
+    const summary = `${cultivator.name}在宗门跑了一趟差事，带回一份${name}。回洞府按配方做完，用掉才会学会。同一趟要隔六个时辰。`;
+    addResourceGainLog(world, cultivator.id, "宗门差事", summary, ["sect", "combat-content", kind], [{ itemId, count: 1 }]);
+    return summary;
+  }
   throw new Error(`Unsupported timed action: ${job.actionId}`);
 }
 
@@ -10742,6 +10830,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         cultivator.spiritStones += spiritStones;
         addRealmProgress(cultivator, tuning.realmProgressReward);
         grantLoadoutSourceDrop(world, cultivator, metadata.grade, challengeGuardianRank, `${world.tick}:${job.id}:guardian-loadout-source`);
+        grantCultivationDrop(world, cultivator, metadata.grade, challengeGuardianRank);
         const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
         if (challengeGuardianRank === highestUnlockedRank) {
           ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(
@@ -11077,6 +11166,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   }
   if (job.actionId === "cultivate") {
     cultivator.activeJobId = null;
+    const aid = consumeCultivationAid(cultivator);
     const cultivateRoll = hashString(`${world.tick}:${job.id}:cultivate-enhanced`);
     const gain =
       18 +
@@ -11087,7 +11177,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       (hasEffect(cultivator, "spirit-saturated") ? 8 : 0) +
       (registration?.cultivateBonus ?? 0) -
       (hasEffect(cultivator, "poisoned") ? 8 : 0) -
-      (hasEffect(cultivator, "deviation") ? 12 : 0);
+      (hasEffect(cultivator, "deviation") ? 12 : 0) +
+      (aid?.bonus ?? 0);
     const progressBefore = cultivator.realmProgress;
     addRealmProgress(cultivator, gain);
     noteCultivationMark(world, cultivator, progressBefore);
@@ -11100,10 +11191,13 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       upsertEffect(cultivator, { id: "deviation", name: "Qi Deviation", description: "Cultivation becomes unstable and risky.", source: "cultivation", remainingTicks: 4, intensity: 1 });
       addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Qi Deviation", content: "A forced cycle disturbed the qi flow and left a deviation behind.", severity: "high", tags: ["event", "cultivation", "deviation"] });
     }
+    const aidNote = aid ? `用了一份${aid.name}。` : "";
     if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && cultivator.realmLevel >= 9) {
-      return `${cultivator.name}的修为顶在门槛上。下一阶要回洞府破境，灵材得到甲级地宫里拿。`;
+      return `${cultivator.name}的修为顶在门槛上。${aidNote}下一阶要按 realmPath 上写的方法破，灵材到对应的秘境里拿。`;
     }
-    return `${cultivator.name} gained cultivation progress.`;
+    return aid
+      ? `${cultivator.name}闭关时用了一份${aid.name}，修为多涨了一截。`
+      : `${cultivator.name} gained cultivation progress.`;
   }
   if (job.actionId === "take-sect-errand") {
     const summary = resolveJob(world, job);
@@ -11164,6 +11258,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       if (metadata.grade === "甲") cultivator.inventory["ward-talisman"] += 1;
     }
     cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:enhanced-search-material`, searchFortuneRank)] += 1;
+    grantCultivationDrop(world, cultivator, metadata.grade, searchFortuneRank);
+    if (dungeonSourceTier(metadata.grade, searchFortuneRank) >= 4) {
+      grantLoadoutSourceDrop(world, cultivator, metadata.grade, searchFortuneRank, `${world.tick}:${job.id}:enhanced-loadout-source`);
+    }
     triggerNodeSpecificEvent(
       world,
       cultivator,
@@ -11691,6 +11789,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (parsedExpedition.rank > highestUnlockedRank) {
         throw new Error(`Dungeon rank ${parsedExpedition.rank} is not unlocked.`);
       }
+      assertMysteryRank(cultivator, metadata.grade, parsedExpedition.rank);
       const started = startJob(
         world,
         cultivator,
@@ -11773,6 +11872,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (selectedRank > highestUnlockedRank) {
         throw new Error(`Dungeon rank ${selectedRank} is not unlocked.`);
       }
+      assertMysteryRank(cultivator, metadata.grade, selectedRank);
       if (challengeGuardianRank !== null) {
         const cgStartSeed = hashString(`${world.tick}:${cultivator.id}:guardian-encounter:${metadata.grade}:${challengeGuardianRank}`);
         const cgStartEncounter = resolveGuardianEncounterTemplate(cgStartSeed);
@@ -11856,6 +11956,19 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       const neutralSect = getCultivatorNeutralSect(world, cultivator);
       if (!neutralSect || cultivator.locationId !== neutralSect.headquarters) {
         throw new Error("Neutral duty requires neutral sect membership at its headquarters.");
+      }
+    }
+    if (actionId === "band-errand:weapon" || actionId === "band-errand:manual") {
+      if (!atOwnSectHall(world, cultivator)) {
+        throw new GameplayRejection("这趟差事要在自己宗门的驻地跑。");
+      }
+      const kind = actionId === "band-errand:weapon" ? "weapon" as const : "spell" as const;
+      const offer = gearOffer(cultivator, kind);
+      if (!offer || offer.tier < 4 || !offer.reachable) {
+        throw new GameplayRejection("这一阶还不用跑宗门差事。坊市买得到，或境界还没到。");
+      }
+      if ((cultivator.bandErrandReadyTick ?? 0) > world.tick) {
+        throw new GameplayRejection("这一趟差事刚跑过。隔六个时辰再来。");
       }
     }
     if (actionId === "heal" && !canHealAtLocation(location)) throw new Error("Heal requires a safe location.");
