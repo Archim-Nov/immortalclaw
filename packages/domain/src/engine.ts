@@ -161,6 +161,12 @@ import {
   cultivationDropForRank,
   mysteryEntry,
 } from "./high-realm.js";
+import {
+  dungeonAdvice,
+  jiaBandFailCost,
+  jiaDirectEncounterScale,
+  stampJiaGuardianTemplate,
+} from "./high-realm-dungeon.js";
 import { buildGuardianPack, companionWoundTicks, fightDigestText, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
@@ -3420,6 +3426,49 @@ function raiseInjury(world: WorldState, cultivator: Cultivator, ticks: number): 
   syncWounded(cultivator);
   noteWound(world, cultivator);
 }
+
+function settleJiaBandFail(
+  world: WorldState,
+  cultivator: Cultivator,
+  grade: DungeonGrade,
+  rank: number,
+  outcome: "loss" | "withdraw",
+): number {
+  const cost = jiaBandFailCost(grade, rank, outcome);
+  if (!cost) return 0;
+  const stones = Math.min(cultivator.spiritStones, cost.stoneLoss);
+  cultivator.spiritStones -= stones;
+  if (cost.spiritLoss > 0) {
+    cultivator.spiritualPower = clamp(
+      cultivator.spiritualPower - cost.spiritLoss,
+      0,
+      cultivator.maxSpiritualPower,
+    );
+  }
+  if (cost.injuryTicks > 0) {
+    raiseInjury(world, cultivator, cost.injuryTicks);
+  }
+  if (cost.deviationTicks > 0) {
+    upsertEffect(cultivator, {
+      id: "deviation",
+      name: "Qi Deviation",
+      description: "Breath is unsettled after the high-realm fight.",
+      source: "guardian",
+      remainingTicks: cost.deviationTicks,
+      intensity: 1,
+    });
+  }
+  recordLife(cultivator, { tick: world.tick, kind: "fight", text: cost.sentence });
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: "injury",
+    title: cost.title,
+    detail: cost.sentence,
+    locationId: cultivator.locationId,
+    mood: cost.mood,
+  }));
+  return stones;
+}
 export function statusOf(cultivator: Cultivator): "idle" | "busy" | "injured" { return cultivator.activeJobId ? "busy" : cultivator.injuryTicksRemaining > 0 ? "injured" : "idle"; }
 function standing(value: number) { return value < -15 ? "hostile" : value < 5 ? "cold" : value < 25 ? "neutral" : value < 50 ? "trusted" : "favored"; }
 function marketStandingDiscount(cultivator: Cultivator) { return Math.max(0, Math.min(50, Math.floor(currentStateReputation(cultivator) / 20) * 10)); }
@@ -3739,6 +3788,7 @@ function dungeonViewForLocation(
     recommendedRank: recommendedDungeonRankOf(cultivator, metadata.grade),
     materialBand: metadata.materialBand,
     rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand, metadata.grade),
+    advice: dungeonAdvice(metadata.grade, recommendedDungeonRankOf(cultivator, metadata.grade)),
     lockReason: dungeonLockReasonOf(cultivator, location!),
   };
 }
@@ -4736,10 +4786,15 @@ function resolveDungeonExpeditionStepIfDue(
     const expedGuardianEncounter = resolveGuardianEncounterTemplate(expedGuardianSeed);
     const policyScale = effectiveProgress.policy === "aggressive" ? 1.18 : effectiveProgress.policy === "conservative" ? 0.84 : 1;
     const combatScale = guardianCombatScale(effectiveProgress.grade, effectiveProgress.targetRank) * policyScale;
+    const guardianTemplate = stampJiaGuardianTemplate(
+      expedGuardianEncounter.template,
+      effectiveProgress.grade,
+      effectiveProgress.targetRank,
+    );
     const combatState = initializeCombatJobState(
       world,
       cultivator,
-      expedGuardianEncounter.template,
+      guardianTemplate,
       combatScale,
       expedGuardianEncounter.buildId ?? undefined,
     );
@@ -4751,7 +4806,7 @@ function resolveDungeonExpeditionStepIfDue(
         allies.push(battleCombatantFromCultivator(companion));
         battleAllyIds.push(companion.id);
       }
-      const template = expedGuardianEncounter.template;
+      const template = guardianTemplate;
       const cfg = expedGuardianEncounter.enemyConfigId ? getEnemyConfig(expedGuardianEncounter.enemyConfigId) : null;
       const enemyName = cfg?.nameCn ?? template.enemyName;
       const enemies = buildGuardianPack({
@@ -4851,6 +4906,30 @@ function resolveDungeonExpeditionStepIfDue(
     syncWounded(cultivator);
     woundedNow.push(cultivator);
   }
+  let bandFailStones = 0;
+  let bandFailBeat: { kind: "injury"; title: string; detail: string; mood: string } | null = null;
+  if (expeditionBattle && (expeditionBattle.outcome === "loss" || expeditionBattle.outcome === "withdraw")) {
+    bandFailStones = settleJiaBandFail(
+      world,
+      cultivator,
+      effectiveProgress.grade,
+      effectiveProgress.targetRank,
+      expeditionBattle.outcome,
+    );
+    const bandCost = jiaBandFailCost(
+      effectiveProgress.grade,
+      effectiveProgress.targetRank,
+      expeditionBattle.outcome,
+    );
+    if (bandCost) {
+      bandFailBeat = {
+        kind: "injury",
+        title: bandCost.title,
+        detail: bandCost.sentence,
+        mood: bandCost.mood,
+      };
+    }
+  }
   const foughtWith = new Set<string>();
   if (expeditionBattle) {
     for (const [companionId, loss] of Object.entries(expeditionBattle.companionQiLoss)) {
@@ -4885,13 +4964,18 @@ function resolveDungeonExpeditionStepIfDue(
   const fightBeats = expeditionBattle?.beats ?? [];
   effectiveProgress = {
     ...effectiveProgress,
-    beats: [...(effectiveProgress.beats ?? []), ...(fightBeats.length > 0 ? fightBeats : [pressure.beat])].slice(-8),
+    beats: [
+      ...(effectiveProgress.beats ?? []),
+      ...(fightBeats.length > 0 ? fightBeats : [pressure.beat]),
+      ...(bandFailBeat ? [bandFailBeat] : []),
+    ].slice(-8),
     combatRounds: expeditionBattle
       ? [...(effectiveProgress.combatRounds ?? []), expeditionBattle.summary].slice(-3)
       : effectiveProgress.combatRounds,
     qiSpent: (effectiveProgress.qiSpent ?? 0) + qiDrain,
     spiritualPowerSpent: (effectiveProgress.spiritualPowerSpent ?? 0) + spiritualDrain,
     injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + injuryTicks,
+    stonesLost: (effectiveProgress.stonesLost ?? 0) + bandFailStones,
   };
   const told = fightBeats.length > 0 ? fightBeats : [pressure.beat];
   const beatAudience = [cultivator];
@@ -10816,6 +10900,9 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           finalPlayerHp: combatState.playerSnapshot.hp,
           retreated: true,
         });
+        if (!job.label.startsWith("Dungeon expedition")) {
+          settleJiaBandFail(world, cultivator, metadata.grade, challengeGuardianRank, "withdraw");
+        }
         return `${cultivator.name} retreated from the rank ${challengeGuardianRank} guardian of ${location.name}.`;
       }
       if (outcome === "victory") {
@@ -10922,6 +11009,9 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         severity: "high",
         tags: ["guardian", location.nodeType, metadata.grade, `rank-${challengeGuardianRank}`, "defeat"],
       });
+      if (!job.label.startsWith("Dungeon expedition")) {
+        settleJiaBandFail(world, cultivator, metadata.grade, challengeGuardianRank, "loss");
+      }
       return `${cultivator.name} was repelled by the rank ${challengeGuardianRank} guardian of ${location.name}.`;
     }
   }
@@ -11893,8 +11983,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         const combatState = initializeCombatJobState(
           world,
           cultivator,
-          cgStartEncounter.template,
-          guardianCombatScale(metadata.grade, challengeGuardianRank),
+          stampJiaGuardianTemplate(cgStartEncounter.template, metadata.grade, challengeGuardianRank),
+          guardianCombatScale(metadata.grade, challengeGuardianRank) * jiaDirectEncounterScale(metadata.grade, challengeGuardianRank),
           cgStartEncounter.buildId ?? undefined,
         );
         setCombatJobState(jobResult.job, combatState);

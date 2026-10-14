@@ -2289,6 +2289,8 @@ export interface DungeonStateView {
   recommendedRank: DungeonRank;
   materialBand: ItemId;
   rankYieldHints: DungeonRankYieldHint[];
+  /** Plain Chinese reminder for this entrance. */
+  advice: string;
   lockReason: string | null;
 }
 
