@@ -46,7 +46,7 @@ Node bands and materials:
 
 Safe and low states grow 炼气 and 筑基 nodes. Medium states add a 金丹 mine and a 元婴 vein. High states add 金丹, 元婴, and 化神 nodes. A node yields one portion every four ticks, two portions once the sect is 中宗 or higher. Stock is capped.
 
-A 宿怨 gift is refused. A same-sect gift is a little warmer. Chat with a feud does not raise affinity.
+A 嫌隙 gift can still be handed over, but affinity does not rise, and the digest can say 剑拔弩张. A 宿怨 gift is refused on the spot: the item stays with the giver. `refuse-gift` stays listed while that person is nearby, including after a chat. A same-sect gift is a little warmer. Chat with a feud does not raise affinity.
 
 ## Constraints
 
@@ -62,6 +62,7 @@ A 宿怨 gift is refused. A same-sect gift is a little warmer. Chat with a feud 
 - A owned herb field yields a 炼气 breakthrough material. A 金丹 mine can yield 丹霞露 to a cultivator who has reached 金丹.
 - A successful raid changes the node's owner. The previous sect's members get a 山门失守 line. A failed raid leaves an injury and costs contribution.
 - After a city duel the pair is at least 嫌隙, the next chat is a hard sentence, `refuse-gift` is offered, and the digest can say 剑拔弩张.
+- A gift during that 嫌隙 does not raise affinity, and the digest can say 剑拔弩张. After it becomes 宿怨, the gift is refused, the item stays, and the digest can say 礼没收下. `refuse-gift` is still listed after chat-up has gone on cooldown.
 
 ## Open Questions
 
