@@ -18,7 +18,13 @@
  *   - 响应道侣 (respond-dao-companion) — accept/reject proposal
  */
 
-import type { Cultivator, WorldState } from "./model.js";
+import type { BondArc, Cultivator, GrudgeArc, WorldState } from "./model.js";
+import {
+  bondArcOf,
+  grudgeArcOf,
+  noteBondCrossing,
+  noteGrudgeCrossing,
+} from "./inner-life.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,6 +62,12 @@ export interface SocialLink {
   readonly dialogueDepth?: number;
   readonly lastGiftItemName?: string;
   readonly lastGiftTick?: number;
+  /** Mutual resentment. Absent on older saves, treated as 0. */
+  readonly grudge?: number;
+  /** Tick of the last 知己 spar-teach between this pair. */
+  readonly lastSparTeachTick?: number;
+  /** Tick of the last 知己 spirit-stone share between this pair. */
+  readonly lastShareTick?: number;
 }
 
 export type CityDuelResult = "win" | "loss" | "draw" | "retreat";
@@ -332,10 +344,47 @@ export function describeSocialBond(link: SocialLink): string {
   } else if (favor < 0) {
     parts.push(`你欠对方${-favor}份人情`);
   }
+  const arc = bondArcOf(link.affinity);
+  const feud = grudgeArcOf(link.grudge ?? 0);
+  if (arc) parts.push(arc);
+  if (feud) parts.push(feud);
   if (parts.length === 0) {
     parts.push(getAffinityLevel(link.affinity));
   }
   return parts.join("，");
+}
+
+export function describeArcLine(link: SocialLink, selfName: string, otherName: string): string {
+  const bond = bondArcOf(link.affinity);
+  const feud = grudgeArcOf(link.grudge ?? 0);
+  if (bond === "知己" && feud === "宿怨") {
+    return `${selfName}与${otherName}成了知己，也结了宿怨。可以切磋指点，分一小笔灵石，也可以公开挑战。`;
+  }
+  if (bond === "知己" && feud) {
+    return `${selfName}与${otherName}是知己，同时有了${feud}。可以切磋指点，也可以分出一小笔灵石。`;
+  }
+  if (bond === "知己") {
+    return `${selfName}与${otherName}成了知己。可以切磋指点，也可以分出一小笔灵石。`;
+  }
+  if (bond === "好友" && feud) {
+    return `${selfName}与${otherName}已是好友，可嫌隙到了${feud}。要紧的事还能开口，但话里已经不那么客气。`;
+  }
+  if (bond === "好友") {
+    return `${selfName}与${otherName}已是好友。要紧的事可以直接开口，不必再先客套。`;
+  }
+  if (bond === "点头之交" && feud) {
+    return `${selfName}与${otherName}本是点头之交，现在有了${feud}。见面还会招呼，心里却不痛快。`;
+  }
+  if (bond === "点头之交") {
+    return `${selfName}与${otherName}是点头之交。在城里碰见，会互相招呼一声。`;
+  }
+  if (feud === "宿怨") {
+    return `${selfName}与${otherName}结成了宿怨。可以公开下挑战书。`;
+  }
+  if (feud === "嫩隙") {
+    return `${selfName}与${otherName}之间有了嫩隙。话还没有撕破，心里已经不痛快。`;
+  }
+  return `${selfName}与${otherName}目前是${getAffinityLevel(link.affinity)}，还没有跨过点头之交，也没有结下嫩隙。`;
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +433,8 @@ export function addMutualAffinity(
   cultivatorB: string,
   amount: number,
 ): { linkAB: SocialLink; linkBA: SocialLink } {
+  const beforeA = getSocialLink(world, cultivatorA, cultivatorB)?.affinity ?? 0;
+  const beforeB = getSocialLink(world, cultivatorB, cultivatorA)?.affinity ?? 0;
   const linkAB = addAffinity(
     getOrCreateSocialLink(world, cultivatorA, cultivatorB),
     amount,
@@ -396,7 +447,26 @@ export function addMutualAffinity(
   );
   writeSocialLink(world, cultivatorA, linkAB);
   writeSocialLink(world, cultivatorB, linkBA);
+  noteBondCrossing(world, cultivatorA, cultivatorB, beforeA, linkAB.affinity, beforeB, linkBA.affinity);
   return { linkAB, linkBA };
+}
+
+export function addMutualGrudge(
+  world: WorldState,
+  cultivatorA: string,
+  cultivatorB: string,
+  amount: number,
+): void {
+  if (amount <= 0 || cultivatorA === cultivatorB) return;
+  const beforeA = getSocialLink(world, cultivatorA, cultivatorB)?.grudge ?? 0;
+  const beforeB = getSocialLink(world, cultivatorB, cultivatorA)?.grudge ?? 0;
+  const linkAB = getOrCreateSocialLink(world, cultivatorA, cultivatorB);
+  const linkBA = getOrCreateSocialLink(world, cultivatorB, cultivatorA);
+  const nextA = beforeA + amount;
+  const nextB = beforeB + amount;
+  writeSocialLink(world, cultivatorA, { ...linkAB, grudge: nextA });
+  writeSocialLink(world, cultivatorB, { ...linkBA, grudge: nextB });
+  noteGrudgeCrossing(world, cultivatorA, cultivatorB, beforeA, nextA, beforeB, nextB);
 }
 
 export function hasDaoCompanion(world: WorldState, cultivatorId: string): boolean {
@@ -444,8 +514,13 @@ export interface SocialLinkView {
   readonly specialBond: SpecialBond | null;
   readonly favorBalance: number;
   readonly rival: boolean;
+  readonly grudge: number;
+  readonly bondArc: BondArc | null;
+  readonly grudgeArc: GrudgeArc | null;
   /** Short Chinese line an agent can read back to its owner. */
   readonly bondLine: string;
+  /** Full sentence naming the current arc and what it unlocks. */
+  readonly arcLine: string;
   readonly lastDuel: { tick: number; result: CityDuelResult; stoneDelta: number } | null;
   readonly lastGift: { tick: number; result: GiftExchangeResult; itemName: string } | null;
 }
@@ -457,17 +532,24 @@ export function getSocialLinksView(
   const links = world.socialLinks?.[cultivatorId];
   if (!links) return [];
   return Object.values(links)
-    .filter((link) => link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0)
-    .sort((a, b) => b.affinity - a.affinity)
-    .map((link) => ({
+    .filter((link) => link.affinity > 0 || link.rival === true || (link.favorBalance ?? 0) !== 0 || (link.grudge ?? 0) > 0)
+    .sort((a, b) => b.affinity - a.affinity || (b.grudge ?? 0) - (a.grudge ?? 0))
+    .map((link) => {
+      const targetName = world.cultivators[link.targetCultivatorId]?.name ?? "unknown";
+      const selfName = world.cultivators[cultivatorId]?.name ?? "你";
+      return {
       targetCultivatorId: link.targetCultivatorId,
-      targetName: world.cultivators[link.targetCultivatorId]?.name ?? "unknown",
+      targetName,
       affinity: link.affinity,
       level: getAffinityLevel(link.affinity),
       specialBond: link.specialBond,
       favorBalance: link.favorBalance ?? 0,
       rival: link.rival === true,
+      grudge: link.grudge ?? 0,
+      bondArc: bondArcOf(link.affinity),
+      grudgeArc: grudgeArcOf(link.grudge ?? 0),
       bondLine: describeSocialBond(link),
+      arcLine: describeArcLine(link, selfName, targetName),
       lastDuel: link.lastDuelResult
         ? {
             tick: link.lastDuelTick ?? 0,
@@ -482,7 +564,8 @@ export function getSocialLinksView(
             itemName: link.lastGiftItemName ?? "礼物",
           }
         : null,
-    }));
+    };
+    });
 }
 
 /**

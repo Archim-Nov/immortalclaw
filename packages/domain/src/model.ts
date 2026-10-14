@@ -754,6 +754,42 @@ export interface TravelNote {
   mood?: string;
 }
 
+export type BondArc = "点头之交" | "好友" | "知己";
+export type GrudgeArc = "嫩隙" | "宿怨";
+export type MoodId = "steady" | "lifted" | "sore" | "warm" | "stung" | "echoing";
+export type MoodCause = "win" | "wound" | "loss" | "gift" | "rejection" | "spoken" | "breakthrough" | "bond" | "settled";
+
+export interface CultivatorMood {
+  id: MoodId;
+  label: string;
+  sentence: string;
+  sinceTick: number;
+  cause: MoodCause;
+}
+
+export type LifeEventKind = "growth" | "fight" | "relationship" | "mood" | "quote";
+
+export interface LifeEvent {
+  tick: number;
+  kind: LifeEventKind;
+  text: string;
+  speakerName?: string;
+  line?: string;
+}
+
+export interface CultivatorDigest {
+  windowTicks: number;
+  windowHours: number;
+  fromTick: number;
+  toTick: number;
+  mood: CultivatorMood;
+  growth: string[];
+  fights: string[];
+  relationships: string[];
+  quotes: readonly { speakerName: string; line: string; tick: number }[];
+  summary: string;
+}
+
 export interface DungeonBeat {
   kind: TravelNoteKind;
   title: string;
@@ -946,6 +982,9 @@ export type ImmediateActionId =
   | "read-messages"
   | `say:${string}`
   | `reply-line:${string}`
+  | `spar-teach:${string}`
+  | `share-resource:${string}`
+  | `grudge-challenge:${string}`
   | `accept-gift:${string}`
   | `reject-gift:${string}`
   | `post-commission:${CommissionType}:${string}`
@@ -1152,6 +1191,10 @@ export interface Cultivator {
   mainAttributePercentageBonus: number;
   /** Recent moments an agent can retell. Absent on cultivators saved before deepen v1. */
   travelNotes?: TravelNote[];
+  /** Latest feeling. Absent until something shifts it. */
+  mood?: CultivatorMood;
+  /** Short log the digest reads. Absent on older saves. */
+  lifeLog?: LifeEvent[];
   actionFatigue?: {
     key: string;
     count: number;
@@ -2275,6 +2318,10 @@ export interface CultivatorStateView {
     mood: string;
     notes: TravelNote[];
   };
+  /** Current feeling. Omitted by older view fixtures. */
+  mood?: CultivatorMood;
+  /** Last six ticks, twelve hours, in sentences an agent can report. Omitted by older view fixtures. */
+  digest?: CultivatorDigest;
   /** Unanswered spoken lines. Omitted by older view fixtures. */
   pendingDialogue?: Array<{
     fromId: string;
@@ -2334,6 +2381,10 @@ export interface CultivatorStateView {
     idle: boolean;
     affinity: number | null;
     bondLine: string | null;
+    bondArc?: BondArc | null;
+    grudgeArc?: GrudgeArc | null;
+    grudge?: number;
+    arcLine?: string | null;
     rival: boolean;
     favorBalance: number;
     placeLine: string;

@@ -44,6 +44,14 @@ export function spamRewardMultiplier(count: number): number {
 }
 
 export function describeMood(cultivator: Cultivator, inDungeon: boolean): string {
+  if (cultivator.mood?.sentence) {
+    const badlyHurt = cultivator.injuryTicksRemaining >= 6;
+    const moodIsHurt = cultivator.mood.cause === "wound" || cultivator.mood.cause === "loss";
+    if (badlyHurt && !moodIsHurt) return "带伤，心气发沉";
+    if (!inDungeon || moodIsHurt || cultivator.mood.cause === "win" || cultivator.mood.cause === "breakthrough") {
+      return cultivator.mood.sentence;
+    }
+  }
   if (cultivator.injuryTicksRemaining >= 6) {
     return "带伤，心气发沉";
   }

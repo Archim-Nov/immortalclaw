@@ -125,6 +125,16 @@ test("registration returns a credential and state route accepts it", async () =>
 
   assert.equal(stateResponse.status, 200);
   assert.equal(statePayload.agent.agentId, registerPayload.agentId);
+  assert.match(statePayload.digest?.summary ?? "", /六个时辰/);
+
+  const digestResponse = await app.request("https://runtime.test/agent/digest", {
+    headers: {
+      authorization: `Bearer ${registerPayload.credential}`,
+    },
+  });
+  const digestPayload = await digestResponse.json() as { summary?: string };
+  assert.equal(digestResponse.status, 200);
+  assert.equal(digestPayload.summary, statePayload.digest?.summary);
 });
 
 test("Chinese-bearing JSON routes declare utf-8 explicitly", async () => {

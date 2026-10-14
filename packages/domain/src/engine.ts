@@ -68,6 +68,25 @@ import { GameplayRejection } from "./gameplay-error.js";
 import { openSpokenLine, type SpeechKind } from "./spoken-lines.js";
 import { describeMood, noteSpam, pushTravelNote, settledMoment, spamRewardMultiplier, travelNote } from "./travelogue.js";
 import {
+  bondArcOf,
+  buildCultivatorDigest,
+  currentMood,
+  GRUDGE_FROM_DRAW,
+  GRUDGE_FROM_DUEL,
+  GRUDGE_FROM_REJECTION,
+  grudgeArcOf,
+  moodCauseForDuel,
+  noteWound,
+  recordLife,
+  SHARE_RESOURCE_COOLDOWN_TICKS,
+  SHARE_RESOURCE_MINIMUM,
+  SHARE_RESOURCE_STONES,
+  shiftCultivatorMood,
+  SPAR_TEACH_COOLDOWN_TICKS,
+  SPAR_TEACH_PRACTICE,
+  SPAR_TEACH_SPIRIT,
+} from "./inner-life.js";
+import {
   getWeaponLoadoutsByFamily,
   getSpellLoadoutsByElement,
   getAllWeaponLoadouts,
@@ -212,6 +231,7 @@ import {
   PARTY_INVITE_MIN_LEVEL,
   VOICE_TRANSMIT_MIN_LEVEL,
   addMutualAffinity,
+  addMutualGrudge,
   adjustFavor,
   forgiveOneFavor,
   markRival,
@@ -220,6 +240,7 @@ import {
   HELP_STONE_GIFT,
   PENDING_HELP_LIMIT,
   BOARD_NOTE_LIMIT,
+  describeArcLine,
   describeSocialBond,
   disbandParty,
   getAffinityLevel,
@@ -3381,6 +3402,12 @@ function syncWounded(cultivator: Cultivator) {
   cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "wounded");
   if (cultivator.injuryTicksRemaining > 0) cultivator.statusEffects.push({ id: "wounded", name: "Wounded", description: "Risky actions are restricted.", source: "injury", remainingTicks: cultivator.injuryTicksRemaining, intensity: 1 });
 }
+function raiseInjury(world: WorldState, cultivator: Cultivator, ticks: number): void {
+  if (ticks <= cultivator.injuryTicksRemaining) return;
+  cultivator.injuryTicksRemaining = ticks;
+  syncWounded(cultivator);
+  noteWound(world, cultivator);
+}
 export function statusOf(cultivator: Cultivator): "idle" | "busy" | "injured" { return cultivator.activeJobId ? "busy" : cultivator.injuryTicksRemaining > 0 ? "injured" : "idle"; }
 function standing(value: number) { return value < -15 ? "hostile" : value < 5 ? "cold" : value < 25 ? "neutral" : value < 50 ? "trusted" : "favored"; }
 function marketStandingDiscount(cultivator: Cultivator) { return Math.max(0, Math.min(50, Math.floor(currentStateReputation(cultivator) / 20) * 10)); }
@@ -3508,14 +3535,16 @@ function noteCultivationMark(world: WorldState, cultivator: Cultivator, before: 
       : crossed >= 50
         ? "进度过半"
         : "修为刚有了影";
+  const detail = `${cultivator.name}感到境界进度到了 ${crossed}。还没破境，但这已经是能写进日记的一步。`;
   pushTravelNote(cultivator, travelNote({
     tick: world.tick,
     kind: crossed === 100 ? "breakthrough" : "insight",
     title,
-    detail: `${cultivator.name}感到境界进度到了 ${crossed}。还没破境，但这已经是能写进日记的一步。`,
+    detail,
     locationId: cultivator.locationId,
     mood: crossed >= 100 ? "想破境" : "还在长",
   }));
+  recordLife(cultivator, { tick: world.tick, kind: "growth", text: detail });
 }
 
 function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinition | null {
@@ -3833,6 +3862,21 @@ function noteCityRivalry(
     locationId: right.locationId,
     mood: "这一架会记住",
   }));
+  const grudgeGain = duel.left.result === "draw" ? GRUDGE_FROM_DRAW : GRUDGE_FROM_DUEL;
+  addMutualGrudge(world, left.id, right.id, grudgeGain);
+  const leftSentence = duel.left.result === "retreat" ? `${left.name}从这一场里撤了下来，心气还没平。` : undefined;
+  const rightSentence = duel.right.result === "retreat" ? `${right.name}从这一场里撤了下来，心气还没平。` : undefined;
+  shiftCultivatorMood(world, left, moodCauseForDuel(duel.left.result), leftSentence);
+  shiftCultivatorMood(world, right, moodCauseForDuel(duel.right.result), rightSentence);
+  const fightLine = duel.left.result === "win"
+    ? `${left.name}在城里赢了${right.name}。这一架会留在两个人的见闻里。`
+    : duel.left.result === "loss"
+      ? `${left.name}在城里输给了${right.name}。这一架会留在两个人的见闻里。`
+      : duel.left.result === "retreat"
+        ? `${left.name}和${right.name}的城中切磋有人撤了。这一架还是被记住了。`
+        : `${left.name}和${right.name}在城里打成平手。谁也没把谁压住。`;
+  recordLife(left, { tick: world.tick, kind: "fight", text: fightLine });
+  recordLife(right, { tick: world.tick, kind: "fight", text: fightLine });
 }
 
 function pendingDialogueOf(world: WorldState, cultivatorId: string) {
@@ -4234,7 +4278,7 @@ function settleDungeonCompanion(
           } else if (outcome === "withdrew" || outcome === "catastrophic") {
             const loss = Math.min(companion.spiritStones, Math.max(4, Math.floor((progress.stonesLost ?? 0) * 0.3)));
             companion.spiritStones -= loss;
-            companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, outcome === "catastrophic" ? 4 : 2);
+            raiseInjury(world, companion, outcome === "catastrophic" ? 4 : 2);
             syncWounded(companion);
             detail = `${leader.name}与${companion.name}一起被拖出地宫。${companion.name}也洒了 ${loss} 枚灵石，身上挂了伤。`;
           } else {
@@ -4726,7 +4770,7 @@ function resolveDungeonExpeditionStepIfDue(
   );
   const woundedNow: Cultivator[] = [];
   if (injuryTicks > 0) {
-    cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, injuryTicks);
+    raiseInjury(world, cultivator, injuryTicks);
     syncWounded(cultivator);
     woundedNow.push(cultivator);
   }
@@ -4744,7 +4788,7 @@ function resolveDungeonExpeditionStepIfDue(
         qiLoss: loss,
       });
       if (companionInjury > 0) {
-        companion.injuryTicksRemaining = Math.max(companion.injuryTicksRemaining, companionInjury);
+        raiseInjury(world, companion, companionInjury);
         syncWounded(companion);
         woundedNow.push(companion);
       }
@@ -4752,6 +4796,12 @@ function resolveDungeonExpeditionStepIfDue(
     if (woundedNow.length > 0) {
       const names = woundedNow.map((person) => person.name).join("、");
       expeditionBattle.summary.wound = `${names}挂了伤。伤着的时候进不了地宫，得歇着、服疗伤丹，或让身边的人把伤压下去。`;
+    }
+    if (expeditionBattle.outcome === "win") {
+      const hurt = new Set(woundedNow.map((person) => person.id));
+      for (const person of [cultivator, ...battleAllyIds.map((id) => world.cultivators[id]).filter((person): person is Cultivator => Boolean(person))]) {
+        if (!hurt.has(person.id)) shiftCultivatorMood(world, person, "win");
+      }
     }
   }
   addRealmProgress(cultivator, pressure.realmProgress);
@@ -4863,7 +4913,7 @@ function resolveDungeonExpeditionStepIfDue(
   if (danger) {
     cultivator.spiritStones = Math.max(0, cultivator.spiritStones - danger.stoneLoss);
     if (danger.injuryTicks > 0) {
-      cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, danger.injuryTicks);
+      raiseInjury(world, cultivator, danger.injuryTicks);
       syncWounded(cultivator);
     }
     const collapsed = {
@@ -5196,6 +5246,12 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
       severity: "medium",
       tags: ["breakthrough", "failure", definition.category],
     });
+    shiftCultivatorMood(world, cultivator, "loss", "破境没有成，心气沉了一下，还得再攒。");
+    recordLife(cultivator, {
+      tick: world.tick,
+      kind: "growth",
+      text: `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`,
+    });
     return `${cultivator.name} failed the breakthrough to level ${definition.targetLevel}.`;
   }
 
@@ -5272,6 +5328,12 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
     content: `${cultivator.name} completed a ${definition.category} breakthrough and reached level ${cultivator.realmLevel}.`,
     severity: definition.category === "major" ? "high" : "medium",
     tags: ["breakthrough", "success", definition.category],
+  });
+  shiftCultivatorMood(world, cultivator, "breakthrough");
+  recordLife(cultivator, {
+    tick: world.tick,
+    kind: "growth",
+    text: `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`,
   });
   return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
 }
@@ -6059,6 +6121,10 @@ function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNull
         idle: !other.activeJobId,
         affinity: link ? link.affinity : null,
         bondLine: link ? describeSocialBond(link) : null,
+        bondArc: link ? bondArcOf(link.affinity) : null,
+        grudgeArc: link ? grudgeArcOf(link.grudge ?? 0) : null,
+        grudge: link?.grudge ?? 0,
+        arcLine: link ? describeArcLine(link, cultivator.name, other.name) : null,
         rival: link?.rival === true,
         favorBalance: link?.favorBalance ?? 0,
         placeLine: `${other.name}也在${locationName}。`,
@@ -6353,6 +6419,8 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       mood: describeMood(cultivator, Boolean(getActiveDungeonExpedition(world, cultivator.id))),
       notes: [...(cultivator.travelNotes ?? [])],
     },
+    mood: currentMood(cultivator, world.tick),
+    digest: buildCultivatorDigest(world, cultivator),
     ...(() => {
       const pendingDialogue = pendingDialogueOf(world, cultivator.id);
       return pendingDialogue.length > 0 ? { pendingDialogue } : {};
@@ -7083,6 +7151,42 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         { actionId: `reject-dao-companion:${proposal.id}` as ActionId, label: `拒绝道侣：${fromName}`, description: `婉拒${fromName}的道侣之约。`, durationTicks: 0, kind: "immediate" },
       );
     }
+    const arcPeers = getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id);
+    for (const peer of arcPeers) {
+      const link = getSocialLink(world, cultivator.id, peer.id);
+      if (!link) continue;
+      if (bondArcOf(link.affinity) === "知己" && !peer.activeJobId && !cultivator.activeJobId) {
+        const sparReady = link.lastSparTeachTick === undefined || world.tick - link.lastSparTeachTick >= SPAR_TEACH_COOLDOWN_TICKS;
+        const shareReady = link.lastShareTick === undefined || world.tick - link.lastShareTick >= SHARE_RESOURCE_COOLDOWN_TICKS;
+        if (sparReady) {
+          actions.push({
+            actionId: `spar-teach:${peer.id}` as ActionId,
+            label: `指点：${peer.name}`,
+            description: `你们已是知己。带${peer.name}把一式走两遍，对方会更熟一点。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
+        if (shareReady) {
+          actions.push({
+            actionId: `share-resource:${peer.id}` as ActionId,
+            label: `分灵石：${peer.name}`,
+            description: `分给${peer.name}八枚灵石。身上至少要留得起这一笔。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
+      }
+      if (grudgeArcOf(link.grudge ?? 0) === "宿怨" && getCityDuelChallengeBlockReason(world, cultivator, peer) === null) {
+        actions.push({
+          actionId: `grudge-challenge:${peer.id}` as ActionId,
+          label: `宿怨挑战：${peer.name}`,
+          description: `嫌隙已成宿怨。公开向${peer.name}下挑战书。`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    }
   }
 
   // ---- Party / Team actions (组队) ----
@@ -7540,6 +7644,8 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("reject-gift:")) return;
   if (actionId.startsWith("say:")) return;
   if (actionId.startsWith("reply-line:")) return;
+  if (actionId.startsWith("spar-teach:")) return;
+  if (actionId.startsWith("share-resource:")) return;
   if (actionId.startsWith("set-party-role:")) return;
   if (actionId.startsWith("equip-skill-slot:")) return;
   if (actionId === "clear-skill-loadout") return;
@@ -7933,6 +8039,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const challenger = world.cultivators[challenge.challengerCultivatorId];
     if (challenger) {
       addMessage(world, challenger.id, "切磋回复", "挑战被拒绝", `${cultivator.name}拒绝了你的切磋挑战。`);
+      addMutualGrudge(world, cultivator.id, challenger.id, GRUDGE_FROM_REJECTION);
+      shiftCultivatorMood(world, challenger, "rejection", `${cultivator.name}拒绝了这场切磋，挑战书像被当面按下。`);
+      shiftCultivatorMood(world, cultivator, "rejection", `拒绝了${challenger.name}的切磋，场上安静了一下。`);
     }
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected the duel challenge.` };
   }
@@ -8134,6 +8243,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const proposerName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
     addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣婉拒", `${cultivator.name}婉拒了你的道侣之约。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "道侣婉拒", `${cultivator.name}婉拒了${proposerName}的道侣之约。`, ["social", "dao-companion", "rejected"]);
+    addMutualGrudge(world, cultivator.id, proposal.fromCultivatorId, GRUDGE_FROM_REJECTION);
+    const proposer = world.cultivators[proposal.fromCultivatorId];
+    if (proposer) shiftCultivatorMood(world, proposer, "rejection", `${cultivator.name}婉拒了道侣之约，这句话会在心里停一阵。`);
+    shiftCultivatorMood(world, cultivator, "rejection", `婉拒了${proposerName}的道侣之约，话说完，场上也静了。`);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected dao companionship with ${proposerName}.` };
   }
 
@@ -8600,6 +8713,134 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} replied to ${target.name}.` };
   }
 
+  if (actionId.startsWith("spar-teach:")) {
+    const targetId = actionId.slice("spar-teach:".length);
+    const target = getCultivatorOrThrow(world, targetId);
+    if (target.id === cultivator.id) throw new GameplayRejection("不能指点自己。");
+    if (target.locationId !== cultivator.locationId) throw new GameplayRejection("人得在眼前，才能切磋指点。");
+    if (target.activeJobId || cultivator.activeJobId) throw new GameplayRejection("有人还在忙，这回指点不了。");
+    const link = getSocialLink(world, cultivator.id, target.id);
+    if (!link || bondArcOf(link.affinity) !== "知己") {
+      throw new GameplayRejection(`和${target.name}还不是知己，指点这事先放一放。`);
+    }
+    if (link.lastSparTeachTick !== undefined && world.tick - link.lastSparTeachTick < SPAR_TEACH_COOLDOWN_TICKS) {
+      const wait = SPAR_TEACH_COOLDOWN_TICKS - (world.tick - link.lastSparTeachTick);
+      throw new GameplayRejection(`刚指点过${target.name}，再过${wait}刻才能再教。`);
+    }
+    if (cultivator.spiritualPower < SPAR_TEACH_SPIRIT) {
+      throw new GameplayRejection(`灵力不够，这回指点不了${target.name}。`);
+    }
+    cultivator.spiritualPower -= SPAR_TEACH_SPIRIT;
+    const taught = skillsForCultivator(target).find((skill) => skill.id !== "basic-strike");
+    let detail: string;
+    if (taught) {
+      grantCombatPractice(target, [taught.id], SPAR_TEACH_PRACTICE);
+      detail = `${cultivator.name}带${target.name}把「${taught.name}」走了两遍。${target.name}的这一式熟了一点。`;
+      recordLife(target, { tick: world.tick, kind: "growth", text: detail });
+    } else {
+      target.realmProgress = clamp(target.realmProgress + 4, 0, 100);
+      detail = `${cultivator.name}陪${target.name}拆了几手。没有新招，修为还是厚了一点。`;
+      recordLife(target, { tick: world.tick, kind: "growth", text: detail });
+    }
+    recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail });
+    const stamp = (ownerId: string, otherId: string) => {
+      const current = getOrCreateSocialLink(world, ownerId, otherId);
+      writeSocialLink(world, ownerId, { ...current, lastSparTeachTick: world.tick });
+    };
+    stamp(cultivator.id, target.id);
+    stamp(target.id, cultivator.id);
+    for (const person of [cultivator, target]) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}指点了${target.name}`,
+        detail,
+        locationId: person.locationId,
+        mood: "招熟了一点",
+      }));
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} taught ${target.name} a skill.` };
+  }
+
+  if (actionId.startsWith("share-resource:")) {
+    const targetId = actionId.slice("share-resource:".length);
+    const target = getCultivatorOrThrow(world, targetId);
+    if (target.id === cultivator.id) throw new GameplayRejection("不能把灵石分给自己。");
+    if (target.locationId !== cultivator.locationId) throw new GameplayRejection("人得在眼前，才能把灵石递过去。");
+    const link = getSocialLink(world, cultivator.id, target.id);
+    if (!link || bondArcOf(link.affinity) !== "知己") {
+      throw new GameplayRejection(`和${target.name}还不是知己，灵石先不分。`);
+    }
+    if (link.lastShareTick !== undefined && world.tick - link.lastShareTick < SHARE_RESOURCE_COOLDOWN_TICKS) {
+      const wait = SHARE_RESOURCE_COOLDOWN_TICKS - (world.tick - link.lastShareTick);
+      throw new GameplayRejection(`刚分过灵石给${target.name}，再过${wait}刻。`);
+    }
+    if (cultivator.spiritStones < SHARE_RESOURCE_MINIMUM) {
+      throw new GameplayRejection("身上的灵石不够分出八枚，先留着自己用。");
+    }
+    cultivator.spiritStones -= SHARE_RESOURCE_STONES;
+    target.spiritStones += SHARE_RESOURCE_STONES;
+    const detail = `${cultivator.name}分给${target.name}八枚灵石。知己之间，这一小笔不用再推来推去。`;
+    const stamp = (ownerId: string, otherId: string) => {
+      const current = getOrCreateSocialLink(world, ownerId, otherId);
+      writeSocialLink(world, ownerId, { ...current, lastShareTick: world.tick });
+    };
+    stamp(cultivator.id, target.id);
+    stamp(target.id, cultivator.id);
+    recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail });
+    recordLife(target, { tick: world.tick, kind: "relationship", text: detail });
+    shiftCultivatorMood(world, cultivator, "gift", `把八枚灵石分给${target.name}，递出去的时候心里是热的。`);
+    shiftCultivatorMood(world, target, "gift", `${cultivator.name}分来八枚灵石，手里和心里都热了一点。`);
+    for (const person of [cultivator, target]) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}分了灵石`,
+        detail,
+        locationId: person.locationId,
+        mood: "手里多了热气",
+      }));
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} shared ${SHARE_RESOURCE_STONES} stones with ${target.name}.` };
+  }
+
+  if (actionId.startsWith("grudge-challenge:")) {
+    const targetId = actionId.slice("grudge-challenge:".length);
+    const target = world.cultivators[targetId];
+    const link = target ? getSocialLink(world, cultivator.id, target.id) : null;
+    if (!target || !link || grudgeArcOf(link.grudge ?? 0) !== "宿怨") {
+      throw new GameplayRejection(`和${target?.name ?? "对方"}还没到宿怨，不必为这点嫌隙公开挑战。`);
+    }
+    const blockReason = getCityDuelChallengeBlockReason(world, cultivator, target);
+    if (blockReason) throw new Error(blockReason);
+    const challengeId = `pvp-challenge-${world.nextPvpChallengeSequence++}`;
+    const challenge: PendingPvpChallenge = {
+      id: challengeId,
+      challengerCultivatorId: cultivator.id,
+      targetCultivatorId: targetId,
+      createdAtTick: world.tick,
+      expiresAtTick: world.tick + 3,
+      locationId: cultivator.locationId,
+    };
+    world.pendingPvpChallenges[challengeId] = challenge;
+    target.pendingPvpChallengeId = challengeId;
+    const detail = `宿怨已成。${cultivator.name}公开向${target.name}下了挑战书，请在三刻内回应。`;
+    addMessage(world, targetId, "宿怨挑战", "挑战书", detail, { fromCultivatorId: cultivator.id });
+    recordLife(cultivator, { tick: world.tick, kind: "fight", text: detail });
+    recordLife(target, { tick: world.tick, kind: "fight", text: detail });
+    for (const person of [cultivator, target]) {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}下了挑战书`,
+        detail,
+        locationId: person.locationId,
+        mood: "宿怨摆到了明面上",
+      }));
+    }
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} challenged ${target.name} over a feud.` };
+  }
+
   // ---- Social Verbs: send-message ----
   const sendMessageParsed = parseSendMessage(actionId);
   if (sendMessageParsed) {
@@ -8820,7 +9061,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         locationId: giver.locationId,
         mood: forgiven ? "欠的那一份消了" : "东西送到了",
       }));
+      shiftCultivatorMood(world, giver, "gift", `${cultivator.name}收下了这份礼，递出去的那点热意还在。`);
     }
+    shiftCultivatorMood(world, cultivator, "gift");
+    recordLife(cultivator, { tick: world.tick, kind: "relationship", text: giftDetail });
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted gift of ${gift.count} ${gift.itemId} from ${fromName}.` };
   }
 
@@ -8858,6 +9102,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       locationId: sender.locationId,
       mood: "礼被退了回来",
     }));
+    addMutualGrudge(world, cultivator.id, sender.id, GRUDGE_FROM_REJECTION);
+    shiftCultivatorMood(world, sender, "rejection", `${cultivator.name}把礼退了回来，心里堵着。`);
+    shiftCultivatorMood(world, cultivator, "rejection", `把${fromName}的礼退了回去，话说出口，心里也不算松。`);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected gift from ${fromName}. Items returned.` };
   }
 
@@ -9516,7 +9763,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       const riskRoll = hashString(`${world.tick}:${job.id}:risk`);
       if (riskRoll % 4 === 0) {
         cultivator.qi = clamp(cultivator.qi - 12, 1, cultivator.maxQi);
-        cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 3);
+        raiseInjury(world, cultivator, 3);
         syncWounded(cultivator);
       }
     } else if (taskTemplate.riskLevel === "medium") {
@@ -9548,10 +9795,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.inventory[pickBreakthroughDrop("mystic-jade-stone", `${world.tick}:${job.id}:mine-material`)] += 1;
     cultivator.qi = clamp(cultivator.qi - Math.max(6, 14 - (registration?.combatGuard ?? 0)), 1, cultivator.maxQi);
     if (roll % 5 === 0) {
-      cultivator.injuryTicksRemaining = Math.max(
-        cultivator.injuryTicksRemaining,
-        Math.max(2, 5 - (registration?.combatGuard ?? 0)),
-      );
+      raiseInjury(world, cultivator, Math.max(2, 5 - (registration?.combatGuard ?? 0)));
       syncWounded(cultivator);
     }
     rememberSettledMoment(world, cultivator, "mine");
@@ -9708,10 +9952,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       const qiLoss = Math.max(1, Math.floor(cultivator.maxQi * (qiLossPercent / 100)));
       cultivator.qi = clamp(cultivator.qi - qiLoss, 1, cultivator.maxQi);
       if ((hashString(`${baseSeed}:defeat-injury`) % 100) < 50) {
-        cultivator.injuryTicksRemaining = Math.max(
-          cultivator.injuryTicksRemaining,
-          Math.max(2, 5 - (registration?.combatGuard ?? 0)),
-        );
+        raiseInjury(world, cultivator, Math.max(2, 5 - (registration?.combatGuard ?? 0)));
       }
       syncWounded(cultivator);
       addCombatLog(world, {
@@ -9850,10 +10091,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       const qiLossPercent = 10 + (hashString(`${baseSeed}:defeat-qi-loss`) % 11);
       const qiLoss = Math.max(1, Math.floor(cultivator.maxQi * (qiLossPercent / 100)));
       cultivator.qi = clamp(cultivator.qi - qiLoss, 1, cultivator.maxQi);
-      cultivator.injuryTicksRemaining = Math.max(
-        cultivator.injuryTicksRemaining,
-        Math.max(2, tuning.defeatInjuryTicks - (registration?.combatGuard ?? 0)),
-      );
+      raiseInjury(world, cultivator, Math.max(2, tuning.defeatInjuryTicks - (registration?.combatGuard ?? 0)));
       if ((hashString(`${baseSeed}:defeat-poison`) % 100) < 30) {
         upsertEffect(cultivator, {
           id: "poisoned",
