@@ -632,6 +632,12 @@ export interface CombatSkillView {
   target: "enemy" | "all-enemies" | "ally" | "self" | "all-allies";
   power: number;
   summary: string;
+  /** weapon is a 兵器招. root is a 灵根法术. Omitted by older view fixtures. */
+  pool?: "weapon" | "root";
+  poolLabel?: "兵器" | "法术";
+  /** favored follows the cultivator's leaning. off fights it. neutral is 均衡. */
+  aptitude?: "favored" | "off" | "neutral";
+  aptitudeLabel?: "顺手" | "别扭" | "平常";
 }
 
 export interface DungeonCombatHighlight {
@@ -642,6 +648,8 @@ export interface DungeonCombatHighlight {
   targetName: string;
   result: "hit" | "miss" | "crit" | "guard" | "heal" | "ward" | "flee" | "drain";
   note: string;
+  /** Set when this beat is a real 兵器 or 法术, not a step back or an empty beat. */
+  skillPoolLabel?: "兵器" | "法术";
 }
 
 export interface DungeonCombatSummary {
@@ -1794,6 +1802,8 @@ export interface SpellBranchDefinition {
 
 export type CombatStyle = "brute" | "finesse" | "tactic";
 export type AttackChannel = "weapon" | "spell";
+/** 兵器偏, 法术偏, or 均衡. Derived from body, root, and what is equipped. */
+export type CombatLeaningId = "weapon" | "spell" | "balanced";
 export type AttackResult = "hit" | "miss" | "crit";
 export type CombatActionType = "basic_attack" | "core_skill" | "escape";
 
@@ -2462,6 +2472,19 @@ export interface CultivatorStateView {
     skillProficiency?: Record<string, number>;
     /** Role id to practice points. */
     roleExperience?: Partial<Record<PartyRoleId, number>>;
+    /** 兵器偏, 法术偏, or 均衡. Omitted by older view fixtures. */
+    combatLeaning?: {
+      id: CombatLeaningId;
+      label: string;
+      reason: string;
+      roleHint: string;
+    };
+    /** Weapon-family and other 兵器 skills this loadout can cast. */
+    weaponSkills?: CombatSkillView[];
+    /** 灵根 and 法术 skills this root and spell can cast. */
+    rootSkills?: CombatSkillView[];
+    /** Soft note about mixing the three slots against the leaning. */
+    loadoutGuidance?: string;
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;

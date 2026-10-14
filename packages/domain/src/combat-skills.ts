@@ -1,4 +1,6 @@
 import {
+  computeEffectiveMainAttributes,
+  createEmptyMainAttributeGrowth,
   deriveMainAttributes,
   extractFiveElementScores,
   physicalDefense,
@@ -12,6 +14,7 @@ import {
 } from "./combat-loadouts.js";
 import type {
   AttackChannel,
+  CombatLeaningId,
   CombatSkillView,
   Cultivator,
   FiveElementId,
@@ -29,6 +32,15 @@ export const PARTY_ROLE_LABEL: Record<PartyRoleId, string> = {
   support: "辅助",
   control: "控场",
 };
+
+export const COMBAT_LEANING_LABEL: Record<CombatLeaningId, "兵器偏" | "法术偏" | "均衡"> = {
+  weapon: "兵器偏",
+  spell: "法术偏",
+  balanced: "均衡",
+};
+
+/** How far the two sides must sit before a cultivator is called 兵器偏 or 法术偏. */
+const LEANING_GAP = 12;
 
 export type SkillTarget = CombatSkillView["target"];
 
@@ -52,6 +64,8 @@ export interface ResolvedCombatSkill {
   focus: boolean;
   shred: number;
   summary: string;
+  /** How this skill sits against the cultivator's leaning. Absent on hand-built fight fixtures. */
+  aptitude?: "favored" | "off" | "neutral";
 }
 
 interface SkillDraft {
@@ -633,6 +647,8 @@ const ALL_SKILLS: readonly SkillDraft[] = [
   ...Object.values(WEAPON_SIGNATURES),
 ];
 
+const CHANNEL_BY_ID = new Map(ALL_SKILLS.map((skill) => [skill.id, skill.channel]));
+
 export const PARTY_ROLE_IDS: readonly PartyRoleId[] = ["dps", "breaker", "guard", "support", "control"];
 
 /** How many preferred skills an agent can keep ready, besides the basic strike. */
@@ -658,6 +674,11 @@ export interface SkillContext {
   spellAttack: number;
   defense: number;
   proficiency?: Readonly<Record<string, number>>;
+  /** Top element score minus the next one. Absent on older hand-built contexts. */
+  rootFocus?: number;
+  temperament?: string;
+  /** Absent on older hand-built contexts, which stay 均衡 and take no bonus. */
+  leaning?: CombatLeaningId;
 }
 
 export function spiritRootElementsOf(cultivator: Cultivator): FiveElementId[] {
@@ -670,6 +691,34 @@ export function spiritRootElementsOf(cultivator: Cultivator): FiveElementId[] {
   return kind === "single-root" ? [first] : [first, second];
 }
 
+function spiritRootFocus(cultivator: Cultivator): number {
+  const sorted = sortedElementEntries(extractFiveElementScores(cultivator.registrationRecord));
+  const top = sorted[0]?.[1] ?? 0;
+  const next = sorted[1]?.[1] ?? 0;
+  return Math.max(0, top - next);
+}
+
+export function deriveCombatLeaning(ctx: SkillContext): CombatLeaningId {
+  let weaponSide = ctx.weaponAttack;
+  let spellSide = ctx.spellAttack;
+  if (ctx.weaponType) weaponSide += 8;
+  if (ctx.weaponFamily === "quick" || ctx.weaponFamily === "heavy" || ctx.weaponFamily === "polearm") {
+    weaponSide += 4;
+  }
+  if (ctx.weaponFamily === "flexible" || ctx.weaponFamily === "ranged-mystic") spellSide += 3;
+  if (ctx.spellBranch) spellSide += 8;
+  if (ctx.rootElements.length <= 1) spellSide += 12;
+  if (ctx.spellElement && ctx.rootElements.includes(ctx.spellElement)) spellSide += 6;
+  if ((ctx.rootFocus ?? 0) >= 15) spellSide += 6;
+  const temperament = ctx.temperament ?? "";
+  if (/刚|勇|武|刀|剑|猛/.test(temperament)) weaponSide += 4;
+  if (/静|慧|灵|术|文|柔|慎/.test(temperament)) spellSide += 4;
+  const gap = weaponSide - spellSide;
+  if (gap >= LEANING_GAP) return "weapon";
+  if (gap <= -LEANING_GAP) return "spell";
+  return "balanced";
+}
+
 export function skillContextOf(cultivator: Cultivator): SkillContext {
   const weapon = cultivator.equippedWeaponLoadoutId
     ? getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId)
@@ -677,8 +726,13 @@ export function skillContextOf(cultivator: Cultivator): SkillContext {
   const spell = cultivator.equippedSpellLoadoutId
     ? getSpellLoadoutDefinition(cultivator.equippedSpellLoadoutId)
     : null;
-  const main = deriveMainAttributes(cultivator.registrationRecord);
-  return {
+  const baseline = deriveMainAttributes(cultivator.registrationRecord);
+  const main = computeEffectiveMainAttributes(
+    baseline,
+    cultivator.mainAttributeGrowth ?? createEmptyMainAttributeGrowth(),
+    cultivator.mainAttributePercentageBonus ?? 0,
+  );
+  const ctx: SkillContext = {
     weaponType: weapon?.weaponTypeId ?? null,
     weaponFamily: weapon?.weaponFamilyId ?? null,
     spellBranch: spell?.spellBranchId ?? null,
@@ -688,7 +742,12 @@ export function skillContextOf(cultivator: Cultivator): SkillContext {
     spellAttack: spellAttack(main) + (spell?.attackPowerBonus ?? 0),
     defense: physicalDefense(main),
     proficiency: cultivator.skillProficiency,
+    rootFocus: spiritRootFocus(cultivator),
+    temperament: cultivator.temperament,
+    leaning: "balanced",
   };
+  ctx.leaning = deriveCombatLeaning(ctx);
+  return ctx;
 }
 
 function elementMatches(draft: SkillDraft, ctx: SkillContext): boolean {
@@ -714,6 +773,12 @@ function skillAvailable(draft: SkillDraft, ctx: SkillContext): boolean {
   return elementMatches(draft, ctx);
 }
 
+function tightenRatio(ratio: number, favored: boolean): number {
+  if (ratio >= 1) return ratio;
+  const next = favored ? ratio * 0.96 : Math.min(0.98, ratio * 1.04);
+  return Math.round(next * 100) / 100;
+}
+
 function resolveDraft(draft: SkillDraft, ctx: SkillContext): ResolvedCombatSkill {
   const borrowed = Boolean(
     draft.elements
@@ -725,26 +790,51 @@ function resolveDraft(draft: SkillDraft, ctx: SkillContext): ResolvedCombatSkill
   if (power > 0) {
     power = Math.round(power * proficiencyPowerMultiplier(ctx.proficiency?.[draft.id]) * 100) / 100;
   }
+  const leaning = ctx.leaning ?? "balanced";
+  const favored = leaning !== "balanced" && (
+    (leaning === "weapon" && draft.channel === "weapon")
+    || (leaning === "spell" && draft.channel === "spell")
+  );
+  const aptitude: ResolvedCombatSkill["aptitude"] = leaning === "balanced" ? "neutral" : favored ? "favored" : "off";
+  let spiritCost = draft.spiritCost;
+  let hitBonus = draft.hitBonus ?? 0;
+  let healRatio = draft.healRatio ?? 0;
+  let guardRatio = draft.guardRatio ?? 1;
+  let wardRatio = draft.wardRatio ?? 1;
+  if (aptitude === "favored" || aptitude === "off") {
+    if (power > 0) {
+      power = Math.round(power * (favored ? 1.06 : 0.94) * 100) / 100;
+      hitBonus += favored ? 3 : -2;
+    }
+    if (spiritCost > 0) spiritCost = Math.max(1, spiritCost + (favored ? -1 : 1));
+    if (healRatio > 0) healRatio = Math.round(healRatio * (favored ? 1.06 : 0.94) * 1000) / 1000;
+    guardRatio = tightenRatio(guardRatio, favored);
+    wardRatio = tightenRatio(wardRatio, favored);
+  }
+  let summary = borrowed ? `${draft.summary}这一式借的是法器，不是本命灵根，威力略收。` : draft.summary;
+  if (aptitude === "favored") summary = `${summary}顺着偏向，这一式略强。`;
+  if (aptitude === "off") summary = `${summary}逆着偏向，这一式略收。`;
   return {
     id: draft.id,
     name: draft.name,
     role: draft.roles[0] ?? "dps",
     roles: draft.roles,
     channel: draft.channel,
-    spiritCost: draft.spiritCost,
+    spiritCost,
     qiCost: draft.qiCost ?? 0,
     cooldown: draft.cooldown,
     target: draft.target,
     power,
-    guardRatio: draft.guardRatio ?? 1,
-    wardRatio: draft.wardRatio ?? 1,
-    healRatio: draft.healRatio ?? 0,
-    hitBonus: draft.hitBonus ?? 0,
+    guardRatio,
+    wardRatio,
+    healRatio,
+    hitBonus,
     critBonus: draft.critBonus ?? 0,
     slow: draft.slow ?? false,
     focus: draft.focus ?? false,
     shred: draft.shred ?? 1,
-    summary: borrowed ? `${draft.summary}这一式借的是法器，不是本命灵根，威力略收。` : draft.summary,
+    summary,
+    aptitude,
   };
 }
 
@@ -761,6 +851,18 @@ export function listResolvedSkills(ctx: SkillContext): ResolvedCombatSkill[] {
   return skills;
 }
 
+function poolOf(channel: AttackChannel): { pool: "weapon" | "root"; poolLabel: "兵器" | "法术" } {
+  return channel === "spell"
+    ? { pool: "root", poolLabel: "法术" }
+    : { pool: "weapon", poolLabel: "兵器" };
+}
+
+function aptitudeLabelOf(aptitude: ResolvedCombatSkill["aptitude"]): "顺手" | "别扭" | "平常" {
+  if (aptitude === "favored") return "顺手";
+  if (aptitude === "off") return "别扭";
+  return "平常";
+}
+
 export function listCombatSkillViews(ctx: SkillContext): CombatSkillView[] {
   return listResolvedSkills(ctx).map((skill) => ({
     id: skill.id,
@@ -774,7 +876,64 @@ export function listCombatSkillViews(ctx: SkillContext): CombatSkillView[] {
     target: skill.target,
     power: skill.power,
     summary: skill.summary,
+    ...poolOf(skill.channel),
+    aptitude: skill.aptitude ?? "neutral",
+    aptitudeLabel: aptitudeLabelOf(skill.aptitude),
   }));
+}
+
+function roleHintFor(role: PartyRoleId, leaning: CombatLeaningId): string {
+  const side = leaning === "weapon" ? "兵器" : leaning === "spell" ? "法术" : "";
+  if (role === "dps" || role === "breaker") {
+    if (!side) return "主攻和破法两边都能打。你目前没有明显偏向，按队伍缺的输出选就行。";
+    return `主攻和破法更适合走${side}。另一边的招还能放进招位，只是威力略收，灵力也略贵。`;
+  }
+  if (!side) return "护卫、辅助、控场用兵器或法术都行。你两边差不多，按队友缺什么补。";
+  return `护卫、辅助、控场用兵器或法术都行。你更顺手的是${side}，逆着偏向的守、补、控会略弱一点。`;
+}
+
+export function combatLeaningView(cultivator: Cultivator): {
+  id: CombatLeaningId;
+  label: string;
+  reason: string;
+  roleHint: string;
+} {
+  const ctx = skillContextOf(cultivator);
+  const id = ctx.leaning ?? deriveCombatLeaning(ctx);
+  const role = partyRoleForCultivator(cultivator).id;
+  const reason = id === "weapon"
+    ? "体魄和手上的兵器压过灵根法术，出手更顺的是兵器。"
+    : id === "spell"
+      ? "灵根和法术压过兵器，出手更顺的是法术。"
+      : "兵器和灵根法术差不多，两边都能用，没有明显偏科。";
+  return {
+    id,
+    label: COMBAT_LEANING_LABEL[id],
+    reason,
+    roleHint: roleHintFor(role, id),
+  };
+}
+
+export function loadoutGuidanceFor(cultivator: Cultivator): string {
+  const leaning = skillContextOf(cultivator).leaning ?? "balanced";
+  const label = COMBAT_LEANING_LABEL[leaning];
+  const chosen = cultivator.preferredSkillIds ?? [];
+  if (chosen.length === 0) {
+    if (leaning === "balanced") return "三个招位可以兵器和法术混着装。你目前两边差不多，按队伍缺的位置选。";
+    const side = leaning === "weapon" ? "兵器" : "法术";
+    return `你是${label}。三个招位仍可以混装，顺着${side}的招更顺手，硬塞满另一边会略亏。`;
+  }
+  const ready = skillsForCultivator(cultivator).filter((skill) => skill.id !== "basic-strike");
+  const off = ready.filter((skill) => skill.aptitude === "off").length;
+  const favored = ready.filter((skill) => skill.aptitude === "favored").length;
+  if (leaning === "balanced") return "这一套混着兵器和法术。你没有明显偏向，这样装不会吃亏。";
+  if (off > 0 && favored === 0) {
+    return `这一套几乎都逆着${label}。能打，但同阶顺着偏向的人更省灵力，也打得更实。队伍里有人补这一侧就不必全换。`;
+  }
+  if (off > 0 && favored > 0) {
+    return `兵器和法术混在招位里。逆着${label}的那几式略收，顺着的几式略增。多个人各走一边，比每个人都乱装更稳。`;
+  }
+  return `这一套顺着${label}。威力、命中和灵力都会略好一点。`;
 }
 
 export function inferPartyRole(ctx: SkillContext): PartyRoleId {
@@ -842,9 +1001,14 @@ export function grantCombatPractice(cultivator: Cultivator, skillIds: readonly s
   const gain = Math.max(0, Math.floor(amount));
   const ids = skillIds.filter((id) => id && id !== "basic-strike");
   if (gain <= 0 || ids.length === 0) return;
+  const leaning = skillContextOf(cultivator).leaning ?? "balanced";
   const book = { ...(cultivator.skillProficiency ?? {}) };
   for (const id of ids) {
-    book[id] = Math.min(SKILL_PROFICIENCY_CAP, (book[id] ?? 0) + gain);
+    const channel = CHANNEL_BY_ID.get(id);
+    const favored = channel !== undefined && leaning !== "balanced" && (
+      (leaning === "weapon" && channel === "weapon") || (leaning === "spell" && channel === "spell")
+    );
+    book[id] = Math.min(SKILL_PROFICIENCY_CAP, (book[id] ?? 0) + gain + (favored ? 1 : 0));
   }
   cultivator.skillProficiency = book;
   const role = partyRoleForCultivator(cultivator).id;
