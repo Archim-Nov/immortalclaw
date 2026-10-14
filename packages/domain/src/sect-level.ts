@@ -61,7 +61,7 @@ export function buildSectLevel(world: WorldState, sectId: string): SectLevel | n
     return null;
   }
 
-  const experience = sumSectContribution(world, sectId);
+  const experience = sumSectContribution(world, sectId) + Math.floor(sect.sectMerit ?? 0);
   const level = calculateSectLevel(experience);
   return {
     sectId,

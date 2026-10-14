@@ -48,7 +48,7 @@ export const SPAR_TEACH_PRACTICE = 2;
 
 export const GRUDGE_FROM_REJECTION = 8;
 export const GRUDGE_FROM_DUEL = 10;
-export const GRUDGE_FROM_DRAW = 6;
+export const GRUDGE_FROM_DRAW = 8;
 
 const LIFE_LOG_LIMIT = 40;
 
@@ -236,8 +236,8 @@ const BOND_LINES: Record<BondArc, (a: string, b: string) => string> = {
 };
 
 const GRUDGE_LINES: Record<GrudgeArc, (a: string, b: string) => string> = {
-  "嫌隙": (a, b) => `${a}和${b}之间起了嫌隙。话还没有撕破，心里已经不痛快。`,
-  "宿怨": (a, b) => `${a}和${b}的嫌隙结成了宿怨。此后可以公开下挑战书。`,
+  "嫌隙": (a, b) => `${a}和${b}之间起了嫌隙。下次见面会剑拔弩张，话硬，礼也不一定收。`,
+  "宿怨": (a, b) => `${a}和${b}的嫌隙结成了宿怨。见面就剑拔弩张，可以公开下挑战书，也可以把礼拒了。`,
 };
 
 const GOSSIP_MEMORY = 6;

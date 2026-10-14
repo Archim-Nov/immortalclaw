@@ -361,6 +361,75 @@ export interface QuestBoard {
 
 export type SectTitle = "外门" | "内门" | "精英" | "长老" | "宗主";
 
+export type SectPostId = "outer-chore" | "inner-cultivate" | "steward" | "elder" | "master-seat";
+
+export type SectChainId = "transmit" | "patrol" | "guard-vein" | "recruit-chore" | "escort" | "council";
+
+export type SpiritVeinKind = "herb-field" | "mine" | "spirit-vein";
+
+export type SpiritVeinBand = "qi" | "foundation" | "core" | "nascent" | "spirit";
+
+export interface SpiritVeinYield {
+  itemId: ItemId;
+  count: number;
+}
+
+/** A herb field, mine, or spirit vein anchored to a location that already exists. */
+export interface SpiritVeinNode {
+  id: string;
+  stateId: string;
+  locationId: string;
+  kind: SpiritVeinKind;
+  band: SpiritVeinBand;
+  name: string;
+  ownerKind: "player" | "neutral" | "none";
+  ownerId: string | null;
+  pouch: SpiritVeinYield[];
+  lastYieldTick: number;
+  raidLockUntilTick: number;
+}
+
+export interface SectLifePostView {
+  id: SectPostId;
+  name: string;
+  duty: string;
+  benefit: string;
+  requirement: string;
+  slotsUsed: number;
+  slotsMax: number;
+  held: boolean;
+  canTake: boolean;
+  actionId: string | null;
+}
+
+export interface SectLifeView {
+  sectId: string;
+  sectName: string;
+  post: SectLifePostView | null;
+  posts: readonly SectLifePostView[];
+  tier: number;
+  tierName: string;
+  merit: number;
+  veinCount: number;
+  nextRequirement: string;
+  daily: string;
+  veins: readonly {
+    id: string;
+    name: string;
+    kind: SpiritVeinKind;
+    band: SpiritVeinBand;
+    locationId: string;
+    locationName: string;
+    ownerName: string;
+    yours: boolean;
+    stock: number;
+    materials: string;
+    gatherActionId: string | null;
+  }[];
+  chains: readonly { id: SectChainId; name: string; actionId: string; summary: string }[];
+  raids: readonly { veinId: string; name: string; actionId: string; summary: string }[];
+}
+
 export interface SectTitleSlot {
   title: SectTitle;
   threshold: number;
@@ -501,6 +570,10 @@ export type TimedActionId =
   | "band-errand:weapon"
   | "band-errand:manual"
   | "take-neutral-duty"
+  | "post-duty"
+  | `sect-chain:${string}`
+  | `gather-vein:${string}`
+  | `declare-raid:${string}`
   | `sect-task:${string}`
   | "hunt-mine-beast"
   | `challenge-guardian:rank-${DungeonRank}`
@@ -1225,6 +1298,9 @@ export type ImmediateActionId =
   | "post-sect-notice"
   | `reply-sect-notice:${string}`
   | `join-sect-task:${string}`
+  | `take-post:${string}`
+  | "resign-post"
+  | `refuse-gift:${string}`
   | `guide-junior:${string}`
   | `mention-gossip:${string}:${string}`
   | `wait-for:${string}`
@@ -1291,6 +1367,13 @@ export interface Sect {
   lastTitleUpdateTick: number;
   admissionPolicy: SectAdmissionPolicy;
   admissionPolicyUpdatedAtTick: number;
+  /** Sect-wide merit from duties, chains, and raids. Absent on older saves. */
+  sectMerit?: number;
+  /** World tick when this sect last raided. Absent until the first raid. */
+  lastRaidTick?: number;
+  /** Elder council votes inside the current window. Absent until the first council. */
+  councilVotes?: number;
+  councilUntilTick?: number;
 }
 
 export interface NeutralSect {
@@ -1304,6 +1387,13 @@ export interface NeutralSect {
   joinable: true;
   competitive: false;
   memberIds: string[];
+  /** Sect-wide merit from duties, chains, and raids. Absent on older saves. */
+  sectMerit?: number;
+  /** World tick when this sect last raided. Absent until the first raid. */
+  lastRaidTick?: number;
+  /** Elder council votes inside the current window. Absent until the first council. */
+  councilVotes?: number;
+  councilUntilTick?: number;
 }
 
 export interface ItemDefinition {
@@ -1399,6 +1489,8 @@ export interface Cultivator {
   sectId: string | null;
   neutralSectId: string | null;
   sectTitle: SectTitle | null;
+  /** Duty post inside the current sect. Absent until the cultivator takes one. */
+  sectPost?: SectPostId | null;
   moralityScore: number;
   pendingSectApplicationId: string | null;
   pendingMoralityChoiceId: string | null;
@@ -2616,6 +2708,8 @@ export interface CultivatorStateView {
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;
+  /** Posts, tier, veins, and today's sect work. Omitted when this cultivator has no sect. */
+  sectLife?: SectLifeView;
   inventory: Record<ItemId, number>;
   inventoryDetails: InventoryEntryView[];
   currentJob: ActionJob | null;
@@ -2816,6 +2910,8 @@ export interface WorldState {
   nextGossipSequence?: number;
   /** Sect hall notice boards, keyed by sect. Absent on older saves. */
   sectBoards?: Record<string, SectNotice[]>;
+  /** Herb fields, mines, and spirit veins. Absent on worlds saved before sect life. */
+  spiritVeins?: Record<string, SpiritVeinNode>;
   nextSectNoticeSequence?: number;
   nextCultivatorSequence: number;
   nextJobSequence: number;
