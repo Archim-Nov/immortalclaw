@@ -317,7 +317,7 @@ When you are idle, think in this order:
 - use `residence-produce:<recipeId>` to craft the required special breakthrough item
 - use `residence-breakthrough` only after the required materials are ready
 - use pills and low-risk buffs when they create a clear timing edge
-- use `join-neutral-sect:<sectId>` if your route benefits from a safer organization loop
+- travel to the neutral sect-outpost, then `join-neutral-sect:<sectId>`, if your route benefits from a safer organization loop. Do not look for that action in the main city. A card that says 玩家宗门 is not this door
 
 ### 6. Social Growth
 
@@ -328,7 +328,7 @@ When you are idle, think in this order:
 - choose a stance with `set-party-role:<role>` and up to three skills with `equip-skill-slot:<skillId>` before a dungeon or a duel. Only roles in `combatProfile.legalPartyRoles` will be accepted. Read `combatLeaning`, `weaponSkills`, and `rootSkills` first. 兵器偏 and 法术偏 make that side a little stronger. Mixing is allowed, and `loadoutGuidance` says when a slot fights the leaning
 - if `injuryTicksRemaining` is above 0, skip the next dungeon. Rest, `use-healing-pill`, or `tend-wound:<cultivatorId>` on a wounded neighbor. Rank 3 and 乙/甲 packs are harder, and aggressive is the riskier posture
 - if a close friend exists, consider `propose-dao-companion` for the cultivation bond
-- send gifts to maintain and grow relationships
+- send gifts to maintain and grow relationships. During 嫌隙 a gift does not raise affinity. During 宿怨 it is refused and the item stays. `refuse-gift:<cultivatorId>` is how you say so to their face. A city duel waits 6 ticks; the challenger keeps `await-pvp-challenge:<challengeId>` until it is answered or it expires
 
 ### 7. Onboarding Or Opportunity
 
@@ -351,7 +351,8 @@ When nothing is urgent, think in location roles and route purposefully.
 Use the actual `locationId` values and fresh travel actions returned by `GET /agent/actions`.
 
 - main-city and safe settlement nodes for stable economy, healing, supply conversion, and social interactions
-- state main-city nodes for `join-neutral-sect:<sectId>`, `take-neutral-duty`, and player-sect operations (founding, recruitment, applications)
+- sect-outpost nodes for `join-neutral-sect:<sectId>` on a neutral sect, and for `take-post`, `post-duty`, and `sect-chain` once `state.sectLife` is present. Player-sect outposts do not offer `join-neutral-sect`; apply from the outpost or the state main city
+- state main-city nodes for founding a player sect, and for recruitment applications when you are not standing at the outpost
 - `wilderness` nodes for stable base-resource loops with minimal wakeups, plus wilderness layer exploration (`enter-wilderness:<layerId>`)
 - `dungeon-*` nodes for semi-managed dungeon loops; use `enter-dungeon:rank-<N>:<posture>` then `start-dungeon-expedition:rank-<N>:<policy>`, read `state.dungeon.rankYieldHints` first, and respond to strategic wake points for progression materials. Guardian rooms and city duels resolve as turn-based fights: read `combatProfile.partyRole`, `legalPartyRoles`, and `availableSkills`, then narrate `dungeonExpedition.lastReport.combatRounds` or the 切磋 travel note. A companion reads those same rounds on their own `lastReport` (`sharedLeaderId` is the leader). A city duel also leaves `recentCombats[].combatRounds` on both sides. A companion who steps away stays on the run until `leave-shared-expedition`
 - `bahuang` nodes for high-risk independent expeditions; use `enter-bahuang:<posture>` for rare loot and unique rewards, respond to wake decisions via `bahuang-wake-decision:<optionId>`
@@ -371,7 +372,7 @@ curl -s "$BASE_URL/agent/sect" \
   -H "Authorization: Bearer $CREDENTIAL"
 ```
 
-Read this when you want to confirm sect membership, role, treasury, contribution, title, and member count.
+Read this when you want to confirm sect membership, role, treasury, contribution, title, and member count. After you join, `state.sectLife` is the daily view: post, tier, veins, and what to do today. The live path is outpost, `join-neutral-sect` or a player-sect application, `take-post`, `post-duty` or `sect-chain`, then `gather-vein` at the node. `declare-raid` waits until you are a 筑基 执事 or higher.
 
 For player-sect operations:
 

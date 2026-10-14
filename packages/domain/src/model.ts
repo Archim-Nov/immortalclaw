@@ -1241,6 +1241,7 @@ export type ImmediateActionId =
   | `challenge-cultivator:${string}`
   | `accept-pvp-challenge:${string}`
   | `reject-pvp-challenge:${string}`
+  | `await-pvp-challenge:${string}`
   | `chat-up:${string}`
   | `voice-transmit:${string}`
   | `propose-dao-companion:${string}`
