@@ -41,6 +41,7 @@ Recent supporting gameplay specs:
 - `docs/specs/combat-party-deepen-v2/spec.md`
 - `docs/specs/combat-deepen-v3/spec.md`
 - `docs/specs/combat-weapon-root-aptitude/spec.md`
+- `docs/specs/combat-content-deepen-v1/spec.md`
 - `docs/specs/social-spoken-lines/spec.md`
 - `docs/specs/companion-shared-report/spec.md`
 - `docs/specs/relationship-mood-digest/spec.md`

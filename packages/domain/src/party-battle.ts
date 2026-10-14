@@ -277,6 +277,45 @@ function pickSkill(skills: readonly ResolvedCombatSkill[], prefer: (skill: Resol
   return skills.filter(prefer).sort((a, b) => aptitudeRank(a) - aptitudeRank(b))[0] ?? null;
 }
 
+function pickLateSignature(
+  fighter: LiveFighter,
+  skills: readonly ResolvedCombatSkill[],
+  allies: readonly LiveFighter[],
+  round: number,
+): ResolvedCombatSkill | null {
+  if (fighter.skillsUsed.some((id) => id.startsWith("late-"))) return null;
+  const reserve = fighter.maxSpirit > 0 ? fighter.spirit / fighter.maxSpirit : 0;
+  if (reserve <= 0.7) return null;
+  const late = skills.filter((skill) => skill.id.startsWith("late-"));
+  const richest = (pool: ResolvedCombatSkill[]) => [...pool].sort((a, b) => {
+    const leaningGap = aptitudeRank(a) - aptitudeRank(b);
+    if (leaningGap !== 0) return leaningGap;
+    return b.spiritCost - a.spiritCost;
+  })[0] ?? null;
+  if (fighter.role === "dps") return richest(late.filter((skill) => skill.power > 1 && skill.target === "enemy"));
+  if (fighter.role === "breaker") {
+    return richest(late.filter((skill) => skill.power > 0 && (skill.shred < 1 || skill.power > 1.4)));
+  }
+  if (fighter.role === "guard") {
+    return richest(late.filter((skill) => skill.focus || skill.guardRatio < 1 || skill.wardRatio < 1));
+  }
+  if (fighter.role === "support") {
+    const hurt = woundedAlly(allies, fighter);
+    if (hurt) {
+      return richest(late.filter((skill) => skill.healRatio > 0))
+        ?? richest(late.filter((skill) => skill.wardRatio < 1));
+    }
+    if (round === 1) return richest(late.filter((skill) => skill.wardRatio < 1 && skill.healRatio <= 0));
+    return null;
+  }
+  if (fighter.role === "control") return richest(late.filter((skill) => skill.slow));
+  return null;
+}
+
+function labeledSkill(name: string, kind: "兵器" | "法术"): string {
+  return `${name}（${kind}）`;
+}
+
 export function choosePartyAction(
   fighter: LiveFighter,
   allies: readonly LiveFighter[],
@@ -289,6 +328,8 @@ export function choosePartyAction(
     return { skill: FLEE_SKILL, flee: true };
   }
   const skills = legalSkills(fighter);
+  const late = pickLateSignature(fighter, skills, allies, round);
+  if (late) return { skill: late, flee: false };
   const basic = skills.find((skill) => skill.id === "basic-strike") ?? skills[0] ?? null;
   const hurt = woundedAlly(allies, fighter);
   const slowed = living(enemies).some((enemy) => enemy.slowRounds > 0);
@@ -504,7 +545,7 @@ function actParty(
       round,
       actorName: fighter.name,
       roleLabel,
-      skillName: skill.name,
+      skillName: labeledSkill(skill.name, kind),
       targetName: target.name,
       result: "heal",
       note: noteOf(fighter.name, roleLabel, skill.name, target.name, "补上了", kind),
@@ -526,7 +567,7 @@ function actParty(
       round,
       actorName: fighter.name,
       roleLabel,
-      skillName: skill.name,
+      skillName: labeledSkill(skill.name, kind),
       targetName,
       result: skill.wardRatio < 1 && skill.guardRatio >= 1 ? "ward" : "guard",
       note: noteOf(fighter.name, roleLabel, skill.name, targetName, skill.focus ? "守住并引开了" : "护住了", kind),
@@ -536,11 +577,13 @@ function actParty(
     };
   }
   const targets = skill.target === "all-enemies" ? living(enemies) : [pickPartyTarget(fighter, enemies)].filter((target): target is LiveFighter => Boolean(target));
+  if (skill.guardRatio < 1) fighter.guardRatio = Math.min(fighter.guardRatio, skill.guardRatio);
   let best: "hit" | "miss" | "crit" = "miss";
   const names: string[] = [];
   for (const target of targets) {
     const strike = applyDamage(fighter, target, skill.power, skill.channel, skill.hitBonus, skill.critBonus, skill.shred, `${seed}:${target.id}`);
     if (skill.slow && strike.result !== "miss") target.slowRounds = 2;
+    if (skill.focus && strike.result !== "miss") fighter.tauntRounds = 2;
     if (strike.result === "crit") best = "crit";
     else if (strike.result === "hit" && best !== "crit") best = "hit";
     names.push(target.name);
@@ -551,7 +594,7 @@ function actParty(
     round,
     actorName: fighter.name,
     roleLabel,
-    skillName: skill.name,
+    skillName: labeledSkill(skill.name, kind),
     targetName,
     result: best,
     note: noteOf(fighter.name, roleLabel, skill.name, targetName, resultText, kind),
@@ -569,8 +612,9 @@ function actEnemy(
   seed: string,
 ): ActRecord {
   const roleLabel = "敌手";
-  const skillName = action.enemyName ?? "进攻";
+  const rawName = action.enemyName ?? "进攻";
   const kind = channelLabel(fighter.spellAttack > fighter.weaponAttack ? "spell" : "weapon");
+  const skillName = labeledSkill(rawName, kind);
   if (action.enemyGuard && action.enemyGuard < 1) {
     fighter.guardRatio = Math.min(fighter.guardRatio, action.enemyGuard);
     if (action.enemyFocus) fighter.tauntRounds = 1;
@@ -581,7 +625,7 @@ function actEnemy(
       skillName,
       targetName: fighter.name,
       result: "guard",
-      note: `${fighter.name}以${skillName}（${kind}）封住了自己的门。`,
+      note: `${fighter.name}以${rawName}（${kind}）封住了自己的门。`,
       leaderStrike: null,
       enemyStrike: null,
       skillPoolLabel: kind,
@@ -625,7 +669,7 @@ function actEnemy(
     skillName,
     targetName: target.name,
     result,
-    note: `${fighter.name}以${skillName}（${kind}）${resultText}${target.name}。`,
+    note: `${fighter.name}以${rawName}（${kind}）${resultText}${target.name}。`,
     leaderStrike: null,
     enemyStrike: strike.result,
     skillPoolLabel: kind,
