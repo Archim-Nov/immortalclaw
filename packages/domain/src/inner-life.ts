@@ -5,6 +5,7 @@
  * The digest looks back six ticks, which is twelve hours.
  */
 
+import { quietRealmStep } from "./realm-path.js";
 import type {
   BondArc,
   Cultivator,
@@ -380,6 +381,7 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
     quotes.push({ speakerName: event.speakerName, line: event.line, tick: event.tick });
     if (quotes.length >= 4) break;
   }
+  const nextStep = quietRealmStep(cultivator.realmLevel);
   return {
     windowTicks: DIGEST_WINDOW_TICKS,
     windowHours: DIGEST_WINDOW_TICKS * HOURS_PER_TICK,
@@ -390,7 +392,8 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
     fights,
     relationships,
     quotes,
-    summary: summarizeDigest(cultivator.name, mood, growth, fights, relationshipEvents, quotes),
+    summary: summarizeDigest(cultivator.name, mood, growth, fights, relationshipEvents, quotes, nextStep),
+    ...(nextStep ? { nextStep } : {}),
   };
 }
 
@@ -401,6 +404,7 @@ function summarizeDigest(
   fights: readonly string[],
   relationshipEvents: readonly LifeEvent[],
   quotes: readonly { speakerName: string; line: string }[],
+  nextStep: string | null,
 ): string {
   const socialTexts = relationshipEvents.map((event) => event.text).slice(0, 3);
   const named: string[] = [];
@@ -414,7 +418,8 @@ function summarizeDigest(
   }
   const quote = quotes[0];
   if (socialTexts.length === 0 && fights.length === 0 && growth.length === 0 && !quote) {
-    return `${name}最近六个时辰过得平常，没有特别要报的事。${mood.sentence}`;
+    const step = nextStep ? `${nextStep}` : "";
+    return `${name}最近六个时辰过得平常，没有特别要报的事。${step}${mood.sentence}`;
   }
   const parts = [`${name}最近六个时辰里有这些事。`];
   if (named.length > 0) parts.push(`说到的人有${named.join("、")}。`);

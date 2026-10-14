@@ -93,7 +93,11 @@ export function computeDaoPotential(cultivator: Cultivator): DaoPotential {
       ? 10 + cultivator.realmLevel * 5
       : cultivator.realm === "筑基"
         ? 50 + cultivator.realmLevel * 8
-        : 100 + cultivator.realmLevel * 12;
+        : cultivator.realm === "金丹"
+          ? 100 + cultivator.realmLevel * 12
+          : cultivator.realm === "元婴"
+            ? 180 + cultivator.realmLevel * 14
+            : 280 + cultivator.realmLevel * 16;
 
   const baselineMainAttributes = deriveMainAttributes(cultivator.registrationRecord);
   const mainAttributes = computeEffectiveMainAttributes(
