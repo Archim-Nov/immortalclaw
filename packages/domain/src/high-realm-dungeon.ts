@@ -248,9 +248,15 @@ export function jiaBandFailCost(
   return { ...cost };
 }
 
-export function jiaInjuryFloor(grade: DungeonGrade, rank: number, outcome: "loss" | "withdraw" | "win"): number {
+export function jiaInjuryFloor(
+  grade: DungeonGrade,
+  rank: number,
+  outcome: "loss" | "withdraw" | "win" | "draw",
+): number {
   if (outcome === "win") return 0;
-  return jiaBandFailCost(grade, rank, outcome)?.injuryTicks ?? 0;
+  // A timeout draw leaves both sides standing, so 甲级 uses the retreat wound length.
+  const fail = outcome === "draw" ? "withdraw" : outcome;
+  return jiaBandFailCost(grade, rank, fail)?.injuryTicks ?? 0;
 }
 
 export function jiaCompanionInjury(

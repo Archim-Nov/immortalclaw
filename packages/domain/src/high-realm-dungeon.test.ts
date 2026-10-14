@@ -13,6 +13,7 @@ import {
   jiaBandFailCost,
   jiaDirectEncounterScale,
   jiaGuardianSpellId,
+  jiaInjuryFloor,
 } from "./high-realm-dungeon.js";
 import type { DungeonExpeditionPolicy, DungeonGrade, PartyRoleId } from "./model.js";
 import {
@@ -270,6 +271,15 @@ test("甲级输掉或撤出会挂伤、掉灵石，层数越高越重", () => {
   assert.equal(companionWoundTicks({ rank: 8, grade: "甲", outcome: "loss", qiLoss: 1 }), 8);
   assert.equal(companionWoundTicks({ rank: 2, grade: "甲", outcome: "withdraw", qiLoss: 1 }), 0);
   assert.equal(companionWoundTicks({ rank: 5, grade: "甲", outcome: "loss", qiLoss: 1 }), 6);
+  assert.equal(jiaInjuryFloor("甲", 7, "win"), 0);
+  assert.equal(jiaInjuryFloor("甲", 7, "draw"), fled.injuryTicks);
+  assert.equal(jiaInjuryFloor("丙", 1, "draw"), 0);
+  assert.equal(woundTicksForGuardian({
+    rank: 7, grade: "甲", policy: "balanced", outcome: "draw", leaderHpLostRatio: 0.1, pressureInjury: 0,
+  }), fled.injuryTicks);
+  assert.equal(woundTicksForGuardian({
+    rank: 7, grade: "甲", policy: "balanced", outcome: "win", leaderHpLostRatio: 0.1, pressureInjury: 0,
+  }), 0);
 });
 
 test("地宫提醒和境界路线用完整的中文写出这一层的危险", () => {
@@ -319,7 +329,7 @@ test("神纹天隙打输会扣灵石、挂伤，并在见闻里留下这一场",
   assert.equal(cultivator.activeJobId, null);
   const log = world.combatLogs[0];
   assert.equal(log?.outcome, "defeat");
-  assert.equal(log?.enemySnapshot.spellLoadoutId, "earth-suppress-tier-4");
+  assert.equal(log?.enemySnapshot?.spellLoadoutId, "earth-suppress-tier-4");
   assert.equal(cultivator.spiritStones, stonesBefore - 60);
   assert.equal(cultivator.injuryTicksRemaining, 11);
   assert.ok(cultivator.statusEffects.some((effect) => effect.id === "deviation" && effect.remainingTicks === 3));
@@ -342,6 +352,6 @@ test("丹霞内府的守关改用法术，不再被兵器功法盖住", () => {
   performAction(world, cultivator.id, "challenge-guardian:rank-1");
   advanceWorld(world, 7);
   const log = world.combatLogs[0];
-  assert.equal(log?.enemySnapshot.spellLoadoutId, "fire-blaze-tier-2");
-  assert.equal(log?.enemySnapshot.weaponLoadoutId, null);
+  assert.equal(log?.enemySnapshot?.spellLoadoutId, "fire-blaze-tier-2");
+  assert.equal(log?.enemySnapshot?.weaponLoadoutId, null);
 });
