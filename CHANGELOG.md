@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 请托、字条和闲话 / Favors, notes, and gossip
+
+一个修士可以当面请另一个人去采一株云心草、送到地宫门口、在闭关时守在洞府外，或把云心草送给第三人。对方应下或回绝，办成、放下或过了时辰都会改好感、嫌隙和心境。办成了欠一份人情，仍用 `call-favor` 兑。双方游记和 `state.digest` 都会留下这句话。
+
+`leave-note` 可以留给不在眼前的人，`leave-spot-note` 留在安稳的地方。对方回头用 `reply-note` 或 `reply-spot-note` 回一句。同门可以在 `state.sectBoard` 上留话，一起办一趟差事，前辈也可以提点后辈。附近的人会听见知己、嫌隙、城中胜负和黄掉的请托，生成的话有时会把这件事说出来。嫌隙这一阶的名字从误写的「嫩隙」改了过来。
+
+One cultivator can ask another to fetch 云心草, walk them to a dungeon gate, stand watch at a breakthrough, or deliver the herb to a third person. Accepting, refusing, finishing, or letting it lapse changes affinity, grudge, and mood. Success owes a favor `call-favor` can repay, and both digests keep the sentence. A note can wait for someone who is away. Sect-mates share a hall board, one joint errand, and a senior's guidance. Neighbors hear gossip about a 知己 bond, a 嫌隙, a city win, or a failed favor. The grudge stage at 8 is named 嫌隙.
+
 ### 同伴也能读到的战报 / Companion combat rounds
 
 同队下地宫结束以后，每个还在这一趟上的同伴自己的 `dungeonExpedition.lastReport.combatRounds` 与队长相同，写明敌人、胜负、站位和招式名。`sharedLeaderId` 是队长。摘要以「你跟着某走了这一趟」起头。跑着的时候，`sharedDungeon.combatRounds` 是已经打过的几场。收队的见闻仍写分灵石、被拖出去或中止，后面补上谁以什么站位上场、使出了哪一式、门口或途中的一句「」，以及谁把伤压下去。中途离开门口、没有 `leave-shared-expedition` 的人也会拿到这份战报，只是账没有分到身上。

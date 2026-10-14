@@ -24,6 +24,7 @@ export type SpeechKind =
 
 const PARTY_KINDS = new Set<SpeechKind>(["rendezvous-at-gate", "ready-to-enter", "wait"]);
 const FREE_KINDS = new Set<SpeechKind>(["say", "reply"]);
+const GOSSIP_KINDS = new Set<SpeechKind>(["chat-up", "greet", "share-info", "say"]);
 
 const POOLS: Record<SpeechKind, readonly string[]> = {
   "chat-up": [
@@ -152,6 +153,15 @@ export const MOOD_LINE_POOLS: Record<Exclude<MoodId, "steady">, Record<SpeechKin
   },
 };
 
+function takeGossipLine(world: WorldState, speakerId: string, previous: string | null): string | null {
+  const heard = world.cultivators[speakerId]?.heardGossip;
+  if (!heard) return null;
+  const fresh = heard.find((item) => !item.mentioned && world.tick - item.tick <= DIALOGUE_WINDOW_TICKS && item.shortLine);
+  if (!fresh || fresh.shortLine === previous) return null;
+  fresh.mentioned = true;
+  return fresh.shortLine;
+}
+
 function hashString(input: string): number {
   return Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 }
@@ -188,13 +198,14 @@ export function openSpokenLine(
   }
   const cleaned = cleanSpokenLine(supplied);
   const previous = speakerLink?.lastSpokenLine ?? heard?.lastSpokenLine ?? null;
+  const gossipLine = !cleaned && GOSSIP_KINDS.has(kind) ? takeGossipLine(world, speakerId, previous) : null;
   if (cleaned && previous === cleaned && recentPair) {
     throw new GameplayRejection("这句话刚说过。换一句，或等几刻。");
   }
   const speakerMood = world.cultivators[speakerId]?.mood?.id;
   const flavored = speakerMood && speakerMood !== "steady" ? MOOD_LINE_POOLS[speakerMood]?.[kind] : undefined;
   const pool = flavored && flavored.length > 0 ? flavored : POOLS[kind];
-  let line = cleaned;
+  let line = cleaned ?? gossipLine;
   if (!line) {
     let index = hashString(`${speakerId}:${listenerId}:${tick}:${kind}`) % pool.length;
     if (pool[index] === previous && pool.length > 1) index = (index + 1) % pool.length;

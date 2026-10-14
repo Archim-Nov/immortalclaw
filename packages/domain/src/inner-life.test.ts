@@ -95,9 +95,9 @@ test("知己 can spar-teach and share stones, and earlier stages cannot", () => 
 test("grudge crossings unlock a feud challenge", () => {
   const { world, first, second } = spawn("楚晚");
   addMutualGrudge(world, first.id, second.id, 8);
-  assert.equal(getSocialLinksView(world, first.id).find((link) => link.targetCultivatorId === second.id)?.grudgeArc, "嫩隙");
-  assert.ok((first.travelNotes ?? []).some((note) => note.detail.includes("嫩隙")));
-  assert.ok((second.travelNotes ?? []).some((note) => note.detail.includes("嫩隙")));
+  assert.equal(getSocialLinksView(world, first.id).find((link) => link.targetCultivatorId === second.id)?.grudgeArc, "嫌隙");
+  assert.ok((first.travelNotes ?? []).some((note) => note.detail.includes("嫌隙")));
+  assert.ok((second.travelNotes ?? []).some((note) => note.detail.includes("嫌隙")));
   assert.equal(actionIds(world, first.id).has(`grudge-challenge:${second.id}`), false);
 
   addMutualGrudge(world, first.id, second.id, 10);
@@ -134,7 +134,7 @@ test("mood shifts from a gift, a rejection, a spoken line, a wound, and a breakt
   const stung = getCultivatorState(world, first.id).mood;
   assert.equal(stung?.cause, "rejection");
   assert.equal(getSocialLink(world, first.id, second.id)?.grudge ?? 0, 8);
-  assert.equal(getSocialLinksView(world, first.id)[0]?.grudgeArc, "嫩隙");
+  assert.equal(getSocialLinksView(world, first.id)[0]?.grudgeArc, "嫌隙");
 
   const said = performAction(world, first.id, `say:${second.id}`);
   assert.equal(said.accepted, true);
