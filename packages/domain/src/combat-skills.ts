@@ -12,18 +12,29 @@ import {
   getWeaponLoadoutDefinition,
   SPELL_BRANCH_ELEMENT_MAP,
 } from "./combat-loadouts.js";
+import {
+  CONTENT_SKILLS,
+  bandForTier,
+  insightFragmentFor,
+  primaryRootElements,
+  seekLine,
+  spellElementOf,
+  weaponFamilyOf,
+} from "./combat-content.js";
 import type {
   AttackChannel,
   CombatLeaningId,
+  CombatNextUnlock,
   CombatSkillView,
   Cultivator,
   FiveElementId,
+  ItemId,
   PartyRoleId,
   SpellBranchId,
   WeaponFamilyId,
   WeaponTypeId,
 } from "./model.js";
-import { deriveSpiritRootKindId, sortedElementEntries } from "./registration-taxonomy.js";
+import { sortedElementEntries } from "./registration-taxonomy.js";
 
 export const PARTY_ROLE_LABEL: Record<PartyRoleId, string> = {
   dps: "主攻",
@@ -66,6 +77,8 @@ export interface ResolvedCombatSkill {
   summary: string;
   /** How this skill sits against the cultivator's leaning. Absent on hand-built fight fixtures. */
   aptitude?: "favored" | "off" | "neutral";
+  /** 入门 through 化神. Absent on the older shared techniques. */
+  manualRank?: string;
 }
 
 interface SkillDraft {
@@ -92,6 +105,10 @@ interface SkillDraft {
   weaponTypes?: readonly WeaponTypeId[];
   elements?: readonly FiveElementId[];
   branches?: readonly SpellBranchId[];
+  minRealmLevel?: number;
+  minProficiency?: number;
+  minTier?: number;
+  manualRank?: string;
 }
 
 const SHARED_SKILLS: readonly SkillDraft[] = [
@@ -645,6 +662,7 @@ const ALL_SKILLS: readonly SkillDraft[] = [
   ...ELEMENT_SKILLS,
   ...BRANCH_SKILLS,
   ...Object.values(WEAPON_SIGNATURES),
+  ...CONTENT_SKILLS,
 ];
 
 const CHANNEL_BY_ID = new Map(ALL_SKILLS.map((skill) => [skill.id, skill.channel]));
@@ -679,16 +697,16 @@ export interface SkillContext {
   temperament?: string;
   /** Absent on older hand-built contexts, which stay 均衡 and take no bonus. */
   leaning?: CombatLeaningId;
+  /** Absent on older hand-built contexts. Gated catalog skills stay locked without it. */
+  realmLevel?: number;
+  /** Equipped weapon tier. Absent or 0 keeps tier-gated weapon skills locked. */
+  weaponTier?: number;
+  /** Highest unlocked manual tier for each element. A missing element is tier 0. */
+  manualTierByElement?: Readonly<Partial<Record<FiveElementId, number>>>;
 }
 
 export function spiritRootElementsOf(cultivator: Cultivator): FiveElementId[] {
-  const scores = extractFiveElementScores(cultivator.registrationRecord);
-  const kind = cultivator.registrationRecord?.result.spirit_root_kind_id
-    ?? (cultivator.registrationRecord ? deriveSpiritRootKindId(scores) : "dual-root");
-  const sorted = sortedElementEntries(scores);
-  const first = sorted[0]?.[0] ?? "metal";
-  const second = sorted[1]?.[0] ?? "wood";
-  return kind === "single-root" ? [first] : [first, second];
+  return primaryRootElements(cultivator);
 }
 
 function spiritRootFocus(cultivator: Cultivator): number {
@@ -745,9 +763,25 @@ export function skillContextOf(cultivator: Cultivator): SkillContext {
     rootFocus: spiritRootFocus(cultivator),
     temperament: cultivator.temperament,
     leaning: "balanced",
+    realmLevel: cultivator.realmLevel,
+    weaponTier: weapon ? (weapon.weaponTier ?? 1) : 0,
+    manualTierByElement: manualTiersOf(cultivator),
   };
   ctx.leaning = deriveCombatLeaning(ctx);
   return ctx;
+}
+
+function manualTiersOf(cultivator: Cultivator): Partial<Record<FiveElementId, number>> {
+  const tiers: Partial<Record<FiveElementId, number>> = {};
+  const ids = new Set(cultivator.unlockedSpellLoadoutIds);
+  if (cultivator.equippedSpellLoadoutId) ids.add(cultivator.equippedSpellLoadoutId);
+  for (const id of ids) {
+    const spell = getSpellLoadoutDefinition(id);
+    if (!spell) continue;
+    const element = SPELL_BRANCH_ELEMENT_MAP[spell.spellBranchId];
+    tiers[element] = Math.max(tiers[element] ?? 0, spell.spellTier ?? 1);
+  }
+  return tiers;
 }
 
 function elementMatches(draft: SkillDraft, ctx: SkillContext): boolean {
@@ -757,20 +791,68 @@ function elementMatches(draft: SkillDraft, ctx: SkillContext): boolean {
   return draft.elements.some((element) => ctx.rootElements.includes(element) || ctx.spellElement === element);
 }
 
-function skillAvailable(draft: SkillDraft, ctx: SkillContext): boolean {
-  if (draft.always) {
-    return true;
+function familiesOf(draft: SkillDraft): WeaponFamilyId[] {
+  if (draft.families && draft.families.length > 0) return [...draft.families];
+  if (draft.weaponTypes && draft.weaponTypes.length > 0) return draft.weaponTypes.map((typeId) => weaponFamilyOf(typeId));
+  return [];
+}
+
+function elementsOf(draft: SkillDraft): FiveElementId[] {
+  if (draft.elements && draft.elements.length > 0) return [...draft.elements];
+  if (draft.branches && draft.branches.length > 0) return draft.branches.map((branch) => spellElementOf(branch));
+  return [];
+}
+
+function sameTrack(left: SkillDraft, right: SkillDraft): boolean {
+  const families = familiesOf(left);
+  if (families.some((family) => familiesOf(right).includes(family))) return true;
+  const elements = elementsOf(left);
+  return elements.some((element) => elementsOf(right).includes(element));
+}
+
+function practiceToward(draft: SkillDraft, ctx: SkillContext): number {
+  let best = ctx.proficiency?.[draft.id] ?? 0;
+  for (const other of ALL_SKILLS) {
+    if (!sameTrack(draft, other)) continue;
+    best = Math.max(best, ctx.proficiency?.[other.id] ?? 0);
   }
-  if (draft.weaponTypes && (!ctx.weaponType || !draft.weaponTypes.includes(ctx.weaponType))) {
-    return false;
-  }
-  if (draft.families && (!ctx.weaponFamily || !draft.families.includes(ctx.weaponFamily))) {
-    return false;
-  }
-  if (draft.branches && (!ctx.spellBranch || !draft.branches.includes(ctx.spellBranch))) {
-    return false;
-  }
+  return best;
+}
+
+function bestManualTier(draft: SkillDraft, ctx: SkillContext): number {
+  const elements = draft.elements ?? [];
+  return elements.reduce((best, element) => Math.max(best, ctx.manualTierByElement?.[element] ?? 0), 0);
+}
+
+function hasContentGate(draft: SkillDraft): boolean {
+  return draft.minRealmLevel !== undefined || draft.minTier !== undefined || (draft.minProficiency ?? 0) > 0;
+}
+
+function identityMatches(draft: SkillDraft, ctx: SkillContext): boolean {
+  if (draft.weaponTypes && (!ctx.weaponType || !draft.weaponTypes.includes(ctx.weaponType))) return false;
+  if (draft.families && (!ctx.weaponFamily || !draft.families.includes(ctx.weaponFamily))) return false;
+  if (draft.branches && (!ctx.spellBranch || !draft.branches.includes(ctx.spellBranch))) return false;
   return elementMatches(draft, ctx);
+}
+
+function unlockBlocker(draft: SkillDraft, ctx: SkillContext): "境界" | "熟练" | "兵器" | "功法" | null {
+  const realmOk = (ctx.realmLevel ?? 0) >= (draft.minRealmLevel ?? 0);
+  const tierNeed = draft.minTier ?? 0;
+  const tierOk = draft.channel === "spell"
+    ? bestManualTier(draft, ctx) >= tierNeed
+    : (ctx.weaponTier ?? 0) >= tierNeed;
+  const profOk = practiceToward(draft, ctx) >= (draft.minProficiency ?? 0);
+  if (realmOk && tierOk && profOk) return null;
+  if (!realmOk) return "境界";
+  if (!tierOk) return draft.channel === "spell" ? "功法" : "兵器";
+  return "熟练";
+}
+
+function skillAvailable(draft: SkillDraft, ctx: SkillContext): boolean {
+  if (draft.always) return true;
+  if (!identityMatches(draft, ctx)) return false;
+  if (hasContentGate(draft) && unlockBlocker(draft, ctx) !== null) return false;
+  return true;
 }
 
 function tightenRatio(ratio: number, favored: boolean): number {
@@ -835,6 +917,7 @@ function resolveDraft(draft: SkillDraft, ctx: SkillContext): ResolvedCombatSkill
     shred: draft.shred ?? 1,
     summary,
     aptitude,
+    ...(draft.manualRank ? { manualRank: draft.manualRank } : {}),
   };
 }
 
@@ -879,6 +962,7 @@ export function listCombatSkillViews(ctx: SkillContext): CombatSkillView[] {
     ...poolOf(skill.channel),
     aptitude: skill.aptitude ?? "neutral",
     aptitudeLabel: aptitudeLabelOf(skill.aptitude),
+    ...(skill.manualRank ? { manualRank: skill.manualRank } : {}),
   }));
 }
 
@@ -1024,4 +1108,82 @@ export function catalogSkillCountForRole(role: PartyRoleId): number {
 
 export function allSkillDrafts(): readonly SkillDraft[] {
   return ALL_SKILLS;
+}
+
+const FAMILY_ENTRY: Record<WeaponFamilyId, string> = {
+  quick: "quick-flurry",
+  heavy: "heavy-cleave",
+  polearm: "pole-thrust",
+  flexible: "flex-lash",
+  "ranged-mystic": "range-snipe",
+};
+
+const ELEMENT_ENTRY: Record<FiveElementId, string> = {
+  metal: "metal-edge-cut",
+  wood: "wood-heal",
+  water: "water-frost",
+  fire: "fire-burst",
+  earth: "earth-wall",
+};
+
+function gateSort(left: SkillDraft, right: SkillDraft): number {
+  return (left.minRealmLevel ?? 0) - (right.minRealmLevel ?? 0)
+    || (left.minTier ?? 0) - (right.minTier ?? 0)
+    || (left.minProficiency ?? 0) - (right.minProficiency ?? 0)
+    || left.name.localeCompare(right.name, "zh");
+}
+
+function needLine(draft: SkillDraft, blockedBy: CombatNextUnlock["blockedBy"]): string {
+  const band = bandForTier(draft.minTier ?? 1);
+  if (blockedBy === "境界") return `要到${band.realm}，第${draft.minRealmLevel}层。`;
+  if (blockedBy === "兵器") return `要把手里的兵器换到${band.manualRank}，第${draft.minTier}阶。`;
+  if (blockedBy === "功法") return `要把这门功法换到${band.manualRank}，第${draft.minTier}阶。`;
+  return `同路的招要练到${draft.minProficiency}。`;
+}
+
+export function listNextUnlocks(ctx: SkillContext): CombatNextUnlock[] {
+  const locked = ALL_SKILLS.filter((draft) => hasContentGate(draft) && identityMatches(draft, ctx) && !skillAvailable(draft, ctx));
+  const picked = [
+    ...locked.filter((draft) => draft.channel === "weapon").sort(gateSort).slice(0, 3),
+    ...locked.filter((draft) => draft.channel === "spell").sort(gateSort).slice(0, 3),
+  ];
+  return picked.map((draft) => {
+    const blockedBy = unlockBlocker(draft, ctx) ?? "熟练";
+    const band = bandForTier(draft.minTier ?? 1);
+    return {
+      id: draft.id,
+      name: draft.name,
+      channel: draft.channel,
+      kind: draft.channel === "spell" ? "法术" as const : "兵器" as const,
+      manualRank: draft.manualRank ?? band.manualRank,
+      realm: band.realm,
+      blockedBy,
+      need: needLine(draft, blockedBy),
+      seek: seekLine(draft.channel === "spell" ? "spell" : "weapon", draft.minTier ?? 1),
+    };
+  });
+}
+
+export function applyBreakthroughInsight(cultivator: Cultivator): { detail: string; fragmentId: ItemId | null } {
+  const weapon = cultivator.equippedWeaponLoadoutId
+    ? getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId)
+    : null;
+  const book = { ...(cultivator.skillProficiency ?? {}) };
+  const familyId = weapon?.weaponFamilyId;
+  if (familyId) {
+    const id = FAMILY_ENTRY[familyId];
+    book[id] = Math.min(SKILL_PROFICIENCY_CAP, (book[id] ?? 0) + 4);
+  }
+  const element = primaryRootElements(cultivator)[0];
+  if (element) {
+    const id = ELEMENT_ENTRY[element];
+    book[id] = Math.min(SKILL_PROFICIENCY_CAP, (book[id] ?? 0) + 4);
+  }
+  cultivator.skillProficiency = book;
+  const fragmentId = insightFragmentFor(cultivator);
+  if (fragmentId) cultivator.inventory[fragmentId] = (cultivator.inventory[fragmentId] ?? 0) + 1;
+  const detail = fragmentId
+    ? `${cultivator.name}破境时把兵器和灵根上的入门招又顺了四成，还悟出一页功法残页。`
+    : `${cultivator.name}破境时把兵器和灵根上的入门招又顺了四成。`;
+  return { detail, fragmentId };
 }

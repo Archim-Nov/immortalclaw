@@ -28,6 +28,7 @@ import type {
 } from "./model.js";
 import { addMutualAffinity, addMutualGrudge, forgiveOneFavor, getPartyOf, getSocialLink, grantOwedFavor, repaymentQuote } from "./social.js";
 import { cleanSpokenLine, errandLine, openSpokenLine } from "./spoken-lines.js";
+import { favorFragmentFor } from "./combat-content.js";
 import { pushTravelNote, travelNote } from "./travelogue.js";
 
 export const FAVOR_HERB_ID = "cloud-heart-grass" as ItemId;
@@ -561,13 +562,21 @@ function finishFavor(world: WorldState, favor: PersonalFavor, detail: string): A
   addMutualAffinity(world, asker.id, asked.id, FAVOR_AFFINITY_DONE);
   const repay = consumeRepayment(world, asked, asker);
   grantOwedFavor(world, asked.id, asker.id, favorReason(world, favor), favor.kind);
+  let page = "";
+  if (favor.kind === "escort-gate" || favor.kind === "guard-breakthrough") {
+    const fragment = favorFragmentFor(asker);
+    if (fragment) {
+      asker.inventory[fragment] = (asker.inventory[fragment] ?? 0) + 1;
+      page = `${asker.name}手里多了一页功法残页。`;
+    }
+  }
   const quote = repay ? repaymentQuote(repay.reason) : null;
   const linked = !quote || !repay
     ? ""
     : repay.forFriend
       ? `${asked.name}替${asker.name}办了这件事，算是还${repay.creditor.name}的人情：「${quote}」`
       : `${asked.name}说：「${quote}」`;
-  const full = linked ? `${detail}${linked}` : detail;
+  const full = `${linked ? `${detail}${linked}` : detail}${page}`;
   const warm = `${full}这份人情记下了，心里也热着。`;
   shiftCultivatorMood(world, asker, "gift", warm);
   shiftCultivatorMood(world, asked, "gift", warm);

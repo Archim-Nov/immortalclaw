@@ -60,7 +60,7 @@ for (const wl of Object.values(WEAPON_LOADOUT_DEFINITIONS)) {
       inputMaterials: [{ itemId: `weapon-material-${wlId}` as ItemId, count: 1 }],
       spiritStoneCost: WEAPON_FORGE_COSTS[tier],
       durationTicks: TIER_DURATION[tier],
-      enabledInLive: tier <= 3,
+      enabledInLive: true,
     }),
   );
 }
@@ -79,7 +79,7 @@ for (const sl of Object.values(SPELL_LOADOUT_DEFINITIONS)) {
       inputMaterials: [{ itemId: `spell-fragment-${slId}` as ItemId, count: 1 }],
       spiritStoneCost: SPELL_SYNTH_COSTS[tier],
       durationTicks: TIER_DURATION[tier],
-      enabledInLive: tier <= 3,
+      enabledInLive: true,
     }),
   );
 }
@@ -118,7 +118,7 @@ export const SPELL_SOURCE_ITEMS_BY_TIER: Record<1 | 2 | 3 | 4 | 5, ItemId[]> = b
 
 // ---- Source Drop Picker ----
 
-export function pickLoadoutSourceDrop(tier: 1 | 2 | 3, seed: string): ItemId {
+export function pickLoadoutSourceDrop(tier: 1 | 2 | 3 | 4 | 5, seed: string): ItemId {
   const weaponMaterials = WEAPON_SOURCE_ITEMS_BY_TIER[tier];
   const spellFragments = SPELL_SOURCE_ITEMS_BY_TIER[tier];
   const hash = hashValue(seed);

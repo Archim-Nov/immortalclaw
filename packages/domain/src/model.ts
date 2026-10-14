@@ -638,6 +638,33 @@ export interface CombatSkillView {
   /** favored follows the cultivator's leaning. off fights it. neutral is 均衡. */
   aptitude?: "favored" | "off" | "neutral";
   aptitudeLabel?: "顺手" | "别扭" | "平常";
+  /** 入门 through 化神. Omitted on the old shared techniques. */
+  manualRank?: string;
+}
+
+export interface CombatNextUnlock {
+  id: string;
+  name: string;
+  channel: AttackChannel;
+  kind: "兵器" | "法术";
+  manualRank: string;
+  realm: string;
+  blockedBy: "境界" | "熟练" | "兵器" | "功法";
+  need: string;
+  seek: string;
+}
+
+export interface CombatNextGear {
+  id: string;
+  name: string;
+  tier: number;
+  realm: string;
+  manualRank: string;
+  reachable: boolean;
+  shopPrice: number;
+  sectPrice: number;
+  contributionGate: number;
+  seek: string;
 }
 
 export interface DungeonCombatHighlight {
@@ -1081,6 +1108,10 @@ export type ImmediateActionId =
   | "buy-ward-talisman"
   | "buy-eight-wastes-pass"
   | "buy-current-breakthrough-material"
+  | "buy-next-weapon"
+  | "buy-next-manual"
+  | "exchange-sect-weapon"
+  | "exchange-sect-manual"
   | "use-healing-pill"
   | "use-qi-pill"
   | "use-ward-talisman"
@@ -2485,6 +2516,12 @@ export interface CultivatorStateView {
     rootSkills?: CombatSkillView[];
     /** Soft note about mixing the three slots against the leaning. */
     loadoutGuidance?: string;
+    /** The next techniques this weapon, root, and realm have not opened yet. */
+    nextUnlocks?: CombatNextUnlock[];
+    /** Next weapon of the type in hand. Null when that type has nothing left. */
+    nextWeapon?: CombatNextGear | null;
+    /** Next manual of the spell in hand. Null when that branch has nothing left. */
+    nextManual?: CombatNextGear | null;
   };
   sect: PlayerSectView | null;
   neutralSect: NeutralSectView | null;

@@ -128,12 +128,22 @@ import {
   grantCombatPractice,
   legalPartyRoles,
   listCombatSkillViews,
+  listNextUnlocks,
   listResolvedSkills,
   loadoutGuidanceFor,
   partyRoleForCultivator,
   skillContextOf,
   skillsForCultivator,
+  applyBreakthroughInsight,
 } from "./combat-skills.js";
+import {
+  bandForTier,
+  dungeonSourceTier,
+  gearOffer,
+  nextGearViews,
+  purchaseNextGear,
+  tierAllowed,
+} from "./combat-content.js";
 import { buildGuardianPack, companionWoundTicks, fightDigestText, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
@@ -4348,6 +4358,25 @@ function settleDungeonCompanion(
   }
 }
 
+function grantLoadoutSourceDrop(
+  world: WorldState,
+  cultivator: Cultivator,
+  grade: "丙" | "乙" | "甲",
+  rank: number,
+  seed: string,
+): void {
+  const drop = pickLoadoutSourceDrop(dungeonSourceTier(grade, rank), seed);
+  cultivator.inventory[drop] = (cultivator.inventory[drop] ?? 0) + 1;
+  addResourceGainLog(
+    world,
+    cultivator.id,
+    "来源物掉落",
+    `${cultivator.name} 得到了${ITEM_CATALOG[drop]?.name ?? drop}。`,
+    [drop.startsWith("weapon-") ? "weapon-source" : "spell-source"],
+    [{ itemId: drop, count: 1 }],
+  );
+}
+
 function finalizeDungeonExpedition(
   world: WorldState,
   cultivator: Cultivator,
@@ -4371,14 +4400,8 @@ function finalizeDungeonExpedition(
   });
 
   // ---- Loadout source drop (dungeon expedition) ----
-  const expSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
-  if (
-    (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0))
-    && expSourceTier >= 1 && expSourceTier <= 3
-  ) {
-    const expSourceDrop = pickLoadoutSourceDrop(expSourceTier as 1 | 2 | 3, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
-    cultivator.inventory[expSourceDrop] = (cultivator.inventory[expSourceDrop] ?? 0) + 1;
-    addResourceGainLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 完成地宫远征后获得了${ITEM_CATALOG[expSourceDrop]?.name ?? expSourceDrop}。`, [expSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"], [{ itemId: expSourceDrop as ItemId, count: 1 }]);
+  if (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0)) {
+    grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
   }
 
   world.dungeonExpeditionReports[cultivator.id] = report;
@@ -5361,6 +5384,19 @@ function resolveResidenceBreakthrough(world: WorldState, cultivator: Cultivator,
     kind: "growth",
     text: `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`,
   });
+  if (definition.category === "major") {
+    const insight = applyBreakthroughInsight(cultivator);
+    const fragmentName = insight.fragmentId ? (ITEM_CATALOG[insight.fragmentId]?.name ?? "功法残页") : "";
+    const detail = insight.fragmentId ? `${insight.detail}那一页是${fragmentName}。` : insight.detail;
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "breakthrough",
+      title: "破境有所得",
+      detail,
+      locationId: cultivator.locationId,
+      mood: "境界松了，手上的招也顺了一点",
+    }));
+  }
   return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
 }
 function buildItemAction(
@@ -6407,6 +6443,8 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         weaponSkills: skillViews.filter((skill) => skill.pool === "weapon"),
         rootSkills: skillViews.filter((skill) => skill.pool === "root"),
         loadoutGuidance: loadoutGuidanceFor(cultivator),
+        nextUnlocks: listNextUnlocks(skillContextOf(cultivator)),
+        ...nextGearViews(cultivator),
       };
     })(),
   };
@@ -6601,6 +6639,38 @@ function ensureSafetyNetActions(
   return actions;
 }
 
+function contentGearActions(cultivator: Cultivator, location: { kind: string; nodeType: string }): AvailableAction[] {
+  const listed: AvailableAction[] = [];
+  const shop = canTradeAtLocation(location);
+  const member = Boolean(cultivator.sectId || cultivator.neutralSectId);
+  const earned = cultivator.sectId ? cultivator.totalContribution : cultivator.neutralContribution;
+  for (const kind of ["weapon", "spell"] as const) {
+    const offer = gearOffer(cultivator, kind);
+    if (!offer?.reachable) continue;
+    if (shop) {
+      listed.push({
+        actionId: kind === "weapon" ? "buy-next-weapon" : "buy-next-manual",
+        label: kind === "weapon" ? `坊市买${offer.name}` : `坊市买${offer.name}`,
+        description: `${offer.seek}坊市要${offer.shopPrice}灵石。买回去还得用掉才会学会，不会自动换上。`,
+        durationTicks: 0,
+        kind: "immediate",
+        costs: { spiritStones: offer.shopPrice },
+      });
+    }
+    if (location.kind === "safe" && member && earned >= offer.contributionGate) {
+      listed.push({
+        actionId: kind === "weapon" ? "exchange-sect-weapon" : "exchange-sect-manual",
+        label: kind === "weapon" ? `宗门换${offer.name}` : `宗门换${offer.name}`,
+        description: `${offer.seek}宗门要${offer.sectPrice}灵石，贡献得到${offer.contributionGate}。换回去还得用掉才会学会。`,
+        durationTicks: 0,
+        kind: "immediate",
+        costs: { spiritStones: offer.sectPrice },
+      });
+    }
+  }
+  return listed;
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -6727,6 +6797,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (loadoutId === cultivator.equippedWeaponLoadoutId) continue;
     const wDef = getWeaponLoadoutDefinition(loadoutId);
     if (!wDef) continue;
+    if (!tierAllowed(cultivator.realmLevel, wDef.weaponTier ?? 1)) continue;
     actions.push({
       actionId: `equip-weapon:${loadoutId}` as ActionId,
       label: `Equip ${wDef.name}`,
@@ -6739,6 +6810,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (loadoutId === cultivator.equippedSpellLoadoutId) continue;
     const sDef = getSpellLoadoutDefinition(loadoutId);
     if (!sDef) continue;
+    if (!tierAllowed(cultivator.realmLevel, sDef.spellTier ?? 1)) continue;
     actions.push({
       actionId: `equip-spell:${loadoutId}` as ActionId,
       label: `Equip ${sDef.name}`,
@@ -6770,6 +6842,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       kind: "immediate",
     });
   }
+
+  actions.push(...contentGearActions(cultivator, location));
 
   if (cultivator.injuryTicksRemaining > 0) {
     if (activeWilderness) {
@@ -7666,7 +7740,7 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
 
 function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
-  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "buy-current-breakthrough-material", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
+  const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "buy-current-breakthrough-material", "buy-next-weapon", "buy-next-manual", "exchange-sect-weapon", "exchange-sect-manual", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
   if (actionId.startsWith("residence-produce:")) return;
@@ -7864,12 +7938,39 @@ const parseUnlockLoadoutItemId = (actionId: ActionId): ItemId | null =>
 
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
   const registration = registrationModifiersOf(cultivator);
+  if (
+    actionId === "buy-next-weapon"
+    || actionId === "buy-next-manual"
+    || actionId === "exchange-sect-weapon"
+    || actionId === "exchange-sect-manual"
+  ) {
+    const location = world.locations[cultivator.locationId];
+    const kind = actionId.endsWith("weapon") ? "weapon" as const : "spell" as const;
+    const path = actionId.startsWith("exchange-") ? "sect" as const : "shop" as const;
+    if (path === "shop") {
+      if (!location || !canTradeAtLocation(location)) throw new Error("得在坊市才能买下一阶。");
+    } else if (!location || location.kind !== "safe") {
+      throw new Error("得在安全的地方才能用宗门换。");
+    }
+    const bought = purchaseNextGear(cultivator, kind, path);
+    addDaoLog(world, cultivator.id, path === "shop" ? "坊市取物" : "宗门换物", bought.summary, ["combat-content", path, kind]);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: bought.summary,
+    };
+  }
 
   // ---- Equip weapon loadout ----
   const equipWeaponId = parseEquipWeaponLoadoutId(actionId);
   if (equipWeaponId) {
     const def = getWeaponLoadoutDefinition(equipWeaponId);
     if (!def) throw new Error(`Unknown weapon loadout: ${equipWeaponId}`);
+    if (!tierAllowed(cultivator.realmLevel, def.weaponTier ?? 1)) {
+      throw new Error(`要到${bandForTier(def.weaponTier ?? 1).realm}才能装备${def.name}。`);
+    }
     equipWeapon(cultivator, equipWeaponId);
     addDaoLog(world, cultivator.id, "装配切换", `${cultivator.name} equipped ${def.name}.`, ["combat-loadout", "equip-weapon"]);
     return {
@@ -7886,6 +7987,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (equipSpellId) {
     const def = getSpellLoadoutDefinition(equipSpellId);
     if (!def) throw new Error(`Unknown spell loadout: ${equipSpellId}`);
+    if (!tierAllowed(cultivator.realmLevel, def.spellTier ?? 1)) {
+      throw new Error(`要到${bandForTier(def.spellTier ?? 1).realm}才能装备${def.name}。`);
+    }
     equipSpell(cultivator, equipSpellId);
     addDaoLog(world, cultivator.id, "装配切换", `${cultivator.name} equipped ${def.name}.`, ["combat-loadout", "equip-spell"]);
     return {
@@ -9910,11 +10014,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.inventory["ruin-fragment"] += 1 + ((registration?.fortuneBonus ?? 0) >= 8 ? 1 : 0);
     }
     cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:search-fortune-material`)] += 1;
-    // ---- Loadout source drop (search-fortune) ----
-    const sfSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
-    const sfSourceDrop = pickLoadoutSourceDrop(sfSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:loadout-source`);
-    cultivator.inventory[sfSourceDrop] = (cultivator.inventory[sfSourceDrop] ?? 0) + 1;
-    addResourceGainLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 在探索地宫时获得了${ITEM_CATALOG[sfSourceDrop]?.name ?? sfSourceDrop}。`, [sfSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"], [{ itemId: sfSourceDrop as ItemId, count: 1 }]);
+    grantLoadoutSourceDrop(world, cultivator, metadata.grade, fallbackSearchFortuneRank, `${world.tick}:${job.id}:loadout-source`);
     return `${cultivator.name} searched the ruins.`;
   }
   if (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null) {
@@ -10125,11 +10225,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`)] += 1;
         cultivator.spiritStones += spiritStones;
         addRealmProgress(cultivator, tuning.realmProgressReward);
-        // ---- Loadout source drop (challenge-guardian victory) ----
-        const cgSourceTier = metadata.grade === "丙" ? 1 : metadata.grade === "乙" ? 2 : 3;
-        const cgSourceDrop = pickLoadoutSourceDrop(cgSourceTier as 1 | 2 | 3, `${world.tick}:${job.id}:guardian-loadout-source`);
-        cultivator.inventory[cgSourceDrop] = (cultivator.inventory[cgSourceDrop] ?? 0) + 1;
-        addResourceGainLog(world, cultivator.id, "来源物掉落", `${cultivator.name} 击败守关后获得了${ITEM_CATALOG[cgSourceDrop]?.name ?? cgSourceDrop}。`, [cgSourceDrop.startsWith("weapon-") ? "weapon-source" : "spell-source"], [{ itemId: cgSourceDrop as ItemId, count: 1 }]);
+        grantLoadoutSourceDrop(world, cultivator, metadata.grade, challengeGuardianRank, `${world.tick}:${job.id}:guardian-loadout-source`);
         const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);
         if (challengeGuardianRank === highestUnlockedRank) {
           ensureDungeonProgress(cultivator)[metadata.grade].highestClearedRank = Math.max(

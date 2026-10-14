@@ -31,6 +31,7 @@ A greet can start a party invite, later agents get a social page, and a fight no
 Dungeon guardians resolve as turn-based fights with a role and named skills: `harness/scenarios/dungeon-turn-combat.md`.
 City duels, a chosen role, a reserve seat, and small skill practice: `harness/scenarios/combat-party-deepen-v2.md`.
 Named aftermath notes, harder rank 3 packs, and a wound a teammate can tend: `harness/scenarios/combat-deepen-v3.md`.
+Weapon families and the five root schools each run from 入门 to 化神, with a shop, a sect exchange, and a realm gate: `harness/scenarios/combat-content-deepen-v1.md`.
 A spoken line on chat, gift, and a doorway call, plus one reply: `harness/scenarios/social-spoken-lines.md`.
 A shared dungeon copies `combatRounds` onto each companion, and the closing note names a role, a skill, a spoken line, and a tended wound: `harness/scenarios/companion-shared-report.md`.
 A personal favor, a note left for someone away, and a rumor a neighbor can repeat: `harness/scenarios/social-deepen.md`.
