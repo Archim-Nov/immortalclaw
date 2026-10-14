@@ -755,7 +755,10 @@ export interface TravelNote {
 }
 
 export type BondArc = "点头之交" | "好友" | "知己";
-export type GrudgeArc = "嫩隙" | "宿怨";
+export type GrudgeArc = "嫌隙" | "宿怨";
+export type FavorKind = "fetch-herb" | "escort-gate" | "guard-breakthrough" | "deliver-gift";
+export type FavorStatus = "offered" | "accepted" | "fulfilled" | "declined" | "failed";
+export type GossipKind = "win" | "feud" | "bond" | "favor-failed";
 export type MoodId = "steady" | "lifted" | "sore" | "warm" | "stung" | "echoing";
 export type MoodCause = "win" | "wound" | "loss" | "gift" | "rejection" | "spoken" | "breakthrough" | "bond" | "settled";
 
@@ -788,6 +791,121 @@ export interface CultivatorDigest {
   relationships: string[];
   quotes: readonly { speakerName: string; line: string; tick: number }[];
   summary: string;
+}
+
+export interface PersonalFavor {
+  id: string;
+  kind: FavorKind;
+  fromId: string;
+  toId: string;
+  thirdId?: string;
+  itemId?: ItemId;
+  status: FavorStatus;
+  createdAtTick: number;
+  deadlineTick: number;
+  locationId: string;
+  line?: string;
+}
+
+export interface NoteReply {
+  fromId: string;
+  fromName: string;
+  line: string;
+  tick: number;
+}
+
+export interface PersonalNote {
+  id: string;
+  fromId: string;
+  toId: string | null;
+  locationId: string;
+  line: string;
+  tick: number;
+  seenTick?: number;
+  replies?: NoteReply[];
+}
+
+export interface GossipItem {
+  id: string;
+  tick: number;
+  locationId: string;
+  aboutIds: string[];
+  kind: GossipKind;
+  text: string;
+  shortLine: string;
+}
+
+export interface HeardGossip {
+  id: string;
+  tick: number;
+  text: string;
+  shortLine: string;
+  kind: GossipKind;
+  mentioned?: boolean;
+}
+
+export interface SectNotice {
+  id: string;
+  sectKey: string;
+  authorId: string;
+  authorName: string;
+  tick: number;
+  text: string;
+  replies?: NoteReply[];
+}
+
+export interface FavorView {
+  id: string;
+  kind: FavorKind;
+  status: "offered" | "accepted";
+  role: "incoming" | "outgoing" | "doing";
+  otherId: string;
+  otherName: string;
+  thirdId?: string;
+  thirdName?: string;
+  summary: string;
+  deadlineTick: number;
+  acceptActionId?: string;
+  declineActionId?: string;
+  fulfillActionId?: string;
+  abandonActionId?: string;
+}
+
+export interface PendingNoteView {
+  id: string;
+  fromId: string;
+  fromName: string;
+  line: string;
+  tick: number;
+  placeName: string;
+  readActionId: string;
+  replyActionId: string;
+}
+
+export interface SpotNoteView {
+  id: string;
+  fromId: string;
+  fromName: string;
+  line: string;
+  tick: number;
+  replyActionId: string;
+}
+
+export interface SectNoticeView {
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  tick: number;
+  replyActionId?: string;
+}
+
+export interface GossipView {
+  id: string;
+  kind: GossipKind;
+  text: string;
+  shortLine: string;
+  tick: number;
 }
 
 export interface DungeonBeat {
@@ -997,6 +1115,24 @@ export type ImmediateActionId =
   | "post-board-note:sect"
   | `call-favor:${string}`
   | `press-rival:${string}`
+  | `ask-favor:${string}:fetch-herb`
+  | `ask-favor:${string}:escort-gate`
+  | `ask-favor:${string}:guard-breakthrough`
+  | `ask-favor:${string}:deliver-gift:${string}`
+  | `accept-favor:${string}`
+  | `decline-favor:${string}`
+  | `fulfill-favor:${string}`
+  | `abandon-favor:${string}`
+  | `leave-note:${string}`
+  | `read-note:${string}`
+  | `reply-note:${string}`
+  | "leave-spot-note"
+  | `reply-spot-note:${string}`
+  | "post-sect-notice"
+  | `reply-sect-notice:${string}`
+  | `join-sect-task:${string}`
+  | `guide-junior:${string}`
+  | `mention-gossip:${string}:${string}`
   | `dungeon-wake-decision:${string}`
   | `bahuang-wake-decision:${string}`;
 
@@ -1203,6 +1339,12 @@ export interface Cultivator {
   lastSectApplicationTick?: number;
   /** Help requests waiting on this cultivator. Absent on older saves. */
   pendingHelpRequests?: PendingHelpRequest[];
+  /** Gossip this cultivator has heard nearby. Absent on older saves. */
+  heardGossip?: HeardGossip[];
+  /** Last tick of a social action, keyed so the same ask cannot be spammed. */
+  socialCooldowns?: Record<string, number>;
+  /** Set when someone stands watch for a breakthrough. Absent until then. */
+  breakthroughWatch?: { guardId: string; guardName: string; untilTick: number };
   /** Sect diary chain, 0–2 while climbing, reset after the elder notice. */
   sectDiaryStep?: number;
   /** Chosen party role, kept only while the loadout can still stand there. */
@@ -2322,6 +2464,16 @@ export interface CultivatorStateView {
   mood?: CultivatorMood;
   /** Last six ticks, twelve hours, in sentences an agent can report. Omitted by older view fixtures. */
   digest?: CultivatorDigest;
+  /** Open personal favors this cultivator asked, was asked, or accepted. Omitted when empty. */
+  favors?: FavorView[];
+  /** Notes left for this cultivator while they were away. Omitted when empty. */
+  pendingNotes?: PendingNoteView[];
+  /** Notes pinned at this spot by someone else. Omitted when empty. */
+  spotNotes?: SpotNoteView[];
+  /** Recent notices on the shared sect board. Omitted when this cultivator has no sect, or the board is empty. */
+  sectBoard?: SectNoticeView[];
+  /** Gossip heard from nearby cultivators. Omitted when empty. */
+  gossip?: GossipView[];
   /** Unanswered spoken lines. Omitted by older view fixtures. */
   pendingDialogue?: Array<{
     fromId: string;
@@ -2481,6 +2633,18 @@ export interface WorldState {
   commissions: Record<string, Commission>;
   /** Public notes pinned at a location. Absent on worlds saved before deepen v3. */
   locationBoards?: Record<string, LocationBoardNote[]>;
+  /** Personal favors between cultivators. Absent on older saves. */
+  personalFavors?: Record<string, PersonalFavor>;
+  nextPersonalFavorSequence?: number;
+  /** Notes left for a person, or pinned at a spot. Absent on older saves. */
+  personalNotes?: Record<string, PersonalNote>;
+  nextPersonalNoteSequence?: number;
+  /** Recent gossip items. Absent on older saves. */
+  gossip?: GossipItem[];
+  nextGossipSequence?: number;
+  /** Sect hall notice boards, keyed by sect. Absent on older saves. */
+  sectBoards?: Record<string, SectNotice[]>;
+  nextSectNoticeSequence?: number;
   nextCultivatorSequence: number;
   nextJobSequence: number;
   nextLogSequence: number;

@@ -10,7 +10,10 @@ import type {
   Cultivator,
   CultivatorDigest,
   CultivatorMood,
+  GossipItem,
+  GossipKind,
   GrudgeArc,
+  HeardGossip,
   LifeEvent,
   MoodCause,
   MoodId,
@@ -25,12 +28,12 @@ export const BOND_ARC_THRESHOLDS: Record<BondArc, number> = {
 };
 
 export const GRUDGE_ARC_THRESHOLDS: Record<GrudgeArc, number> = {
-  "嫩隙": 8,
+  "嫌隙": 8,
   "宿怨": 18,
 };
 
 const BOND_ORDER: readonly BondArc[] = ["点头之交", "好友", "知己"];
-const GRUDGE_ORDER: readonly GrudgeArc[] = ["嫩隙", "宿怨"];
+const GRUDGE_ORDER: readonly GrudgeArc[] = ["嫌隙", "宿怨"];
 
 export const DIGEST_WINDOW_TICKS = 6;
 export const HOURS_PER_TICK = 2;
@@ -231,9 +234,60 @@ const BOND_LINES: Record<BondArc, (a: string, b: string) => string> = {
 };
 
 const GRUDGE_LINES: Record<GrudgeArc, (a: string, b: string) => string> = {
-  "嫩隙": (a, b) => `${a}和${b}之间起了嫩隙。话还没有撕破，心里已经不痛快。`,
+  "嫌隙": (a, b) => `${a}和${b}之间起了嫌隙。话还没有撕破，心里已经不痛快。`,
   "宿怨": (a, b) => `${a}和${b}的嫌隙结成了宿怨。此后可以公开下挑战书。`,
 };
+
+const GOSSIP_MEMORY = 6;
+const HEARD_GOSSIP_LIMIT = 3;
+
+function clipLine(text: string): string {
+  return Array.from(text).slice(0, 40).join("");
+}
+
+/** Tell idle neighbors about a bond, a feud, a win, or a failed favor. The people involved already know. */
+export function spreadNearbyGossip(
+  world: WorldState,
+  locationIds: readonly string[],
+  aboutIds: readonly string[],
+  kind: GossipKind,
+  text: string,
+  shortLine: string,
+): void {
+  const places = [...new Set(locationIds.filter((id) => id.length > 0))];
+  if (places.length === 0) return;
+  const line = clipLine(shortLine);
+  const item: GossipItem = {
+    id: `gossip-${world.nextGossipSequence ?? 1}`,
+    tick: world.tick,
+    locationId: places[0]!,
+    aboutIds: [...aboutIds],
+    kind,
+    text,
+    shortLine: line,
+  };
+  world.nextGossipSequence = (world.nextGossipSequence ?? 1) + 1;
+  const board = (world.gossip ?? []).filter((row) => world.tick - row.tick <= GOSSIP_MEMORY);
+  board.unshift(item);
+  world.gossip = board.slice(0, 24);
+  const about = new Set(aboutIds);
+  for (const person of Object.values(world.cultivators)) {
+    if (!places.includes(person.locationId) || about.has(person.id)) continue;
+    const heard = person.heardGossip ?? [];
+    if (heard.some((row) => row.shortLine === line && world.tick - row.tick <= GOSSIP_MEMORY)) continue;
+    const entry: HeardGossip = { id: item.id, tick: world.tick, text, shortLine: line, kind };
+    person.heardGossip = [entry, ...heard].slice(0, HEARD_GOSSIP_LIMIT);
+    pushTravelNote(person, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: "听见了一桩闲话",
+      detail: text,
+      locationId: person.locationId,
+      mood: "耳朵里多了一句",
+    }));
+    recordLife(person, { tick: world.tick, kind: "relationship", text });
+  }
+}
 
 export function noteBondCrossing(
   world: WorldState,
@@ -258,6 +312,16 @@ export function noteBondCrossing(
   const warm = `${a.name}和${b.name}走近了一步，心里比刚才热一点。`;
   shiftCultivatorMood(world, a, "bond", warm);
   shiftCultivatorMood(world, b, "bond", warm);
+  if (stages.includes("知己")) {
+    spreadNearbyGossip(
+      world,
+      [a.locationId, b.locationId],
+      [a.id, b.id],
+      "bond",
+      `${a.name}和${b.name}成了知己。附近的人很快也会听见这件事。`,
+      `听人说，${a.name}和${b.name}成了知己。`,
+    );
+  }
 }
 
 export function noteGrudgeCrossing(
@@ -283,6 +347,15 @@ export function noteGrudgeCrossing(
   const stung = `${a.name}和${b.name}的嫌隙深了一层，心里堵着，话也不想装得客气。`;
   shiftCultivatorMood(world, a, "rejection", stung);
   shiftCultivatorMood(world, b, "rejection", stung);
+  const stage = stages[stages.length - 1]!;
+  spreadNearbyGossip(
+    world,
+    [a.locationId, b.locationId],
+    [a.id, b.id],
+    "feud",
+    `${a.name}和${b.name}之间的${stage}传开了。附近的人不需要亲眼看见，也已经听见了。`,
+    `听人说，${a.name}和${b.name}结了${stage}。`,
+  );
 }
 
 export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator): CultivatorDigest {

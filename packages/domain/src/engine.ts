@@ -78,6 +78,7 @@ import {
   moodCauseForDuel,
   noteWound,
   recordLife,
+  spreadNearbyGossip,
   SHARE_RESOURCE_COOLDOWN_TICKS,
   SHARE_RESOURCE_MINIMUM,
   SHARE_RESOURCE_STONES,
@@ -86,6 +87,7 @@ import {
   SPAR_TEACH_PRACTICE,
   SPAR_TEACH_SPIRIT,
 } from "./inner-life.js";
+import { expireSocialDeepen, listSocialDeepenActions, performSocialDeepenAction, socialDeepenView } from "./social-deepen.js";
 import {
   getWeaponLoadoutsByFamily,
   getSpellLoadoutsByElement,
@@ -3877,6 +3879,18 @@ function noteCityRivalry(
         : `${left.name}和${right.name}在城里打成平手。谁也没把谁压住。`;
   recordLife(left, { tick: world.tick, kind: "fight", text: fightLine });
   recordLife(right, { tick: world.tick, kind: "fight", text: fightLine });
+  if (duel.left.result === "win" || duel.right.result === "win") {
+    const winner = duel.left.result === "win" ? left : right;
+    const loser = winner.id === left.id ? right : left;
+    spreadNearbyGossip(
+      world,
+      [left.locationId, right.locationId],
+      [left.id, right.id],
+      "win",
+      `${winner.name}在城里赢了${loser.name}。这件事很快会传到附近人的耳朵里。`,
+      `听人说，${winner.name}在城里赢了${loser.name}。`,
+    );
+  }
 }
 
 function pendingDialogueOf(world: WorldState, cultivatorId: string) {
@@ -6421,6 +6435,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     },
     mood: currentMood(cultivator, world.tick),
     digest: buildCultivatorDigest(world, cultivator),
+    ...socialDeepenView(world, cultivator),
     ...(() => {
       const pendingDialogue = pendingDialogueOf(world, cultivator.id);
       return pendingDialogue.length > 0 ? { pendingDialogue } : {};
@@ -7580,6 +7595,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       kind: "immediate",
     });
   }
+  actions.push(...listSocialDeepenActions(world, cultivator));
 
   return ensureSafetyNetActions(world, cultivator, location, actions);
 }
@@ -7644,6 +7660,19 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("reject-gift:")) return;
   if (actionId.startsWith("say:")) return;
   if (actionId.startsWith("reply-line:")) return;
+  if (actionId.startsWith("ask-favor:")) return;
+  if (actionId.startsWith("accept-favor:")) return;
+  if (actionId.startsWith("decline-favor:")) return;
+  if (actionId.startsWith("fulfill-favor:")) return;
+  if (actionId.startsWith("abandon-favor:")) return;
+  if (actionId.startsWith("leave-note:")) return;
+  if (actionId.startsWith("read-note:")) return;
+  if (actionId.startsWith("reply-note:")) return;
+  if (actionId === "leave-spot-note" || actionId.startsWith("reply-spot-note:")) return;
+  if (actionId === "post-sect-notice" || actionId.startsWith("reply-sect-notice:")) return;
+  if (actionId.startsWith("join-sect-task:")) return;
+  if (actionId.startsWith("guide-junior:")) return;
+  if (actionId.startsWith("mention-gossip:")) return;
   if (actionId.startsWith("spar-teach:")) return;
   if (actionId.startsWith("share-resource:")) return;
   if (actionId.startsWith("set-party-role:")) return;
@@ -10611,6 +10640,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
+  const socialDeepenResult = performSocialDeepenAction(world, cultivator, actionId, speechLine);
+  if (socialDeepenResult) return socialDeepenResult;
   // ---- Buy Residence ----
   const buyResidenceStateId = parseBuyResidenceStateId(actionId);
   if (buyResidenceStateId) {
@@ -11261,6 +11292,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         }
       }
     }
+    expireSocialDeepen(world);
     // ---- Party invitation auto-expiry ----
     if (world.partyInvitations) {
       for (const [invId, inv] of Object.entries(world.partyInvitations)) {

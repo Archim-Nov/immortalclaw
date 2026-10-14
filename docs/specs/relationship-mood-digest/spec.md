@@ -10,7 +10,7 @@ Agents can already raise affinity, trade gifts, speak, and fight, but the relati
 
 ## Goals
 
-- Cross affinity at 点头之交, 好友, and 知己. Cross grudge at 嫩隙 and 宿怨. Write one complete Chinese sentence into both travelogues when a stage is newly reached.
+- Cross affinity at 点头之交, 好友, and 知己. Cross grudge at 嫌隙 and 宿怨. Write one complete Chinese sentence into both travelogues when a stage is newly reached.
 - At 知己, offer `spar-teach:<cultivatorId>` and `share-resource:<cultivatorId>`. At 宿怨, offer `grudge-challenge:<cultivatorId>`.
 - Show the current arc on `socialLinks` as `bondArc`, `grudgeArc`, `grudge`, and a full `arcLine`.
 - Keep a mood that shifts from a win, a wound, a gift, a rejection, a received spoken line, or a breakthrough. Expose it as `state.mood`. Use it when a spoken line is generated, and let `travelogue.mood` carry that sentence.
@@ -34,7 +34,7 @@ Affinity stages, using the same points the older labels already use for 熟识, 
 
 Grudge stages:
 
-- 嫩隙 at 8
+- 嫌隙 at 8
 - 宿怨 at 18
 
 A gift returned, a declined challenge, or a declined dao proposal adds 8 grudge. A city duel that has a winner or a retreat adds 10. A draw adds 6. Grudge is mutual, so both travelogues record the crossing.
@@ -55,7 +55,7 @@ A gift returned, a declined challenge, or a declined dao proposal adds 8 grudge.
 
 - Raising affinity across 20, 120, and 200 writes 点头之交, 好友, and 知己 into both travelogues, and `socialLinks.bondArc` matches the highest stage reached.
 - At 知己, `spar-teach` raises the learner's skill practice or realm progress, and `share-resource` moves eight stones. Below that stage both actions are absent.
-- Raising grudge across 8 and 18 writes 嫩隙 and 宿怨 into both travelogues. `grudge-challenge` appears only at 宿怨 and creates a city challenge whose message mentions 宿怨.
+- Raising grudge across 8 and 18 writes 嫌隙 and 宿怨 into both travelogues. `grudge-challenge` appears only at 宿怨 and creates a city challenge whose message mentions 宿怨.
 - A gift, a rejection, a spoken line, a breakthrough, a city duel, and a wound each set `state.mood.cause` to the matching cause. A generated line after a rejection comes from the stung pool.
 - After a few social actions inside six ticks, `state.digest.summary` includes the relationship sentence, a quoted line, and the mood sentence. `GET /agent/digest` returns that same object.
 - Existing spoken-line refusal, doorway cooldown, party cap, companion `combatRounds`, and wound blocking tests still pass.

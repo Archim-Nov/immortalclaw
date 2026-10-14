@@ -381,10 +381,10 @@ export function describeArcLine(link: SocialLink, selfName: string, otherName: s
   if (feud === "宿怨") {
     return `${selfName}与${otherName}结成了宿怨。可以公开下挑战书。`;
   }
-  if (feud === "嫩隙") {
-    return `${selfName}与${otherName}之间有了嫩隙。话还没有撕破，心里已经不痛快。`;
+  if (feud === "嫌隙") {
+    return `${selfName}与${otherName}之间有了嫌隙。话还没有撕破，心里已经不痛快。`;
   }
-  return `${selfName}与${otherName}目前是${getAffinityLevel(link.affinity)}，还没有跨过点头之交，也没有结下嫩隙。`;
+  return `${selfName}与${otherName}目前是${getAffinityLevel(link.affinity)}，还没有跨过点头之交，也没有结下嫌隙。`;
 }
 
 // ---------------------------------------------------------------------------
