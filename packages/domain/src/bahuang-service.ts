@@ -1,3 +1,4 @@
+import { bahuangRoomLine } from "./dungeon-interior.js";
 import { recordWildernessAttunement } from "./guixu-service.js";
 import { recordLife } from "./inner-life.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
@@ -178,6 +179,18 @@ function maybeBahuangSighting(world: WorldState, cultivator: Cultivator, progres
   const band = bahuangBandForDepth(progress.depth);
   const line = pickWildLine(band.sightings, `${cultivator.id}:${progress.depth}:sight`);
   rememberBahuangLine(world, cultivator, "八荒里的见闻", `${band.name}这一段的见闻：${line}`);
+}
+
+function maybeBahuangRoom(world: WorldState, cultivator: Cultivator, progress: BahuangExpeditionProgress): void {
+  if (progress.lastSightingDepth === progress.depth) return;
+  if (progress.depth % 2 !== 0) return;
+  const band = bahuangBandForDepth(progress.depth);
+  rememberBahuangLine(
+    world,
+    cultivator,
+    "路上的一处",
+    bahuangRoomLine(band.name, `${cultivator.id}:${progress.depth}:room`),
+  );
 }
 
 function bahuangCarriedLine(progress: BahuangExpeditionProgress): string {
@@ -402,6 +415,7 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
 
   recordWildernessAttunement(world, cultivator.id, 1);
   maybeBahuangSighting(world, cultivator, progress);
+  maybeBahuangRoom(world, cultivator, progress);
 
   const wakeNode = createWakeNode(progress, world.tick);
   if (wakeNode) {

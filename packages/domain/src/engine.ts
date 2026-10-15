@@ -416,6 +416,7 @@ import {
   strategyFromPolicy,
   startDungeonExpeditionActionIdOf,
 } from "./dungeon-expedition-service.js";
+import { interiorRoomBeat, resolveInteriorSkirmish } from "./dungeon-interior.js";
 import {
   createPartyExpeditionWake,
   partyWakeAwaitingIds,
@@ -4135,6 +4136,9 @@ function applyDungeonWakeSettlement(
   if (settlement.moralityDelta !== 0) {
     applyMoralityDelta(world, cultivator, settlement.moralityDelta, "dungeon-wake");
   }
+  if (settlement.injuryTicks > 0) {
+    raiseInjury(world, cultivator, settlement.injuryTicks);
+  }
   if (settlement.beat) {
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
@@ -4144,6 +4148,7 @@ function applyDungeonWakeSettlement(
       locationId: cultivator.locationId,
       mood: settlement.beat.mood,
     }));
+    recordLife(cultivator, { tick: world.tick, kind: settlement.injuryTicks > 0 ? "fight" : "growth", text: settlement.beat.detail });
   }
 }
 
@@ -5051,6 +5056,13 @@ function paintCombatStateFromBattle(state: CombatJobState, battle: PartyBattleRe
   }));
 }
 
+function keepRecentCombatRounds<T extends { beats: readonly string[] }>(rounds: T[]): T[] {
+  const trimmed = rounds.slice(-3);
+  const carried = [...rounds].reverse().find((round) => round.beats.some((beat) => beat.includes("带出何物")));
+  if (!carried || trimmed.includes(carried)) return trimmed;
+  return [carried, ...trimmed.slice(-2)];
+}
+
 function resolveDungeonExpeditionStepIfDue(
   world: WorldState,
   job: ActionJob,
@@ -5136,6 +5148,7 @@ function resolveDungeonExpeditionStepIfDue(
     },
   };
   let expeditionBattle: PartyBattleResult | null = null;
+  let interiorBattle: PartyBattleResult | null = null;
   const battleAllyIds: string[] = [];
   if (actionKind === "guardian") {
     const expedGuardianSeed = hashString(`${world.tick}:${cultivator.id}:expedition-guardian:${effectiveProgress.grade}:${effectiveProgress.targetRank}`);
@@ -5210,6 +5223,33 @@ function resolveDungeonExpeditionStepIfDue(
     setCombatJobState(syntheticJob, combatState);
   }
 
+  if (actionKind === "search") {
+    const allies = [battleCombatantFromCultivator(cultivator)];
+    for (const companionId of expeditionCompanionIds(effectiveProgress)) {
+      const companion = world.cultivators[companionId];
+      if (!companion || companion.locationId !== cultivator.locationId || companion.activeJobId) continue;
+      allies.push(battleCombatantFromCultivator(companion));
+      battleAllyIds.push(companion.id);
+    }
+    interiorBattle = resolveInteriorSkirmish({
+      grade: effectiveProgress.grade,
+      rank: effectiveProgress.targetRank,
+      stepIndex: effectiveProgress.stepIndex,
+      actionKind,
+      seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:interior`,
+      allies,
+      leaderId: cultivator.id,
+      policy: effectiveProgress.policy,
+    });
+    if (interiorBattle?.outcome === "win") {
+      for (const entry of interiorBattle.practice) {
+        const person = world.cultivators[entry.id];
+        if (!person) continue;
+        grantCombatPractice(person, entry.skillIds, 1);
+      }
+    }
+  }
+
   resolveEnhancedJob(world, syntheticJob);
   cultivator.activeJobId = outerJobId;
 
@@ -5261,6 +5301,19 @@ function resolveDungeonExpeditionStepIfDue(
     raiseInjury(world, cultivator, injuryTicks);
     syncWounded(cultivator);
     woundedNow.push(cultivator);
+  }
+  if (interiorBattle) {
+    const interiorQi = interiorBattle.outcome === "loss" ? 4 : 2;
+    cultivator.qi = clamp(cultivator.qi - interiorQi, 1, cultivator.maxQi);
+    if (
+      interiorBattle.outcome === "loss"
+      && effectiveProgress.policy !== "conservative"
+      && effectiveProgress.stepIndex === 4
+    ) {
+      raiseInjury(world, cultivator, 2);
+      syncWounded(cultivator);
+      if (!woundedNow.some((person) => person.id === cultivator.id)) woundedNow.push(cultivator);
+    }
   }
   let bandFailStones = 0;
   let bandFailBeat: { kind: "injury"; title: string; detail: string; mood: string } | null = null;
@@ -5321,9 +5374,17 @@ function resolveDungeonExpeditionStepIfDue(
     }
   }
   addRealmProgress(cultivator, pressure.realmProgress);
-  const fightBeats = expeditionBattle?.beats ?? [];
+  const fightBeats = expeditionBattle?.beats ?? interiorBattle?.beats ?? [];
+  const completedStep = effectiveProgress.stepIndex + 1;
+  const roomBeat = interiorRoomBeat({
+    grade: effectiveProgress.grade,
+    rank: effectiveProgress.targetRank,
+    step: completedStep,
+    fought: Boolean(expeditionBattle || interiorBattle),
+  });
   const addedBeats = [
     ...(fightBeats.length > 0 ? fightBeats : [pressure.beat]),
+    ...(roomBeat ? [roomBeat] : []),
     ...(bandFailBeat ? [bandFailBeat] : []),
   ];
   const appended = appendDungeonBeats(
@@ -5334,8 +5395,12 @@ function resolveDungeonExpeditionStepIfDue(
   );
   effectiveProgress = {
     ...appended.progress,
-    combatRounds: expeditionBattle
-      ? [...(effectiveProgress.combatRounds ?? []), expeditionBattle.summary].slice(-3)
+    combatRounds: expeditionBattle || interiorBattle
+      ? keepRecentCombatRounds([
+          ...(effectiveProgress.combatRounds ?? []),
+          ...(expeditionBattle ? [expeditionBattle.summary] : []),
+          ...(interiorBattle ? [interiorBattle.summary] : []),
+        ])
       : effectiveProgress.combatRounds,
     qiSpent: (effectiveProgress.qiSpent ?? 0) + qiDrain,
     spiritualPowerSpent: (effectiveProgress.spiritualPowerSpent ?? 0) + spiritualDrain,
@@ -5350,6 +5415,16 @@ function resolveDungeonExpeditionStepIfDue(
     for (const companionId of battleAllyIds) {
       const companion = world.cultivators[companionId];
       if (companion && companion.id !== cultivator.id) beatAudience.push(companion);
+    }
+  }
+  if (interiorBattle) {
+    const interiorLine = fightDigestText(interiorBattle.summary);
+    if (interiorLine) {
+      recordLife(cultivator, { tick: world.tick, kind: "fight", text: interiorLine });
+      for (const companionId of battleAllyIds) {
+        const companion = world.cultivators[companionId];
+        if (companion) recordLife(companion, { tick: world.tick, kind: "fight", text: interiorLine });
+      }
     }
   }
   if (expeditionBattle) {

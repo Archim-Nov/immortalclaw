@@ -1,5 +1,6 @@
 import { recordWildernessAttunement } from "./guixu-service.js";
 import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
+import { wildRoomLine } from "./dungeon-interior.js";
 import {
   noteWild,
   pickWildLine,
@@ -272,6 +273,13 @@ export function applyWildernessPressure(world: WorldState, cultivator: Cultivato
         locationId: cultivator.locationId,
         title: "这一段见闻",
         detail: `${place.name}这一段的见闻：${body}`,
+      });
+    } else if (progress.ticksSurvived % 2 === 0) {
+      noteWild(cultivator, {
+        tick: world.tick,
+        locationId: cultivator.locationId,
+        title: "路上的一处",
+        detail: wildRoomLine(place.name, `${cultivator.id}:${progress.ticksSurvived}:room`),
       });
     }
   }

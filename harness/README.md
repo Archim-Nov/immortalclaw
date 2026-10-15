@@ -45,6 +45,7 @@ Five cultivators on one dungeon leave a tended wound, a yielded pile, a crack ov
 A finished 甲 run leaves one 残页, 炉灰, or 纹屑, and a companion can quote the same arc line: `harness/scenarios/jia-relic-chronicle.md`.
 乙级一到三层是雷泽残阵，四到六层是沉雾沼，七到九层是铜棺窟。丙级七到九层是旧驿石廊: `harness/scenarios/yi-mystery-identity.md`.
 九州各有一处只能从这一州进去的秘境，主城和宗门驻地另有三处短洞: `harness/scenarios/regional-dungeons-v1.md`.
+排名层和州府秘境在进门与守关之间还有侧室、探路和有名字的中途敌人: `harness/scenarios/dungeon-interior-v1.md`.
 九州荒野各有一处名字，八荒按深浅分成荒尘驿、断碑原、无灯壑: `harness/scenarios/wild-route-identity.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
