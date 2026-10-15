@@ -3323,6 +3323,8 @@ function createJob(world: WorldState, cultivatorId: string, actionId: TimedActio
         ? (getGuixuNodeById(world, guixuNodeId)?.explorationDurationTicks ?? NaN)
       : isSectTimedAction(actionId)
         ? 1
+      : String(actionId).startsWith("enter-regional:")
+        ? 3
       : DEFAULT_ACTION_DURATIONS[normalizedActionId];
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error(`Invalid action duration for ${actionId}.`);

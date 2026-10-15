@@ -1080,6 +1080,10 @@ function canStand(dungeon: RegionalDungeonDef, locationId: string): boolean {
   return nodeOf(locationId) === "sect-outpost";
 }
 
+function phaseNow(run: RegionalRunState): RegionalRunState["phase"] {
+  return run.phase;
+}
+
 function findRun(world: WorldState, cultivatorId: string): RegionalRunState | null {
   const runs = world.regionalRuns ?? {};
   if (runs[cultivatorId]) return runs[cultivatorId]!;
@@ -1611,7 +1615,7 @@ export function submitRegionalChoice(
     return { summary: `${cultivator.name}把这一岔的话放了下来。`, done: false };
   }
   applyOption(world, run, winner[0], combatantOf, false);
-  return { summary: run.summary, done: run.phase === "resolved" };
+  return { summary: run.summary, done: phaseNow(run) === "resolved" };
 }
 
 export function leaveRegionalRun(world: WorldState, cultivator: Cultivator): string {
@@ -1649,7 +1653,7 @@ export function tickRegionalRun(
   if (run.phase === "choice" && world.tick >= run.deadlineTick) {
     const dungeon = mustDungeon(run.dungeonId);
     applyOption(world, run, safeOption(dungeon).id, combatantOf, false);
-    if (run.phase === "resolved") job.remainingTicks = 0;
+    if (phaseNow(run) === "resolved") job.remainingTicks = 0;
   }
 }
 

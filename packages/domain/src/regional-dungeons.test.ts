@@ -245,7 +245,10 @@ test("two companions must agree, and the drop stays in the leader's bag", () => 
   assert.equal(cultivator.inventory["qinglan-dew-core"], 0);
   assert.ok(cultivator.activeJobId);
 
-  performAction(world, cultivator.id, "regional-choice:qinglan-wait");
+  const splitVote = performAction(world, cultivator.id, "regional-choice:qinglan-wait");
+  assert.match(splitVote.summary, /放了下来/);
+  assert.equal(cultivator.inventory["qinglan-dew-core"], 0);
+  performAction(world, mate.id, "regional-choice:qinglan-wait");
   assert.equal(cultivator.inventory["qinglan-dew-core"], 1);
   assert.equal(mate.inventory["qinglan-dew-core"], 0);
   assert.match(mate.regionalReport?.line ?? "", /袋子里/);
