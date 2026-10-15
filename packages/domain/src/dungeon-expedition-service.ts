@@ -1,3 +1,4 @@
+import { interiorWakeDraft, interiorWakeEffect, pickLateWakeKind } from "./dungeon-interior.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
 import { jiaRelicHint } from "./jia-relics.js";
@@ -614,6 +615,7 @@ export interface DungeonWakeSettlement {
   chosenOptionId: string;
   stoneDelta: number;
   moralityDelta: number;
+  injuryTicks: number;
   beat: DungeonBeat | null;
 }
 
@@ -643,11 +645,13 @@ export function settleDungeonWakeNode(
       chosenOptionId,
       stoneDelta: 0,
       moralityDelta: 0,
+      injuryTicks: 0,
       beat: null,
     };
   }
 
-  const known = MORAL_WAKE_EFFECTS[chosenOptionId] ?? null;
+  const extra = interiorWakeEffect(chosenOptionId);
+  const known = MORAL_WAKE_EFFECTS[chosenOptionId] ?? extra;
   const risky = !isSafeDungeonWakeOption(chosenOptionId);
   const beat: DungeonBeat | null = known
     ? known.beat
@@ -672,6 +676,7 @@ export function settleDungeonWakeNode(
     chosenOptionId,
     stoneDelta,
     moralityDelta: known?.moralityDelta ?? 0,
+    injuryTicks: extra?.injuryTicks ?? 0,
     beat,
     progress: {
       ...progress,
@@ -693,7 +698,7 @@ export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgr
   return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress)).progress;
 }
 
-type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank";
+type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank" | "trap" | "shrine" | "chamber" | "nest" | "sealed";
 
 function finishWake(input: {
   nodeId: string;
@@ -846,22 +851,26 @@ export function maybeCreateDungeonWakeNode(input: {
   const elite = actionKind === "guardian" && (qiRatio < 0.55 || spiritualRatio < 0.55 || cultivator.injuryTicksRemaining > 0);
   const rewardsSignificant = progress.spiritStoneGain >= 180 || progress.primaryMaterialCount >= 4;
   const pressureHigh = qiRatio < 0.5 || spiritualRatio < 0.5 || cultivator.injuryTicksRemaining >= 3;
-  const candidates: DungeonWakeSceneKind[] = ["fork", "relic", "fellow", "loot"];
-  if (elite) candidates.push("elite");
-  if (rewardsSignificant && pressureHigh) candidates.push("bank");
-  const open = candidates.filter((kind) => !used.has(kind));
-  if (open.length === 0) return null;
   let roll = hashString(`${progress.jobId}:${progress.stepIndex}:${nodeId}:${input.worldTick}:scene`);
   roll = Math.imul(roll ^ (roll >>> 16), 0x7feb352d);
   roll = Math.imul(roll ^ (roll >>> 15), 0x846ca68b);
   roll = (roll ^ (roll >>> 16)) >>> 0;
-  const kind = open[roll % open.length]!;
+  const kind = pickLateWakeKind({
+    used,
+    elite,
+    bank: rewardsSignificant && pressureHigh,
+    roll,
+  });
+  if (!kind) return null;
   if (kind === "fork") return forkWake(nodeId, posture);
   if (kind === "relic") return relicWake(nodeId, posture);
   if (kind === "fellow") return fellowWake(nodeId, posture, input.sectName ?? null);
   if (kind === "loot") return lootWake(nodeId, posture);
   if (kind === "elite") return eliteWake(nodeId, posture);
-  return bankWake(nodeId, posture);
+  if (kind === "bank") return bankWake(nodeId, posture);
+  const draft = interiorWakeDraft(kind, posture);
+  if (!draft) return bankWake(nodeId, posture);
+  return finishWake({ nodeId, ...draft });
 }
 
 export function chooseDungeonExpeditionStepKind(input: {

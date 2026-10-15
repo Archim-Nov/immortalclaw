@@ -1030,6 +1030,10 @@ export interface RegionalRunState {
   votes: Record<string, string>;
   summary: string;
   report: RegionalDungeonReport | null;
+  /** Side room already answered. Absent on runs saved before interior rooms. */
+  interiorResolved?: boolean;
+  /** Votes on the side room, separate from the signature choice. */
+  interiorVotes?: Record<string, string>;
 }
 
 export interface RegionalPlaceView {
@@ -1065,6 +1069,12 @@ export interface RegionalDungeonsView {
     safeOptionId: string | null;
     awaitingNames: string[];
     options: Array<{ optionId: string; label: string; description: string }>;
+    /** Side room still open beside the signature choice. Absent once it is answered. */
+    interior: {
+      prompt: string;
+      safeOptionId: string;
+      options: Array<{ optionId: string; label: string; description: string }>;
+    } | null;
   } | null;
   lastReport: RegionalDungeonReport | null;
 }

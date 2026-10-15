@@ -1,4 +1,5 @@
 import { grantCombatPractice } from "./combat-skills.js";
+import { regionalEscort, regionalInterior, type InteriorChoice } from "./dungeon-interior.js";
 import {
   STATUS_BURNING,
   STATUS_ENTANGLE,
@@ -1097,6 +1098,58 @@ function safeOption(dungeon: RegionalDungeonDef): ChoiceOption {
   return dungeon.options.find((option) => option.safe) ?? dungeon.options[0]!;
 }
 
+function interiorScene(dungeonId: string) {
+  return regionalInterior(dungeonId);
+}
+
+function interiorSafe(dungeonId: string): InteriorChoice | null {
+  const scene = interiorScene(dungeonId);
+  if (!scene) return null;
+  return scene.options.find((option) => option.safe) ?? scene.options[0] ?? null;
+}
+
+function applyInteriorChoice(world: WorldState, run: RegionalRunState, option: InteriorChoice): void {
+  if (run.interiorResolved) return;
+  const dungeon = dungeonOf(run.dungeonId);
+  const leader = world.cultivators[run.leaderId];
+  if (!dungeon || !leader) {
+    run.interiorResolved = true;
+    return;
+  }
+  const companions = presentCultivators(world, run).filter((person) => person.id !== leader.id);
+  if ((option.stones ?? 0) > 0) splitStones(leader, companions, option.stones ?? 0);
+  if ((option.stones ?? 0) < 0) payStones(leader, -(option.stones ?? 0));
+  if ((option.qi ?? 0) > 0) spendQi(leader, option.qi ?? 0);
+  if ((option.injury ?? 0) > 0 && leader.injuryTicksRemaining < (option.injury ?? 0)) {
+    leader.injuryTicksRemaining = option.injury ?? 0;
+    noteWound(world, leader);
+  }
+  const reputation = option.reputation ?? 0;
+  if (reputation > 0) addReputation(leader, dungeon.stateId ?? stateOf(leader.locationId), reputation);
+  if (reputation < 0) {
+    const key = (dungeon.stateId ?? stateOf(leader.locationId)) as StateId;
+    leader.stateReputation[key] = Math.max(0, (leader.stateReputation[key] ?? 0) + reputation);
+  }
+  notePeople(
+    world,
+    presentCultivators(world, run),
+    { kind: (option.injury ?? 0) > 0 ? "injury" : "find", title: dungeon.name, detail: option.line, mood: "这一段可以回去说" },
+    { kind: (option.injury ?? 0) > 0 ? "fight" : "growth", text: option.line },
+  );
+  run.interiorResolved = true;
+  run.interiorVotes = {};
+}
+
+function ensureInteriorNoted(world: WorldState, run: RegionalRunState): void {
+  if (run.interiorResolved) return;
+  const safe = interiorSafe(run.dungeonId);
+  if (!safe) {
+    run.interiorResolved = true;
+    return;
+  }
+  applyInteriorChoice(world, run, safe);
+}
+
 function realmBand(level: number): Band | null {
   if (level >= 13) return "化神";
   if (level >= 10) return "元婴";
@@ -1452,9 +1505,10 @@ function runFight(
     sealSpells: option.sealSpells,
   }));
   const hard = option.difficulty === "hard";
+  const escort = hard ? regionalEscort(dungeon.id, allies[0]) : null;
   const battle = runPartyBattle({
     allies,
-    enemies: [bossOf(dungeon, allies, hard)],
+    enemies: escort ? [escort, bossOf(dungeon, allies, hard)] : [bossOf(dungeon, allies, hard)],
     policy: hard ? "aggressive" : "balanced",
     seed: `${world.tick}:${run.leaderId}:${dungeon.id}:${option.id}`,
     maxRounds: hard ? 7 : 6,
@@ -1486,6 +1540,7 @@ function applyOption(
 ): void {
   if (run.phase === "resolved") return;
   const dungeon = mustDungeon(run.dungeonId);
+  ensureInteriorNoted(world, run);
   const option = dungeon.options.find((entry) => entry.id === optionId) ?? safeOption(dungeon);
   if (!run.sightingWritten) writeSighting(world, run);
   if (option.kind === "vigil" && !jobEnding) {
@@ -1575,6 +1630,8 @@ export function openRegionalRun(
     votes: {},
     summary: dungeon.entryLine,
     report: null,
+    interiorResolved: false,
+    interiorVotes: {},
   };
   runsOf(world)[cultivator.id] = run;
   notePeople(world, [cultivator, ...companions], {
@@ -1595,6 +1652,32 @@ export function submitRegionalChoice(
   const run = findRun(world, cultivator.id);
   if (!run || run.phase !== "choice") throw new GameplayRejection("这一处没有在等你开口。");
   const dungeon = mustDungeon(run.dungeonId);
+  const scene = interiorScene(run.dungeonId);
+  const interiorOption = scene?.options.find((option) => option.id === optionId) ?? null;
+  if (interiorOption) {
+    if (run.interiorResolved) throw new GameplayRejection("旁边这一处已经看过了。");
+    const present = presentCultivators(world, run);
+    if (!present.some((person) => person.id === cultivator.id)) {
+      throw new GameplayRejection("这一岔路不是在等你开口。");
+    }
+    if (present.length <= 1) {
+      applyInteriorChoice(world, run, interiorOption);
+      return { summary: interiorOption.line, done: false };
+    }
+    run.interiorVotes = { ...(run.interiorVotes ?? {}), [cultivator.id]: optionId };
+    const needed = votesNeeded(present.length);
+    const tally = new Map<string, number>();
+    for (const person of present) {
+      const vote = run.interiorVotes[person.id];
+      if (!vote) continue;
+      tally.set(vote, (tally.get(vote) ?? 0) + 1);
+    }
+    const winner = [...tally.entries()].find(([, count]) => count >= needed);
+    if (!winner) return { summary: `${cultivator.name}先看了看旁边。`, done: false };
+    const chosen = scene?.options.find((option) => option.id === winner[0]) ?? interiorOption;
+    applyInteriorChoice(world, run, chosen);
+    return { summary: chosen.line, done: false };
+  }
   if (!dungeon.options.some((option) => option.id === optionId)) {
     throw new GameplayRejection("这个选择不在当前岔路上。");
   }
@@ -1720,7 +1803,9 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
       phase: run.phase,
       stepLine: run.phase === "vigil"
         ? `${dungeon.name}里还坐着。时辰没到，灰不落。`
-        : `${dungeon.prompt}人已经在里面。`,
+        : run.interiorResolved
+          ? `${dungeon.prompt}人已经在里面。`
+          : `${dungeon.prompt}${interiorScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
       safeOptionId: run.phase === "choice" ? safeOption(dungeon).id : null,
       awaitingNames: run.phase === "choice"
         ? presentCultivators(world, run).filter((person) => !run.votes[person.id]).map((person) => person.name)
@@ -1732,6 +1817,17 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
           description: option.description,
         }))
         : [],
+      interior: run.phase === "choice" && !run.interiorResolved && interiorScene(dungeon.id)
+        ? {
+          prompt: interiorScene(dungeon.id)!.prompt,
+          safeOptionId: interiorSafe(dungeon.id)?.id ?? "",
+          options: interiorScene(dungeon.id)!.options.map((option) => ({
+            optionId: option.id,
+            label: option.label,
+            description: option.description,
+          })),
+        }
+        : null,
     }
     : null;
   const names = places.map((place) => place.name);
@@ -1768,6 +1864,16 @@ export function listRegionalChoiceActions(world: WorldState, cultivator: Cultiva
   if (!dungeon) return [];
   const actions: AvailableAction[] = [];
   if (run.phase === "choice" && presentCultivators(world, run).some((person) => person.id === cultivator.id)) {
+    const scene = run.interiorResolved ? null : interiorScene(dungeon.id);
+    for (const option of scene?.options ?? []) {
+      actions.push({
+        actionId: `regional-choice:${option.id}` as ActionId,
+        label: `${dungeon.name}：${option.label}`,
+        description: `${scene?.prompt ?? ""}${option.description}`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
     for (const option of dungeon.options) {
       actions.push({
         actionId: `regional-choice:${option.id}` as ActionId,
