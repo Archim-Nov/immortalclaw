@@ -6,6 +6,7 @@ import {
 } from "./combat-statuses.js";
 import { mysteryForRank, type MysteryRealm } from "./high-realm.js";
 import type { CombatStatusId, DungeonGrade, SpellLoadoutId, SpellTier } from "./model.js";
+import { lightAdvice } from "./yi-mystery.js";
 
 /**
  * How a 甲级 mystery realm fights.
@@ -269,9 +270,11 @@ export function jiaCompanionInjury(
   return outcome === "loss" ? found.fight.companionLoss : found.fight.companionFlee;
 }
 
-export function dungeonAdvice(grade: DungeonGrade, rank: number): string {
+export function dungeonAdvice(grade: DungeonGrade, rank: number, stateId?: string): string {
+  const named = lightAdvice(grade, rank, stateId);
+  if (named) return named;
   if (grade === "丙") return "丙级地宫仍是练手的地方。按自己的境界从低层往上打，守关还留得住人。";
-  if (grade === "乙") return "乙级地宫仍是筑基的练手处。比丙级重一档，结伴更稳，还不到甲级那种会把人压伤的关。";
+  if (grade === "乙") return "乙级地宫按层分成雷泽残阵、沉雾沼和铜棺窟。先看这一层的名字和会挂上的状态。";
   const warning = jiaFightWarning(rank);
   return warning || "甲级守关比丙级和乙级重。先看这一层的提醒，再决定一个人进还是五人结队。";
 }

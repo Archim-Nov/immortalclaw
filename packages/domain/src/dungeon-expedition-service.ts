@@ -1,6 +1,7 @@
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
 import { jiaRelicHint } from "./jia-relics.js";
+import { lightMysteryHint } from "./yi-mystery.js";
 import type {
   ActionJob,
   Cultivator,
@@ -129,10 +130,12 @@ export function buildDungeonRankYieldHints(
   availableRanks: DungeonRank[],
   primaryMaterial: ItemId,
   grade?: DungeonGrade,
+  stateId?: string,
 ): DungeonRankYieldHint[] {
   return availableRanks.map((rank) => {
     const band = yieldBandForRank(rank);
     const mystery = grade ? mysteryForRank(grade, rank) : null;
+    const light = !mystery && grade ? lightMysteryHint(grade, rank, stateId) : null;
     const notableSecondaryDrops = [...SECONDARY_DROPS_BY_BAND[band]];
     if (mystery && !notableSecondaryDrops.includes(mystery.cultivationItemId)) {
       notableSecondaryDrops.push(mystery.cultivationItemId);
@@ -153,7 +156,12 @@ export function buildDungeonRankYieldHints(
             mysteryLine: `${mystery.line}${jiaFightWarning(rank)}`,
             entryMinLevel: mystery.minLevel,
           }
-        : {}),
+        : light
+          ? {
+              mysteryName: light.name,
+              mysteryLine: light.line,
+            }
+          : {}),
       ...(relicLine ? { relicLine } : {}),
     };
   });

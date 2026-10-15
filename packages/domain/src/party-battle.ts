@@ -11,6 +11,7 @@ import {
   jiaPackShape,
   type GuardianThreat,
 } from "./high-realm-dungeon.js";
+import { lightPackFlavor } from "./yi-mystery.js";
 import type {
   CombatStatusInstance,
   DungeonCombatSummary,
@@ -220,12 +221,18 @@ export function buildGuardianPack(input: {
       shaped(jia.addNames[1], jia.addFactors[1], false, jia.patterns[2]),
     ];
   }
-  const pack = [make("", 1, true, enemyPatternFor(input.patternKey, input.name))];
+  const light = lightPackFlavor(input.grade, input.rank);
+  const stamp = (body: BattleCombatant): BattleCombatant => (
+    light ? { ...body, threat: light.threat } : body
+  );
+  const pack = [stamp(make("", 1, true, enemyPatternFor(input.patternKey, input.name)))];
   if (!hard) return pack;
   const start = hashString(`${input.patternKey}:${input.grade}:${input.rank}`) % ADD_PATTERNS.length;
-  pack.push(make("从者", 0.7, false, ADD_PATTERNS[start]!));
+  const follower = light?.addNames[0] ?? "从者";
+  const flank = light?.addNames[1] ?? "侧翼";
+  pack.push(stamp(make(follower, 0.7, false, ADD_PATTERNS[start]!)));
   if (input.rank >= 6 || input.grade !== "丙") {
-    pack.push(make("侧翼", 0.58, false, ADD_PATTERNS[(start + 1) % ADD_PATTERNS.length]!));
+    pack.push(stamp(make(flank, 0.58, false, ADD_PATTERNS[(start + 1) % ADD_PATTERNS.length]!)));
   }
   return pack.slice(0, 3);
 }
@@ -801,6 +808,8 @@ function actEnemy(
   };
 }
 
+const TELLABLE_STATUS = /焚灼|幻惑|镇压|断法|缠绕|霜寒|定根/;
+
 function readableBeats(records: readonly ActRecord[], enemyName: string, outcome: PartyBattleResult["outcome"]): string[] {
   const beats: string[] = [];
   const first = records.find((record) => record.result === "crit" || record.result === "hit" || record.result === "heal" || record.result === "guard");
@@ -815,8 +824,8 @@ function readableBeats(records: readonly ActRecord[], enemyName: string, outcome
         ? `${enemyName}和这边都还站着，这一场算平手。`
         : `有人撤步，这一场退出${enemyName}。`;
   if (beats.length < 3) beats.push(ending);
-  const marked = records.find((record) => /焚灼|幻惑|镇压/.test(record.note));
-  if (marked && !beats.some((beat) => /焚灼|幻惑|镇压/.test(beat))) {
+  const marked = records.find((record) => TELLABLE_STATUS.test(record.note));
+  if (marked && !beats.some((beat) => TELLABLE_STATUS.test(beat))) {
     if (beats.length >= 3) beats[1] = marked.note;
     else beats.splice(1, 0, marked.note);
   }

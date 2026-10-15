@@ -1,6 +1,7 @@
 import { breakthroughMethodNarrative, quietMethodStep } from "./breakthrough-methods.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { resourceGoals } from "./high-realm.js";
+import { lightRealmClause } from "./yi-mystery.js";
 import type { ItemId, RealmPathView, RealmStage } from "./model.js";
 import { realmPhaseForLevel, realmStageForLevel } from "./realms.js";
 
@@ -98,8 +99,12 @@ export function quietRealmStep(realmLevel: number): string | null {
 }
 
 function earlyWhere(level: number): string {
-  if (level <= 3) return "炼气的材料坊市买得到，丙级地宫和城镇差事也会掉。";
-  if (level <= 6) return "筑基的材料坊市买得到，荒野和乙级地宫也会掉。";
+  if (level <= 2) return "炼气的材料坊市买得到，丙级地宫和城镇差事也会掉。";
+  if (level === 3) return `炼气后期的材料坊市买得到，丙级七到九层的旧驿石廊和城镇差事也会掉。${lightRealmClause("丙", 7)}`;
+  if (level <= 6) {
+    const rank = level === 4 ? 1 : level === 5 ? 4 : 7;
+    return `筑基的材料坊市买得到，荒野和乙级地宫也会掉。${lightRealmClause("乙", rank)}`;
+  }
   return `金丹前期和中期的材料坊市不卖，甲级一到三层的丹霞内府，探宝和守关都会掉。${jiaFightWarning(1)}四层的婴火莲池要金丹后期才开。`;
 }
 
