@@ -102,6 +102,8 @@ export interface WakeNode {
   options: WakeNodeOption[];
   defaultOptionId: string;
   timeoutTicks: number;
+  /** Which mid-run scene this wake came from. Absent on older saves. */
+  sceneKind?: string;
 }
 
 export interface DungeonLocationMetadata {
@@ -876,6 +878,16 @@ export interface DungeonExpeditionProgress {
   heardLines?: string[];
   /** Wound-tending clauses from this shared run. Absent on older expeditions. */
   tendedLines?: string[];
+  /** Wake scene kinds already shown on this run. Absent on older expeditions. */
+  usedWakeScenes?: string[];
+  /** Beats appended so far, including ones dropped from the kept list. */
+  beatsSeen?: number;
+  /** Beats already folded into a 见闻. */
+  beatsTold?: number;
+  /** How many new beats to gather before the next 见闻. Two, three, or four. */
+  nextSightingGap?: number;
+  /** Latest reusable win line. The same sentence is copied onto the fight. */
+  carriedLine?: string;
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -1153,6 +1165,10 @@ export interface BahuangExpeditionProgress {
     items: Partial<Record<ItemId, number>>;
     realmProgress: number;
   };
+  /** Depth of the last 见闻. Absent on older expeditions. */
+  lastSightingDepth?: number;
+  /** Depths to walk before the next 见闻. Two, three, or four. */
+  nextSightingGap?: number;
 }
 
 export interface BahuangExpeditionStateView {

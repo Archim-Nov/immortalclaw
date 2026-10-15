@@ -431,6 +431,8 @@ function summarizeDigest(
     if (growth[0]) parts.push(growth[0]);
   }
   if (quote) parts.push(`${quote.speakerName}说过：「${quote.line}」`);
+  const sighting = [...fights, ...growth].find((line) => line.includes("见闻") || line.includes("带出何物"));
+  if (sighting && !parts.some((part) => part.includes(sighting))) parts.push(sighting);
   parts.push(mood.sentence);
   return parts.join("");
 }

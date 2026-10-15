@@ -1,14 +1,18 @@
 import { recordWildernessAttunement } from "./guixu-service.js";
+import { recordLife } from "./inner-life.js";
+import { ITEM_CATALOG } from "./items/catalog.js";
 import type {
   BahuangExpeditionProgress,
   BahuangExpeditionStateView,
   Cultivator,
+  ItemId,
   RunStrategy,
   WakeNode,
   WorldEvent,
   WorldState,
 } from "./model.js";
 import { EIGHT_WASTES_CONTENT } from "./seed.js";
+import { pushTravelNote, travelNote } from "./travelogue.js";
 
 const REALM_ORDER: Record<string, number> = {
   "鐐兼皵": 0,
@@ -53,6 +57,76 @@ function strategyDefaults(posture: RunStrategy["posture"]): RunStrategy {
   return { posture, bias: "survival-first", pushPreference: "neutral" };
 }
 
+function finishBahuangWake(input: {
+  nodeId: string;
+  sceneKind: string;
+  context: string;
+  options: WakeNode["options"];
+  defaultOptionId: string;
+}): WakeNode {
+  return { ...input, timeoutTicks: WAKE_TIMEOUT_TICKS };
+}
+
+function bahuangWakeOf(kind: number, progress: BahuangExpeditionProgress, nodeId: string): WakeNode {
+  if (kind === 0) {
+    return finishBahuangWake({
+      nodeId,
+      sceneKind: "depth",
+      context: "深处的压力突然重了一截。可以继续往下、先把收获收好、只探一处口袋，或者丢一份干粮换一段退路。",
+      options: [
+        { optionId: "continue-deeper", label: "继续往下", description: "压力会松一点，路还是往深处。" },
+        { optionId: "bank-now", label: "先把收获收好", description: "把已经到手的灵石再稳一成。" },
+        { optionId: "scout-pocket", label: "只探一处口袋", description: "不多走，只在手边摸一把。" },
+        { optionId: "drop-ration", label: "丢一份干粮", description: "少一口粮，换压力退一截。" },
+      ],
+      defaultOptionId: progress.strategy.pushPreference === "push" ? "continue-deeper" : "bank-now",
+    });
+  }
+  if (kind === 1) {
+    return finishBahuangWake({
+      nodeId,
+      sceneKind: "cache",
+      context: "荒尘里露出一只不稳的匣子。可以耗一张符撬开、绕开、用灵石硬砸，或者做个记号以后再来。",
+      options: [
+        { optionId: "spend-rare-supply", label: "耗一张符", description: "有符就换一把更厚的收获。" },
+        { optionId: "skip-cache", label: "绕开匣子", description: "不耗补给，路还按原来的走。" },
+        { optionId: "crack-cache", label: "用灵石砸开", description: "花一点灵石，匣子里未必比花掉的多多少。" },
+        { optionId: "leave-mark", label: "做个记号", description: "先记下位置，人继续往前。" },
+      ],
+      defaultOptionId: progress.strategy.bias === "reward-first" ? "spend-rare-supply" : "skip-cache",
+    });
+  }
+  if (kind === 2) {
+    return finishBahuangWake({
+      nodeId,
+      sceneKind: "hazard",
+      context: "前面是一条险廊，旁边有绕路。可以硬穿、走长路、贴着灯沿，或者等尘土落下再走。",
+      options: [
+        { optionId: "detour-hazard", label: "硬穿险廊", description: "压力升高，修为也会多一点。" },
+        { optionId: "safe-route", label: "走长路", description: "绕开这一段，人稳一些。" },
+        { optionId: "lamp-edge", label: "贴着灯沿走", description: "不快不慢，手边也许能摸到几枚灵石。" },
+        { optionId: "wait-dust", label: "等尘土落下", description: "停一停，压力会退一点。" },
+      ],
+      defaultOptionId: progress.strategy.posture === "aggressive" ? "detour-hazard" : "safe-route",
+    });
+  }
+  return finishBahuangWake({
+    nodeId,
+    sceneKind: "retreat",
+    context: "压力已经顶到该撤的地方。可以守住原来的走法、立刻撤出，或者把脚步放慢。",
+    options: [
+      { optionId: "hold-line", label: "守住原来的走法", description: "不改路线，按进八荒时定的姿态走。" },
+      { optionId: "emergency-retreat", label: "立刻撤出", description: "这一趟到此为止，人先出去。" },
+      { optionId: "slow-step", label: "把脚步放慢", description: "不撤，只是这一段走得轻一点。" },
+    ],
+    defaultOptionId: progress.strategy.pushPreference === "retreat" ? "emergency-retreat" : "hold-line",
+  });
+}
+
+export function previewBahuangWakes(progress: BahuangExpeditionProgress): WakeNode[] {
+  return [0, 1, 2, 3].map((kind) => bahuangWakeOf(kind, progress, `bahuang-preview-${kind}`));
+}
+
 function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number): WakeNode | null {
   if (progress.encounteredWakeNodes.length >= MAX_WAKE_NODES || progress.pendingWakeNodeIndex !== null) {
     return null;
@@ -67,52 +141,52 @@ function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number):
 
   const nodeId = `bahuang-wake-${progress.cultivatorId}-${progress.depth}-${progress.encounteredWakeNodes.length + 1}`;
   const type = hashString(`${nodeId}:type`) % 4;
-  if (type === 0) {
-    return {
-      nodeId,
-      context: "Depth pressure spikes: continue deeper now or bank current haul.",
-      options: [
-        { optionId: "continue-deeper", label: "Continue Deeper", description: "Push the expedition for stronger rewards." },
-        { optionId: "bank-now", label: "Bank Now", description: "Stabilize and secure current gains." },
-      ],
-      defaultOptionId: progress.strategy.pushPreference === "push" ? "continue-deeper" : "bank-now",
-      timeoutTicks: WAKE_TIMEOUT_TICKS,
-    };
+  return bahuangWakeOf(type, progress, nodeId);
+}
+
+const BAHUANG_SIGHTINGS = [
+  "风里全是细沙，牙缝里也有。你把袖口扎紧，还是能听见沙打在符纸上的声音。",
+  "脚下的土忽然软了一块。你退半步，看见一个旧脚印，比你的靴子深，人已经不在了。",
+  "远处有一点光，走近才发现是别人扔下的灯芯，油已经干了。",
+  "你停下来数了数干粮。还够再走一段，水却先少了。",
+  "荒原上没有路标，只有风把前一个人的绳子吹得横过来。你从绳子底下钻过去。",
+  "压力贴在胸口的时候，你把已经到手的东西又缠紧了一圈。",
+] as const;
+
+function rememberBahuangLine(world: WorldState, cultivator: Cultivator, title: string, detail: string): void {
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: "insight",
+    title,
+    detail,
+    locationId: cultivator.locationId,
+    mood: "这一句可以拿回去说",
+  }));
+  recordLife(cultivator, { tick: world.tick, kind: "growth", text: detail });
+}
+
+function maybeBahuangSighting(world: WorldState, cultivator: Cultivator, progress: BahuangExpeditionProgress): void {
+  const gap = progress.nextSightingGap ?? (2 + (hashString(`${cultivator.id}:bahuang-gap`) % 3));
+  progress.nextSightingGap = gap;
+  const last = progress.lastSightingDepth ?? 0;
+  if (progress.depth - last < gap) return;
+  progress.lastSightingDepth = progress.depth;
+  progress.nextSightingGap = (2 + (hashString(`${cultivator.id}:${progress.depth}:next-gap`) % 3)) as 2 | 3 | 4;
+  const line = BAHUANG_SIGHTINGS[hashString(`${cultivator.id}:${progress.depth}:sight`) % BAHUANG_SIGHTINGS.length]!;
+  rememberBahuangLine(world, cultivator, "八荒里的见闻", `八荒深处这一段的见闻：${line}`);
+}
+
+function bahuangCarriedLine(progress: BahuangExpeditionProgress): string {
+  const bits: string[] = [];
+  for (const [itemId, count] of Object.entries(progress.rewards.items) as Array<[ItemId, number | undefined]>) {
+    if (!count || count <= 0) continue;
+    const name = ITEM_CATALOG[itemId]?.name ?? itemId;
+    bits.push(count > 1 ? `${count}份${name}` : name);
+    if (bits.length >= 2) break;
   }
-  if (type === 1) {
-    return {
-      nodeId,
-      context: "A volatile cache can be opened by spending rare supplies.",
-      options: [
-        { optionId: "spend-rare-supply", label: "Spend Rare Supply", description: "Use talisman coverage for a high-value pull." },
-        { optionId: "skip-cache", label: "Skip Cache", description: "Avoid supply loss and maintain route stability." },
-      ],
-      defaultOptionId: progress.strategy.bias === "reward-first" ? "spend-rare-supply" : "skip-cache",
-      timeoutTicks: WAKE_TIMEOUT_TICKS,
-    };
-  }
-  if (type === 2) {
-    return {
-      nodeId,
-      context: "A hazard corridor appears with a possible detour.",
-      options: [
-        { optionId: "detour-hazard", label: "Detour Hazard", description: "Risk a harder segment for better loot density." },
-        { optionId: "safe-route", label: "Safe Route", description: "Take the longer route with lower pressure." },
-      ],
-      defaultOptionId: progress.strategy.posture === "aggressive" ? "detour-hazard" : "safe-route",
-      timeoutTicks: WAKE_TIMEOUT_TICKS,
-    };
-  }
-  return {
-    nodeId,
-    context: "Pressure trend suggests an emergency retreat window.",
-    options: [
-      { optionId: "hold-line", label: "Hold Line", description: "Stay on route and trust current strategy." },
-      { optionId: "emergency-retreat", label: "Emergency Retreat", description: "Abort expedition before collapse." },
-    ],
-    defaultOptionId: progress.strategy.pushPreference === "retreat" ? "emergency-retreat" : "hold-line",
-    timeoutTicks: WAKE_TIMEOUT_TICKS,
-  };
+  if (progress.rewards.spiritStones > 0) bits.push(`${progress.rewards.spiritStones}枚灵石`);
+  if (bits.length === 0) bits.push("袖口上的一层荒尘");
+  return `带出何物：${bits.join("，")}。`;
 }
 
 export function canEnterBahuang(
@@ -307,6 +381,7 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
   }
 
   recordWildernessAttunement(world, cultivator.id, 1);
+  maybeBahuangSighting(world, cultivator, progress);
 
   const wakeNode = createWakeNode(progress, world.tick);
   if (wakeNode) {
@@ -333,14 +408,16 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
         progress.rewards.items[itemId] = (progress.rewards.items[itemId] ?? 0) + 1;
         cultivator.inventory[itemId] += 1;
       }
+      const carried = bahuangCarriedLine(progress);
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
         locationId: cultivator.locationId,
         title: "八荒远征完成",
-        content: `${cultivator.name} 完成了深度 ${progress.depth} 的八荒远征，获得 ${bonus.spiritStones} 灵石奖励。`,
+        content: `${cultivator.name} 完成了深度 ${progress.depth} 的八荒远征，获得 ${bonus.spiritStones} 灵石奖励。${carried}`,
         severity: "medium",
         tags: ["bahuang", "completed"],
       });
+      rememberBahuangLine(world, cultivator, "带出何物", carried);
       delete world.bahuangProgress[cultivator.id];
       return;
     }
@@ -409,19 +486,48 @@ export function resolveBahuangWakeDecision(
       progress.rewards.spiritStones += bonusStones;
       cultivator.spiritStones += bonusStones;
     }
+  } else if (optionId === "scout-pocket") {
+    const found = 8;
+    progress.pressure += 1;
+    progress.rewards.spiritStones += found;
+    cultivator.spiritStones += found;
+  } else if (optionId === "drop-ration") {
+    if (progress.supplies.rations > 0) {
+      progress.supplies.rations -= 1;
+      progress.pressure = Math.max(0, progress.pressure - 3);
+    }
+  } else if (optionId === "crack-cache") {
+    if (cultivator.spiritStones >= 8) {
+      cultivator.spiritStones -= 8;
+      const found = 12;
+      progress.rewards.spiritStones += found;
+      cultivator.spiritStones += found;
+    }
+  } else if (optionId === "leave-mark" || optionId === "wait-dust") {
+    progress.pressure = Math.max(0, progress.pressure - 1);
+  } else if (optionId === "lamp-edge") {
+    progress.pressure += 1;
+    progress.rewards.spiritStones += 6;
+    cultivator.spiritStones += 6;
+  } else if (optionId === "slow-step") {
+    progress.pressure = Math.max(0, progress.pressure - 2);
   } else if (optionId === "detour-hazard") {
     progress.pressure += 3;
     const bonusProgress = 5 + (hashString(`${cultivator.id}:${world.tick}:wake-detour`) % 8);
     progress.rewards.realmProgress += bonusProgress;
     cultivator.realmProgress = Math.min(100, cultivator.realmProgress + bonusProgress);
   } else if (optionId === "emergency-retreat") {
+    const sentence = `${cultivator.name}在八荒里选了「${option.label}」。${option.description}`;
+    rememberBahuangLine(world, cultivator, "八荒里的抉择", sentence);
     retreatFromBahuang(world, cultivator, "emergency-wake-retreat");
-    return `${cultivator.name} chose emergency retreat from 八荒.`;
+    return sentence;
   }
 
   progress.pendingWakeNodeIndex = null;
   progress.pendingWakeNodeDeadlineTick = null;
   progress.resolvedWakeNodeCount += 1;
 
-  return `${cultivator.name} chose "${option.label}" at wake node.`;
+  const sentence = `${cultivator.name}在八荒里选了「${option.label}」。${option.description}`;
+  rememberBahuangLine(world, cultivator, "八荒里的抉择", sentence);
+  return sentence;
 }

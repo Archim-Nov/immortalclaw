@@ -2,7 +2,7 @@
   AgentBinding, AgentPersonaSyncResult, ActionExecutionResult, ActionId, ActionJob, AvailableAction, CharacterSummary,
   BreakthroughCategory, BreakthroughMaterialSourceView, BreakthroughRateModifier, BreakthroughRecord, BreakthroughStateView,
   CombatLogEntry, CultivationRegistrationRecord, CultivationRegistrationView, Cultivator, CultivatorStateView,
-  CreateCultivatorInput, DecisionPolicyView, DungeonExpeditionProgress, DungeonExpeditionReport, DungeonExpeditionStateView, DungeonGrade, DungeonRank, DungeonRankYieldHint, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RealmPhase, RegistrationAnswer,
+  CreateCultivatorInput, DecisionPolicyView, DungeonBeat, DungeonExpeditionProgress, DungeonExpeditionReport, DungeonExpeditionStateView, DungeonGrade, DungeonRank, DungeonRankYieldHint, DungeonStateView, EventEffect, FiveElementId, ItemId, Message, RealmPhase, RegistrationAnswer,
   MoralityAlignment, PendingMoralityChoiceResponse, PlayerSectFoundingBlockerCode, PlayerSectFoundingOptionsView,
   FoundPlayerSectResult, NeutralSect, OrganizationInfoView, PlayerSectApplicationResult,
   ResolveMoralityChoiceResult,
@@ -377,6 +377,10 @@ import {
   maybeCreateDungeonWakeNode,
   chooseDefaultDungeonWakeOptionId,
   settleDungeonWakeNode,
+  appendDungeonBeats,
+  flushDungeonSighting,
+  carriedClause,
+  withCarriedLine,
   parseEnterDungeonActionId,
   parseStartDungeonExpeditionActionId,
   recordDungeonExpeditionStep,
@@ -4679,6 +4683,12 @@ function finalizeDungeonExpedition(
     throw new Error("Dungeon expedition progress requires dungeon metadata.");
   }
 
+  const flushed = flushDungeonSighting(progress, dungeonPlace(progress));
+  if (flushed.sighting) {
+    publishExpeditionStory(world, cultivator, flushed.progress, flushed.sighting, "growth");
+  }
+  progress = flushed.progress;
+
   const returnLocationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
   cultivator.locationId = returnLocationId;
 
@@ -4704,29 +4714,58 @@ function finalizeDungeonExpedition(
   return report;
 }
 
-function noteDungeonRoomRhythm(
+function dungeonPlace(progress: DungeonExpeditionProgress): string {
+  return `${progress.grade}级地宫第${progress.targetRank}层`;
+}
+
+function publishExpeditionStory(
   world: WorldState,
-  cultivator: Cultivator,
-  room: number,
-  actionKind: "search" | "guardian",
-  rounds: readonly CombatRoundLog[],
+  leader: Cultivator,
+  progress: DungeonExpeditionProgress,
+  note: { kind: DungeonBeat["kind"]; title: string; detail: string; mood: string },
+  lifeKind: "growth" | "fight",
 ): void {
-  try {
-    const crits = rounds.filter((round) => round.playerAttack?.result === "crit" || round.enemyAttack?.result === "crit").length;
-    const guards = rounds.filter((round) => round.playerAttack?.result === "miss" || round.enemyAttack?.result === "miss").length;
-    const detail = actionKind === "guardian"
-      ? `第${room}间守关过了${rounds.length}合。${crits > 0 ? "有一击破防" : "出手没能破防"}。守势拦住${guards}次。节奏是进、拆、再进。`
-      : `第${room}间没有守关。石室里的短节奏是探、停、再探，像一回合交手，还没到破防的时候。`;
-    pushTravelNote(cultivator, travelNote({
-      tick: world.tick,
-      kind: actionKind === "guardian" ? "injury" : "insight",
-      title: `第${room}间的节奏`,
-      detail,
-      locationId: cultivator.locationId,
-      mood: actionKind === "guardian" ? "这一间是打出来的" : "这一间只是探路",
-    }));
-  } catch {
-    // A room note must not stop the expedition step.
+  const people = [leader];
+  for (const companionId of expeditionCompanionIds(progress)) {
+    const companion = world.cultivators[companionId];
+    if (companion && companion.id !== leader.id) people.push(companion);
+  }
+  for (const person of people) {
+    try {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: note.kind,
+        title: note.title,
+        detail: note.detail,
+        locationId: person.locationId,
+        mood: note.mood,
+      }));
+      recordLife(person, { tick: world.tick, kind: lifeKind, text: note.detail });
+    } catch {
+      // One listener must not drop the story.
+    }
+  }
+}
+
+function attachCarriedLine(world: WorldState, people: readonly Cultivator[], carried: string): void {
+  for (const person of people) {
+    try {
+      const fight = (person.lifeLog ?? []).find((event) => (
+        event.kind === "fight" && event.tick === world.tick && !event.text.includes("带出何物")
+      ));
+      if (fight) fight.text = `${fight.text}${carried}`;
+      else recordLife(person, { tick: world.tick, kind: "fight", text: carried });
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "find",
+        title: "带出何物",
+        detail: carried,
+        locationId: person.locationId,
+        mood: "这一句可以拿回去说",
+      }));
+    } catch {
+      // A carried line must not roll the step back.
+    }
   }
 }
 
@@ -5170,13 +5209,18 @@ function resolveDungeonExpeditionStepIfDue(
   }
   addRealmProgress(cultivator, pressure.realmProgress);
   const fightBeats = expeditionBattle?.beats ?? [];
+  const addedBeats = [
+    ...(fightBeats.length > 0 ? fightBeats : [pressure.beat]),
+    ...(bandFailBeat ? [bandFailBeat] : []),
+  ];
+  const appended = appendDungeonBeats(
+    effectiveProgress,
+    addedBeats,
+    `${world.tick}:${job.id}:${effectiveProgress.stepIndex}`,
+    dungeonPlace(effectiveProgress),
+  );
   effectiveProgress = {
-    ...effectiveProgress,
-    beats: [
-      ...(effectiveProgress.beats ?? []),
-      ...(fightBeats.length > 0 ? fightBeats : [pressure.beat]),
-      ...(bandFailBeat ? [bandFailBeat] : []),
-    ].slice(-8),
+    ...appended.progress,
     combatRounds: expeditionBattle
       ? [...(effectiveProgress.combatRounds ?? []), expeditionBattle.summary].slice(-3)
       : effectiveProgress.combatRounds,
@@ -5185,24 +5229,14 @@ function resolveDungeonExpeditionStepIfDue(
     injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + injuryTicks,
     stonesLost: (effectiveProgress.stonesLost ?? 0) + bandFailStones,
   };
-  const told = fightBeats.length > 0 ? fightBeats : [pressure.beat];
+  if (appended.sighting) {
+    publishExpeditionStory(world, cultivator, effectiveProgress, appended.sighting, "growth");
+  }
   const beatAudience = [cultivator];
   if (expeditionBattle) {
     for (const companionId of battleAllyIds) {
       const companion = world.cultivators[companionId];
       if (companion && companion.id !== cultivator.id) beatAudience.push(companion);
-    }
-  }
-  for (const person of beatAudience) {
-    for (const beat of told.slice(0, 3)) {
-      pushTravelNote(person, travelNote({
-        tick: world.tick,
-        kind: beat.kind,
-        title: beat.title,
-        detail: beat.detail,
-        locationId: person.locationId,
-        mood: beat.mood,
-      }));
     }
   }
   if (expeditionBattle) {
@@ -5227,13 +5261,6 @@ function resolveDungeonExpeditionStepIfDue(
       }));
     }
   }
-  noteDungeonRoomRhythm(
-    world,
-    cultivator,
-    effectiveProgress.stepIndex + 1,
-    actionKind,
-    actionKind === "guardian" ? (getCombatJobState(syntheticJob)?.rounds ?? []) : [],
-  );
   effectiveProgress = echoDungeonCompanion(world, effectiveProgress, qiDrain, foughtWith);
 
   const flavorEventTitles = actionKind === "search"
@@ -5264,6 +5291,10 @@ function resolveDungeonExpeditionStepIfDue(
   cultivator.pendingSceneChoiceId = beforePendingSceneChoiceId;
 
   const inventoryDelta = positiveInventoryDelta(beforeInventory, cultivator.inventory);
+  const carriedItems = (Object.entries(inventoryDelta) as Array<[ItemId, number | undefined]>)
+    .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
+    .slice(0, 2)
+    .map(([itemId, count]) => ({ name: ITEM_CATALOG[itemId]?.name ?? itemId, count }));
   const tierPool = breakthroughDropPool(metadata.materialBand, effectiveProgress.targetRank);
   let primaryMaterialCount = 0;
   for (const matId of tierPool) {
@@ -5271,7 +5302,7 @@ function resolveDungeonExpeditionStepIfDue(
     delete inventoryDelta[matId];
   }
 
-  const updatedProgress = recordDungeonExpeditionStep({
+  let updatedProgress = recordDungeonExpeditionStep({
     progress: effectiveProgress,
     action: actionKind,
     primaryMaterialCount,
@@ -5282,6 +5313,20 @@ function resolveDungeonExpeditionStepIfDue(
     resolvedAtTick: world.tick,
     flavorEventTitles,
   });
+  if (expeditionBattle?.outcome === "win") {
+    const carried = carriedClause({
+      stones: Math.max(0, cultivator.spiritStones - beforeSpiritStones),
+      items: carriedItems,
+      seed: `${world.tick}:${cultivator.id}:${updatedProgress.stepIndex}`,
+    });
+    const rounds = [...(updatedProgress.combatRounds ?? [])];
+    const lastRound = rounds[rounds.length - 1];
+    if (lastRound) {
+      rounds[rounds.length - 1] = { ...lastRound, beats: withCarriedLine(lastRound.beats, carried) };
+    }
+    updatedProgress = { ...updatedProgress, combatRounds: rounds, carriedLine: carried };
+    attachCarriedLine(world, beatAudience, carried);
+  }
 
   const danger = dangerousDungeonExit({
     policy: updatedProgress.policy,
@@ -5299,20 +5344,20 @@ function resolveDungeonExpeditionStepIfDue(
       raiseInjury(world, cultivator, danger.injuryTicks);
       syncWounded(cultivator);
     }
+    const collapsedAppend = appendDungeonBeats(
+      updatedProgress,
+      [danger.beat],
+      `${world.tick}:${job.id}:collapse`,
+      dungeonPlace(updatedProgress),
+    );
     const collapsed = {
-      ...updatedProgress,
+      ...collapsedAppend.progress,
       stonesLost: (updatedProgress.stonesLost ?? 0) + danger.stoneLoss,
       injuryTicksGained: (updatedProgress.injuryTicksGained ?? 0) + danger.injuryTicks,
-      beats: [...(updatedProgress.beats ?? []), danger.beat].slice(-8),
     };
-    pushTravelNote(cultivator, travelNote({
-      tick: world.tick,
-      kind: danger.beat.kind,
-      title: danger.beat.title,
-      detail: danger.beat.detail,
-      locationId: cultivator.locationId,
-      mood: danger.beat.mood,
-    }));
+    if (collapsedAppend.sighting) {
+      publishExpeditionStory(world, cultivator, collapsed, collapsedAppend.sighting, "growth");
+    }
     finalizeDungeonExpedition(world, cultivator, collapsed, danger.outcome);
     job.remainingTicks = 0;
     return;
@@ -5330,11 +5375,14 @@ function resolveDungeonExpeditionStepIfDue(
     return;
   }
 
+  const wakeSect = cultivator.sectId ? world.sects[cultivator.sectId] : null;
+  const wakeNeutral = getCultivatorNeutralSect(world, cultivator);
   const wakeNode = maybeCreateDungeonWakeNode({
     progress: updatedProgress,
     cultivator,
     actionKind,
     worldTick: world.tick,
+    sectName: wakeSect?.name ?? wakeNeutral?.name ?? null,
   });
   const progressedWithWake = wakeNode
     ? {
@@ -5342,6 +5390,7 @@ function resolveDungeonExpeditionStepIfDue(
         wakeNodesEncountered: updatedProgress.wakeNodesEncountered + 1,
         pendingWakeNode: wakeNode,
         pendingWakeNodeDeadlineTick: world.tick + wakeNode.timeoutTicks,
+        usedWakeScenes: [...(updatedProgress.usedWakeScenes ?? []), wakeNode.sceneKind ?? "wake"],
       }
     : updatedProgress;
 

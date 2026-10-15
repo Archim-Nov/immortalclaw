@@ -86,7 +86,7 @@ test("a full party explains the cap and refuses a sixth", () => {
   );
 });
 
-test("a dungeon room writes a rhythm note and the tick still advances", () => {
+test("a dungeon run writes a 见闻 and the tick still advances", () => {
   const world = createSeedWorld();
   const leader = world.cultivators[CULTIVATOR_ID]!;
   leader.locationId = "qingzhou:dungeon-c";
@@ -97,7 +97,18 @@ test("a dungeon room writes a rhythm note and the tick still advances", () => {
   advanceWorld(world, 3);
   assert.equal(world.tick, tickBefore + 3);
   assert.ok(leader.activeJobId);
-  assert.ok((leader.travelNotes ?? []).some((note) => note.detail.includes("节奏")));
+
+  let guard = 0;
+  while (leader.activeJobId && guard < 36) {
+    const told = (leader.travelNotes ?? []).some((note) => note.detail.includes("见闻"));
+    if (told) break;
+    advanceWorld(world, 1);
+    guard += 1;
+  }
+  assert.ok(world.tick > tickBefore);
+  const notes = (leader.travelNotes ?? []).map((note) => note.detail).join("\n");
+  assert.match(notes, /见闻/);
+  assert.equal(notes.includes("节奏是进、拆、再进"), false);
 });
 
 test("a city duel names the opening stance and the qi spent", () => {
