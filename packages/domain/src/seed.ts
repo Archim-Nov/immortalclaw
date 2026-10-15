@@ -756,6 +756,13 @@ export function hydrateWorldState(
       (cultivator.residence as any).stateId = stateId;
       (cultivator.residence as any).description = (cultivator.residence as any).description ?? "";
     }
+    const fillResidenceSink = (residence: { grandeur?: number; fixtures?: unknown } | null | undefined) => {
+      if (!residence) return;
+      if (typeof residence.grandeur !== "number") residence.grandeur = 1;
+      if (!residence.fixtures) residence.fixtures = [];
+    };
+    fillResidenceSink(cultivator.residence);
+    for (const residence of cultivator.residences ?? []) fillResidenceSink(residence);
 
     for (const itemId of ["core-nourish-dew", "nascent-nourish-sand", "spirit-nourish-dust"] as const) {
       if (cultivator.inventory[itemId] === undefined) cultivator.inventory[itemId] = 0;

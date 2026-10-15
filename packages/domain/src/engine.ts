@@ -89,6 +89,7 @@ import {
   moodCauseForDuel,
   noteWound,
   recordLife,
+  recordSpokenEcho,
   spreadNearbyGossip,
   SHARE_RESOURCE_COOLDOWN_TICKS,
   SHARE_RESOURCE_MINIMUM,
@@ -197,8 +198,6 @@ import {
   updateSectTitlesIfDue,
 } from "./quest.js";
 import {
-  canCraftResidenceRecipe,
-  consumeResidenceRecipeInputs,
   createResidenceForState,
   getActiveResidence,
   getFirstCraftableResidenceRecipe,
@@ -217,6 +216,30 @@ import {
   getRecentResidenceAmbientEventsForResidence,
   pickResidenceAmbientEvent,
 } from "./residence-context.js";
+import {
+  applyClearFixture,
+  applyFixture,
+  applyUpgrade,
+  benefitsOf,
+  buildOwnedResidenceView,
+  discountedSpiritCost,
+  fixtureFamily,
+  fixtureOffers,
+  fixtureSlotCount,
+  fixtureViews,
+  hostReady,
+  hostSpokenLine,
+  hostTeaCost,
+  HOST_AFFINITY_BASE,
+  meditateProgressBonus,
+  nearbyHomeLine,
+  placedFixtures,
+  residenceGlance,
+  residenceTierName,
+  stampHost,
+  upgradeQuote,
+  withResidence,
+} from "./residence-grandeur.js";
 import {
   computeActivityContext,
   computeDaoPotential,
@@ -3281,6 +3304,9 @@ function defaultResidenceAt(locationId: string, cultivatorId: string) {
     name: entry?.name ?? "洞府",
     stateId,
     description: entry?.description ?? "",
+    grandeur: 1,
+    origin: "starter" as const,
+    fixtures: [],
   };
 }
 
@@ -6974,6 +7000,25 @@ function nearbyActionNote(world: WorldState, cultivator: Cultivator): string {
   return `同场能看见的修士有 ${window.agentsHere} 位，都在 nearbyCultivators 里。搭讪、问候、赠礼、切磋和组队先列这一页，最多 ${SOCIAL_ACTION_LIMIT} 位。第 ${window.page + 1}/${window.pageCount} 页，每 ${SOCIAL_PAGE_HOLD_TICKS} 刻换一页。认识了的人留在这一页上。`;
 }
 
+function nearbyHomeViews(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyHomes"]> {
+  const homes: NonNullable<CultivatorStateView["nearbyHomes"]>[number][] = [];
+  for (const other of getCultivatorsAtLocation(world, cultivator.locationId, cultivator.id)) {
+    const home = other.residences?.find((residence) => residence.locationId === cultivator.locationId);
+    if (!home) continue;
+    homes.push({
+      ownerId: other.id,
+      ownerName: other.name,
+      residenceName: home.name,
+      grandeur: home.grandeur ?? 1,
+      tierName: residenceTierName(home),
+      glance: residenceGlance(home),
+    });
+  }
+  return homes
+    .sort((left, right) => right.grandeur - left.grandeur || left.ownerName.localeCompare(right.ownerName, "zh"))
+    .slice(0, 4);
+}
+
 function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["nearbyCultivators"]> {
   const locationName = world.locations[cultivator.locationId]?.name ?? "这里";
   return selectNearbyCultivators(world, cultivator)
@@ -6997,6 +7042,10 @@ function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNull
         placeLine: link && grudgeArcOf(link.grudge ?? 0)
           ? `${other.name}也在${locationName}。你们有${grudgeArcOf(link.grudge ?? 0)}，见面剑拔弩张。`
           : `${other.name}也在${locationName}。`,
+        ...(() => {
+          const home = other.residences?.find((residence) => residence.locationId === cultivator.locationId);
+          return home ? { homeLine: nearbyHomeLine(home, other.name) } : {};
+        })(),
       };
     });
 }
@@ -7345,14 +7394,11 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     guixu: buildGuixuView(world, cultivator),
     derivedState,
     socialLinks: getSocialLinksView(world, cultivatorId),
-    residences: cultivator.residences.map((r) => ({
-      id: r.id,
-      stateId: r.stateId,
-      locationId: r.locationId,
-      name: r.name,
-      description: r.description,
-      isActive: r.locationId === cultivator.locationId,
-    })),
+    residences: cultivator.residences.map((r) => buildOwnedResidenceView(r, r.locationId === cultivator.locationId)),
+    ...(() => {
+      const homes = nearbyHomeViews(world, cultivator);
+      return homes.length > 0 ? { nearbyHomes: homes } : {};
+    })(),
     activeResidence,
     residenceContext: activeResidence
       ? buildResidenceContext(activeResidence, world.tick, recentResidenceAmbientEvents)
@@ -7525,6 +7571,53 @@ function travelCardFor(world: WorldState, locationId: string): { label: string; 
     label: `Travel to ${name}`,
     description: `Travel to ${name}.`,
   };
+}
+
+function residenceGrandeurActions(world: WorldState, cultivator: Cultivator): AvailableAction[] {
+  const residence = getActiveResidence(cultivator);
+  if (!residence) return [];
+  const actions: AvailableAction[] = [];
+  const upgrade = upgradeQuote(residence);
+  actions.push({
+    actionId: "upgrade-residence",
+    label: `修府：${upgrade.tierName}`,
+    description: upgrade.line,
+    durationTicks: 0,
+    kind: "immediate",
+    costs: { spiritStones: upgrade.price },
+  });
+  for (const offer of fixtureOffers(residence)) {
+    actions.push({
+      actionId: offer.actionId as ActionId,
+      label: offer.nextTier === 1 ? `置办${offer.name}` : `换上${offer.tierName}${offer.name}`,
+      description: offer.line,
+      durationTicks: 0,
+      kind: "immediate",
+      costs: { spiritStones: offer.price },
+    });
+  }
+  for (const fixture of fixtureViews(residence)) {
+    actions.push({
+      actionId: `clear-fixture:${fixture.id}` as ActionId,
+      label: `撤下${fixture.name}`,
+      description: `把${fixture.name}撤下来，空出一个位子。灵石不退，再买从最低一阶重新算。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  const tea = hostTeaCost(residence);
+  for (const guest of socialActionTargets(world, cultivator)) {
+    if (!hostReady(residence, guest.id, world.tick).ok) continue;
+    actions.push({
+      actionId: `host-guest:${guest.id}` as ActionId,
+      label: `请${guest.name}到府里坐`,
+      description: `请${guest.name}进${residenceTierName(residence)}坐一坐，花${tea}灵石温茶。人在这城里就能请。好感加得很少，隔四个时辰才能再请这一位。`,
+      durationTicks: 0,
+      kind: "immediate",
+      costs: { spiritStones: tea },
+    });
+  }
+  return actions;
 }
 
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
@@ -7832,6 +7925,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       });
     }
   }
+  actions.push(...residenceGrandeurActions(world, cultivator));
   if (!cultivator.sectId && !cultivator.neutralSectId && localNeutralSect?.joinable) {
     actions.push({
       actionId: `join-neutral-sect:${localNeutralSect.id}`,
@@ -8741,6 +8835,10 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId === "clear-skill-loadout") return;
   if (actionId === "cycle-social-page") return;
   if (actionId.startsWith("buy-residence:")) return;
+  if (actionId === "upgrade-residence") return;
+  if (actionId.startsWith("place-fixture:")) return;
+  if (actionId.startsWith("clear-fixture:")) return;
+  if (actionId.startsWith("host-guest:")) return;
   // Allow low-risk sect tasks (resource tribute) while injured
   const injuredSectTask = parseSectTaskId(actionId);
   if (injuredSectTask) {
@@ -10786,12 +10884,14 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.spiritStones -= 80;
     }
     const aid = consumeCultivationAid(cultivator);
-    const gain =
+    const baseGain =
       (fallback ? 4 : 10) +
       (hashString(`${world.tick}:${job.id}:residence-meditate`) % (fallback ? 3 : 5)) +
       (hasEffect(cultivator, "clear-mind") ? 4 : 0) +
       (registration?.cultivateBonus ?? 0) +
       (aid?.bonus ?? 0);
+    const furnishingBonus = meditateProgressBonus(residence, baseGain);
+    const gain = baseGain + furnishingBonus;
     const progressBefore = cultivator.realmProgress;
     addRealmProgress(cultivator, gain);
     noteCultivationMark(world, cultivator, progressBefore);
@@ -10819,7 +10919,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       world,
       cultivator.id,
       "闭关修炼",
-      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}闭关修炼，消耗 ${fallback ? 0 : 80} 灵石，修为增加 ${gain}。${aid ? `用了一份${aid.name}。` : ""}`,
+      `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}闭关修炼，消耗 ${fallback ? 0 : 80} 灵石，修为增加 ${gain}。${furnishingBonus > 0 ? `屋里的布置又添了${furnishingBonus}分。` : ""}${aid ? `用了一份${aid.name}。` : ""}`,
       ["cultivation", "residence"],
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
@@ -10833,7 +10933,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (usePill && cultivator.inventory["healing-pill"] > 0) {
       cultivator.inventory["healing-pill"] -= 1;
     }
-    const healed = (usePill ? 6 : 4) + Math.floor((registration?.healBonus ?? 0) / 4);
+    const healed = (usePill ? 6 : 4) + Math.floor((registration?.healBonus ?? 0) / 4) + benefitsOf(residence).healBonus;
     cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - healed);
     cultivator.qi = clamp(cultivator.qi + (usePill ? 55 : 35) + (registration?.healBonus ?? 0), 0, cultivator.maxQi);
     cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned");
@@ -10863,7 +10963,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
         intensity: 1,
       });
     }
-    const qiGain = Math.max(1, Math.floor(cultivator.maxQi * (usePill ? 0.6 : 0.35)));
+    const qiGain = Math.max(1, Math.floor(cultivator.maxQi * (usePill ? 0.6 : 0.35))) + benefitsOf(residence).qiBonus;
     cultivator.qi = clamp(cultivator.qi + qiGain, 0, cultivator.maxQi);
     addDaoLog(
       world,
@@ -10893,10 +10993,14 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (!recipe) {
       throw new Error("Residence production recipe missing.");
     }
-    if (!canCraftResidenceRecipe(cultivator, recipe)) {
+    const craftedStoneCost = discountedSpiritCost(residence, recipe.spiritStoneCost);
+    if (cultivator.spiritStones < craftedStoneCost || !recipe.inputMaterials.every((material) => cultivator.inventory[material.itemId] >= material.count)) {
       throw new Error("No craftable residence recipe with current materials.");
     }
-    consumeResidenceRecipeInputs(cultivator, recipe);
+    for (const material of recipe.inputMaterials) {
+      cultivator.inventory[material.itemId] -= material.count;
+    }
+    cultivator.spiritStones -= craftedStoneCost;
     cultivator.inventory[recipe.outputItemId] += recipe.outputCount;
     addResourceGainLog(
       world,
@@ -10915,7 +11019,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     // If there are other cultivators at the same location, grow affinity with one
     const socialTarget = pickChatUpTarget(world, cultivator.id, `${world.tick}:${job.id}:socialize`);
     if (socialTarget) {
-      const { linkAB } = addMutualAffinity(world, cultivator.id, socialTarget.id, AFFINITY_GAINS.residenceSocialize);
+      const { linkAB } = addMutualAffinity(world, cultivator.id, socialTarget.id, AFFINITY_GAINS.residenceSocialize + benefitsOf(residence).hostAffinity);
       const level = getAffinityLevel(linkAB.affinity);
       addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}与${socialTarget.name}交流心法，好感度${linkAB.affinity}（${level}）。`, ["social", "residence"]);
     } else {
@@ -11884,6 +11988,144 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   return resolveJob(world, job);
 }
 
+function performResidenceGrandeurAction(
+  world: WorldState,
+  cultivator: Cultivator,
+  actionId: ActionId,
+): ActionExecutionResult | null {
+  const placing = actionId.startsWith("place-fixture:") ? actionId.slice("place-fixture:".length) : null;
+  const clearing = actionId.startsWith("clear-fixture:") ? actionId.slice("clear-fixture:".length) : null;
+  const hosting = actionId.startsWith("host-guest:") ? actionId.slice("host-guest:".length) : null;
+  if (actionId !== "upgrade-residence" && placing === null && clearing === null && hosting === null) {
+    return null;
+  }
+  const residence = getActiveResidence(cultivator);
+  if (!residence) {
+    throw new GameplayRejection("修府、置办陈设和待客，都要在自己的洞府里。先回去。");
+  }
+  const done = (summary: string): ActionExecutionResult => ({
+    tick: world.tick,
+    cultivatorId: cultivator.id,
+    actionId,
+    accepted: true,
+    summary,
+  });
+
+  if (actionId === "upgrade-residence") {
+    const quote = upgradeQuote(residence);
+    if (cultivator.spiritStones < quote.price) {
+      throw new GameplayRejection(`灵石不够。修到${quote.tierName}要${quote.price}，身上只有${cultivator.spiritStones}。`);
+    }
+    const previous = residenceTierName(residence);
+    cultivator.spiritStones -= quote.price;
+    withResidence(cultivator, residence.id, (home) => applyUpgrade(home, quote.nextGrandeur));
+    const text = `${cultivator.name}把${residence.name}从${previous}修成了${quote.tierName}，花了${quote.price}灵石。`;
+    addDaoLog(world, cultivator.id, "修缮洞府", text, ["residence", "purchase", "grandeur"]);
+    recordLife(cultivator, { tick: world.tick, kind: "growth", text });
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "find",
+      title: `${residence.name}修成了${quote.tierName}`,
+      detail: text,
+      locationId: cultivator.locationId,
+      mood: "府里比昨天宽",
+    }));
+    return done(text);
+  }
+
+  if (placing !== null) {
+    const family = fixtureFamily(placing);
+    if (!family) throw new GameplayRejection("没有这件陈设。");
+    const offer = fixtureOffers(residence).find((row) => row.fixtureId === placing);
+    if (!offer) {
+      const current = (residence.fixtures ?? []).find((fixture) => fixture.id === placing);
+      if (current && current.tier >= family.maxTier) {
+        throw new GameplayRejection(`${family.name}已经到顶，再买也没有下一阶。`);
+      }
+      const slots = fixtureSlotCount(residence.grandeur ?? 1);
+      throw new GameplayRejection(`这处${residenceTierName(residence)}只有${slots}个位子，已经满了。先撤下一件，或者把府邸再修大。`);
+    }
+    if (cultivator.spiritStones < offer.price) {
+      throw new GameplayRejection(`灵石不够。${offer.tierName}的${family.name}要${offer.price}，身上只有${cultivator.spiritStones}。`);
+    }
+    cultivator.spiritStones -= offer.price;
+    withResidence(cultivator, residence.id, (home) => applyFixture(home, placing, offer.nextTier));
+    const text = offer.cosmetic
+      ? `${cultivator.name}在${residence.name}添了${offer.tierName}的${family.name}，花了${offer.price}灵石。来的人看得见。`
+      : `${cultivator.name}在${residence.name}安了${offer.tierName}的${family.name}，花了${offer.price}灵石。`;
+    addDaoLog(world, cultivator.id, "置办陈设", text, ["residence", "purchase", "fixture"]);
+    recordLife(cultivator, { tick: world.tick, kind: "growth", text });
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "find",
+      title: `${residence.name}里多了${family.name}`,
+      detail: text,
+      locationId: cultivator.locationId,
+      mood: "府里又多了一件东西",
+    }));
+    return done(text);
+  }
+
+  if (clearing !== null) {
+    const family = fixtureFamily(clearing);
+    const exists = (residence.fixtures ?? []).some((fixture) => fixture.id === clearing);
+    if (!family || !exists) throw new GameplayRejection("这件本来就没摆着。");
+    withResidence(cultivator, residence.id, (home) => applyClearFixture(home, clearing));
+    const text = `${cultivator.name}把${residence.name}里的${family.name}撤了下来。灵石不退。`;
+    addDaoLog(world, cultivator.id, "撤下陈设", text, ["residence", "fixture"]);
+    return done(text);
+  }
+
+  const guest = hosting ? world.cultivators[hosting] : undefined;
+  if (!guest || guest.id === cultivator.id) throw new GameplayRejection("请不到这个人。");
+  if (guest.locationId !== cultivator.locationId) {
+    throw new GameplayRejection(`${guest.name}不在这城里，门开了也没人进来。`);
+  }
+  const ready = hostReady(residence, guest.id, world.tick);
+  if (!ready.ok) {
+    throw new GameplayRejection(`${guest.name}刚在府里坐过。再过${ready.wait}个时辰再请。`);
+  }
+  const cost = hostTeaCost(residence);
+  if (cultivator.spiritStones < cost) {
+    throw new GameplayRejection(`待客要${cost}灵石温茶，身上不够。`);
+  }
+  cultivator.spiritStones -= cost;
+  const spoken = hostSpokenLine(residence, world.tick, guest.id);
+  const tierName = residenceTierName(residence);
+  addMutualAffinity(world, cultivator.id, guest.id, HOST_AFFINITY_BASE + benefitsOf(residence).hostAffinity);
+  withResidence(cultivator, residence.id, (home) => stampHost(home, guest.id, world.tick));
+  const hostText = `${cultivator.name}把${guest.name}请到${tierName}里坐了一会儿。`;
+  const guestText = `${guest.name}在${cultivator.name}的${residence.name}坐了一会儿。眼下这里是${tierName}。`;
+  recordLife(cultivator, { tick: world.tick, kind: "relationship", text: hostText, names: [guest.name], topic: "bond" });
+  recordLife(guest, { tick: world.tick, kind: "relationship", text: guestText, names: [cultivator.name], topic: "bond" });
+  recordSpokenEcho(world, cultivator, guest, spoken);
+  shiftCultivatorMood(world, cultivator, "bond", "把人请到家里坐了一会儿，心里比刚才热一点。");
+  addMessage(world, guest.id, cultivator.name, "有人请你进府", `${cultivator.name}把你请到${residence.name}里。${residenceGlance(residence)}对方说：「${spoken}」`, {
+    fromCultivatorId: cultivator.id,
+    toCultivatorId: guest.id,
+    spokenLine: spoken,
+  });
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: "person",
+    title: `请${guest.name}进府坐了坐`,
+    detail: `${hostText}${cultivator.name}说：「${spoken}」`,
+    locationId: cultivator.locationId,
+    mood: "家里有人坐着",
+  }));
+  pushTravelNote(guest, travelNote({
+    tick: world.tick,
+    kind: "person",
+    title: `在${cultivator.name}府里坐了一会儿`,
+    detail: `${guestText}${residenceGlance(residence)}`,
+    locationId: guest.locationId,
+    mood: "看见了别人的府",
+  }));
+  addDaoLog(world, cultivator.id, "洞府待客", `${hostText}${cultivator.name}说：「${spoken}」`, ["residence", "social"]);
+  addDaoLog(world, guest.id, "洞府作客", guestText, ["residence", "social"]);
+  return done(`${hostText}${cultivator.name}说：「${spoken}」`);
+}
+
 export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -11965,6 +12207,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       summary: `${cultivator.name} purchased ${newResidence.name} in ${buyResidenceStateId} for ${price} spirit stones.`,
     };
   }
+  const residenceSink = performResidenceGrandeurAction(world, cultivator, actionId);
+  if (residenceSink) return residenceSink;
   // ---- Queue Production ----
   if (actionId.startsWith("queue-production:")) {
     const recipeId = actionId.slice("queue-production:".length);
@@ -11975,11 +12219,12 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     }
     const recipe = RESIDENCE_PRODUCTION_RECIPES.find((r) => r.id === recipeId && r.enabledInLive);
     if (!recipe) throw new Error(`Unknown or disabled recipe: ${recipeId}`);
-    if (cultivator.spiritStones < recipe.spiritStoneCost) throw new Error(`Not enough spirit stones. Need ${recipe.spiritStoneCost}.`);
+    const queuedStoneCost = discountedSpiritCost(getActiveResidence(cultivator), recipe.spiritStoneCost);
+    if (cultivator.spiritStones < queuedStoneCost) throw new Error(`Not enough spirit stones. Need ${queuedStoneCost}.`);
     for (const mat of recipe.inputMaterials) {
       if ((cultivator.inventory[mat.itemId] ?? 0) < mat.count) throw new Error(`Not enough ${mat.itemId}. Need ${mat.count}.`);
     }
-    cultivator.spiritStones -= recipe.spiritStoneCost;
+    cultivator.spiritStones -= queuedStoneCost;
     for (const mat of recipe.inputMaterials) {
       cultivator.inventory[mat.itemId] = (cultivator.inventory[mat.itemId] ?? 0) - mat.count;
     }
@@ -11990,7 +12235,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       outputItemId: recipe.outputItemId,
       outputCount: recipe.outputCount,
       consumedMaterials: recipe.inputMaterials.map((m) => ({ itemId: m.itemId, count: m.count })),
-      consumedSpiritStones: recipe.spiritStoneCost,
+      consumedSpiritStones: queuedStoneCost,
       ticksRemaining: recipe.durationTicks,
       totalTicks: recipe.durationTicks,
     };
@@ -12044,7 +12289,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       }
       const recipe = getResidenceRecipeById(residenceProduceRecipeId);
       if (!recipe) throw new Error(`Unknown residence recipe: ${residenceProduceRecipeId}`);
-      if (!canCraftResidenceRecipe(cultivator, recipe)) {
+      const produceStoneCost = discountedSpiritCost(getActiveResidence(cultivator), recipe.spiritStoneCost);
+      const materialsReady = recipe.inputMaterials.every((material) => cultivator.inventory[material.itemId] >= material.count);
+      if (cultivator.spiritStones < produceStoneCost || !materialsReady) {
         throw new Error("No craftable residence recipe with current materials.");
       }
       return startJob(

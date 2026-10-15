@@ -6,6 +6,7 @@ import type {
   ResidenceContextView,
   TimedActionId,
 } from "./model.js";
+import { residenceGlance, residenceGrandeur, residenceTierName } from "./residence-grandeur.js";
 
 const hashString = (input: string) => Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 
@@ -186,5 +187,8 @@ export function buildResidenceContext(
     timeSense,
     scene,
     recentAmbientEvents,
+    grandeur: residenceGrandeur(residence),
+    tierName: residenceTierName(residence),
+    glance: residenceGlance(residence),
   };
 }
