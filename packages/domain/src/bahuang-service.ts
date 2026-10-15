@@ -1,6 +1,12 @@
 import { recordWildernessAttunement } from "./guixu-service.js";
 import { recordLife } from "./inner-life.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
+import {
+  bahuangBandForDepth,
+  noteWild,
+  pickWildLine,
+  wildRouteFromBand,
+} from "./wild-places.js";
 import type {
   BahuangExpeditionProgress,
   BahuangExpeditionStateView,
@@ -124,7 +130,13 @@ function bahuangWakeOf(kind: number, progress: BahuangExpeditionProgress, nodeId
 }
 
 export function previewBahuangWakes(progress: BahuangExpeditionProgress): WakeNode[] {
-  return [0, 1, 2, 3].map((kind) => bahuangWakeOf(kind, progress, `bahuang-preview-${kind}`));
+  return [0, 1, 2, 3].map((kind) => placeWake(progress, bahuangWakeOf(kind, progress, `bahuang-preview-${kind}`)));
+}
+
+function placeWake(progress: BahuangExpeditionProgress, node: WakeNode): WakeNode {
+  const band = bahuangBandForDepth(progress.depth);
+  if (node.context.startsWith(band.name)) return node;
+  return { ...node, context: `${band.name}里。${node.context}` };
 }
 
 function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number): WakeNode | null {
@@ -141,17 +153,8 @@ function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number):
 
   const nodeId = `bahuang-wake-${progress.cultivatorId}-${progress.depth}-${progress.encounteredWakeNodes.length + 1}`;
   const type = hashString(`${nodeId}:type`) % 4;
-  return bahuangWakeOf(type, progress, nodeId);
+  return placeWake(progress, bahuangWakeOf(type, progress, nodeId));
 }
-
-const BAHUANG_SIGHTINGS = [
-  "风里全是细沙，牙缝里也有。你把袖口扎紧，还是能听见沙打在符纸上的声音。",
-  "脚下的土忽然软了一块。你退半步，看见一个旧脚印，比你的靴子深，人已经不在了。",
-  "远处有一点光，走近才发现是别人扔下的灯芯，油已经干了。",
-  "你停下来数了数干粮。还够再走一段，水却先少了。",
-  "荒原上没有路标，只有风把前一个人的绳子吹得横过来。你从绳子底下钻过去。",
-  "压力贴在胸口的时候，你把已经到手的东西又缠紧了一圈。",
-] as const;
 
 function rememberBahuangLine(world: WorldState, cultivator: Cultivator, title: string, detail: string): void {
   pushTravelNote(cultivator, travelNote({
@@ -172,8 +175,9 @@ function maybeBahuangSighting(world: WorldState, cultivator: Cultivator, progres
   if (progress.depth - last < gap) return;
   progress.lastSightingDepth = progress.depth;
   progress.nextSightingGap = (2 + (hashString(`${cultivator.id}:${progress.depth}:next-gap`) % 3)) as 2 | 3 | 4;
-  const line = BAHUANG_SIGHTINGS[hashString(`${cultivator.id}:${progress.depth}:sight`) % BAHUANG_SIGHTINGS.length]!;
-  rememberBahuangLine(world, cultivator, "八荒里的见闻", `八荒深处这一段的见闻：${line}`);
+  const band = bahuangBandForDepth(progress.depth);
+  const line = pickWildLine(band.sightings, `${cultivator.id}:${progress.depth}:sight`);
+  rememberBahuangLine(world, cultivator, "八荒里的见闻", `${band.name}这一段的见闻：${line}`);
 }
 
 function bahuangCarriedLine(progress: BahuangExpeditionProgress): string {
@@ -265,13 +269,20 @@ export function enterBahuangExpedition(
   };
 
   world.bahuangProgress[cultivator.id] = progress;
+  const gateBand = bahuangBandForDepth(0);
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: "Bahuang Entry",
-    content: `${cultivator.name} entered 八荒 with ${strategyPosture} posture.`,
+    title: `走进${gateBand.name}`,
+    content: `${cultivator.name}走进${gateBand.name}。${gateBand.advice}`,
     severity: "medium",
     tags: ["bahuang", "entry", strategyPosture],
+  });
+  noteWild(cultivator, {
+    tick: world.tick,
+    locationId: cultivator.locationId,
+    title: `走进${gateBand.name}`,
+    detail: gateBand.advice,
   });
   return progress;
 }
@@ -286,6 +297,15 @@ export function retreatFromBahuang(
     return null;
   }
 
+  const band = bahuangBandForDepth(progress.depth);
+  const leaving = reason === "collapse" ? band.loss : band.retreat;
+  noteWild(cultivator, {
+    tick: world.tick,
+    locationId: cultivator.locationId,
+    title: reason === "collapse" ? `${band.name}没走出去` : `从${band.name}撤出`,
+    detail: leaving,
+  });
+
   cultivator.spiritStones = Math.max(0, cultivator.spiritStones - EIGHT_WASTES_CONTENT.retreatCost.spiritStoneLoss);
   cultivator.realmProgress = Math.max(0, cultivator.realmProgress - EIGHT_WASTES_CONTENT.retreatCost.progressLoss * 5);
   cultivator.injuryTicksRemaining = Math.max(
@@ -299,8 +319,8 @@ export function retreatFromBahuang(
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: "Bahuang Retreat",
-    content: `${cultivator.name} retreated from 八荒 (${reason}).`,
+    title: reason === "collapse" ? `${band.name}没走出去` : `从${band.name}撤出`,
+    content: leaving,
     severity: "high",
     tags: ["bahuang", "retreat", reason],
   });
@@ -409,21 +429,30 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
         cultivator.inventory[itemId] += 1;
       }
       const carried = bahuangCarriedLine(progress);
+      const doneBand = bahuangBandForDepth(progress.depth);
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
         locationId: cultivator.locationId,
         title: "八荒远征完成",
-        content: `${cultivator.name} 完成了深度 ${progress.depth} 的八荒远征，获得 ${bonus.spiritStones} 灵石奖励。${carried}`,
+        content: `${cultivator.name}走出${doneBand.name}。${carried}`,
         severity: "medium",
         tags: ["bahuang", "completed"],
       });
-      rememberBahuangLine(world, cultivator, "带出何物", carried);
+      rememberBahuangLine(world, cultivator, "带出何物", `${doneBand.name}走到了头。${carried}`);
       delete world.bahuangProgress[cultivator.id];
       return;
     }
 
-    progress.status = cultivator.qi <= 0 || cultivator.spiritualPower <= 0 ? "failed" : "retreated";
-    retreatFromBahuang(world, cultivator, progress.status === "failed" ? "collapse" : "pressure");
+    const failed = cultivator.qi <= 0 || cultivator.spiritualPower <= 0;
+    const exitBand = bahuangBandForDepth(progress.depth);
+    noteWild(cultivator, {
+      tick: world.tick,
+      locationId: cultivator.locationId,
+      title: failed ? `${exitBand.name}没走出去` : `从${exitBand.name}撤出`,
+      detail: failed ? exitBand.loss : exitBand.retreat,
+    });
+    progress.status = failed ? "failed" : "retreated";
+    retreatFromBahuang(world, cultivator, failed ? "collapse" : "pressure");
   }
 }
 
@@ -436,6 +465,7 @@ export function buildBahuangStateView(
     return null;
   }
 
+  const route = wildRouteFromBand(bahuangBandForDepth(progress.depth));
   return {
     status: progress.status,
     depth: progress.depth,
@@ -450,6 +480,12 @@ export function buildBahuangStateView(
       items: { ...progress.rewards.items },
       realmProgress: progress.rewards.realmProgress,
     },
+    placeName: route.placeName,
+    advice: route.advice,
+    mysteryLine: route.mysteryLine,
+    statusLabel: route.statusLabel,
+    enemyLabel: route.enemyLabel,
+    followerLabel: route.followerLabel,
   };
 }
 

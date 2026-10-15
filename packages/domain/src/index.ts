@@ -15,6 +15,7 @@ export type {
   DungeonExpeditionPolicy,
   BahuangExpeditionProgress,
   BahuangExpeditionStateView,
+  WildRouteView,
   DungeonExpeditionReport,
   DungeonExpeditionStateView,
   DungeonRankYieldHint,

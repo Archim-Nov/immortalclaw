@@ -781,6 +781,8 @@ export interface WildernessProgress {
   remainingSurvivalTicks: number;
   status: "active" | "withdrawn";
   lastEventId: string | null;
+  /** Survived ticks when the last 见闻 was written. Absent on older runs. */
+  lastSightingAt?: number;
 }
 
 export interface DungeonYieldEstimate {
@@ -1240,6 +1242,16 @@ export interface BahuangExpeditionProgress {
   nextSightingGap?: number;
 }
 
+export interface WildRouteView {
+  kind: "wilderness" | "bahuang";
+  placeName: string;
+  advice: string;
+  mysteryLine: string;
+  statusLabel: string;
+  enemyLabel: string;
+  followerLabel: string;
+}
+
 export interface BahuangExpeditionStateView {
   status: BahuangExpeditionProgress["status"];
   depth: number;
@@ -1248,6 +1260,13 @@ export interface BahuangExpeditionStateView {
   strategy: RunStrategy;
   pendingWakeNode: WakeNode | null;
   rewards: BahuangExpeditionProgress["rewards"];
+  /** The band this depth is walking. Absent on older view fixtures. */
+  placeName?: string;
+  advice?: string;
+  mysteryLine?: string;
+  statusLabel?: string;
+  enemyLabel?: string;
+  followerLabel?: string;
 }
 
 export type GuixuTier = "entry" | "mid" | "deep" | "core";
@@ -1862,6 +1881,8 @@ export interface ActionJob {
     dualPartnerId?: string;
     dualRole?: "initiator" | "partner";
     travelFlavorEventCount?: number;
+    /** Set once a wilderness road has left its 见闻. */
+    wildSighting?: boolean;
   };
 }
 
@@ -2903,7 +2924,15 @@ export interface CultivatorStateView {
     ticksSurvived: number;
     remainingSurvivalTicks: number;
     status: "active" | "withdrawn";
+    placeName?: string;
+    advice?: string;
+    mysteryLine?: string;
+    statusLabel?: string;
+    enemyLabel?: string;
+    followerLabel?: string;
   } | null;
+  /** The wilderness road or 八荒 band an agent can read before and during the trip. Omitted by older view fixtures. */
+  wildRoute?: WildRouteView | null;
   guixu: {
     wildernessAttunement: number;
     unlockedNodeIds: string[];
