@@ -96,14 +96,43 @@ export interface WakeNodeOption {
   description: string;
 }
 
+export type PartyWakeKind = "tend-wound" | "loot-contention" | "treasure-split";
+
+export interface PartyWakeVote {
+  cultivatorId: string;
+  optionId: string;
+}
+
+/** A paired memory kept until the shared run ends, then written on both digests. */
+export interface PartyExpeditionMoment {
+  kind: "favor" | "crack" | "memory";
+  actorId: string;
+  otherId: string;
+  /** What the other person can say, in the 上回你… shape. */
+  pairedLine: string;
+  /** What the actor's side records. */
+  actorLine: string;
+  witnessLine?: string;
+  witnessIds?: string[];
+  reason?: string;
+}
+
 export interface WakeNode {
   nodeId: string;
   context: string;
   options: WakeNodeOption[];
   defaultOptionId: string;
   timeoutTicks: number;
-  /** Which mid-run scene this wake came from. Absent on older saves. */
+  /** Which mid-run scene this wake came from. Absent on older saves and on a party wake. */
   sceneKind?: string;
+  /** Set when this wake is asking the whole party. Absent on a solo mid-run wake. */
+  partyKind?: PartyWakeKind;
+  /** The wounded companion, when this wake is about a wound. */
+  subjectId?: string;
+  /** Used when a party wake times out without a clear vote. */
+  safeOptionId?: string;
+  /** Votes already cast. Absent until someone answers. */
+  votes?: PartyWakeVote[];
 }
 
 export interface DungeonLocationMetadata {
@@ -888,6 +917,10 @@ export interface DungeonExpeditionProgress {
   nextSightingGap?: number;
   /** Latest reusable win line. The same sentence is copied onto the fight. */
   carriedLine?: string;
+  /** Party social wakes already opened on this run. Absent on older expeditions. */
+  partyWakeKinds?: PartyWakeKind[];
+  /** Favors, cracks, and shared lines waiting for the exit digest. Absent on older expeditions. */
+  partyMoments?: PartyExpeditionMoment[];
 }
 
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
@@ -1143,6 +1176,13 @@ export interface DungeonExpeditionStateView {
     defaultOptionId: string;
     timeoutTicks: number;
     options: WakeNodeOption[];
+    /** Present when the pending wake is a party social choice. */
+    partyKind?: PartyWakeKind;
+    safeOptionId?: string;
+    subjectId?: string;
+    subjectName?: string;
+    votedIds?: string[];
+    awaitingNames?: string[];
   } | null;
 }
 
@@ -2955,6 +2995,18 @@ export interface CultivatorStateView {
     shareNote: string;
     /** Fights so far on the leader's run. The finished copy lives on lastReport.combatRounds. */
     combatRounds?: DungeonCombatSummary[];
+    /** Present while the shared run is waiting on a party social choice. */
+    partyWake?: {
+      kind: PartyWakeKind;
+      context: string;
+      subjectId?: string;
+      subjectName?: string;
+      safeOptionId: string;
+      defaultOptionId: string;
+      votedIds: string[];
+      awaitingNames: string[];
+      options: WakeNodeOption[];
+    } | null;
   } | null;
   endgame: { guixuCompletedNodeIds: readonly string[]; originHeartAwakened: boolean };
   onboarding: OnboardingProgress;

@@ -390,6 +390,16 @@ import {
   startDungeonExpeditionActionIdOf,
 } from "./dungeon-expedition-service.js";
 import {
+  createPartyExpeditionWake,
+  partyWakeAwaitingIds,
+  partyWakeIsReady,
+  partyWakePublicFields,
+  partyWakeResolvedOption,
+  publishPartyExpeditionMemories,
+  recordPartyWakeVote,
+  resolvePartyExpeditionWake,
+} from "./party-expedition-social.js";
+import {
   advanceBahuangExpedition,
   buildBahuangStateView,
   canEnterBahuang,
@@ -4507,7 +4517,8 @@ function sharedRunRetelling(world: WorldState, leader: Cultivator, progress: Dun
   const wound = last?.wound ?? "";
   const spoken = (progress.heardLines ?? [])[0] ?? "";
   const tended = (progress.tendedLines ?? [])[0] ?? "";
-  return [`${roles}。`, skillLine ? `${skillLine}。` : "", beat, wound, spoken, tended].filter(Boolean).join("");
+  const memory = (progress.partyMoments ?? []).map((moment) => moment.pairedLine).filter(Boolean).slice(0, 2).join("");
+  return [`${roles}。`, skillLine ? `${skillLine}。` : "", beat, wound, spoken, tended, memory].filter(Boolean).join("");
 }
 
 function publishCompanionExpeditionReports(
@@ -4709,6 +4720,7 @@ function finalizeDungeonExpedition(
   world.dungeonExpeditionReports[cultivator.id] = report;
   delete world.dungeonExpeditions[cultivator.id];
   settleDungeonCompanion(world, cultivator, progress, outcome, returnLocationId);
+  publishPartyExpeditionMemories(world, progress);
   publishCompanionExpeditionReports(world, cultivator, progress, report);
   writeDungeonExpeditionSummaryEvent(world, cultivator.id, returnLocationId, report);
   return report;
@@ -4967,10 +4979,22 @@ function resolveDungeonExpeditionStepIfDue(
       effectiveProgress.pendingWakeNodeDeadlineTick !== null
       && world.tick >= effectiveProgress.pendingWakeNodeDeadlineTick
     ) {
-      const chosen = chooseDefaultDungeonWakeOptionId(effectiveProgress);
-      const settlement = settleDungeonWakeNode(effectiveProgress, chosen);
-      applyDungeonWakeSettlement(world, cultivator, settlement);
-      effectiveProgress = settlement.progress;
+      if (effectiveProgress.pendingWakeNode.partyKind) {
+        const awaiting = partyWakeAwaitingIds(world, effectiveProgress);
+        const chosen = partyWakeResolvedOption(effectiveProgress.pendingWakeNode, awaiting, effectiveProgress.policy);
+        effectiveProgress = resolvePartyExpeditionWake({
+          world,
+          progress: effectiveProgress,
+          optionId: chosen,
+          awaitingIds: awaiting,
+          timedOut: true,
+        });
+      } else {
+        const chosen = chooseDefaultDungeonWakeOptionId(effectiveProgress);
+        const settlement = settleDungeonWakeNode(effectiveProgress, chosen);
+        applyDungeonWakeSettlement(world, cultivator, settlement);
+        effectiveProgress = settlement.progress;
+      }
       world.dungeonExpeditions[cultivator.id] = effectiveProgress;
     } else {
       job.remainingTicks += 1;
@@ -5375,24 +5399,45 @@ function resolveDungeonExpeditionStepIfDue(
     return;
   }
 
+  const companionsHere = expeditionCompanionIds(updatedProgress)
+    .map((companionId) => world.cultivators[companionId])
+    .filter((companion): companion is Cultivator => Boolean(
+      companion && companion.locationId === cultivator.locationId && !companion.activeJobId,
+    ));
+  const partyDraft = companionsHere.length > 0
+    ? createPartyExpeditionWake({ progress: updatedProgress, leader: cultivator, companions: companionsHere })
+    : null;
+  if (partyDraft?.bruise) {
+    const bruised = world.cultivators[partyDraft.bruise.cultivatorId];
+    if (bruised && bruised.injuryTicksRemaining < partyDraft.bruise.ticks) {
+      raiseInjury(world, bruised, partyDraft.bruise.ticks);
+    }
+  }
   const wakeSect = cultivator.sectId ? world.sects[cultivator.sectId] : null;
   const wakeNeutral = getCultivatorNeutralSect(world, cultivator);
-  const wakeNode = maybeCreateDungeonWakeNode({
-    progress: updatedProgress,
-    cultivator,
-    actionKind,
-    worldTick: world.tick,
-    sectName: wakeSect?.name ?? wakeNeutral?.name ?? null,
-  });
+  const wakeNode = partyDraft
+    ? partyDraft.node
+    : companionsHere.length > 0
+      ? null
+      : maybeCreateDungeonWakeNode({
+          progress: updatedProgress,
+          cultivator,
+          actionKind,
+          worldTick: world.tick,
+          sectName: wakeSect?.name ?? wakeNeutral?.name ?? null,
+        });
+  const progressedBase = partyDraft
+    ? { ...updatedProgress, partyWakeKinds: [...(updatedProgress.partyWakeKinds ?? []), partyDraft.kind] }
+    : updatedProgress;
   const progressedWithWake = wakeNode
     ? {
-        ...updatedProgress,
-        wakeNodesEncountered: updatedProgress.wakeNodesEncountered + 1,
+        ...progressedBase,
+        wakeNodesEncountered: progressedBase.wakeNodesEncountered + 1,
         pendingWakeNode: wakeNode,
         pendingWakeNodeDeadlineTick: world.tick + wakeNode.timeoutTicks,
-        usedWakeScenes: [...(updatedProgress.usedWakeScenes ?? []), wakeNode.sceneKind ?? "wake"],
+        usedWakeScenes: [...(progressedBase.usedWakeScenes ?? []), wakeNode.sceneKind ?? wakeNode.partyKind ?? "wake"],
       }
-    : updatedProgress;
+    : progressedBase;
 
   world.dungeonExpeditions[cultivator.id] = progressedWithWake;
   job.meta = {
@@ -7164,6 +7209,40 @@ function partyShareOf(world: WorldState, cultivator: Cultivator): NonNullable<Cu
   };
 }
 
+function findSharedExpedition(world: WorldState, cultivatorId: string): DungeonExpeditionProgress | null {
+  for (const progress of Object.values(world.dungeonExpeditions)) {
+    if (expeditionCompanionIds(progress).includes(cultivatorId)) return progress;
+  }
+  return null;
+}
+
+function appendSharedExpeditionActions(world: WorldState, cultivator: Cultivator, actions: AvailableAction[]): void {
+  const sharedRun = findSharedExpedition(world, cultivator.id);
+  if (!sharedRun) return;
+  const partyWake = sharedRun.pendingWakeNode;
+  if (partyWake?.partyKind && partyWakeAwaitingIds(world, sharedRun).includes(cultivator.id)) {
+    for (const option of partyWake.options) {
+      const actionId = `dungeon-wake-decision:${option.optionId}` as ActionId;
+      if (actions.some((action) => action.actionId === actionId)) continue;
+      actions.push({
+        actionId,
+        label: `地宫抉择：${option.label}`,
+        description: `${partyWake.context} ${option.description}`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+  }
+  if (actions.some((action) => action.actionId === "leave-shared-expedition")) return;
+  actions.push({
+    actionId: "leave-shared-expedition",
+    label: "退出这一趟地宫",
+    description: "明确离开同伴的地宫。人还在名册上时，只是暂时不在门口，不会被悄悄抹掉。",
+    durationTicks: 0,
+    kind: "immediate",
+  });
+}
+
 function expeditionCompanionIds(progress: DungeonExpeditionProgress): string[] {
   if (progress.companionIds && progress.companionIds.length > 0) {
     return progress.companionIds;
@@ -7198,6 +7277,23 @@ function sharedDungeonOf(world: WorldState, cultivatorId: string): CultivatorSta
       ...(progress.combatRounds && progress.combatRounds.length > 0
         ? { combatRounds: progress.combatRounds }
         : {}),
+      ...(() => {
+        const fields = partyWakePublicFields(world, progress);
+        if (!fields || !progress.pendingWakeNode) return {};
+        return {
+          partyWake: {
+            kind: fields.partyKind,
+            context: progress.pendingWakeNode.context,
+            ...(fields.subjectId ? { subjectId: fields.subjectId } : {}),
+            ...(fields.subjectName ? { subjectName: fields.subjectName } : {}),
+            safeOptionId: fields.safeOptionId,
+            defaultOptionId: progress.pendingWakeNode.defaultOptionId,
+            votedIds: fields.votedIds,
+            awaitingNames: fields.awaitingNames,
+            options: progress.pendingWakeNode.options,
+          },
+        };
+      })(),
     };
   }
   return null;
@@ -7431,13 +7527,28 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       };
     })(),
     dungeon: dungeonViewForLocation(world, cultivator, location),
-    dungeonExpedition: {
-      ...buildDungeonExpeditionStateView(
+    dungeonExpedition: (() => {
+      const view = buildDungeonExpeditionStateView(
         world,
         cultivator,
         cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
-      ),
-    },
+      );
+      const active = getActiveDungeonExpedition(world, cultivator.id);
+      const fields = active ? partyWakePublicFields(world, active) : null;
+      if (!fields || !view.wakeNodeHint) return view;
+      return {
+        ...view,
+        wakeNodeHint: {
+          ...view.wakeNodeHint,
+          partyKind: fields.partyKind,
+          safeOptionId: fields.safeOptionId,
+          ...(fields.subjectId ? { subjectId: fields.subjectId } : {}),
+          ...(fields.subjectName ? { subjectName: fields.subjectName } : {}),
+          votedIds: fields.votedIds,
+          awaitingNames: fields.awaitingNames,
+        },
+      };
+    })(),
     bahuang: buildBahuangStateView(world, cultivator),
     wilderness: buildWildernessView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
@@ -7847,6 +7958,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   actions.push(...contentGearActions(cultivator, location));
 
   if (cultivator.injuryTicksRemaining > 0) {
+    appendSharedExpeditionActions(world, cultivator, actions);
     if (activeWilderness) {
       actions.push({
         actionId: "withdraw-from-wilderness",
@@ -8120,6 +8232,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       }
     }
     actions.push(...sceneChoiceActions(world, cultivator));
+    appendSharedExpeditionActions(world, cultivator, actions);
     return actions;
   } else if (wildernessLayer) {
     actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
@@ -8701,15 +8814,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
 
-  if (sharedDungeonOf(world, cultivator.id)) {
-    actions.push({
-      actionId: "leave-shared-expedition",
-      label: "退出这一趟地宫",
-      description: "明确离开同伴的地宫。人还在名册上时，只是暂时不在门口，不会被悄悄抹掉。",
-      durationTicks: 0,
-      kind: "immediate",
-    });
-  }
+  appendSharedExpeditionActions(world, cultivator, actions);
   if (!getPartyOf(world, cultivator.id) && !findReserveParty(world, cultivator.id)) {
     for (const party of Object.values(world.parties ?? {})) {
       if (party.memberIds.length < PARTY_MAX_MEMBERS) continue;
@@ -12200,12 +12305,37 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   }
   const dungeonWakeOptionId = parseDungeonWakeDecision(actionId);
   if (dungeonWakeOptionId) {
-    const progress = getActiveDungeonExpedition(world, cultivator.id);
+    const ownProgress = getActiveDungeonExpedition(world, cultivator.id);
+    const progress = ownProgress?.pendingWakeNode ? ownProgress : findSharedExpedition(world, cultivator.id);
     if (!progress?.pendingWakeNode) {
       throw new GameplayRejection("地宫里没有待决的岔路。");
     }
     if (!progress.pendingWakeNode.options.some((option) => option.optionId === dungeonWakeOptionId)) {
       throw new GameplayRejection("这个选择不在当前岔路上。");
+    }
+    if (progress.pendingWakeNode.partyKind) {
+      const awaiting = partyWakeAwaitingIds(world, progress);
+      if (!awaiting.includes(cultivator.id)) {
+        throw new GameplayRejection("这一岔路不是在等你开口。");
+      }
+      let next = recordPartyWakeVote(progress, cultivator.id, dungeonWakeOptionId);
+      const ready = next.pendingWakeNode ? partyWakeIsReady(next.pendingWakeNode, awaiting) : false;
+      if (ready && next.pendingWakeNode) {
+        const chosen = partyWakeResolvedOption(next.pendingWakeNode, awaiting, next.policy);
+        next = resolvePartyExpeditionWake({
+          world,
+          progress: next,
+          optionId: chosen,
+          awaitingIds: awaiting,
+          timedOut: false,
+        });
+      }
+      world.dungeonExpeditions[progress.cultivatorId] = next;
+      const title = next.beats?.[next.beats.length - 1]?.title;
+      const summary = ready && title
+        ? `${cultivator.name}在地宫里选择了${title}。`
+        : `${cultivator.name}把这一岔路的话放了下来。`;
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
     }
     const settlement = settleDungeonWakeNode(progress, dungeonWakeOptionId);
     applyDungeonWakeSettlement(world, cultivator, settlement);

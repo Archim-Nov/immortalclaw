@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 同队下地宫的人情 / Party dungeon favors
+
+五个人走同一趟地宫时，第 3、6、8 步会停下来，用中文问一件事。有人挂了伤，可以伸手压住，也可以先走。石室里的灵石可以让出去，也可以钻短路先拿。壁缝里那件东西可以当面分开、让给伤重的人，或者先伸手。队长和还在门口、自己没有开工的同伴都能投 `dungeon-wake-decision`，伤着的人也能看见这张卡。三个人说定了就不用等剩下的人。时辰到了还没说死，就按不伤情分的那边收，冒进也不会替没开口的人去抢。
+
+伸手压伤记下「替我挡了一剑」。让出灵石记下「把灵材让给我」。先伸手或走短路会裂一道嫌隙以下的缝。出地宫时，两边游记和六个时辰的 digest 都写「上回你替我挡了一剑」这一类成对的句子。送到门口的请托，和开跑前约在门口见的那一句，也会各记一次。一个人自己下去，仍走中文的中途醒时：第三步扶起伤者、分一口水、拿走袋子，后面是岔路、残片、同路的人或夺宝。见闻和「带出何物」在同队这一趟里也照旧写。
+
+On a shared run, steps 3, 6, and 8 pause for a Chinese choice about a wound, a pile of stones, and an unclaimed find. The leader and idle companions at the gate vote, including someone who is wounded. Three of five can lock it. A timeout keeps the safe side. The paired 上回 lines land on both travelogues and both digests when the run ends. A fulfilled escort and a recent rendezvous are quoted once each. A solo run still uses the Chinese mid-run wakes, and 见闻 plus 带出何物 still publish on a shared run.
+
 ### 地宫中途的见闻 / Mid-run dungeon sights
 
 地宫和八荒的醒时抉择改成了中文。一次仍最多醒三次。第三步还是伤者岔路。后面会遇到岔路、残片、同路的人，或一只两边都看见的袋子，每个场面三到四个做法。每走两三笔，游记和六个时辰的摘要里会有一条见闻。守关打赢时，战报、游记和摘要共用一句「带出何物」。
