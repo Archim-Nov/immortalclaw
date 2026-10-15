@@ -10,6 +10,7 @@ import { LEGACY_MATERIALS } from "./legacy-materials.js";
 import { BREAKTHROUGH_GENERICS } from "./breakthrough-generics.js";
 import { BREAKTHROUGH_ITEMS } from "./breakthrough-items.js";
 import { CULTIVATION_ITEMS } from "./cultivation-items.js";
+import { JIA_RELIC_ITEMS } from "./jia-relic-items.js";
 import { SPECIAL_ITEMS } from "./special-items.js";
 import { LOADOUT_SOURCE_ITEMS } from "./loadout-source-items.js";
 
@@ -22,6 +23,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
   ...BREAKTHROUGH_GENERICS,
   ...BREAKTHROUGH_ITEMS,
   ...CULTIVATION_ITEMS,
+  ...JIA_RELIC_ITEMS,
   ...SPECIAL_ITEMS,
   ...LOADOUT_SOURCE_ITEMS,
 };

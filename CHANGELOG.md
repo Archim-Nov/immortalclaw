@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 甲级通关留下的一件东西 / A relic from a finished 甲 run
+
+丹霞内府、婴火莲池、神纹天隙走完以后，袋子里会多一件能拿回去说的东西。丹霞是残页、炉灰或纹屑，婴火和神纹各有自己的三件。只有一份，坊市不收，守关的算法也不改。`lastReport.relic.arcLine` 是那一句。同队的人在自己的战报、游记和六个时辰的摘要里引用同一句，袋子里不会多出一份。中止、撤出，以及丙级和乙级，都没有这件。
+
+回到自己洞府，可以用 `display-relic` 把它摆上案。东西还在袋子里。来的人在洞府的 glance 和 homeLine 里看得见那一句。`clear-displayed-relic` 只是把案清空。
+
+A finished 甲 run leaves one story relic: a page scrap, kiln ash, or pattern flake named for 丹霞内府, 婴火莲池, or 神纹天隙. `lastReport.relic.arcLine` is the sentence. Companions quote it and do not receive a copy. `display-relic` sets it on the cave table without spending the item.
+
 ### 同队下地宫的人情 / Party dungeon favors
 
 五个人走同一趟地宫时，第 3、6、8 步会停下来，用中文问一件事。有人挂了伤，可以伸手压住，也可以先走。石室里的灵石可以让出去，也可以钻短路先拿。壁缝里那件东西可以当面分开、让给伤重的人，或者先伸手。队长和还在门口、自己没有开工的同伴都能投 `dungeon-wake-decision`，伤着的人也能看见这张卡。三个人说定了就不用等剩下的人。时辰到了还没说死，就按不伤情分的那边收，冒进也不会替没开口的人去抢。

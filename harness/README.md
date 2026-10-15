@@ -42,6 +42,7 @@ A personal favor, a note left for someone away, and a rumor a neighbor can repea
 A favor repaid in words, a digest that names the people, and a reunion after travel: `harness/scenarios/favor-chains.md`.
 A dungeon run wakes in Chinese, with three or four mid-run choices, and leaves a 见闻 plus 带出何物 when a fight is won: `harness/scenarios/dungeon-midrun-sights.md`.
 Five cultivators on one dungeon leave a tended wound, a yielded pile, a crack over an unclaimed find, and paired lines on both digests: `harness/scenarios/party-expedition-social.md`.
+A finished 甲 run leaves one 残页, 炉灰, or 纹屑, and a companion can quote the same arc line: `harness/scenarios/jia-relic-chronicle.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

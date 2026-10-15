@@ -176,6 +176,7 @@ import {
   cultivationDropForRank,
   mysteryEntry,
 } from "./high-realm.js";
+import { chronicleRelic, jiaRelicByItemId, jiaRelicsHeld } from "./jia-relics.js";
 import {
   dungeonAdvice,
   jiaBandFailCost,
@@ -4703,12 +4704,19 @@ function finalizeDungeonExpedition(
   const returnLocationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
   cultivator.locationId = returnLocationId;
 
+  const relic = chronicleRelic({
+    grade: progress.grade,
+    rank: progress.targetRank,
+    outcome,
+    seed: `${cultivator.id}:${progress.jobId}:${progress.targetRank}`,
+  });
   const report = createDungeonExpeditionReport({
     progress,
     outcome,
     endedAtTick: world.tick,
     returnLocationId,
     primaryMaterial: metadata.materialBand,
+    relic: relic ?? undefined,
   });
 
   // ---- Loadout source drop (dungeon expedition) ----
@@ -4716,14 +4724,53 @@ function finalizeDungeonExpedition(
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
     grantCultivationDrop(world, cultivator, metadata.grade, progress.targetRank);
   }
+  if (relic) {
+    cultivator.inventory[relic.itemId] = (cultivator.inventory[relic.itemId] ?? 0) + 1;
+  }
 
   world.dungeonExpeditionReports[cultivator.id] = report;
   delete world.dungeonExpeditions[cultivator.id];
   settleDungeonCompanion(world, cultivator, progress, outcome, returnLocationId);
   publishPartyExpeditionMemories(world, progress);
+  if (relic) publishJiaRelicChronicle(world, cultivator, progress, relic);
   publishCompanionExpeditionReports(world, cultivator, progress, report);
   writeDungeonExpeditionSummaryEvent(world, cultivator.id, returnLocationId, report);
   return report;
+}
+
+function publishJiaRelicChronicle(
+  world: WorldState,
+  leader: Cultivator,
+  progress: DungeonExpeditionProgress,
+  relic: NonNullable<DungeonExpeditionReport["relic"]>,
+): void {
+  const people = [leader];
+  for (const companionId of expeditionCompanionIds(progress)) {
+    const companion = world.cultivators[companionId];
+    if (companion && companion.id !== leader.id) people.push(companion);
+  }
+  const detail = `${leader.name}走完甲级第${relic.rank}层的${relic.mysteryName}，带出${relic.name}。${relic.arcLine}`;
+  for (const person of people) {
+    try {
+      pushTravelNote(person, travelNote({
+        tick: world.tick,
+        kind: "find",
+        title: relic.name,
+        detail,
+        locationId: person.locationId,
+        mood: "这一句可以拿回去说",
+      }));
+      recordLife(person, {
+        tick: world.tick,
+        kind: "quote",
+        text: `${leader.name}说：「${relic.arcLine}」`,
+        speakerName: leader.name,
+        line: relic.arcLine,
+      });
+    } catch {
+      // One listener must not drop the relic line.
+    }
+  }
 }
 
 function dungeonPlace(progress: DungeonExpeditionProgress): string {
@@ -7106,6 +7153,9 @@ function nearbyHomeViews(world: WorldState, cultivator: Cultivator): NonNullable
       grandeur: home.grandeur ?? 1,
       tierName: residenceTierName(home),
       glance: residenceGlance(home),
+      ...(home.displayedRelic
+        ? { displayedRelic: { name: home.displayedRelic.name, arcLine: home.displayedRelic.arcLine } }
+        : {}),
     });
   }
   return homes
@@ -7761,6 +7811,25 @@ function residenceGrandeurActions(world: WorldState, cultivator: Cultivator): Av
       actionId: `clear-fixture:${fixture.id}` as ActionId,
       label: `撤下${fixture.name}`,
       description: `把${fixture.name}撤下来，空出一个位子。灵石不退，再买从最低一阶重新算。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  for (const relic of jiaRelicsHeld(cultivator.inventory)) {
+    if (residence.displayedRelic?.itemId === relic.itemId) continue;
+    actions.push({
+      actionId: `display-relic:${relic.itemId}` as ActionId,
+      label: `把${relic.name}摆上案`,
+      description: `${relic.arcLine}摆上以后东西还在袋子里。来的人能在洞府的 glance 和 homeLine 里读到这一句。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+  if (residence.displayedRelic) {
+    actions.push({
+      actionId: "clear-displayed-relic",
+      label: `收回案上的${residence.displayedRelic.name}`,
+      description: "案上不再摆这件。袋子里的份数不变。",
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8993,6 +9062,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId.startsWith("place-fixture:")) return;
   if (actionId.startsWith("clear-fixture:")) return;
   if (actionId.startsWith("host-guest:")) return;
+  if (actionId.startsWith("display-relic:") || actionId === "clear-displayed-relic") return;
   // Allow low-risk sect tasks (resource tribute) while injured
   const injuredSectTask = parseSectTaskId(actionId);
   if (injuredSectTask) {
@@ -12150,12 +12220,21 @@ function performResidenceGrandeurAction(
   const placing = actionId.startsWith("place-fixture:") ? actionId.slice("place-fixture:".length) : null;
   const clearing = actionId.startsWith("clear-fixture:") ? actionId.slice("clear-fixture:".length) : null;
   const hosting = actionId.startsWith("host-guest:") ? actionId.slice("host-guest:".length) : null;
-  if (actionId !== "upgrade-residence" && placing === null && clearing === null && hosting === null) {
+  const displaying = actionId.startsWith("display-relic:") ? actionId.slice("display-relic:".length) : null;
+  const clearingDisplay = actionId === "clear-displayed-relic";
+  if (
+    actionId !== "upgrade-residence"
+    && placing === null
+    && clearing === null
+    && hosting === null
+    && displaying === null
+    && !clearingDisplay
+  ) {
     return null;
   }
   const residence = getActiveResidence(cultivator);
   if (!residence) {
-    throw new GameplayRejection("修府、置办陈设和待客，都要在自己的洞府里。先回去。");
+    throw new GameplayRejection("修府、置办陈设、摆遗物和待客，都要在自己的洞府里。先回去。");
   }
   const done = (summary: string): ActionExecutionResult => ({
     tick: world.tick,
@@ -12227,6 +12306,38 @@ function performResidenceGrandeurAction(
     withResidence(cultivator, residence.id, (home) => applyClearFixture(home, clearing));
     const text = `${cultivator.name}把${residence.name}里的${family.name}撤了下来。灵石不退。`;
     addDaoLog(world, cultivator.id, "撤下陈设", text, ["residence", "fixture"]);
+    return done(text);
+  }
+
+  if (displaying !== null) {
+    const relic = jiaRelicByItemId(displaying);
+    if (!relic) throw new GameplayRejection("这不是能摆上案的甲级遗物。");
+    if ((cultivator.inventory[relic.itemId] ?? 0) < 1) {
+      throw new GameplayRejection(`袋子里没有${relic.name}。`);
+    }
+    withResidence(cultivator, residence.id, (home) => {
+      home.displayedRelic = { itemId: relic.itemId, name: relic.name, arcLine: relic.arcLine };
+    });
+    const text = `${cultivator.name}把${relic.name}摆在${residence.name}的案上。${relic.arcLine}`;
+    recordLife(cultivator, { tick: world.tick, kind: "growth", text });
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "find",
+      title: `案上摆着${relic.name}`,
+      detail: text,
+      locationId: cultivator.locationId,
+      mood: "来的人看得见",
+    }));
+    return done(text);
+  }
+
+  if (clearingDisplay) {
+    const shown = residence.displayedRelic;
+    if (!shown) throw new GameplayRejection("案上本来就空着。");
+    withResidence(cultivator, residence.id, (home) => {
+      delete home.displayedRelic;
+    });
+    const text = `${cultivator.name}把案上的${shown.name}收回了。袋子里的份数没变。`;
     return done(text);
   }
 
