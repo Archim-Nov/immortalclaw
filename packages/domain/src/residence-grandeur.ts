@@ -1,4 +1,4 @@
-import type { Cultivator, Residence } from "./model.js";
+import type { Cultivator, ItemId, Residence } from "./model.js";
 import { residenceRiskMultiplier } from "./residence.js";
 
 /**
@@ -250,6 +250,12 @@ export interface OwnedResidenceView {
   glance: string;
   benefitLine: string;
   fixtures: ResidenceFixtureView[];
+  displayedRelic?: {
+    itemId: ItemId;
+    name: string;
+    arcLine: string;
+    line: string;
+  };
   nextUpgrade: ResidenceUpgradeView;
   offers?: ResidenceOfferView[];
 }
@@ -261,6 +267,10 @@ export interface NearbyHomeView {
   grandeur: number;
   tierName: string;
   glance: string;
+  displayedRelic?: {
+    name: string;
+    arcLine: string;
+  };
 }
 
 export function residenceGrandeur(residence: Residence): number {
@@ -397,13 +407,14 @@ export function residenceGlance(residence: Residence): string {
     .slice(0, 3)
     .map((fixture) => fixtureFamily(fixture.id)?.name)
     .filter((name): name is string => Boolean(name));
-  if (residenceGrandeur(residence) <= 1 && names.length === 0) {
-    return `${residence.name}眼下还是一间${tierName}，陈设很少。`;
-  }
-  if (names.length === 0) {
-    return `${residence.name}已经是${tierName}，屋里还空着。`;
-  }
-  return `${residence.name}是一处${tierName}，屋里看得见${names.join("、")}。`;
+  const base = residenceGrandeur(residence) <= 1 && names.length === 0
+    ? `${residence.name}眼下还是一间${tierName}，陈设很少。`
+    : names.length === 0
+      ? `${residence.name}已经是${tierName}，屋里还空着。`
+      : `${residence.name}是一处${tierName}，屋里看得见${names.join("、")}。`;
+  const shown = residence.displayedRelic;
+  if (!shown) return base;
+  return `${base}案上摆着${shown.name}。${shown.arcLine}`;
 }
 
 export function nearbyHomeLine(residence: Residence, ownerName: string): string {
@@ -489,6 +500,16 @@ export function buildOwnedResidenceView(residence: Residence, isActive: boolean)
     glance: residenceGlance(residence),
     benefitLine: RESIDENCE_BENEFIT_LINE,
     fixtures: fixtureViews(residence),
+    ...(residence.displayedRelic
+      ? {
+          displayedRelic: {
+            itemId: residence.displayedRelic.itemId,
+            name: residence.displayedRelic.name,
+            arcLine: residence.displayedRelic.arcLine,
+            line: `案上摆着${residence.displayedRelic.name}。${residence.displayedRelic.arcLine}`,
+          },
+        }
+      : {}),
     nextUpgrade: upgradeQuote(residence),
     ...(isActive ? { offers: fixtureOffers(residence) } : {}),
   };

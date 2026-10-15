@@ -274,6 +274,12 @@ export interface Residence {
   fixtures?: ResidenceFixture[];
   /** Last tick each guest was hosted. */
   hostTicks?: Record<string, number>;
+  /** One 甲 relic set on the table. The bag still holds the item. Absent when the table is clear. */
+  displayedRelic?: {
+    itemId: ItemId;
+    name: string;
+    arcLine: string;
+  };
 }
 
 export type QuestCategory = "base" | "sect" | "high-risk";
@@ -559,6 +565,15 @@ export type LegacyItemId =
   | "core-nourish-dew"
   | "nascent-nourish-sand"
   | "spirit-nourish-dust"
+  | "danxia-page-scrap"
+  | "danxia-kiln-ash"
+  | "danxia-pattern-flake"
+  | "infant-page-scrap"
+  | "infant-kiln-ash"
+  | "infant-pattern-flake"
+  | "rift-page-scrap"
+  | "rift-kiln-ash"
+  | "rift-pattern-flake"
   // Breakthrough special materials (1 per stage)
   | "condensed-qi-dew"
   | "azure-stone-marrow"
@@ -782,6 +797,8 @@ export interface DungeonRankYieldHint {
   mysteryName?: string;
   mysteryLine?: string;
   entryMinLevel?: number;
+  /** Story relic a finished 甲 run can leave. Absent on 丙级 and 乙级. */
+  relicLine?: string;
 }
 
 export interface GearPath {
@@ -923,6 +940,16 @@ export interface DungeonExpeditionProgress {
   partyMoments?: PartyExpeditionMoment[];
 }
 
+export interface JiaRelicNote {
+  itemId: ItemId;
+  name: string;
+  mysteryId: "danxia" | "infant-pool" | "divine-rift";
+  mysteryName: string;
+  kind: "page" | "ash" | "flake";
+  rank: number;
+  arcLine: string;
+}
+
 export type DungeonExpeditionOutcome = "completed" | "withdrew" | "aborted" | "catastrophic";
 
 export interface DungeonExpeditionReport {
@@ -956,6 +983,8 @@ export interface DungeonExpeditionReport {
   sharedLeaderId?: string;
   /** Display name for sharedLeaderId. */
   sharedLeaderName?: string;
+  /** Story relic from a finished 甲 run. Absent on 丙, 乙, and unfinished runs. */
+  relic?: JiaRelicNote;
 }
 
 export type TravelNoteKind =
@@ -1356,6 +1385,8 @@ export type ImmediateActionId =
   | `place-fixture:${string}`
   | `clear-fixture:${string}`
   | `host-guest:${string}`
+  | `display-relic:${string}`
+  | "clear-displayed-relic"
   | `send-message:${string}:${MessageTemplateKind}`
   | "read-messages"
   | `say:${string}`
@@ -2903,6 +2934,13 @@ export interface CultivatorStateView {
       cosmetic: boolean;
       line: string;
     }[];
+    /** Set when a 甲 relic is on the table. The bag still holds it. */
+    displayedRelic?: {
+      itemId: ItemId;
+      name: string;
+      arcLine: string;
+      line: string;
+    };
     nextUpgrade: {
       actionId: "upgrade-residence";
       nextGrandeur: number;
@@ -2931,6 +2969,11 @@ export interface CultivatorStateView {
     grandeur: number;
     tierName: string;
     glance: string;
+    /** Set when that cave has a 甲 relic on the table. */
+    displayedRelic?: {
+      name: string;
+      arcLine: string;
+    };
   }[];
   activeResidence: Residence | null;
   residenceContext: ResidenceContextView | null;

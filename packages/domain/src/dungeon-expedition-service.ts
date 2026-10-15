@@ -1,5 +1,6 @@
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
+import { jiaRelicHint } from "./jia-relics.js";
 import type {
   ActionJob,
   Cultivator,
@@ -136,6 +137,7 @@ export function buildDungeonRankYieldHints(
     if (mystery && !notableSecondaryDrops.includes(mystery.cultivationItemId)) {
       notableSecondaryDrops.push(mystery.cultivationItemId);
     }
+    const relicLine = jiaRelicHint(grade, rank);
     return {
       rank,
       primaryMaterial,
@@ -152,6 +154,7 @@ export function buildDungeonRankYieldHints(
             entryMinLevel: mystery.minLevel,
           }
         : {}),
+      ...(relicLine ? { relicLine } : {}),
     };
   });
 }
@@ -1396,15 +1399,21 @@ export function createDungeonExpeditionReport(input: {
   endedAtTick: number;
   returnLocationId: string;
   primaryMaterial: ItemId;
+  relic?: DungeonExpeditionReport["relic"];
 }): DungeonExpeditionReport {
   const remembered = input.progress.beats?.[input.progress.beats.length - 1];
+  const secondaryDrops = { ...input.progress.secondaryDrops };
+  if (input.relic) {
+    secondaryDrops[input.relic.itemId] = (secondaryDrops[input.relic.itemId] ?? 0) + 1;
+  }
   const summary = [
     `地宫${outcomePhrase(input.outcome)}${input.progress.grade}${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
-    `带回 ${input.progress.primaryMaterialCount} ${input.primaryMaterial}，旁支 ${summarizeSecondaryDrops(input.progress.secondaryDrops)}，灵石 ${input.progress.spiritStoneGain}，修为 +${input.progress.realmProgressGain}。`,
+    `带回 ${input.progress.primaryMaterialCount} ${input.primaryMaterial}，旁支 ${summarizeSecondaryDrops(secondaryDrops)}，灵石 ${input.progress.spiritStoneGain}，修为 +${input.progress.realmProgressGain}。`,
     `气血耗去 ${input.progress.qiSpent ?? 0}，灵力耗去 ${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石 ${input.progress.stonesLost}。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
     input.progress.carriedLine ?? null,
+    input.relic?.arcLine ?? null,
     fightLine(input.progress),
     `人已回到 ${input.returnLocationId}。`,
     `(${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy})`,
@@ -1423,7 +1432,8 @@ export function createDungeonExpeditionReport(input: {
       itemId: input.primaryMaterial,
       count: input.progress.primaryMaterialCount,
     },
-    secondaryDrops: { ...input.progress.secondaryDrops },
+    secondaryDrops,
+    ...(input.relic ? { relic: input.relic } : {}),
     spiritStoneGain: input.progress.spiritStoneGain,
     realmProgressGain: input.progress.realmProgressGain,
     unlockedNextRank: input.progress.unlockedNextRank,
