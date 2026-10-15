@@ -224,6 +224,11 @@ export interface EventPools {
   travelPool: readonly EventTemplate[];
 }
 
+export interface ResidenceFixture {
+  id: string;
+  tier: number;
+}
+
 export interface Residence {
   id: string;
   locationId: import("./constants.js").LocationId;
@@ -231,6 +236,13 @@ export interface Residence {
   name: string;
   stateId: string;
   description: string;
+  /** 1 is 草庐 or 石室. Higher steps never stop. Omitted on old saves means 1. */
+  grandeur?: number;
+  /** A granted cave reads as 草庐. A purchased cave reads as 石室 until it is rebuilt. */
+  origin?: "starter" | "bought";
+  fixtures?: ResidenceFixture[];
+  /** Last tick each guest was hosted. */
+  hostTicks?: Record<string, number>;
 }
 
 export type QuestCategory = "base" | "sect" | "high-risk";
@@ -1284,6 +1296,10 @@ export type ImmediateActionId =
   | "seal-divine-step"
   | "cycle-social-page"
   | `buy-residence:${string}`
+  | "upgrade-residence"
+  | `place-fixture:${string}`
+  | `clear-fixture:${string}`
+  | `host-guest:${string}`
   | `send-message:${string}:${MessageTemplateKind}`
   | "read-messages"
   | `say:${string}`
@@ -2293,6 +2309,9 @@ export interface ResidenceContextView {
   timeSense: string;
   scene: string;
   recentAmbientEvents: readonly ResidenceAmbientEventView[];
+  grandeur?: number;
+  tierName?: string;
+  glance?: string;
 }
 
 export interface TickSummary {
@@ -2813,6 +2832,49 @@ export interface CultivatorStateView {
     name: string;
     description: string;
     isActive: boolean;
+    grandeur: number;
+    tierName: string;
+    slotCount: number;
+    usedSlots: number;
+    prestige: number;
+    glance: string;
+    benefitLine: string;
+    fixtures: readonly {
+      id: string;
+      name: string;
+      tier: number;
+      tierName: string;
+      cosmetic: boolean;
+      line: string;
+    }[];
+    nextUpgrade: {
+      actionId: "upgrade-residence";
+      nextGrandeur: number;
+      tierName: string;
+      price: number;
+      slotCount: number;
+      line: string;
+    };
+    /** Present on the cave you are standing in. */
+    offers?: readonly {
+      actionId: string;
+      fixtureId: string;
+      name: string;
+      nextTier: number;
+      tierName: string;
+      price: number;
+      cosmetic: boolean;
+      line: string;
+    }[];
+  }[];
+  /** Other people's caves in this city. Omitted when nobody else has one here. */
+  nearbyHomes?: readonly {
+    ownerId: string;
+    ownerName: string;
+    residenceName: string;
+    grandeur: number;
+    tierName: string;
+    glance: string;
   }[];
   activeResidence: Residence | null;
   residenceContext: ResidenceContextView | null;
@@ -2842,6 +2904,8 @@ export interface CultivatorStateView {
     rival: boolean;
     favorBalance: number;
     placeLine: string;
+    /** Set when this person owns a cave in the city you are standing in. */
+    homeLine?: string;
   }[];
   /** Party partner and whether a dungeon start will share the run. Omitted by older view fixtures. */
   party?: {

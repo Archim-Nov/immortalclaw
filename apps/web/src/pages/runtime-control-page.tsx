@@ -27,6 +27,7 @@ import type {
 import { copyTextToClipboard } from "../lib/agent-onboarding";
 import { requestAgentGuide, requestWorldChronicle, requestWorldSects, isHintActionId } from "../lib/runtime-api";
 import { useRuntimeSession } from "../lib/runtime-session";
+import { ResidenceBoards } from "./residence-boards";
 import {
   getPremiumControlRouteByPath,
   premiumControlRoutes,
@@ -2131,6 +2132,18 @@ function WorldTab() {
           )}
         </div>
       </div>
+
+      {session.agentState && session.agentState.residences.length > 0 ? (
+        <div className="glass-panel">
+          <div className="dashboard-support-kicker">RESIDENCE</div>
+          <h3 className="dashboard-support-title" style={{ fontSize: "2rem" }}>洞府</h3>
+          <ResidenceBoards
+            residences={session.agentState.residences}
+            nearbyHomes={session.agentState.nearbyHomes}
+            variant="runtime"
+          />
+        </div>
+      ) : null}
 
       <div className="glass-panel">
         <div className="dashboard-support-kicker">DAO HEART</div>

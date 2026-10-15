@@ -87,10 +87,14 @@ const RISK_PRICE_MULTIPLIER: Record<RiskLevel, number> = {
   high: 2.0,
 };
 
-export function residencePriceForState(stateId: string): number {
+export function residenceRiskMultiplier(stateId: string): number {
   const entry = RESIDENCE_CATALOG.find((e) => e.stateId === stateId);
-  if (!entry) return RESIDENCE_PRICE_BASE;
-  return Math.round(RESIDENCE_PRICE_BASE * RISK_PRICE_MULTIPLIER[entry.risk]);
+  if (!entry) return 1;
+  return RISK_PRICE_MULTIPLIER[entry.risk];
+}
+
+export function residencePriceForState(stateId: string): number {
+  return Math.round(RESIDENCE_PRICE_BASE * residenceRiskMultiplier(stateId));
 }
 
 export function getResidenceCatalogEntry(stateId: string): ResidenceCatalogEntry | null {
@@ -111,6 +115,9 @@ export function createResidenceForState(stateId: string, cultivatorId: string): 
     name: entry?.name ?? "洞府",
     stateId,
     description: entry?.description ?? "",
+    grandeur: 1,
+    origin: "bought",
+    fixtures: [],
   };
 }
 

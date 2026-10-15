@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { PublicAgentStateResponse } from "../../../../packages/contracts/src/runtime-api.js";
 import { requestPublicAgentState } from "../lib/runtime-api";
+import { ResidenceBoards } from "./residence-boards";
 import "../styles/player-stat-page.css";
 
 export function PlayerStatPage() {
@@ -211,6 +212,15 @@ export function PlayerStatPage() {
               <span className="stat-value">{cultivator.reputation.toLocaleString()}</span>
             </div>
           </div>
+        </section>
+
+        <section className="stat-panel full-width">
+          <h3 className="stat-panel-title">洞府 · Residence</h3>
+          {data.residences && data.residences.length > 0 ? (
+            <ResidenceBoards residences={data.residences} nearbyHomes={data.nearbyHomes} variant="stat" />
+          ) : (
+            <p className="stat-empty">还没有洞府。</p>
+          )}
         </section>
 
         {/* 4. 8 Main Attributes */}
