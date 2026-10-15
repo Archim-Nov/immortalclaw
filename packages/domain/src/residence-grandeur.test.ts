@@ -18,6 +18,7 @@ import {
   HEAL_TICK_CAP,
   MEDITATE_PROGRESS_CAP,
   PRODUCE_DISCOUNT_CAP,
+  RESIDENCE_BENEFIT_LINE,
   residenceTierName,
   upgradePrice,
 } from "./residence-grandeur.js";
@@ -102,20 +103,72 @@ test("furniture benefits diminish and stay inside the caps", () => {
     ],
   });
   const benefits = benefitsOf(stuffed);
-  assert.ok(benefits.produceDiscount <= PRODUCE_DISCOUNT_CAP);
-  assert.ok(benefits.produceDiscount > 0);
-  assert.equal(benefits.healBonus <= HEAL_TICK_CAP, true);
-  assert.equal(benefits.qiBonus <= QI_BONUS_CAP, true);
-  assert.equal(benefits.hostAffinity <= HOST_AFFINITY_CAP, true);
+  assert.equal(benefits.produceDiscount, PRODUCE_DISCOUNT_CAP);
+  assert.equal(benefits.healBonus, HEAL_TICK_CAP);
+  assert.equal(benefits.qiBonus, QI_BONUS_CAP);
+  assert.equal(benefits.hostAffinity, HOST_AFFINITY_CAP);
   assert.equal(meditateProgressBonus(stuffed, 4), 1);
-  assert.ok(meditateProgressBonus(stuffed, 40) <= MEDITATE_PROGRESS_CAP);
+  assert.equal(meditateProgressBonus(stuffed, 10), 3);
+  assert.equal(meditateProgressBonus(stuffed, 12), MEDITATE_PROGRESS_CAP);
+  assert.equal(meditateProgressBonus(stuffed, 40), MEDITATE_PROGRESS_CAP);
   assert.equal(meditateProgressBonus(bareResidence(), 40), 0);
   const fullCost = 30;
   const paid = discountedSpiritCost(stuffed, fullCost);
-  assert.ok(paid < fullCost);
-  assert.ok(paid >= Math.floor(fullCost * (1 - PRODUCE_DISCOUNT_CAP)));
+  assert.equal(paid, Math.floor(fullCost * (1 - PRODUCE_DISCOUNT_CAP)));
   assert.equal(discountedSpiritCost(bareResidence(), fullCost), fullCost);
-  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "pingfeng", tier: 3 }] })).meditateFraction, 0);
+  const cosmetic = benefitsOf(bareResidence({
+    fixtures: [{ id: "pingfeng", tier: 3 }, { id: "guanjing", tier: 3 }],
+  }));
+  assert.equal(cosmetic.meditateFraction, 0);
+  assert.equal(cosmetic.qiBonus, 0);
+  assert.equal(cosmetic.healBonus, 0);
+  assert.equal(cosmetic.produceDiscount, 0);
+  assert.equal(cosmetic.hostAffinity, 0);
+  assert.match(RESIDENCE_BENEFIT_LINE, /四分进境/);
+  assert.match(RESIDENCE_BENEFIT_LINE, /两刻/);
+  assert.match(RESIDENCE_BENEFIT_LINE, /八点气血/);
+  assert.match(RESIDENCE_BENEFIT_LINE, /两成灵石/);
+  assert.match(RESIDENCE_BENEFIT_LINE, /四点好感/);
+  assert.match(RESIDENCE_BENEFIT_LINE, /屏风和观景台只给人看/);
+});
+
+test("cheap furniture stays under the ceiling and a second piece counts half", () => {
+  const cheapCushion = bareResidence({ fixtures: [{ id: "putuan", tier: 1 }] });
+  assert.equal(meditateProgressBonus(cheapCushion, 14), 1);
+  assert.ok(meditateProgressBonus(cheapCushion, 40) < MEDITATE_PROGRESS_CAP);
+  const immortalCushion = bareResidence({ fixtures: [{ id: "putuan", tier: 4 }] });
+  const cushionAlone = meditateProgressBonus(immortalCushion, 12);
+  assert.ok(cushionAlone > 2);
+  assert.ok(cushionAlone < MEDITATE_PROGRESS_CAP);
+
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "juling", tier: 1 }] })).qiBonus, 2);
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "juling", tier: 2 }] })).qiBonus, 4);
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "juling", tier: 3 }] })).qiBonus, 6);
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "juling", tier: 4 }] })).qiBonus, QI_BONUS_CAP);
+
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "lingquan", tier: 1 }] })).healBonus, 1);
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "lingquan", tier: 3 }] })).healBonus, 1);
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "lingquan", tier: 4 }] })).healBonus, HEAL_TICK_CAP);
+  const springAndWard = benefitsOf(bareResidence({
+    fixtures: [{ id: "lingquan", tier: 3 }, { id: "hushan", tier: 2 }],
+  }));
+  assert.equal(springAndWard.healBonus, HEAL_TICK_CAP);
+
+  const oneFurnace = benefitsOf(bareResidence({ fixtures: [{ id: "danlu", tier: 2 }] })).produceDiscount;
+  const furnaceAndBench = benefitsOf(bareResidence({
+    fixtures: [{ id: "danlu", tier: 2 }, { id: "lianqi", tier: 2 }],
+  })).produceDiscount;
+  assert.ok(furnaceAndBench > oneFurnace);
+  assert.ok(furnaceAndBench < oneFurnace + 0.05);
+  assert.ok(benefitsOf(bareResidence({ fixtures: [{ id: "danlu", tier: 4 }] })).produceDiscount < PRODUCE_DISCOUNT_CAP);
+
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "chaan", tier: 1 }] })).hostAffinity, 1);
+  assert.equal(benefitsOf(bareResidence({ fixtures: [{ id: "chaan", tier: 3 }] })).hostAffinity, 3);
+  const teaAndLibrary = benefitsOf(bareResidence({
+    fixtures: [{ id: "chaan", tier: 2 }, { id: "lingshou", tier: 4 }],
+  })).hostAffinity;
+  assert.equal(teaAndLibrary, 3);
+  assert.ok(teaAndLibrary < 2 + 2);
 });
 
 test("a full slot list hides new families and still offers an upgrade of a placed one", () => {
@@ -205,7 +258,7 @@ test("furniture fills slots, replaces in place, and does not refund", () => {
   assert.equal(cultivator.residence.fixtures?.some((fixture) => fixture.id === "danlu"), true);
 });
 
-test("a furnished cave heals one tick faster and discounts crafting inside the cap", () => {
+test("a furnished cave heals two ticks faster and discounts crafting at the cap", () => {
   const world = createSeedWorld();
   const created = createCultivator(world, { name: "养伤人" });
   const cultivator = world.cultivators[created.id]!;
@@ -217,14 +270,13 @@ test("a furnished cave heals one tick faster and discounts crafting inside the c
   cultivator.spiritStones = 100;
   performAction(world, created.id, "residence-heal");
   while (cultivator.activeJobId) advanceWorld(world, 1);
-  assert.equal(cultivator.injuryTicksRemaining, 5);
+  assert.equal(cultivator.injuryTicksRemaining, 4);
 
   const before = cultivator.spiritStones;
   performAction(world, created.id, "residence-produce:recipe-healing-pill");
   while (cultivator.activeJobId) advanceWorld(world, 1);
   const spent = before - cultivator.spiritStones;
-  assert.ok(spent < 30);
-  assert.ok(spent >= 27);
+  assert.equal(spent, 24);
 });
 
 test("hosting is visible to the guest, then waits", () => {

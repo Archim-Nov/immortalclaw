@@ -2,7 +2,7 @@
 
 ## Summary
 
-A cultivator can keep spending spirit stones on the home they already own. The first purchase stays `buy-residence`. After that, the same cave can be rebuilt from 草庐 or 石室 through 洞府, 灵府, 仙府, and 洞天, and then expanded without a last tier. Furniture fills a limited number of slots. The benefits stay small and stop growing. Visitors in the same city can see the place, and a host can ask someone in.
+A cultivator can keep spending spirit stones on the home they already own. The first purchase stays `buy-residence`. After that, the same cave can be rebuilt from 草庐 or 石室 through 洞府, 灵府, 仙府, and 洞天, and then expanded without a last tier. Furniture fills a limited number of slots. The benefits are larger than the first pass, and they still stop. Visitors in the same city can see the place, and a host can ask someone in.
 
 ## Problem
 
@@ -13,7 +13,7 @@ A cultivator can keep spending spirit stones on the home they already own. The f
 - Keep `buy-residence:<stateId>` and its prices: safe 3000, low 3600, medium 4500, high 6000.
 - Add an upgrade ladder on the owned cave. Named tiers stop at 洞天. Further expansions double in price and do not stop.
 - Add a furniture catalog. Each family has several tiers. Slot count grows with the cave and then stops at 12.
-- Keep mechanical benefits modest and capped: meditation, healing, qi recovery, crafting cost, hosting affinity. Some pieces are only there to be seen.
+- Keep mechanical benefits capped: meditation, healing, qi recovery, crafting cost, hosting affinity. The ceiling is about twice the first pass. Some pieces are only there to be seen.
 - Let someone in the same city read the cave, and let the owner host a guest. The digest, the travelogue, and a spoken line carry it.
 - Show the tier and the furniture on the web, and document the actions in `apps/web/public/skill.md`.
 
@@ -34,15 +34,34 @@ Slots are 2, 3, 4, 6, and 8 through 洞天, then one more slot per expansion unt
 
 Furniture families are 蒲团, 聚灵阵, 丹炉, 炼器台, 灵泉, 药圃, 藏经阁, 屏风, 灵兽窝, 观景台, 护山阵, and 茶案. Most have four tiers (粗成, 灵纹, 宝光, 仙品). 屏风, 观景台, and 茶案 stop at 宝光. Safe-state tier prices before the family multiplier are 2400, 12000, 56000, and 220000.
 
-Benefits, after diminishing returns, stop at these caps:
+Benefits diminish, then stop. The strongest piece on a path counts in full, the next counts half, and the one after that counts a quarter. 屏风 and 观景台 do not enter the numbers. They only change what a visitor reads.
 
-- Meditation adds at most 2 progress.
-- Residence healing clears at most 1 extra injury tick.
-- Qi recovery adds at most 4 qi.
-- Crafting spirit-stone cost drops by at most 10%.
-- Hosting adds at most 2 affinity on top of a base of 6.
+The first pass stopped a furnished cave at +2 meditation progress, +1 heal tick, +4 qi, 10% off crafting, and +2 hosting affinity. A mid-tier piece already touched those ceilings, so the expensive tiers did not pay. The ceilings are now twice that. A 粗成 piece stays near the old early bonus. The higher tiers are what reach the new ceiling.
 
-屏风 and 观景台 do not enter those numbers. They only change what a visitor reads.
+- Meditation adds at most 4 progress.
+- Residence healing clears at most 2 extra injury ticks.
+- Qi recovery adds at most 8 qi.
+- Crafting spirit-stone cost drops by at most 20%.
+- Hosting adds at most 4 affinity on top of a base of 6.
+
+Furniture tiers, before diminishing and before the cap:
+
+| Piece | Path | 粗成 | 灵纹 | 宝光 | 仙品 |
+| --- | --- | --- | --- | --- | --- |
+| 蒲团 | meditation | 0.05 | 0.09 | 0.14 | 0.22 |
+| 聚灵阵 | meditation | 0.03 | 0.05 | 0.07 | 0.10 |
+| 聚灵阵 | qi | 2 | 4 | 6 | 8 |
+| 药圃 | meditation | 0.02 | 0.03 | 0.04 | 0.05 |
+| 藏经阁 | meditation | 0.02 | 0.03 | 0.05 | 0.07 |
+| 藏经阁 | hosting | 0 | 1 | 2 | 3 |
+| 丹炉 | crafting | 5% | 8% | 13% | 17% |
+| 炼器台 | crafting | 3% | 5% | 8% | 11% |
+| 灵泉 | healing | 1 | 1 | 1 | 2 |
+| 护山阵 | healing | 0 | 1 | 1 | 1 |
+| 灵兽窝 | hosting | 0 | 0 | 1 | 2 |
+| 茶案 | hosting | 1 | 2 | 3 | — |
+
+茶案, 屏风, and 观景台 still stop at 宝光. Meditation progress is that fraction of the sitting's gain, rounded, and at least 1 when any fraction remains, then clamped at 4. A full set of 仙品 meditation pieces reaches 4 on an ordinary sitting of about 12 progress, and a short free sitting still only gains 1. A 仙品 聚灵阵 is the qi ceiling by itself: 粗成 is +2, 灵纹 is +4, 宝光 is +6, 仙品 is +8. A 仙品 灵泉 is the heal ceiling by itself. A 宝光 灵泉 together with a 护山阵 also reaches 2, because 1 plus half of 1 rounds to 2. One 丹炉, even at 仙品, stays under 20%. The furnace and the bench together are what touch that discount. One 茶案, even at 宝光, stops at 3 hosting affinity. A second hosting piece is what reaches 4.
 
 At the cave, `GET /agent/actions` lists `upgrade-residence`, `place-fixture:<fixtureId>`, `clear-fixture:<fixtureId>`, and `host-guest:<cultivatorId>` for people on the current social page. Hosting spends a small tea cost, waits 4 ticks before the same guest can be asked again, and leaves a spoken line of at most 40 characters.
 
@@ -61,7 +80,8 @@ At the cave, `GET /agent/actions` lists `upgrade-residence`, `place-fixture:<fix
 - A starter home is a 草庐. `upgrade-residence` at that home spends the listed price and renames the tier. The next expansion after 洞天 costs twice the previous one.
 - Not enough stones leaves the home and the purse unchanged. The action is absent away from the home.
 - Two pieces fit in a 草庐. A third new family is refused until a slot is freed or the cave is rebuilt. Replacing a family does not take another slot. Clearing a piece returns no stones.
-- A fully furnished cave still adds at most 2 meditation progress, 1 heal tick, 4 qi, a 10% craft discount, and 2 hosting affinity.
+- A fully furnished cave adds 4 meditation progress on an ordinary sitting, 2 heal ticks, 8 qi, a 20% craft discount, and 4 hosting affinity, and does not go past those.
+- A single 粗成 piece stays under those ceilings. A second piece on the same path does not add its full value. 屏风 and 观景台 still add none of those numbers.
 - Hosting a person in the city writes a spoken line, a digest sentence on both sides, and lets the guest read the tier. The same guest cannot be hosted again for 4 ticks.
 - The web state page and the runtime world tab show the tier and the placed furniture.
 - `npm test` for the residence suite and `npm run build:web` pass.
