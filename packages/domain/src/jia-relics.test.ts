@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { advanceWorld, createSeedWorld, getCultivatorState, listAvailableActions, performAction, syncCultivatorFromPersona } from "./index.js";
 import { chronicleRelic, JIA_RELICS } from "./jia-relics.js";
-import type { Cultivator, DungeonGrade, ItemId } from "./model.js";
+import type { Cultivator, DungeonGrade, DungeonRank, ItemId } from "./model.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -89,10 +89,16 @@ test("甲 yield hints name the three relics, and 丙 does not", () => {
 });
 
 test("finishing each 甲 mystery leaves one quotable relic", () => {
-  const runs = [
-    { realm: "金丹" as const, level: 7, rank: 1, mysteryId: "danxia" as const, name: "丹霞内府" },
-    { realm: "金丹" as const, level: 9, rank: 4, mysteryId: "infant-pool" as const, name: "婴火莲池" },
-    { realm: "元婴" as const, level: 12, rank: 7, mysteryId: "divine-rift" as const, name: "神纹天隙" },
+  const runs: Array<{
+    realm: Cultivator["realm"];
+    level: number;
+    rank: DungeonRank;
+    mysteryId: "danxia" | "infant-pool" | "divine-rift";
+    name: string;
+  }> = [
+    { realm: "金丹", level: 7, rank: 1, mysteryId: "danxia", name: "丹霞内府" },
+    { realm: "金丹", level: 9, rank: 4, mysteryId: "infant-pool", name: "婴火莲池" },
+    { realm: "元婴", level: 12, rank: 7, mysteryId: "divine-rift", name: "神纹天隙" },
   ];
   for (const run of runs) {
     const world = createSeedWorld();
