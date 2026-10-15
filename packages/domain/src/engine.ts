@@ -185,6 +185,23 @@ import {
 } from "./high-realm-dungeon.js";
 import { lightFailCost, lightPlaceName } from "./yi-mystery.js";
 import {
+  assertRegionalEntry,
+  completeRegionalJob,
+  leaveRegionalRun,
+  listRegionalChoiceActions,
+  listRegionalEnterActions,
+  openRegionalRun,
+  regionalCraftStoneCost,
+  regionalGateClause,
+  regionalGuidanceHint,
+  releaseRegionalJob,
+  spendRegionalCraftFiber,
+  submitRegionalChoice,
+  takeRegionalMeditationAid,
+  tickRegionalRun,
+  viewRegionalDungeons,
+} from "./regional-dungeons.js";
+import {
   bahuangBandForDepth,
   huntSentence,
   noteWild,
@@ -4020,7 +4037,7 @@ function dungeonViewForLocation(
     recommendedRank: recommendedDungeonRankOf(cultivator, metadata.grade),
     materialBand: metadata.materialBand,
     rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand, metadata.grade, location?.stateId),
-    advice: dungeonAdvice(metadata.grade, recommendedDungeonRankOf(cultivator, metadata.grade), location?.stateId),
+    advice: `${dungeonAdvice(metadata.grade, recommendedDungeonRankOf(cultivator, metadata.grade), location?.stateId)}${regionalGateClause(location?.stateId)}`,
     lockReason: dungeonLockReasonOf(cultivator, location!),
   };
 }
@@ -4668,11 +4685,17 @@ function grantCultivationDrop(
 function consumeCultivationAid(cultivator: Cultivator): { name: string; bonus: number } | null {
   if (cultivator.realmProgress >= 100) return null;
   const aid = cultivationAidForLevel(cultivator.realmLevel);
-  if (!aid) return null;
-  const owned = cultivator.inventory[aid.itemId] ?? 0;
-  if (owned <= 0) return null;
-  cultivator.inventory[aid.itemId] = owned - 1;
-  return { name: aid.name, bonus: aid.bonus };
+  if (aid) {
+    const owned = cultivator.inventory[aid.itemId] ?? 0;
+    if (owned > 0) {
+      cultivator.inventory[aid.itemId] = owned - 1;
+      return { name: aid.name, bonus: aid.bonus };
+    }
+  }
+  const regional = takeRegionalMeditationAid(cultivator);
+  if (!regional) return null;
+  if (regional.syncWound) syncWounded(cultivator);
+  return { name: regional.name, bonus: regional.bonus };
 }
 
 function grantLoadoutSourceDrop(
@@ -6588,6 +6611,11 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     } else if (EIGHT_WASTES_CONTENT.entryLocationIds.includes(location.id as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
       locationPriorities.push("身处八荒入口，可发起远征探索稀有资源。");
     }
+    const regionalHint = regionalGuidanceHint(world, cultivator);
+    if (regionalHint) {
+      locationPriorities.push(regionalHint.priority);
+      locationActions.push(regionalHint.actionId);
+    }
   }
 
   // Registration-based suggestions (only when healthy)
@@ -6975,6 +7003,9 @@ function ensureOptionalProgressMaps(world: WorldState): void {
   }
   if (!runtimeWorld.dungeonExpeditionReports || typeof runtimeWorld.dungeonExpeditionReports !== "object") {
     runtimeWorld.dungeonExpeditionReports = {};
+  }
+  if (!world.regionalRuns || typeof world.regionalRuns !== "object") {
+    world.regionalRuns = {};
   }
   if (!runtimeWorld.wildernessProgress || typeof runtimeWorld.wildernessProgress !== "object") {
     runtimeWorld.wildernessProgress = {};
@@ -7648,6 +7679,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         },
       };
     })(),
+    regionalDungeons: viewRegionalDungeons(world, cultivator),
     bahuang: buildBahuangStateView(world, cultivator),
     wilderness: buildWildernessView(world, cultivator),
     wildRoute: buildWildRouteView(world, cultivator),
@@ -7919,6 +7951,10 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const readinessLevel = computeReadiness(cultivator);
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
   if (cultivator.activeJobId) {
+    const regionalBusy = listRegionalChoiceActions(world, cultivator);
+    if (regionalBusy.length > 0) {
+      return [...regionalBusy, ...sceneChoiceActions(world, cultivator)];
+    }
     if (!activeDungeonExpedition) {
       return sceneChoiceActions(world, cultivator);
     }
@@ -8454,6 +8490,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       }
     }
   }
+  actions.push(...listRegionalEnterActions(world, cultivator));
+  actions.push(...listRegionalChoiceActions(world, cultivator));
   if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
   if (location.kind === "safe") {
     const duelTargets = socialActionTargets(world, cultivator)
@@ -11304,7 +11342,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (!recipe) {
       throw new Error("Residence production recipe missing.");
     }
-    const craftedStoneCost = discountedSpiritCost(residence, recipe.spiritStoneCost);
+    const residenceStoneCost = discountedSpiritCost(residence, recipe.spiritStoneCost);
+    const craftedStoneCost = regionalCraftStoneCost(cultivator, residenceStoneCost);
     if (cultivator.spiritStones < craftedStoneCost || !recipe.inputMaterials.every((material) => cultivator.inventory[material.itemId] >= material.count)) {
       throw new Error("No craftable residence recipe with current materials.");
     }
@@ -11312,6 +11351,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.inventory[material.itemId] -= material.count;
     }
     cultivator.spiritStones -= craftedStoneCost;
+    spendRegionalCraftFiber(cultivator, residenceStoneCost, craftedStoneCost);
     cultivator.inventory[recipe.outputItemId] += recipe.outputCount;
     addResourceGainLog(
       world,
@@ -11554,6 +11594,10 @@ function resolveJob(world: WorldState, job: ActionJob): string {
 
 function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId);
+  if (String(job.actionId).startsWith("enter-regional:")) {
+    cultivator.activeJobId = null;
+    return completeRegionalJob(world, cultivator, job, (person) => battleCombatantFromCultivator(person));
+  }
   const registration = registrationModifiersOf(cultivator);
   const combatState = getCombatJobState(job);
   if (combatState && (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null)) {
@@ -12560,10 +12604,35 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   if (sceneOptionId) {
     return resolveSceneChoiceAction(world, cultivator, actionId, sceneOptionId);
   }
+  if (actionId === "leave-regional") {
+    const summary = leaveRegionalRun(world, cultivator);
+    releaseRegionalJob(world, cultivator);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
+  }
+  if (actionId.startsWith("regional-choice:")) {
+    const optionId = actionId.slice("regional-choice:".length);
+    const choice = submitRegionalChoice(world, cultivator, optionId, (person) => battleCombatantFromCultivator(person));
+    if (choice.done) releaseRegionalJob(world, cultivator);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: choice.summary };
+  }
   requireIdle(cultivator);
   requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
+  if (actionId.startsWith("enter-regional:")) {
+    const dungeonId = actionId.slice("enter-regional:".length);
+    const plan = assertRegionalEntry(world, cultivator, dungeonId);
+    const started = startJob(
+      world,
+      cultivator,
+      actionId as TimedActionId,
+      plan.label,
+      undefined,
+      plan.durationTicks,
+    );
+    const summary = openRegionalRun(world, cultivator, dungeonId, started.job?.id ?? "");
+    return { ...started, summary };
+  }
   const breakthroughMethodResult = performBreakthroughMethodAction(world, cultivator, actionId);
   if (breakthroughMethodResult) return breakthroughMethodResult;
   const socialDeepenResult = performSocialDeepenAction(world, cultivator, actionId, speechLine);
@@ -12609,12 +12678,14 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     }
     const recipe = RESIDENCE_PRODUCTION_RECIPES.find((r) => r.id === recipeId && r.enabledInLive);
     if (!recipe) throw new Error(`Unknown or disabled recipe: ${recipeId}`);
-    const queuedStoneCost = discountedSpiritCost(getActiveResidence(cultivator), recipe.spiritStoneCost);
+    const queuedResidenceCost = discountedSpiritCost(getActiveResidence(cultivator), recipe.spiritStoneCost);
+    const queuedStoneCost = regionalCraftStoneCost(cultivator, queuedResidenceCost);
     if (cultivator.spiritStones < queuedStoneCost) throw new Error(`Not enough spirit stones. Need ${queuedStoneCost}.`);
     for (const mat of recipe.inputMaterials) {
       if ((cultivator.inventory[mat.itemId] ?? 0) < mat.count) throw new Error(`Not enough ${mat.itemId}. Need ${mat.count}.`);
     }
     cultivator.spiritStones -= queuedStoneCost;
+    spendRegionalCraftFiber(cultivator, queuedResidenceCost, queuedStoneCost);
     for (const mat of recipe.inputMaterials) {
       cultivator.inventory[mat.itemId] = (cultivator.inventory[mat.itemId] ?? 0) - mat.count;
     }
@@ -12679,7 +12750,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       }
       const recipe = getResidenceRecipeById(residenceProduceRecipeId);
       if (!recipe) throw new Error(`Unknown residence recipe: ${residenceProduceRecipeId}`);
-      const produceStoneCost = discountedSpiritCost(getActiveResidence(cultivator), recipe.spiritStoneCost);
+      const produceResidenceCost = discountedSpiritCost(getActiveResidence(cultivator), recipe.spiritStoneCost);
+      const produceStoneCost = regionalCraftStoneCost(cultivator, produceResidenceCost);
       const materialsReady = recipe.inputMaterials.every((material) => cultivator.inventory[material.itemId] >= material.count);
       if (cultivator.spiritStones < produceStoneCost || !materialsReady) {
         throw new Error("No craftable residence recipe with current materials.");
@@ -13345,6 +13417,9 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       const activeDungeonExpedition = getActiveDungeonExpedition(world, job.cultivatorId);
       if (activeDungeonExpedition && activeDungeonExpedition.jobId === job.id && isDungeonExpeditionActionId(job.actionId)) {
         resolveDungeonExpeditionStepIfDue(world, job, activeDungeonExpedition);
+      }
+      if (String(job.actionId).startsWith("enter-regional:")) {
+        tickRegionalRun(world, job, (person) => battleCombatantFromCultivator(person));
       }
 
       if (job.remainingTicks > 0 && !(combatState?.resolved)) {

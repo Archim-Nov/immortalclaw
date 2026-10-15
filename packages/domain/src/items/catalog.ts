@@ -13,6 +13,7 @@ import { CULTIVATION_ITEMS } from "./cultivation-items.js";
 import { JIA_RELIC_ITEMS } from "./jia-relic-items.js";
 import { SPECIAL_ITEMS } from "./special-items.js";
 import { LOADOUT_SOURCE_ITEMS } from "./loadout-source-items.js";
+import { REGIONAL_ITEMS } from "./regional-items.js";
 
 type BuyActionId = "buy-healing-pill" | "buy-qi-pill" | "buy-ward-talisman" | "buy-eight-wastes-pass";
 type SellActionId = "sell-spirit-ore" | "sell-ruin-fragment" | "sell-beast-core" | "sell-ancient-artifact" | "sell-bahuang-spirit-essence" | "sell-legendary-artifact";
@@ -26,6 +27,7 @@ export const ITEM_CATALOG: Record<ItemId, ItemDefinition> = {
   ...JIA_RELIC_ITEMS,
   ...SPECIAL_ITEMS,
   ...LOADOUT_SOURCE_ITEMS,
+  ...REGIONAL_ITEMS,
 };
 
 export const ITEM_IDS = Object.freeze(Object.keys(ITEM_CATALOG) as ItemId[]);
