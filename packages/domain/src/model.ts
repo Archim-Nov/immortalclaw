@@ -592,7 +592,20 @@ export type LegacyItemId =
   | "eight-wastes-pass"
   | "bahuang-spirit-essence"
   | "ancient-artifact"
-  | "legendary-artifact";
+  | "legendary-artifact"
+  // State and roadside dungeons. Not sold. Meditation or one craft spends them.
+  | "qinglan-dew-core"
+  | "tide-bell-shard"
+  | "cloud-plank-fiber"
+  | "old-tea-pattern"
+  | "balance-stone-chip"
+  | "frost-hunt-bone"
+  | "scorched-thunder-core"
+  | "salt-pattern-crystal"
+  | "sand-seal-page"
+  | "wanderer-slip"
+  | "merchant-ledger"
+  | "vigil-ash";
 
 export type WeaponMaterialItemId = `weapon-material-${string}`;
 export type WeaponUnlockItemId = `weapon-item-${string}`;
@@ -655,6 +668,7 @@ export type TimedActionId =
   | "hunt-mine-beast"
   | `challenge-guardian:rank-${DungeonRank}`
   | "survey-wilderness"
+  | `enter-regional:${string}`
   | "dual-survey-wilderness"
   | "dual-cultivate"
   | "pvp-duel"
@@ -987,6 +1001,72 @@ export interface DungeonExpeditionReport {
   sharedLeaderName?: string;
   /** Story relic from a finished 甲 run. Absent on 丙, 乙, and unfinished runs. */
   relic?: JiaRelicNote;
+}
+
+/** One state dungeon or one of the shorter shared caves. */
+export interface RegionalDungeonReport {
+  dungeonId: string;
+  name: string;
+  outcome: "cleared" | "failed" | "withdrew" | "sat";
+  line: string;
+  signatureName: string | null;
+  stones: number;
+  endedAtTick: number;
+  combatRounds?: DungeonCombatSummary[];
+  /** Set on a companion's copy. The item stayed with the leader. */
+  sharedLeaderId?: string;
+  sharedLeaderName?: string;
+}
+
+export interface RegionalRunState {
+  leaderId: string;
+  dungeonId: string;
+  jobId: string;
+  companionIds: string[];
+  startedAtTick: number;
+  deadlineTick: number;
+  sightingWritten: boolean;
+  phase: "choice" | "vigil" | "resolved";
+  votes: Record<string, string>;
+  summary: string;
+  report: RegionalDungeonReport | null;
+}
+
+export interface RegionalPlaceView {
+  id: string;
+  name: string;
+  stateName: string;
+  band: string;
+  minRealm: number;
+  mechanic: string;
+  advice: string;
+  signatureName: string;
+  signatureUse: string;
+  bossName: string;
+  bossMove: string;
+  open: boolean;
+  lockReason: string | null;
+  cooldownUntilTick: number | null;
+  opensAtTick: number | null;
+  actionId: string | null;
+  party: boolean;
+}
+
+export interface RegionalDungeonsView {
+  advice: string;
+  places: RegionalPlaceView[];
+  active: {
+    dungeonId: string;
+    name: string;
+    leaderId: string;
+    leaderName: string;
+    phase: "choice" | "vigil";
+    stepLine: string;
+    safeOptionId: string | null;
+    awaitingNames: string[];
+    options: Array<{ optionId: string; label: string; description: string }>;
+  } | null;
+  lastReport: RegionalDungeonReport | null;
 }
 
 export type TravelNoteKind =
@@ -1448,7 +1528,9 @@ export type ImmediateActionId =
   | `mention-gossip:${string}:${string}`
   | `wait-for:${string}`
   | `dungeon-wake-decision:${string}`
-  | `bahuang-wake-decision:${string}`;
+  | `bahuang-wake-decision:${string}`
+  | `regional-choice:${string}`
+  | "leave-regional";
 
 export type ActionId = TimedActionId | ImmediateActionId;
 
@@ -1652,6 +1734,10 @@ export interface Cultivator {
   dungeonProgress: DungeonProgress;
   activeJobId: string | null;
   injuryTicksRemaining: number;
+  /** Tick when a state dungeon can be entered again. Absent on older saves. */
+  regionalCooldowns?: Record<string, number>;
+  /** Latest state-dungeon result. Absent until one finishes. */
+  regionalReport?: RegionalDungeonReport;
   registrationRecord: CultivationRegistrationRecord | null;
   // ---- Combat Loadout System ----
   equippedWeaponLoadoutId: WeaponLoadoutId | null;
@@ -2917,6 +3003,8 @@ export interface CultivatorStateView {
   realmPath: RealmPathView;
   dungeon: DungeonStateView | null;
   dungeonExpedition: DungeonExpeditionStateView;
+  /** State dungeons and the shorter shared caves visible from here. */
+  regionalDungeons?: RegionalDungeonsView;
   bahuang: BahuangExpeditionStateView | null;
   wilderness: {
     layerId: string;
@@ -3124,6 +3212,8 @@ export interface WorldState {
   wildernessProgress: Record<string, WildernessProgress>;
   dungeonExpeditions: Record<string, DungeonExpeditionProgress>;
   dungeonExpeditionReports: Record<string, DungeonExpeditionReport>;
+  /** State-dungeon runs in progress, keyed by the leader. Absent on older saves. */
+  regionalRuns?: Record<string, RegionalRunState>;
   bahuangProgress: Record<string, BahuangExpeditionProgress>;
   guixuNodes: Record<string, GuixuNode>;
   guixuProgress: GuixuProgress;

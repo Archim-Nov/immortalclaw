@@ -630,6 +630,7 @@ export function createSeedWorld(options: CreateSeedWorldOptions = {}): WorldStat
     wildernessProgress: {},
     dungeonExpeditions: {},
     dungeonExpeditionReports: {},
+    regionalRuns: {},
     bahuangProgress: {},
     guixuNodes: structuredClone(GUIXU_NODES),
     guixuProgress: createGuixuProgress(),
@@ -716,6 +717,7 @@ export function hydrateWorldState(
   hydrated.states = buildAllStates(hydrated.locations, geographyRegistry);
   hydrated.topology = buildFullTopology(hydrated.locations, { geographyRegistry });
   hydrated.eventPools = createEventPools(hydrated.locations, { geographyRegistry });
+  hydrated.regionalRuns ??= {};
   hydrated.pendingSceneChoices ??= {};
   if (typeof hydrated.nextSceneChoiceSequence !== "number") {
     hydrated.nextSceneChoiceSequence = 1;
