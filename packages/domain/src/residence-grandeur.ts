@@ -8,15 +8,16 @@ import { residenceRiskMultiplier } from "./residence.js";
 
 export const HOST_COOLDOWN_TICKS = 4;
 export const HOST_AFFINITY_BASE = 6;
-export const HOST_AFFINITY_CAP = 2;
-export const MEDITATE_PROGRESS_CAP = 2;
-export const HEAL_TICK_CAP = 1;
-export const QI_BONUS_CAP = 4;
-export const PRODUCE_DISCOUNT_CAP = 0.1;
+export const HOST_AFFINITY_CAP = 4;
+export const MEDITATE_PROGRESS_CAP = 4;
+export const MEDITATE_FRACTION_CAP = 0.3;
+export const HEAL_TICK_CAP = 2;
+export const QI_BONUS_CAP = 8;
+export const PRODUCE_DISCOUNT_CAP = 0.2;
 export const FIXTURE_SLOT_CAP = 12;
 
 export const RESIDENCE_BENEFIT_LINE =
-  "陈设的用处有顶。闭关最多比原来多两分进境，疗伤最多快一刻，调息最多多四点气血，炼制最多少花一成灵石，待客最多多两点好感。屏风和观景台只给人看，不进这些数。";
+  "陈设的用处有顶。闭关最多比原来多四分进境，疗伤最多快两刻，调息最多多八点气血，炼制最多少花两成灵石，待客最多多四点好感。同一路的第二件只算一半，第三件只算四分之一。屏风和观景台只给人看，不进这些数。";
 
 const FIXTURE_TIER_BASE = [0, 2_400, 12_000, 56_000, 220_000] as const;
 const FIXTURE_TIER_NAMES = ["", "粗成", "灵纹", "宝光", "仙品"] as const;
@@ -43,7 +44,7 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 1,
     cosmetic: false,
     blurb: "闭关时进境会多一点点。",
-    meditate: [0, 0.04, 0.06, 0.08, 0.1],
+    meditate: [0, 0.05, 0.09, 0.14, 0.22],
   },
   {
     id: "juling",
@@ -52,8 +53,8 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 1.6,
     cosmetic: false,
     blurb: "打坐和调息都顺一点。",
-    meditate: [0, 0.02, 0.03, 0.04, 0.05],
-    qi: [0, 2, 3, 4, 5],
+    meditate: [0, 0.03, 0.05, 0.07, 0.1],
+    qi: [0, 2, 4, 6, 8],
   },
   {
     id: "danlu",
@@ -62,7 +63,7 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 1.8,
     cosmetic: false,
     blurb: "炼丹少花一点灵石。",
-    produce: [0, 0.05, 0.08, 0.1, 0.12],
+    produce: [0, 0.05, 0.08, 0.13, 0.17],
   },
   {
     id: "lianqi",
@@ -71,7 +72,7 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 1.5,
     cosmetic: false,
     blurb: "炼器少花一点灵石。",
-    produce: [0, 0.03, 0.05, 0.07, 0.09],
+    produce: [0, 0.03, 0.05, 0.08, 0.11],
   },
   {
     id: "lingquan",
@@ -89,7 +90,7 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 1.2,
     cosmetic: false,
     blurb: "在府里歇着，心会静一点。",
-    meditate: [0, 0.01, 0.02, 0.02, 0.03],
+    meditate: [0, 0.02, 0.03, 0.04, 0.05],
   },
   {
     id: "cangjing",
@@ -98,8 +99,8 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 2.2,
     cosmetic: false,
     blurb: "请人进来说话时，底气稳一点。",
-    meditate: [0, 0.01, 0.02, 0.03, 0.04],
-    host: [0, 0, 1, 1, 2],
+    meditate: [0, 0.02, 0.03, 0.05, 0.07],
+    host: [0, 0, 1, 2, 3],
   },
   {
     id: "pingfeng",
@@ -116,7 +117,7 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 1.3,
     cosmetic: false,
     blurb: "窝里有活物，府里不那么冷清。",
-    host: [0, 0, 0, 1, 1],
+    host: [0, 0, 0, 1, 2],
   },
   {
     id: "guanjing",
@@ -142,7 +143,7 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
     priceScale: 0.9,
     cosmetic: false,
     blurb: "请人进来坐，好感多一点点。",
-    host: [0, 1, 2, 2],
+    host: [0, 1, 2, 3],
   },
 ] as const;
 
@@ -368,7 +369,7 @@ export function benefitsOf(residence: Residence | null): ResidenceBenefits {
     return sum + fixture.tier * weight;
   }, 0);
   return {
-    meditateFraction: Math.min(0.12, diminish(channelValues(residence, "meditate"))),
+    meditateFraction: Math.min(MEDITATE_FRACTION_CAP, diminish(channelValues(residence, "meditate"))),
     qiBonus: Math.min(QI_BONUS_CAP, Math.round(diminish(channelValues(residence, "qi")))),
     healBonus: Math.min(HEAL_TICK_CAP, Math.round(diminish(channelValues(residence, "heal")))),
     produceDiscount: Math.min(PRODUCE_DISCOUNT_CAP, diminish(channelValues(residence, "produce"))),

@@ -45,3 +45,7 @@ Benefits are computed from the placed pieces, diminished, then clamped. Meditati
 - `apps/web/public/skill.md`
 - `AGENTS.md`
 - `README.md`
+
+## Cap revision
+
+The first ceilings were +2 meditation progress, +1 heal tick, +4 qi, 10% off crafting, and +2 hosting affinity. Mid-tier furniture already reached them. The revision doubles each ceiling and raises the upper furniture tiers so that 仙品, or two high pieces on the same path, is what arrives there. 粗成 stays near the old early bonus. The half-and-quarter diminish is unchanged. 屏风 and 观景台 stay cosmetic. Prices, slots, and hosting tea are unchanged.
