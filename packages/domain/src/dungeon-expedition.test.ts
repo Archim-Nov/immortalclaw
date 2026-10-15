@@ -261,7 +261,9 @@ test("dungeon wake nodes expose context/options/defaults and remain capped by wa
     if (pendingWakeNode) {
       assert.ok(pendingWakeNode.context.length > 0);
       assert.ok(pendingWakeNode.options.length >= 2);
-      assert.ok(pendingWakeNode.options.length <= 3);
+      assert.ok(pendingWakeNode.options.length <= 4);
+      assert.match(pendingWakeNode.context, /[\u4e00-\u9fff]/);
+      assert.equal(/[A-Za-z]/.test(pendingWakeNode.context), false);
       assert.ok(
         pendingWakeNode.options.some(
           (option: { optionId: string }) => option.optionId === pendingWakeNode.defaultOptionId,

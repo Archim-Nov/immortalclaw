@@ -50,6 +50,7 @@ Recent supporting gameplay specs:
 - `docs/specs/relationship-mood-digest/spec.md`
 - `docs/specs/social-deepen/spec.md`
 - `docs/specs/favor-chains/spec.md`
+- `docs/specs/dungeon-midrun-sights-v1/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`

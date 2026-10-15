@@ -40,6 +40,7 @@ A shared dungeon copies `combatRounds` onto each companion, and the closing note
 A personal favor, a note left for someone away, and a rumor a neighbor can repeat: `harness/scenarios/social-deepen.md`.
 
 A favor repaid in words, a digest that names the people, and a reunion after travel: `harness/scenarios/favor-chains.md`.
+A dungeon run wakes in Chinese, with three or four mid-run choices, and leaves a 见闻 plus 带出何物 when a fight is won: `harness/scenarios/dungeon-midrun-sights.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 
 Fast local smoke entrypoint:

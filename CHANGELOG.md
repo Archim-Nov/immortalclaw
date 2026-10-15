@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### 地宫中途的见闻 / Mid-run dungeon sights
+
+地宫和八荒的醒时抉择改成了中文。一次仍最多醒三次。第三步还是伤者岔路。后面会遇到岔路、残片、同路的人，或一只两边都看见的袋子，每个场面三到四个做法。每走两三笔，游记和六个时辰的摘要里会有一条见闻。守关打赢时，战报、游记和摘要共用一句「带出何物」。
+
+Dungeon and Eight Wastes wakes are Chinese, still capped at three. Later wakes offer three or four choices. Every few beats, the travelogue and the digest gain a 见闻, and a won fight keeps one reusable 带出何物 line.
+
 ### 人情、见闻和说话 / Favor chains, the digest, and spoken lines
 
 办成的请托会记下一条短事由，例如「替我守关」，出现在 `state.owedFavors`。当面 `call-favor`，或后来用另一件请托去还，两边的见闻都会把上回的事和这次的偿还写成一句。替对方的朋友办成，也会点出三个人的名字。六个时辰里若有请托、字条、闲话、同门差事或重逢，摘要先讲这些，并点出最多三个人和一句原话。同队或有人情的人在路上、或在别的城里时，可以 `wait-for`。人到了记一笔重逢，同一对要隔十二刻。

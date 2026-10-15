@@ -225,6 +225,10 @@ export function createDungeonExpeditionProgress(input: {
     pendingWakeNode: null,
     pendingWakeNodeDeadlineTick: null,
     resolvedWakeNodeCount: 0,
+    usedWakeScenes: [],
+    beatsSeen: 0,
+    beatsTold: 0,
+    nextSightingGap: sightingGapFor(input.jobId),
   };
 }
 
@@ -312,13 +316,13 @@ export function buildDungeonExpeditionStateView(
   };
 }
 
-const SAFE_WAKE_TOKENS = ["safe", "stable", "avoid", "bank", "retreat", "aid", "share"] as const;
+const SAFE_WAKE_TOKENS = ["safe", "stable", "avoid", "bank", "retreat", "aid", "share", "leave", "yield", "offer", "point"] as const;
 
 export function isSafeDungeonWakeOption(optionId: string): boolean {
   return SAFE_WAKE_TOKENS.some((token) => optionId.includes(token));
 }
 
-const MORAL_WAKE_EFFECTS: Record<string, { stoneDelta: number; moralityDelta: number; beat: DungeonBeat }> = {
+const MORAL_WAKE_EFFECTS: Record<string, { stoneDelta: number; moralityDelta: number; realmDelta?: number; beat: DungeonBeat }> = {
   "aid-wounded": {
     stoneDelta: -6,
     moralityDelta: 2,
@@ -347,6 +351,249 @@ const MORAL_WAKE_EFFECTS: Record<string, { stoneDelta: number; moralityDelta: nu
       title: "拿走了袋子",
       detail: "那人伤得站不稳，袋子就挂在腕上。你拿走了。他没有追，只是看着你走进更暗的那一条。灵石还热着。",
       mood: "手里有东西，心里不干净",
+    },
+  },
+  "stable-route": {
+    stoneDelta: 0,
+    moralityDelta: 0,
+    beat: {
+      kind: "mood",
+      title: "走了稳路",
+      detail: "两条岔路里选了灯还亮着的那条。脚步慢，靴底是干的。",
+      mood: "心里定一点",
+    },
+  },
+  "stable-lamp": {
+    stoneDelta: 2,
+    moralityDelta: 0,
+    beat: {
+      kind: "find",
+      title: "沿壁灯走",
+      detail: "你贴着一排没灭的壁灯往前。灯油味很重，路也长，墙根里却摸到两枚还温的灵石。",
+      mood: "慢，可不是白走",
+    },
+  },
+  "stable-mark": {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "insight",
+      title: "做了记号",
+      detail: "你在分岔的砖上划了一道，又退回灯下看了看。这条路还在，人不必现在就赌。",
+      mood: "知道回头的地方",
+    },
+  },
+  "volatile-route": {
+    stoneDelta: 18,
+    moralityDelta: 0,
+    realmDelta: 2,
+    beat: {
+      kind: "close-call",
+      title: "抄了短路",
+      detail: "两条路里选了更暗的那条。脚步快了，后背也凉了，袋子里多出一截还烫的残材。",
+      mood: "还想再往里",
+    },
+  },
+  "avoid-elite": {
+    stoneDelta: 0,
+    moralityDelta: 0,
+    beat: {
+      kind: "mood",
+      title: "绕开精英",
+      detail: "前面的脚步声太齐。你灭了灯，贴着墙等那一阵过去，再从旁边的窄缝走。",
+      mood: "人还全乎",
+    },
+  },
+  "aid-flank": {
+    stoneDelta: -2,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "让旁边的人压住",
+      detail: "同路的人肩上已经见血。你把半袋药粉拍给他，自己退到他侧后，等那阵脚步偏过去。",
+      mood: "两个人都还在",
+    },
+  },
+  "share-warning": {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "低声说了一句",
+      detail: "你只对旁边的人说了前面有精英，就一起退了半步。谁也没冲出去。",
+      mood: "话是说了",
+    },
+  },
+  "engage-elite": {
+    stoneDelta: 18,
+    moralityDelta: 0,
+    realmDelta: 2,
+    beat: {
+      kind: "close-call",
+      title: "迎上精英",
+      detail: "你没有绕。那个人比普通巡守站得更稳，交手只有几息，袖口还是裂了，地上留下一枚别人没拿走的灵石。",
+      mood: "手还在抖",
+    },
+  },
+  "bank-progress": {
+    stoneDelta: 0,
+    moralityDelta: 0,
+    beat: {
+      kind: "mood",
+      title: "先把收获收好",
+      detail: "你把已经到手的东西缠进内袋，打了死结。再往里的路还在，这一截先不赌。",
+      mood: "袋子是实的",
+    },
+  },
+  "stable-pocket": {
+    stoneDelta: 4,
+    moralityDelta: 0,
+    beat: {
+      kind: "find",
+      title: "只揣最好的一件",
+      detail: "你把最像样的那一件塞进贴身处，其余的原样放下，然后照着原来的灯继续走。",
+      mood: "拿得少，拿得住",
+    },
+  },
+  "share-cache": {
+    stoneDelta: 2,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "留了一半",
+      detail: "石龛里的东西你拿了一半，另一半用石块压住，留了个能看见的角。后来的人还找得到。",
+      mood: "不是一个人的地宫",
+    },
+  },
+  "push-deeper": {
+    stoneDelta: 18,
+    moralityDelta: 0,
+    realmDelta: 2,
+    beat: {
+      kind: "close-call",
+      title: "又往里走了一段",
+      detail: "收获已经够沉，你还是往更暗的地方走了一段。气短了一点，袋子却又沉了一点。",
+      mood: "还想再往里",
+    },
+  },
+  "leave-relic": {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "insight",
+      title: "把残片留在原处",
+      detail: "壁龛里躺着一块还温的残片。你看清纹路，没有拿。离开时它还在原来的灰里。",
+      mood: "知道它在那儿",
+    },
+  },
+  "offer-relic": {
+    stoneDelta: -2,
+    moralityDelta: 2,
+    beat: {
+      kind: "insight",
+      title: "就地祭了一祭",
+      detail: "你把两枚灵石压在残片旁边，低声说了句路过。残片没亮，心里那点紧倒松了。",
+      mood: "算是打过招呼",
+    },
+  },
+  "bank-relic": {
+    stoneDelta: 4,
+    moralityDelta: 0,
+    beat: {
+      kind: "find",
+      title: "收起残片",
+      detail: "残片不大，贴着掌心还有一点热。你用布裹好，放进不会响的那一层。",
+      mood: "手里多了一件能说的东西",
+    },
+  },
+  "pry-relic": {
+    stoneDelta: 10,
+    moralityDelta: -1,
+    beat: {
+      kind: "close-call",
+      title: "把残片撬开",
+      detail: "你顺着裂缝撬了一下。里面滚出几枚灵石，也溅了点灰在眼睛上。残片本身裂得不能再看纹路。",
+      mood: "拿到了，也弄坏了",
+    },
+  },
+  "aid-fellow": {
+    stoneDelta: -4,
+    moralityDelta: 2,
+    beat: {
+      kind: "person",
+      title: "搭了一把手",
+      detail: "同路的人被石缝夹住了袖口。你蹲下去把石头掀开，又分了几枚灵石让他买水。两个人的路从这里还能一起走一段。",
+      mood: "袖子脏了，人还在",
+    },
+  },
+  "share-pill": {
+    stoneDelta: -2,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "分了一颗丹",
+      detail: "你把疗伤的那颗掰开，只给了半颗。对方含下去，点了下头，没有再要。",
+      mood: "袋子轻了一点",
+    },
+  },
+  "point-path": {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "只指了一条路",
+      detail: "你没有停步，只把灯往安全的那条偏了偏，说了一句墙根能走。人已经过去了。",
+      mood: "话是送到了",
+    },
+  },
+  "take-map": {
+    stoneDelta: 8,
+    moralityDelta: -1,
+    beat: {
+      kind: "close-call",
+      title: "收下了那张草图",
+      detail: "对方把半张路线递过来，想换你手里的水。你把图拿走了，水还在自己袋里。他没有追。",
+      mood: "图是有了",
+    },
+  },
+  "yield-loot": {
+    stoneDelta: 0,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "让了一步",
+      detail: "石台上的袋子同时有两只手。你先松开。对方把东西收进怀里，侧身让出了路。",
+      mood: "路还在",
+    },
+  },
+  "share-split": {
+    stoneDelta: 6,
+    moralityDelta: 0,
+    beat: {
+      kind: "find",
+      title: "对半拆开",
+      detail: "你们把袋子里的灵石在灯下数开，一人一半。谁也没再伸第二次手。",
+      mood: "分得清楚",
+    },
+  },
+  "share-witness": {
+    stoneDelta: 2,
+    moralityDelta: 1,
+    beat: {
+      kind: "person",
+      title: "喊人来看",
+      detail: "你没有先拿，而是把旁边的人叫过来一起看。最后只分到两枚，可三个人都看见了怎么分的。",
+      mood: "有人能作证",
+    },
+  },
+  "seize-loot": {
+    stoneDelta: 12,
+    moralityDelta: -2,
+    beat: {
+      kind: "close-call",
+      title: "先伸了手",
+      detail: "你比对面快了半息，袋子到了自己腕上。对方骂了一句，没有打起来，灯却被他碰灭了。",
+      mood: "手里有东西，身后不静",
     },
   },
 };
@@ -389,10 +636,10 @@ export function settleDungeonWakeNode(
     };
   }
 
-  const moral = MORAL_WAKE_EFFECTS[chosenOptionId] ?? null;
+  const known = MORAL_WAKE_EFFECTS[chosenOptionId] ?? null;
   const risky = !isSafeDungeonWakeOption(chosenOptionId);
-  const beat: DungeonBeat | null = moral
-    ? moral.beat
+  const beat: DungeonBeat | null = known
+    ? known.beat
     : risky
       ? {
           kind: "close-call",
@@ -406,19 +653,21 @@ export function settleDungeonWakeNode(
           detail: "岔路选了更稳的一条。慢，可灯还在。",
           mood: "心里定一点",
         };
-  const reportStone = moral ? moral.stoneDelta : (risky ? 18 : 0);
-  const reportRealm = moral ? 0 : (risky ? 2 : 0);
+  const stoneDelta = known ? known.stoneDelta : 0;
+  const reportStone = known ? known.stoneDelta : (risky ? 18 : 0);
+  const reportRealm = known?.realmDelta ?? (known ? 0 : (risky ? 2 : 0));
 
   return {
     chosenOptionId,
-    stoneDelta: moral?.stoneDelta ?? 0,
-    moralityDelta: moral?.moralityDelta ?? 0,
+    stoneDelta,
+    moralityDelta: known?.moralityDelta ?? 0,
     beat,
     progress: {
       ...progress,
       spiritStoneGain: progress.spiritStoneGain + reportStone,
       realmProgressGain: progress.realmProgressGain + reportRealm,
       beats: [...(progress.beats ?? []), beat].slice(-8),
+      beatsSeen: (progress.beatsSeen ?? (progress.beats?.length ?? 0)) + 1,
       pendingWakeNode: null,
       pendingWakeNodeDeadlineTick: null,
       resolvedWakeNodeCount: progress.resolvedWakeNodeCount + 1,
@@ -433,11 +682,136 @@ export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgr
   return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress)).progress;
 }
 
+type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank";
+
+function finishWake(input: {
+  nodeId: string;
+  sceneKind: DungeonWakeSceneKind;
+  context: string;
+  options: WakeNode["options"];
+  defaultOptionId: string;
+}): WakeNode {
+  return {
+    nodeId: input.nodeId,
+    sceneKind: input.sceneKind,
+    context: input.context,
+    options: input.options,
+    defaultOptionId: input.defaultOptionId,
+    timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
+  };
+}
+
+function moralWake(nodeId: string, posture: DungeonExpeditionPolicy): WakeNode {
+  return finishWake({
+    nodeId,
+    sceneKind: "moral",
+    context: "岔路里有个被阵纹擦伤的人，水囊和袋子都在。扶他、分水，或者拿走袋子。",
+    options: [
+      { optionId: "aid-wounded", label: "扶起伤者", description: "留下水囊和几枚灵石，看他往外走。" },
+      { optionId: "share-water", label: "分一口水", description: "把水囊递过去，喝完再还回来。" },
+      { optionId: "take-pouch", label: "拿走袋子", description: "袋子还热着。人伤得追不上。" },
+    ],
+    defaultOptionId: posture === "aggressive" ? "take-pouch" : posture === "balanced" ? "share-water" : "aid-wounded",
+  });
+}
+
+function forkWake(nodeId: string, posture: DungeonExpeditionPolicy): WakeNode {
+  return finishWake({
+    nodeId,
+    sceneKind: "fork",
+    context: "前面岔成几条。一条灯还亮着，一条贴着壁灯，一条可以先做记号退回来，还有一条又黑又短。",
+    options: [
+      { optionId: "stable-route", label: "走亮着灯的路", description: "慢一点，靴底是干的。" },
+      { optionId: "stable-lamp", label: "沿壁灯走", description: "路长，墙根里偶尔有漏下的灵石。" },
+      { optionId: "stable-mark", label: "做个记号再看", description: "先在砖上划一道，人不必现在就赌。" },
+      { optionId: "volatile-route", label: "抄那条短路", description: "暗，快，袋子里可能多一件烫手的东西。" },
+    ],
+    defaultOptionId: posture === "aggressive" ? "volatile-route" : posture === "balanced" ? "stable-lamp" : "stable-route",
+  });
+}
+
+function relicWake(nodeId: string, posture: DungeonExpeditionPolicy): WakeNode {
+  return finishWake({
+    nodeId,
+    sceneKind: "relic",
+    context: "壁龛里躺着一块还温的残片，灰没盖严。可以留下、祭一祭、裹起来带走，或者顺着裂缝撬开。",
+    options: [
+      { optionId: "leave-relic", label: "留在原处", description: "看清纹路就走，残片还在灰里。" },
+      { optionId: "offer-relic", label: "就地祭一祭", description: "压上两枚灵石，低声打个招呼。" },
+      { optionId: "bank-relic", label: "收进袋子", description: "用布裹好，放进不会响的那一层。" },
+      { optionId: "pry-relic", label: "撬开看看", description: "裂缝里可能有灵石，纹路也就没了。" },
+    ],
+    defaultOptionId: posture === "aggressive" ? "pry-relic" : posture === "balanced" ? "bank-relic" : "leave-relic",
+  });
+}
+
+function fellowWake(nodeId: string, posture: DungeonExpeditionPolicy, sectName: string | null): WakeNode {
+  const who = sectName ? `${sectName}的人` : "一个同路的修士";
+  return finishWake({
+    nodeId,
+    sceneKind: "fellow",
+    context: `岔路里遇见${who}，袖口被石缝夹住了，手里还攥着半张草图。你可以搭把手、分半颗丹、只指一条路，或者把图拿走。`,
+    options: [
+      { optionId: "aid-fellow", label: "搭一把手", description: "把石头掀开，再分几枚灵石让他买水。" },
+      { optionId: "share-pill", label: "分半颗丹", description: "疗伤的那颗掰开，只给一半。" },
+      { optionId: "point-path", label: "只指一条路", description: "灯往安全的那边偏一偏，人不必停。" },
+      { optionId: "take-map", label: "拿走草图", description: "图到手，水还在自己袋里。" },
+    ],
+    defaultOptionId: posture === "aggressive" ? "take-map" : posture === "balanced" ? "point-path" : "aid-fellow",
+  });
+}
+
+function lootWake(nodeId: string, posture: DungeonExpeditionPolicy): WakeNode {
+  return finishWake({
+    nodeId,
+    sceneKind: "loot",
+    context: "石台上一只袋子，你和对面的人同时看见了。可以让开、对半拆、喊旁边的人来看，或者先伸手。",
+    options: [
+      { optionId: "yield-loot", label: "让一步", description: "先松开。对方收进怀里，侧身让路。" },
+      { optionId: "share-split", label: "对半拆开", description: "灯下把灵石数开，一人一半。" },
+      { optionId: "share-witness", label: "喊人来看", description: "先不拿，叫旁边的人一起看怎么分。" },
+      { optionId: "seize-loot", label: "先伸手", description: "比对面快半息。灯可能被碰灭。" },
+    ],
+    defaultOptionId: posture === "aggressive" ? "seize-loot" : posture === "balanced" ? "share-split" : "yield-loot",
+  });
+}
+
+function eliteWake(nodeId: string, posture: DungeonExpeditionPolicy): WakeNode {
+  return finishWake({
+    nodeId,
+    sceneKind: "elite",
+    context: "前面的脚步声太齐，不像普通巡守。可以绕开、让旁边的人压住、低声提醒一声，或者直接迎上去。",
+    options: [
+      { optionId: "avoid-elite", label: "绕开", description: "灭灯，贴墙，等那一阵过去。" },
+      { optionId: "aid-flank", label: "让旁边的人压住", description: "把半袋药粉拍给同路的人，自己退到侧后。" },
+      { optionId: "share-warning", label: "低声说一句", description: "只告诉旁边的人前面有精英，一起退半步。" },
+      { optionId: "engage-elite", label: "迎上去", description: "不绕。袖口可能裂，地上也许留下一枚灵石。" },
+    ],
+    defaultOptionId: posture === "conservative" ? "avoid-elite" : posture === "balanced" ? "aid-flank" : "engage-elite",
+  });
+}
+
+function bankWake(nodeId: string, posture: DungeonExpeditionPolicy): WakeNode {
+  return finishWake({
+    nodeId,
+    sceneKind: "bank",
+    context: "这一截已经有收获，人也不如进来时稳。可以把东西收死、只揣最好的一件、留一半给后来的人，或者再往暗处走一段。",
+    options: [
+      { optionId: "bank-progress", label: "先收好", description: "缠进内袋，打上死结，这一截不赌。" },
+      { optionId: "stable-pocket", label: "只揣最好的一件", description: "像样的塞进贴身处，其余放下。" },
+      { optionId: "share-cache", label: "留一半", description: "拿一半，另一半用石块压住，留个能看见的角。" },
+      { optionId: "push-deeper", label: "再往里走一段", description: "袋子会更沉，气也会更短。" },
+    ],
+    defaultOptionId: posture === "conservative" ? "bank-progress" : posture === "balanced" ? "stable-pocket" : "push-deeper",
+  });
+}
+
 export function maybeCreateDungeonWakeNode(input: {
   progress: DungeonExpeditionProgress;
   cultivator: Cultivator;
   actionKind: "search" | "guardian";
   worldTick: number;
+  sectName?: string | null;
 }): WakeNode | null {
   const { progress, cultivator, actionKind } = input;
   if (progress.wakeNodesEncountered >= progress.maxWakeNodes || progress.pendingWakeNode) {
@@ -445,102 +819,38 @@ export function maybeCreateDungeonWakeNode(input: {
   }
 
   const nodeId = `dungeon-wake-${progress.jobId}-${progress.stepIndex}-${progress.wakeNodesEncountered + 1}`;
-  if (progress.stepIndex === 3) {
-    const posture = progress.strategy.posture;
-    return {
-      nodeId,
-      context: "岔路里有个被阵纹擦伤的人，水囊和袋子都在。扶他、分水，或者拿走袋子。",
-      options: [
-        {
-          optionId: "aid-wounded",
-          label: "扶起伤者",
-          description: "留下水囊和几枚灵石，看他往外走。",
-        },
-        {
-          optionId: "share-water",
-          label: "分一口水",
-          description: "把水囊递过去，喝完再还回来。",
-        },
-        {
-          optionId: "take-pouch",
-          label: "拿走袋子",
-          description: "袋子还热着。人伤得追不上。",
-        },
-      ],
-      defaultOptionId: posture === "aggressive" ? "take-pouch" : posture === "balanced" ? "share-water" : "aid-wounded",
-      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
-    };
+  const used = new Set(progress.usedWakeScenes ?? []);
+  const posture = progress.policy;
+  if (progress.stepIndex === 3 && !used.has("moral")) {
+    return moralWake(nodeId, posture);
   }
-  if (DUNGEON_ROUTE_SPLIT_STEPS.has(progress.stepIndex)) {
-    return {
-      nodeId,
-      context: "A route split appears: one stable corridor, one volatile shortcut.",
-      options: [
-        {
-          optionId: "stable-route",
-          label: "Stable Route",
-          description: "Maintain lower risk and slower progress.",
-        },
-        {
-          optionId: "volatile-route",
-          label: "Take Shortcut",
-          description: "Accept higher pressure for stronger rewards.",
-        },
-      ],
-      defaultOptionId: progress.strategy.posture === "aggressive" ? "volatile-route" : "stable-route",
-      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
-    };
+  if (!DUNGEON_ROUTE_SPLIT_STEPS.has(progress.stepIndex)) {
+    return null;
   }
 
   const qiRatio = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
   const spiritualRatio = cultivator.maxSpiritualPower > 0
     ? cultivator.spiritualPower / cultivator.maxSpiritualPower
     : 0;
-  if (actionKind === "guardian" && (qiRatio < 0.55 || spiritualRatio < 0.55 || cultivator.injuryTicksRemaining > 0)) {
-    return {
-      nodeId,
-      context: "An elite encounter is tracking your expedition path.",
-      options: [
-        {
-          optionId: "engage-elite",
-          label: "Engage Elite",
-          description: "Attempt a harder fight for progression rewards.",
-        },
-        {
-          optionId: "avoid-elite",
-          label: "Avoid Elite",
-          description: "Preserve safety and continue with regular clears.",
-        },
-      ],
-      defaultOptionId: progress.strategy.posture === "conservative" ? "avoid-elite" : "engage-elite",
-      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
-    };
-  }
-
+  const elite = actionKind === "guardian" && (qiRatio < 0.55 || spiritualRatio < 0.55 || cultivator.injuryTicksRemaining > 0);
   const rewardsSignificant = progress.spiritStoneGain >= 180 || progress.primaryMaterialCount >= 4;
   const pressureHigh = qiRatio < 0.5 || spiritualRatio < 0.5 || cultivator.injuryTicksRemaining >= 3;
-  if (rewardsSignificant && pressureHigh) {
-    return {
-      nodeId,
-      context: "Current gains can be banked now or pushed one more segment.",
-      options: [
-        {
-          optionId: "bank-progress",
-          label: "Bank Progress",
-          description: "Lock current gains and reduce pressure growth.",
-        },
-        {
-          optionId: "push-deeper",
-          label: "Push Deeper",
-          description: "Continue deeper for a stronger step payout.",
-        },
-      ],
-      defaultOptionId: progress.strategy.posture === "conservative" ? "bank-progress" : "push-deeper",
-      timeoutTicks: DUNGEON_WAKE_TIMEOUT_TICKS,
-    };
-  }
-
-  return null;
+  const candidates: DungeonWakeSceneKind[] = ["fork", "relic", "fellow", "loot"];
+  if (elite) candidates.push("elite");
+  if (rewardsSignificant && pressureHigh) candidates.push("bank");
+  const open = candidates.filter((kind) => !used.has(kind));
+  if (open.length === 0) return null;
+  let roll = hashString(`${progress.jobId}:${progress.stepIndex}:${nodeId}:${input.worldTick}:scene`);
+  roll = Math.imul(roll ^ (roll >>> 16), 0x7feb352d);
+  roll = Math.imul(roll ^ (roll >>> 15), 0x846ca68b);
+  roll = (roll ^ (roll >>> 16)) >>> 0;
+  const kind = open[roll % open.length]!;
+  if (kind === "fork") return forkWake(nodeId, posture);
+  if (kind === "relic") return relicWake(nodeId, posture);
+  if (kind === "fellow") return fellowWake(nodeId, posture, input.sectName ?? null);
+  if (kind === "loot") return lootWake(nodeId, posture);
+  if (kind === "elite") return eliteWake(nodeId, posture);
+  return bankWake(nodeId, posture);
 }
 
 export function chooseDungeonExpeditionStepKind(input: {
@@ -978,6 +1288,108 @@ export function expeditionPressureFor(input: {
   };
 }
 
+export function sightingGapFor(seed: string): 2 | 3 | 4 {
+  return (2 + (hashString(`${seed}:sighting`) % 3)) as 2 | 3 | 4;
+}
+
+function closedSentence(text: string): string {
+  const trimmed = text.trim().replace(/。+$/u, "");
+  return trimmed.length > 0 ? `${trimmed}。` : "";
+}
+
+export function composeDungeonSighting(beats: readonly DungeonBeat[], place: string): DungeonBeat {
+  const recent = beats.slice(-4);
+  const last = recent[recent.length - 1];
+  const parts = recent.map((beat) => closedSentence(beat.detail)).filter((part) => part.length > 0);
+  const body = parts.length > 0 ? parts.join("") : "这一段没有留下能拿回去说的事。";
+  return {
+    kind: last?.kind ?? "mood",
+    title: "这一段见闻",
+    detail: `${place}这一段的见闻：${body}`,
+    mood: last?.mood ?? "值得回去说",
+  };
+}
+
+export function appendDungeonBeats(
+  progress: DungeonExpeditionProgress,
+  added: readonly DungeonBeat[],
+  seed: string,
+  place: string,
+): { progress: DungeonExpeditionProgress; sighting: DungeonBeat | null } {
+  if (added.length === 0) {
+    return { progress, sighting: null };
+  }
+  const beats = [...(progress.beats ?? []), ...added].slice(-8);
+  const seen = (progress.beatsSeen ?? 0) + added.length;
+  const told = progress.beatsTold ?? 0;
+  const gap = progress.nextSightingGap ?? sightingGapFor(seed);
+  const untold = seen - told;
+  if (untold < gap) {
+    return {
+      progress: { ...progress, beats, beatsSeen: seen, beatsTold: told, nextSightingGap: gap },
+      sighting: null,
+    };
+  }
+  const slice = beats.slice(-Math.min(untold, beats.length));
+  return {
+    sighting: composeDungeonSighting(slice, place),
+    progress: {
+      ...progress,
+      beats,
+      beatsSeen: seen,
+      beatsTold: seen,
+      nextSightingGap: sightingGapFor(`${seed}:${seen}`),
+    },
+  };
+}
+
+export function flushDungeonSighting(
+  progress: DungeonExpeditionProgress,
+  place: string,
+): { progress: DungeonExpeditionProgress; sighting: DungeonBeat | null } {
+  const beats = progress.beats ?? [];
+  const seen = progress.beatsSeen ?? beats.length;
+  const told = progress.beatsTold ?? 0;
+  const untold = seen - told;
+  if (untold <= 0 || beats.length === 0) {
+    return { progress: { ...progress, beatsSeen: seen, beatsTold: told }, sighting: null };
+  }
+  return {
+    sighting: composeDungeonSighting(beats.slice(-Math.min(untold, beats.length)), place),
+    progress: { ...progress, beatsSeen: seen, beatsTold: seen },
+  };
+}
+
+const CARRIED_FLAVOR = ["掌心一点还温的壁灰", "半片刮下来的阵纹", "一截没人认领的灯芯", "袖里沾上的灵砂"] as const;
+
+export function carriedClause(input: {
+  stones: number;
+  items: readonly { name: string; count: number }[];
+  seed: string;
+}): string {
+  const bits: string[] = [];
+  for (const item of input.items.slice(0, 2)) {
+    if (!item.name || item.count <= 0) continue;
+    bits.push(item.count > 1 ? `${item.count}份${item.name}` : item.name);
+  }
+  if (input.stones > 0) bits.push(`${input.stones}枚灵石`);
+  if (bits.length === 0) {
+    bits.push(CARRIED_FLAVOR[hashString(`${input.seed}:carried`) % CARRIED_FLAVOR.length]!);
+  }
+  return `带出何物：${bits.join("，")}。`;
+}
+
+export function withCarriedLine(beats: readonly string[], carried: string): string[] {
+  if (!carried) return [...beats];
+  if (beats.length === 0) return [carried];
+  const next = [...beats];
+  const last = next[next.length - 1] ?? "";
+  if (last.includes(carried) || last.includes("带出何物")) return next;
+  const trimmed = last.replace(/。+$/u, "");
+  next[next.length - 1] = `${trimmed}。${carried}`;
+  return next;
+}
+
 export function createDungeonExpeditionReport(input: {
   progress: DungeonExpeditionProgress;
   outcome: DungeonExpeditionReport["outcome"];
@@ -992,6 +1404,7 @@ export function createDungeonExpeditionReport(input: {
     `气血耗去 ${input.progress.qiSpent ?? 0}，灵力耗去 ${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石 ${input.progress.stonesLost}。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
+    input.progress.carriedLine ?? null,
     fightLine(input.progress),
     `人已回到 ${input.returnLocationId}。`,
     `(${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy})`,

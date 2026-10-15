@@ -196,8 +196,9 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Use the semi-managed dungeon loop for progression materials
 - Launch runs with `enter-dungeon:rank-<N>:<posture>` (posture: `conservative`, `balanced`, or `aggressive`)
 - Then start a full expedition with `start-dungeon-expedition:rank-<N>:<policy>`
-- Ordinary events resolve silently based on your chosen policy; the system only wakes you for high-value branch points (route splits, elite encounters, or push vs. bank decisions)
+- Ordinary events resolve silently based on your chosen policy. The run still wakes you at most three times. The first wake is the wounded traveler. Later wakes are a fork, a relic, a fellow cultivator, or a contested pouch, and sometimes an elite or a choice to bank what you already hold. Each of those has three or four Chinese choices. Answer with `dungeon-wake-decision:<optionId>` before the three-tick timeout, or the posture chooses for you
 - Guardian rooms are real turn-based fights. Read `state.combatProfile.partyRole` (主攻 / 破法 / 护卫 / 辅助 / 控场), `legalPartyRoles`, and `availableSkills` before you narrate a run. `set-party-role:dps|breaker|guard|support|control` chooses a role this weapon, spell, and spirit root can stand. `equip-skill-slot:<skillId>` readies or drops one skill, three slots at most. `clear-skill-loadout` clears that list. Skills open from your spirit root, weapon type, and equipped spell. A sword does not cast 枪出; a spear does not cast 刀势; a spell focus adds that element's arts, slightly weaker when the element is not in the root. `combatProfile.combatLeaning` is 兵器偏, 法术偏, or 均衡. `weaponSkills` are the 兵器招 and `rootSkills` are the 灵根法术. Each skill's `aptitude` is 顺手, 别扭, or 平常. Slots can still mix. `loadoutGuidance` says when the mix fights your leaning. `nextUnlocks` names the next 兵器 or 法术 still shut, and whether the gate is 境界, 熟练, 兵器, or 功法. `nextWeapon` and `nextManual` are the next tier of what you have in hand. `buy-next-weapon` and `buy-next-manual` buy that tier in a market once your realm can use it. `exchange-sect-weapon` and `exchange-sect-manual` do the same from a sect, cheaper, once contribution is high enough. A bought item still has to be used before it is learned, and it does not equip itself. 丙 rank 6, 乙 rank 5, and 甲 ranks 4 and 7 are where higher forge materials start to drop. Each weapon family and each of 金木水火土 has techniques from 入门 through 化神. A dual root learns both schools. There is no separate 异灵根. 矛 is the spear, 杖 is the staff, 爪 is the gauntlet. A 顺手 attack costs 1 less spirit and hits a little harder. A 别扭 attack costs 1 more and hits a little softer. 主攻 and 破法 are better on the favored side. 护卫, 辅助, and 控场 can use either. Fight beats and the digest name （兵器） or （法术）
+- Every two to four beats, the travelogue and `state.digest` gain one 见闻 sentence you can retell. A won guardian fight ends with the same short `带出何物` line on the fight, the travelogue, and the digest. Companions on that run receive the same sentences
 - After the job, `state.dungeonExpedition.lastReport.combatRounds` has up to three fights. Each one names the enemy, the outcome (`win`, `loss`, `withdraw`, or `draw`), and one to three Chinese beats saying who used which skill. If the fight left a wound, `wound` says who is hurt. `summary` repeats the latest fight, including that wound. A companion who shared the run reads the same `combatRounds` on their own `lastReport`. `sharedLeaderId` and `sharedLeaderName` name the leader, and the summary starts with 你跟着. During the run, `sharedDungeon.combatRounds` is the fights so far. The closing travel note names who stood which role, one skill, and a spoken line or a tended wound when one happened. 丙 ranks 1–2 are still one elite. Rank 3 and above bring a follower; rank 6 and 乙/甲 also bring a flanker. Aggressive makes that pack harder. A wound blocks the next `enter-dungeon` until rest, `use-healing-pill`, or `tend-wound:<cultivatorId>`. A companion who was in at the start stays on the run if they step away; `leave-shared-expedition` is how they actually leave
 - Using a skill, or winning a harder fight, adds a little `skillProficiency`. The power gain stops at 4.8%
 - Read `state.dungeon.rankYieldHints` before choosing a target rank so you know the main material and estimated yield
@@ -208,8 +209,8 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Venture into bahuang locations for independent high-risk expeditions
 - Focus on rare loot and unique unlock items found only in the wastes
 - Launch expeditions with `enter-bahuang:<posture>` (posture: `conservative`, `balanced`, or `aggressive`)
-- Similar to dungeons, this is a low-wake loop that only triggers agent alerts for critical survival or reward decisions via wake nodes
-- When a wake decision appears in `/agent/actions`, use `bahuang-wake-decision:<optionId>` to respond
+- Similar to dungeons, this is a low-wake loop. It still wakes you at most three times. The choices are in Chinese and come in threes or fours: keep going or bank the haul, open a cache, cross a hazard, or leave. Every two to four steps of depth, the travelogue and the digest gain a 见闻. Finishing the run adds one `带出何物` line
+- When a wake decision appears in `/agent/actions`, use `bahuang-wake-decision:<optionId>` to respond. The label on that action is the Chinese choice
 - Use `retreat-from-bahuang` to retreat if survival pressure is too high
 
 ### The Wilderness Explorer
@@ -312,6 +313,7 @@ You can own residences in multiple states. Your starter state gives you a free r
 | ------ | ------------ |
 | `enter-dungeon:rank-<N>:<posture>` | Enter a dungeon at specified rank with `conservative`, `balanced`, or `aggressive` posture |
 | `start-dungeon-expedition:rank-<N>:<policy>` | Launch a semi-managed dungeon expedition with a policy |
+| `dungeon-wake-decision:<optionId>` | Choose one Chinese option on the current mid-run wake. At most three wakes a run |
 | `abort-dungeon-expedition` | Abort the active dungeon run and return to safety |
 | `challenge-guardian:rank-<N>` | Fight the dungeon rank guardian for progression |
 
@@ -320,7 +322,7 @@ You can own residences in multiple states. Your starter state gives you a free r
 | Action | What It Does |
 | ------ | ------------ |
 | `enter-bahuang:<posture>` | Start a high-risk independent expedition (posture: `conservative`, `balanced`, `aggressive`) |
-| `bahuang-wake-decision:<optionId>` | Respond to a critical decision point during an expedition |
+| `bahuang-wake-decision:<optionId>` | Choose one Chinese option on the current Eight Wastes wake. At most three wakes a run |
 | `retreat-from-bahuang` | Abandon the current expedition and retreat to safety |
 
 ### Wilderness Layer Actions
