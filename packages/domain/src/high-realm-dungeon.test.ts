@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { listResolvedSkills, type SkillContext } from "./combat-skills.js";
-import { STATUS_BURNING, STATUS_ILLUSION_BLUR, STATUS_SUPPRESSION } from "./combat-statuses.js";
+import { STATUS_BURNING, STATUS_ENTANGLE, STATUS_FROSTBITE, STATUS_ILLUSION_BLUR, STATUS_ROOTED, STATUS_SPELL_BREAK, STATUS_SUPPRESSION } from "./combat-statuses.js";
 import {
   advanceWorld,
   createSeedWorld,
@@ -15,6 +15,7 @@ import {
   jiaGuardianSpellId,
   jiaInjuryFloor,
 } from "./high-realm-dungeon.js";
+import { lightFailCost } from "./yi-mystery.js";
 import type { DungeonExpeditionPolicy, DungeonGrade, PartyRoleId } from "./model.js";
 import {
   buildGuardianPack,
@@ -130,17 +131,97 @@ test("丙级一层仍是单人练手，乙级一层不吃甲级倍率", () => {
   const yi = pack(1, "balanced", "乙");
   assert.equal(yi.length, 3);
   assert.equal(yi[0]?.hp, unbandedEliteHp("乙", 1));
-  assert.equal(yi[0]?.threat, undefined);
+  assert.equal(yi[0]?.threat?.statusId, STATUS_SPELL_BREAK);
+  assert.equal(yi[0]?.threat?.extraSpiritDrain, 0);
   assert.equal(jiaDirectEncounterScale("丙", 1), 1);
   assert.equal(jiaDirectEncounterScale("乙", 6), 1);
   assert.equal(jiaGuardianSpellId("丙", 1), null);
+  assert.equal(jiaGuardianSpellId("乙", 6), null);
   assert.equal(woundTicksForGuardian({
     rank: 1, grade: "丙", policy: "balanced", outcome: "loss", leaderHpLostRatio: 1, pressureInjury: 0,
   }), 4);
   assert.equal(companionWoundTicks({ rank: 1, grade: "丙", outcome: "loss", qiLoss: 8 }), 4);
   assert.equal(jiaBandFailCost("丙", 1, "loss"), null);
+  assert.equal(jiaBandFailCost("乙", 9, "loss"), null);
   assert.match(dungeonAdvice("丙", 1), /练手/);
-  assert.match(dungeonAdvice("乙", 3), /练手/);
+  assert.match(dungeonAdvice("乙", 3), /雷泽残阵/);
+});
+
+test("乙级三处从者和状态不同，血量仍按原公式", () => {
+  const lei = pack(2, "balanced", "乙");
+  assert.equal(lei[0]?.hp, unbandedEliteHp("乙", 2));
+  assert.match(lei.map((body) => body.name).join(""), /阵脚/);
+  assert.match(lei.map((body) => body.name).join(""), /残雷/);
+  assert.equal(lei[0]?.threat?.statusId, STATUS_SPELL_BREAK);
+  assert.equal(lei[0]?.threat?.tier, 2);
+  assert.equal(lei[1]?.threat?.selfStatusId, undefined);
+
+  const marsh = pack(5, "balanced", "乙");
+  assert.equal(marsh[0]?.hp, unbandedEliteHp("乙", 5));
+  assert.match(marsh.map((body) => body.name).join(""), /沼影/);
+  assert.match(marsh.map((body) => body.name).join(""), /雾丝/);
+  assert.equal(marsh[0]?.threat?.statusId, STATUS_ENTANGLE);
+
+  const coffin = pack(8, "balanced", "乙");
+  assert.equal(coffin[0]?.hp, unbandedEliteHp("乙", 8));
+  assert.match(coffin.map((body) => body.name).join(""), /棺侍/);
+  assert.match(coffin.map((body) => body.name).join(""), /铜卫/);
+  assert.equal(coffin[0]?.threat?.statusId, STATUS_FROSTBITE);
+
+  const lateBing = pack(8, "balanced", "丙");
+  assert.equal(lateBing.length, 3);
+  assert.equal(lateBing[0]?.hp, unbandedEliteHp("丙", 8));
+  assert.match(lateBing.map((body) => body.name).join(""), /灯奴/);
+  assert.match(lateBing.map((body) => body.name).join(""), /石卒/);
+  assert.equal(lateBing[0]?.threat?.statusId, STATUS_ROOTED);
+
+  const midBing = pack(6, "balanced", "丙");
+  assert.match(midBing.map((body) => body.name).join(""), /从者/);
+  assert.equal(midBing[0]?.threat, undefined);
+  const earlyBingPack = pack(3, "balanced", "丙");
+  assert.equal(earlyBingPack.length, 2);
+  assert.match(earlyBingPack.map((body) => body.name).join(""), /从者/);
+  assert.equal(earlyBingPack.some((body) => body.name.includes("侧翼")), false);
+
+  const lost = lightFailCost("乙", 2, "loss");
+  const marshLost = lightFailCost("乙", 5, "loss");
+  const fled = lightFailCost("乙", 8, "withdraw");
+  const jiaLost = jiaBandFailCost("甲", 1, "loss");
+  assert.ok(lost && marshLost && fled && jiaLost);
+  assert.match(lost.sentence, /雷泽残阵/);
+  assert.match(marshLost.sentence, /沉雾沼/);
+  assert.match(fled.sentence, /铜棺/);
+  assert.ok(lost.stoneLoss > 0 && lost.stoneLoss < jiaLost.stoneLoss);
+  assert.ok(fled.stoneLoss > 0 && fled.stoneLoss < (lightFailCost("乙", 8, "loss")?.stoneLoss ?? 0));
+  assert.equal(lost.injuryTicks, 0);
+  assert.equal(lost.deviationTicks, 0);
+  assert.equal(lost.spiritLoss, 0);
+  assert.equal(lightFailCost("丙", 1, "loss"), null);
+  assert.equal(lightFailCost("丙", 6, "loss"), null);
+  assert.equal(lightFailCost("丙", 8, "loss")?.stoneLoss, 0);
+  assert.match(lightFailCost("丙", 8, "loss")?.sentence ?? "", /旧驿石廊/);
+  assert.equal(jiaInjuryFloor("乙", 9, "loss"), 0);
+  assert.match(dungeonAdvice("丙", 8, "qingzhou"), /旧驿石廊/);
+  assert.match(dungeonAdvice("丙", 8, "qingzhou"), /青州/);
+  assert.match(dungeonAdvice("丙", 8, "leizhou"), /雷州/);
+  assert.equal(dungeonAdvice("丙", 8, "leizhou").includes("青州"), false);
+
+  const weak = fighter("dps", 0, 40, 12, 2);
+  weak.dodge = 0;
+  let seenStatus = false;
+  for (let seed = 0; seed < 6 && !seenStatus; seed += 1) {
+    const result = runPartyBattle({
+      allies: [weak],
+      enemies: pack(1, "balanced", "乙"),
+      policy: "balanced",
+      seed: `lei-hang:${seed}`,
+      maxRounds: 4,
+      leaderId: weak.id,
+    });
+    const text = result.summary.beats.join("");
+    if (text.includes("断法") && text.includes("阵脚")) seenStatus = true;
+  }
+  assert.equal(seenStatus, true);
 });
 
 test("甲级三层秘境的守关按层数变重，威胁也不一样", () => {
@@ -290,6 +371,8 @@ test("地宫提醒和境界路线用完整的中文写出这一层的危险", ()
   assert.match(training.dungeon?.advice ?? "", /练手/);
   assert.equal((training.realmPath.where + training.realmPath.goals.join("")).includes("神纹天隙"), false);
   assert.equal((training.realmPath.where + (training.realmPath.resources ?? []).join("")).includes("丹霞露"), false);
+  assert.match(training.realmPath.where, /旧驿石廊/);
+  assert.equal(training.realmPath.where.includes("雷泽残阵"), false);
 
   cultivator.realm = "金丹";
   cultivator.realmLevel = 9;
@@ -354,4 +437,91 @@ test("丹霞内府的守关改用法术，不再被兵器功法盖住", () => {
   const log = world.combatLogs[0];
   assert.equal(log?.enemySnapshot?.spellLoadoutId, "fire-blaze-tier-2");
   assert.equal(log?.enemySnapshot?.weaponLoadoutId, null);
+});
+
+test("筑基在乙级读到三处名字，炼气后期读到旧驿石廊，甲级掉落门不变", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 4;
+  cultivator.locationId = "qingzhou:dungeon-b";
+  cultivator.dungeonProgress = {
+    丙: { highestClearedRank: 9 },
+    乙: { highestClearedRank: 9 },
+    甲: { highestClearedRank: 0 },
+  };
+  const early = getCultivatorState(world, cultivator.id);
+  assert.match(early.dungeon?.advice ?? "", /雷泽残阵/);
+  assert.match(early.dungeon?.advice ?? "", /断法/);
+  const hint1 = early.dungeon?.rankYieldHints.find((hint) => hint.rank === 1);
+  const hint4 = early.dungeon?.rankYieldHints.find((hint) => hint.rank === 4);
+  const hint7 = early.dungeon?.rankYieldHints.find((hint) => hint.rank === 7);
+  assert.equal(hint1?.mysteryName, "雷泽残阵");
+  assert.match(hint1?.mysteryLine ?? "", /阵脚/);
+  assert.equal(hint1?.relicLine, undefined);
+  assert.equal(hint1?.notableSecondaryDrops.includes("core-nourish-dew"), false);
+  assert.equal(hint4?.mysteryName, "沉雾沼");
+  assert.match(hint4?.mysteryLine ?? "", /缠绕/);
+  assert.equal(hint7?.mysteryName, "铜棺窟");
+  assert.match(hint7?.mysteryLine ?? "", /霜寒/);
+  assert.match(early.realmPath.where, /雷泽残阵/);
+  assert.equal(early.realmPath.where.includes("丹霞内府"), false);
+
+  cultivator.realmLevel = 5;
+  const mid = getCultivatorState(world, cultivator.id);
+  assert.match(mid.realmPath.where, /沉雾沼/);
+  assert.match(mid.dungeon?.advice ?? "", /沉雾沼/);
+
+  cultivator.realmLevel = 6;
+  const lateFoundation = getCultivatorState(world, cultivator.id);
+  assert.match(lateFoundation.realmPath.where, /铜棺窟/);
+  assert.match(lateFoundation.dungeon?.advice ?? "", /霜寒/);
+
+  cultivator.realm = "炼气";
+  cultivator.realmLevel = 3;
+  cultivator.locationId = "qingzhou:dungeon-c";
+  const bing = getCultivatorState(world, cultivator.id);
+  assert.match(bing.dungeon?.advice ?? "", /旧驿石廊/);
+  assert.match(bing.dungeon?.advice ?? "", /练手/);
+  assert.match(bing.dungeon?.advice ?? "", /青州/);
+  assert.match(bing.realmPath.where, /旧驿石廊/);
+  const bing7 = bing.dungeon?.rankYieldHints.find((hint) => hint.rank === 7);
+  const bing1 = bing.dungeon?.rankYieldHints.find((hint) => hint.rank === 1);
+  assert.equal(bing7?.mysteryName, "旧驿石廊");
+  assert.match(bing7?.mysteryLine ?? "", /青州/);
+  assert.equal(bing7?.relicLine, undefined);
+  assert.equal(bing1?.mysteryName, undefined);
+
+  cultivator.locationId = "leizhou:dungeon-c";
+  const leiGate = getCultivatorState(world, cultivator.id);
+  const leiHint = leiGate.dungeon?.rankYieldHints.find((hint) => hint.rank === 7);
+  assert.equal(leiHint?.mysteryName, "旧驿石廊");
+  assert.match(leiHint?.mysteryLine ?? "", /雷州/);
+  assert.equal((leiHint?.mysteryLine ?? "").includes("青州"), false);
+  assert.deepEqual(leiHint?.notableSecondaryDrops, bing7?.notableSecondaryDrops);
+
+  cultivator.realmLevel = 1;
+  cultivator.locationId = "qingzhou:dungeon-c";
+  const novice = getCultivatorState(world, cultivator.id);
+  assert.equal(novice.realmPath.where.includes("旧驿石廊"), false);
+  assert.equal(novice.realmPath.where.includes("雷泽残阵"), false);
+  assert.match(novice.dungeon?.advice ?? "", /练手/);
+  assert.equal(novice.dungeon?.advice?.includes("旧驿石廊"), false);
+
+  cultivator.realm = "金丹";
+  cultivator.realmLevel = 7;
+  cultivator.locationId = "qingzhou:dungeon-a";
+  cultivator.dungeonProgress = {
+    丙: { highestClearedRank: 9 },
+    乙: { highestClearedRank: 9 },
+    甲: { highestClearedRank: 2 },
+  };
+  const jia = getCultivatorState(world, cultivator.id);
+  const danxia = jia.dungeon?.rankYieldHints.find((hint) => hint.rank === 1);
+  assert.equal(danxia?.mysteryName, "丹霞内府");
+  assert.match(danxia?.mysteryLine ?? "", /焚灼/);
+  assert.match(danxia?.relicLine ?? "", /丹霞残页/);
+  assert.equal(danxia?.notableSecondaryDrops.includes("core-nourish-dew"), true);
+  assert.match(jia.realmPath.where, /丹霞内府/);
+  assert.equal(jia.dungeon?.rankYieldHints.find((hint) => hint.rank === 4), undefined);
 });

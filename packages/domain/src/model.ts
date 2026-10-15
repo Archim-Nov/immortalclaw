@@ -793,7 +793,7 @@ export interface DungeonRankYieldHint {
   primaryMaterial: ItemId;
   estimatedExpeditionYieldByPolicy: Record<DungeonExpeditionPolicy, DungeonYieldEstimate>;
   notableSecondaryDrops: ItemId[];
-  /** Named 秘境 on 甲级. Absent on 丙级 and 乙级. */
+  /** Named place. 甲级 has a mystery, 乙级 has one per band, and 丙级 ranks 7–9 have 旧驿石廊. Earlier 丙级 omits it. */
   mysteryName?: string;
   mysteryLine?: string;
   entryMinLevel?: number;

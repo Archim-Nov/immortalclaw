@@ -183,6 +183,7 @@ import {
   jiaDirectEncounterScale,
   stampJiaGuardianTemplate,
 } from "./high-realm-dungeon.js";
+import { lightFailCost, lightPlaceName } from "./yi-mystery.js";
 import { buildGuardianPack, companionWoundTicks, fightDigestText, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
@@ -3655,7 +3656,7 @@ function settleJiaBandFail(
   rank: number,
   outcome: "loss" | "withdraw",
 ): number {
-  const cost = jiaBandFailCost(grade, rank, outcome);
+  const cost = jiaBandFailCost(grade, rank, outcome) ?? lightFailCost(grade, rank, outcome);
   if (!cost) return 0;
   const stones = Math.min(cultivator.spiritStones, cost.stoneLoss);
   cultivator.spiritStones -= stones;
@@ -4008,8 +4009,8 @@ function dungeonViewForLocation(
     frontierRank,
     recommendedRank: recommendedDungeonRankOf(cultivator, metadata.grade),
     materialBand: metadata.materialBand,
-    rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand, metadata.grade),
-    advice: dungeonAdvice(metadata.grade, recommendedDungeonRankOf(cultivator, metadata.grade)),
+    rankYieldHints: buildDungeonRankYieldHints(availableRanks, metadata.materialBand, metadata.grade, location?.stateId),
+    advice: dungeonAdvice(metadata.grade, recommendedDungeonRankOf(cultivator, metadata.grade), location?.stateId),
     lockReason: dungeonLockReasonOf(cultivator, location!),
   };
 }
@@ -4774,7 +4775,9 @@ function publishJiaRelicChronicle(
 }
 
 function dungeonPlace(progress: DungeonExpeditionProgress): string {
-  return `${progress.grade}级地宫第${progress.targetRank}层`;
+  const base = `${progress.grade}级地宫第${progress.targetRank}层`;
+  const name = lightPlaceName(progress.grade, progress.targetRank);
+  return name ? `${base}·${name}` : base;
 }
 
 function publishExpeditionStory(
@@ -5235,6 +5238,10 @@ function resolveDungeonExpeditionStepIfDue(
       expeditionBattle.outcome,
     );
     const bandCost = jiaBandFailCost(
+      effectiveProgress.grade,
+      effectiveProgress.targetRank,
+      expeditionBattle.outcome,
+    ) ?? lightFailCost(
       effectiveProgress.grade,
       effectiveProgress.targetRank,
       expeditionBattle.outcome,
