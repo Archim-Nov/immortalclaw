@@ -1,5 +1,11 @@
 import { recordWildernessAttunement } from "./guixu-service.js";
 import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
+import {
+  noteWild,
+  pickWildLine,
+  wildPlaceForState,
+  wildSightingGap,
+} from "./wild-places.js";
 import type {
   ActionJob,
   Cultivator,
@@ -161,14 +167,25 @@ export function enterWildernessExpedition(
   };
 
   world.wildernessProgress[cultivator.id] = progress;
+  const entered = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: "Eight Wastes Entry",
-    content: `${cultivator.name} crossed into ${layer.name}.`,
+    title: entered ? `走进${entered.name}` : "Eight Wastes Entry",
+    content: entered
+      ? `${cultivator.name}走进${entered.name}。${entered.advice}`
+      : `${cultivator.name} crossed into ${layer.name}.`,
     severity: "medium",
     tags: ["wilderness", "entry"],
   });
+  if (entered) {
+    noteWild(cultivator, {
+      tick: world.tick,
+      locationId: cultivator.locationId,
+      title: `走进${entered.name}`,
+      detail: entered.advice,
+    });
+  }
 
   return progress;
 }
@@ -202,20 +219,30 @@ export function withdrawFromWilderness(
     cultivator.activeJobId = null;
   }
 
+  const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
   cultivator.locationId = nearestSafeLocationId(world, cultivator.locationId);
   progress.status = "withdrawn";
   delete world.wildernessProgress[cultivator.id];
 
+  const sentence = place?.withdraw ?? `${cultivator.name} retreated from ${layer.name}.`;
+  if (place) {
+    noteWild(cultivator, {
+      tick: world.tick,
+      locationId: cultivator.locationId,
+      title: `从${place.name}退出`,
+      detail: sentence,
+    });
+  }
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: "Wilderness Retreat",
-    content: `${cultivator.name} retreated from ${layer.name} after ${reason}.`,
+    title: place ? `从${place.name}退出` : "Wilderness Retreat",
+    content: sentence,
     severity: "high",
     tags: ["wilderness", "retreat", reason],
   });
 
-  return `${cultivator.name} retreated from ${layer.name}.`;
+  return sentence;
 }
 
 export function applyWildernessPressure(world: WorldState, cultivator: Cultivator): string | null {
@@ -233,6 +260,21 @@ export function applyWildernessPressure(world: WorldState, cultivator: Cultivato
   progress.ticksSurvived += 1;
   progress.remainingSurvivalTicks = Math.max(0, layer.survivalPressure.maxSurvivalTicks - progress.ticksSurvived);
   recordWildernessAttunement(world, cultivator.id, 1);
+  const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+  if (place) {
+    const gap = wildSightingGap(`${cultivator.id}:wild-gap`);
+    const last = progress.lastSightingAt ?? 0;
+    if (progress.ticksSurvived - last >= gap) {
+      progress.lastSightingAt = progress.ticksSurvived;
+      const body = pickWildLine(place.sightings, `${cultivator.id}:${progress.ticksSurvived}:wild-sight`);
+      noteWild(cultivator, {
+        tick: world.tick,
+        locationId: cultivator.locationId,
+        title: "这一段见闻",
+        detail: `${place.name}这一段的见闻：${body}`,
+      });
+    }
+  }
   cultivator.qi = clamp(cultivator.qi - layer.survivalPressure.qiDamagePerTick, 0, cultivator.maxQi);
   cultivator.spiritualPower = clamp(
     cultivator.spiritualPower - layer.survivalPressure.spiritualDamagePerTick,
@@ -304,6 +346,19 @@ export function resolveWildernessSurvey(
     severity: eventDefinition.severity,
     tags: eventDefinition.tags,
   });
+
+  const surveyed = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+  const alreadyTold = cultivator.travelNotes?.[0]?.tick === world.tick
+    && (cultivator.travelNotes[0]?.title.includes("见闻") ?? false);
+  if (surveyed && !alreadyTold) {
+    const body = pickWildLine(surveyed.sightings, `${world.tick}:${cultivator.id}:${job.id}:survey-sight`);
+    noteWild(cultivator, {
+      tick: world.tick,
+      locationId: cultivator.locationId,
+      title: "这一段见闻",
+      detail: `${surveyed.name}这一段的见闻：${body}`,
+    });
+  }
 
   // ---- Loadout source drop (wilderness survey) ----
   if (layer.tier >= 1 && layer.tier <= 3) {

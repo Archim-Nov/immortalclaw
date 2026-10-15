@@ -53,6 +53,7 @@ Recent supporting gameplay specs:
 - `docs/specs/dungeon-midrun-sights-v1/spec.md`
 - `docs/specs/party-expedition-social/spec.md`
 - `docs/specs/jia-relic-chronicle/spec.md`
+- `docs/specs/wild-route-identity/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`

@@ -184,6 +184,14 @@ import {
   stampJiaGuardianTemplate,
 } from "./high-realm-dungeon.js";
 import { lightFailCost, lightPlaceName } from "./yi-mystery.js";
+import {
+  bahuangBandForDepth,
+  huntSentence,
+  noteWild,
+  wildPlaceForState,
+  wildRouteFromBand,
+  wildRouteFromPlace,
+} from "./wild-places.js";
 import { buildGuardianPack, companionWoundTicks, fightDigestText, runPartyBattle, woundTicksForGuardian, type BattleCombatant, type PartyBattleResult } from "./party-battle.js";
 import {
   acceptQuest,
@@ -2671,18 +2679,20 @@ function buildSectApplicationView(world: WorldState, application: SectApplicatio
 }
 
 function buildEnterWildernessAction(
+  world: WorldState,
   cultivator: Cultivator,
   layer: NonNullable<ReturnType<typeof getWildernessLayerForLocation>>,
 ): AvailableAction {
   const gate = canEnterWilderness(cultivator, layer);
+  const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
   const gateText = gate.allowed
     ? `Consumes ${layer.entryRequirement.entryTicket ?? "no ticket"} and grants ${layer.survivalPressure.maxSurvivalTicks} survival ticks.`
     : gate.reason ?? "Cannot enter yet.";
 
   return {
     actionId: `enter-wilderness:${layer.layerId}` as ActionId,
-    label: `Enter ${layer.name}`,
-    description: `${gateText} Pressure ${layer.survivalPressure.qiDamagePerTick}/${layer.survivalPressure.spiritualDamagePerTick} per tick.`,
+    label: wild ? `走进${wild.name}` : `Enter ${layer.name}`,
+    description: wild ? `${wild.advice}${gateText}` : `${gateText} Pressure ${layer.survivalPressure.qiDamagePerTick}/${layer.survivalPressure.spiritualDamagePerTick} per tick.`,
     durationTicks: 0,
     kind: "immediate",
   };
@@ -6872,13 +6882,45 @@ function buildWildernessView(world: WorldState, cultivator: Cultivator): Cultiva
     return null;
   }
 
+  const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+  const route = place ? wildRouteFromPlace(place) : null;
   return {
     layerId: layer.layerId,
-    layerName: layer.name,
+    layerName: route?.placeName ?? layer.name,
     ticksSurvived: progress.ticksSurvived,
     remainingSurvivalTicks: progress.remainingSurvivalTicks,
     status: progress.status,
+    ...(route
+      ? {
+          placeName: route.placeName,
+          advice: route.advice,
+          mysteryLine: route.mysteryLine,
+          statusLabel: route.statusLabel,
+          enemyLabel: route.enemyLabel,
+          followerLabel: route.followerLabel,
+        }
+      : {}),
   };
+}
+
+function buildWildRouteView(world: WorldState, cultivator: Cultivator): CultivatorStateView["wildRoute"] {
+  const bahuang = world.bahuangProgress[cultivator.id];
+  if (bahuang?.status === "active") {
+    return wildRouteFromBand(bahuangBandForDepth(bahuang.depth));
+  }
+  const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] : null;
+  const travelDestination = job ? parseTravelDestination(job.actionId) : null;
+  const destination = travelDestination ? world.locations[travelDestination] : null;
+  if (destination?.nodeType === "wilderness") {
+    const place = wildPlaceForState(destination.stateId);
+    if (place) return wildRouteFromPlace(place);
+  }
+  const here = world.locations[cultivator.locationId];
+  if (here?.nodeType === "wilderness" || getActiveWildernessProgress(world, cultivator.id)) {
+    const place = wildPlaceForState(here?.stateId);
+    if (place) return wildRouteFromPlace(place);
+  }
+  return null;
 }
 
 function reconcileBusyState(world: WorldState): void {
@@ -7608,6 +7650,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
     })(),
     bahuang: buildBahuangStateView(world, cultivator),
     wilderness: buildWildernessView(world, cultivator),
+    wildRoute: buildWildRouteView(world, cultivator),
     guixu: buildGuixuView(world, cultivator),
     derivedState,
     socialLinks: getSocialLinksView(world, cultivatorId),
@@ -7783,6 +7826,15 @@ function travelCardFor(world: WorldState, locationId: string): { label: string; 
       label: `前往${name}（玩家宗门）`,
       description: `${name}是玩家自建的${sectName}，不是中立门派。这里没有 join-neutral-sect。想入门要在据点或本州主城报名：先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications。open-player-sect-recruitment 只是提示，提交给 /agent/act 不会入门。`,
     };
+  }
+  if (place?.nodeType === "wilderness") {
+    const wild = wildPlaceForState(place.stateId);
+    if (wild) {
+      return {
+        label: `前往${wild.name}`,
+        description: wild.advice,
+      };
+    }
   }
   return {
     label: `Travel to ${name}`,
@@ -8272,14 +8324,22 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       {
         actionId: "survey-wilderness",
         label: "Survey wilderness",
-        description: "Push deeper into the Eight Wastes for dedicated events and rare drops.",
+        description: (() => {
+          const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+          return wild
+            ? `${wild.advice}再走一段，会留下一句见闻。`
+            : "Push deeper into the wilderness for dedicated events and rare drops.";
+        })(),
         durationTicks: DEFAULT_ACTION_DURATIONS["survey-wilderness"],
         kind: "timed",
       },
       {
         actionId: "withdraw-from-wilderness",
         label: "Withdraw from wilderness",
-        description: "Retreat before survival pressure forces a worse exit.",
+        description: (() => {
+          const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+          return wild ? `${wild.withdraw}不另扣灵石。` : "Retreat before survival pressure forces a worse exit.";
+        })(),
         durationTicks: 0,
         kind: "immediate",
       },
@@ -8288,7 +8348,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push({
       actionId: "retreat-from-bahuang",
       label: "Retreat from bahuang",
-      description: "Abort the 八荒 expedition before pressure collapses the run.",
+      description: `${bahuangBandForDepth(activeBahuang.depth).retreat}原来的那笔灵石还是要扣。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8311,7 +8371,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     appendSharedExpeditionActions(world, cultivator, actions);
     return actions;
   } else if (wildernessLayer) {
-    actions.push(buildEnterWildernessAction(cultivator, wildernessLayer));
+    actions.push(buildEnterWildernessAction(world, cultivator, wildernessLayer));
   }
   if (!activeWilderness && !activeBahuang && highRiskAllowed && EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
     const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
@@ -8320,7 +8380,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         actions.push({
           actionId: `enter-bahuang:${posture}` as ActionId,
           label: `Enter Bahuang (${posture})`,
-          description: `Start an independent 八荒 run with ${posture} posture and strategy-backed timeout handling.`,
+          description: `${bahuangBandForDepth(0).advice}姿态是 ${posture}。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -8355,7 +8415,16 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   if (location.nodeType === "wilderness") {
     actions.push({ actionId: "mine-spirit-stones", label: "Mine spirit stones", description: "Gather stones and ore.", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" });
     if (highRiskAllowed) {
-      actions.push({ actionId: "hunt-mine-beast", label: "Hunt mine beast", description: "PVE combat for better loot.", durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"], kind: "timed" });
+      const hunted = wildPlaceForState(location.stateId);
+      actions.push({
+        actionId: "hunt-mine-beast",
+        label: hunted ? `猎${hunted.enemy}` : "Hunt mine beast",
+        description: hunted
+          ? `${hunted.name}上打的是${hunted.enemy}，旁边是${hunted.follower}，身上挂${hunted.statusLabel}。`
+          : "PVE combat for better loot.",
+        durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"],
+        kind: "timed",
+      });
     }
   }
   if (isDungeonNode(location.nodeType) && highRiskAllowed) {
@@ -10984,6 +11053,17 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (!destination) {
       throw new Error(`Invalid travel destination: ${travelDestination}`);
     }
+    if (destination.nodeType === "wilderness" && job.meta?.wildSighting !== true) {
+      const arrived = wildPlaceForState(destination.stateId);
+      if (arrived) {
+        noteWild(cultivator, {
+          tick: world.tick,
+          locationId: travelDestination,
+          title: "路上的见闻",
+          detail: `${arrived.name}这一段的见闻：${arrived.road}`,
+        });
+      }
+    }
     cultivator.locationId = travelDestination;
     noteArrivalReunion(world, cultivator);
     triggerLocationEvent(
@@ -11496,10 +11576,21 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       const baseSeed = `${world.tick}:${job.id}:mine-beast`;
       const encId = combatState.encounterTemplateId;
       // Use the enemy name from the encounter registry, fall back to legacy
-      const enemyDisplayName = (() => {
+      const huntedPlace = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+      const enemyDisplayName = huntedPlace?.enemy ?? (() => {
         const cfg = getEnemyConfig(encId as unknown as EnemyConfigId);
         return cfg?.name ?? MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName;
       })();
+      const huntedLine = huntedPlace ? huntSentence(huntedPlace, retreated ? "retreat" : outcome === "victory" ? "win" : "loss") : null;
+      if (huntedLine) {
+        noteWild(cultivator, {
+          tick: world.tick,
+          locationId: cultivator.locationId,
+          title: outcome === "victory" && !retreated ? `斗过${enemyDisplayName}` : `没打过${enemyDisplayName}`,
+          detail: huntedLine,
+          fight: true,
+        });
+      }
       if (retreated) {
         addCombatLog(world, {
           cultivatorId: cultivator.id,
@@ -11510,7 +11601,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           damageTaken,
           spiritualPowerSpent: 16,
           loot: {},
-          summary: `${cultivator.name} retreated from ${enemyDisplayName} after ${totalRounds} rounds.`,
+          summary: huntedLine ?? `${cultivator.name} retreated from ${enemyDisplayName} after ${totalRounds} rounds.`,
           encounterTemplateId: encId,
           encounterBuildId: combatState.encounterBuildId ?? encId,
           totalRounds,
@@ -11542,14 +11633,16 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           intensity: 1,
         });
         addRealmProgress(cultivator, 4 + Math.floor(cultivator.realmLevel / 3));
-        pushTravelNote(cultivator, travelNote({
-          tick: world.tick,
-          kind: "find",
-          title: `斗过${enemyDisplayName}`,
-          detail: `${cultivator.name}在荒野里斗过${enemyDisplayName}，身上还留着那一战的气血翻涌，修为也跟着动了一截。`,
-          locationId: cultivator.locationId,
-          mood: "打完还想再找一场",
-        }));
+        if (!huntedLine) {
+          pushTravelNote(cultivator, travelNote({
+            tick: world.tick,
+            kind: "find",
+            title: `斗过${enemyDisplayName}`,
+            detail: `${cultivator.name}在荒野里斗过${enemyDisplayName}，身上还留着那一战的气血翻涌，修为也跟着动了一截。`,
+            locationId: cultivator.locationId,
+            mood: "打完还想再找一场",
+          }));
+        }
         addCombatLog(world, {
           cultivatorId: cultivator.id,
           locationId: cultivator.locationId,
@@ -11563,7 +11656,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
             [pickBreakthroughDrop("mystic-jade-stone", `${baseSeed}:mine-beast-material`)]: 1,
             ...(beastCoreDrop > 0 ? { "beast-core": beastCoreDrop } : {}),
           },
-          summary: `${cultivator.name} defeated ${enemyDisplayName} in ${totalRounds} rounds.`,
+          summary: huntedLine ?? `${cultivator.name} defeated ${enemyDisplayName} in ${totalRounds} rounds.`,
           encounterTemplateId: encId,
           encounterBuildId: combatState.encounterBuildId ?? encId,
           totalRounds,
@@ -11592,7 +11685,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         damageTaken,
         spiritualPowerSpent: 16,
         loot: {},
-        summary: `${cultivator.name} was defeated by ${enemyDisplayName} after ${totalRounds} rounds.`,
+        summary: huntedLine ?? `${cultivator.name} was defeated by ${enemyDisplayName} after ${totalRounds} rounds.`,
         encounterTemplateId: encId,
         encounterBuildId: combatState.encounterBuildId ?? encId,
         totalRounds,
@@ -13209,6 +13302,19 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       if (travelDestination && job.remainingTicks > 0) {
         const cultivator = world.cultivators[job.cultivatorId];
         if (cultivator) {
+          const roadPlace = world.locations[travelDestination];
+          if (roadPlace?.nodeType === "wilderness" && job.meta?.wildSighting !== true) {
+            const wild = wildPlaceForState(roadPlace.stateId);
+            if (wild) {
+              noteWild(cultivator, {
+                tick: world.tick,
+                locationId: cultivator.locationId,
+                title: "路上的见闻",
+                detail: `${wild.name}这一段的见闻：${wild.road}`,
+              });
+              job.meta = { ...(job.meta ?? {}), wildSighting: true };
+            }
+          }
           const roll = hashString(`${world.tick}:${job.id}:${cultivator.id}:travel-event`) % 100;
           if (roll < 30) {
             const seed = `${world.tick}:${cultivator.id}:${job.id}:travel`;

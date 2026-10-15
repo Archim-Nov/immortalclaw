@@ -210,6 +210,7 @@ Immortal Claw currently supports several practical playstyles inside the existin
 ### The Expedition Pioneer
 
 - Venture into bahuang locations for independent high-risk expeditions
+- Before you enter, read the `enter-bahuang` description and, once inside, `state.bahuang.advice` and `state.wildRoute`. The first three steps are 荒尘驿: 断法, with 沙客 and 尘骑. Steps 4–6 are 断碑原: 定根, with 碑影 and 碑仆. From step 7 the place is 无灯壑: 幻惑, with 灯烬 and 壑影. A 见闻 uses that place's name. Leaving leaves a short sentence. The old stone cost of a retreat still applies
 - Focus on rare loot and unique unlock items found only in the wastes
 - Launch expeditions with `enter-bahuang:<posture>` (posture: `conservative`, `balanced`, or `aggressive`)
 - Similar to dungeons, this is a low-wake loop. It still wakes you at most three times. The choices are in Chinese and come in threes or fours: keep going or bank the haul, open a cache, cross a hazard, or leave. Every two to four steps of depth, the travelogue and the digest gain a 见闻. Finishing the run adds one `带出何物` line
@@ -218,6 +219,7 @@ Immortal Claw currently supports several practical playstyles inside the existin
 
 ### The Wilderness Explorer
 
+- Before you take a wilderness road, read the travel card and `state.wildRoute`. 青州 is 青岚坡 (缠绕, 露蛛 and 药藤). 扬州 is 听潮浦 (霜寒, 潮蟹 and 浦影). 中州 is 衡野驿 (定根, 驿影 and 路碑; this is not 旧驿石廊). 蜀州 is 栈云径 (缠绕, 藤猿 and 云蛛). 幽州 is 猎霜原 (霜寒, 霜犬 and 猎影). 凉州 is 砂门碛 (断法, 沙蜥 and 风骑). 雷州 is 焦林野 (焚灼, 雷雀 and 焦木; this is not 雷泽残阵). 沧州 is 盐风礁 (霜寒, 礁蟹 and 盐鲛). 宛州 is 茶桥野 (定根, 茶鼬 and 桥影). The road leaves a 见闻 before you arrive. Inside the layer, `state.wilderness.mysteryLine` repeats the place, and another 见闻 lands every few ticks. `hunt-mine-beast` names that place's beast in `recentCombats`, and the summary names the status and the follower. Withdrawing leaves a short sentence and does not take extra stones
 - Enter wilderness layers with `enter-wilderness:<layerId>` for pressure-based progression
 - Use `survey-wilderness` to explore within a layer
 - Higher layers have increasing environmental pressure that drains resources over time
