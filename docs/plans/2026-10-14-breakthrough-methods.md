@@ -20,7 +20,7 @@
 
 - 在 `breakthrough-methods.ts` 写出六种做法：洞府、结丹仪、婴火淬体、魂灯守夜、天劫、神纹落印。
 - `RealmPathView` 和 `BreakthroughStateView` 加上可选的 `method`、`methodName`、`sequence`。突破视图再加 `help` 和 `rite`。
-- 炼气、筑基的句子仍指向 `residence-breakthrough`。
+- 炼气、筑基的做法仍是 `residence-breakthrough`。玩家读到的句子后来改为「回自己的洞府破境」，行动标识不再写进 `sequence`。见 `docs/plans/2026-10-16-breakthrough-facing-zh.md`。
 
 ### 行动
 
