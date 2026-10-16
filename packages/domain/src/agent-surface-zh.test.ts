@@ -11,10 +11,11 @@ import {
   getStrategySnapshot,
   listAvailableActions,
   performAction,
+  saveCultivationRegistration,
   syncCultivatorFromPersona,
 } from "./index.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
-import type { ItemId } from "./model.js";
+import type { ActionJob, CultivationRegistrationRecord, ItemId, Sect, WorldState } from "./model.js";
 import { writeSocialLink } from "./social.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
@@ -809,3 +810,138 @@ test("favor, quest, and bounty cards show a Chinese name for an English given na
   assert.equal(commission.description.includes("Emma"), false);
   assert.equal(getCultivatorState(world, first.id).localCommissions.find((row) => row.id === "comm-emma")?.posterName, "艾玛");
 });
+
+test("creation, registration, sect errand, and dual wilderness text stays Chinese", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "青萝" });
+  const born = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("character"));
+  assert.equal(born?.title, "初入尘世");
+  assert.equal(born?.content, "青萝踏入了这一界。");
+
+  const saved = saveCultivationRegistration(world, created.id, rawRegistrationRecord());
+  assert.equal(saved.result.core_temperament, "qian_yuan");
+  assert.equal(saved.result.behavior_aspect, "water-earth");
+  assert.equal(saved.result.cultivation_motive, "seek-truth");
+  const registered = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("registration"));
+  assert.equal(registered?.title, "问心定档");
+  assert.equal(registered?.content, "青萝问心已定。心性落在潜渊型，行路以潜守为先，所求偏求真知。");
+  assert.equal(/qian_yuan|water-earth|seek-truth|completed registration/.test(registered?.content ?? ""), false);
+
+  const cultivator = world.cultivators[created.id]!;
+  const sect = seedQingyun(world);
+  cultivator.sectId = sect.id;
+  cultivator.sectTitle = "外门";
+  cultivator.locationId = sect.headquarters;
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.activeJobId = null;
+
+  let bounty: WorldState["worldEvents"][number] | undefined;
+  for (let attempt = 0; attempt < 12 && !bounty; attempt += 1) {
+    const started = performAction(world, created.id, "take-sect-errand");
+    assert.match(started.summary, /开始宗门差事/);
+    const finished = advanceWorld(world, 2);
+    const done = finished.completedJobs.find((job) => job.cultivatorId === created.id && job.actionId === "take-sect-errand");
+    assert.equal(done?.summary, "青萝把宗门差事做完了。");
+    bounty = world.worldEvents.find((event) => event.cultivatorId === created.id && event.tags.includes("bounty") && event.tags.includes("sect") && !event.tags.includes("patrol"));
+  }
+  assert.ok(bounty);
+  assert.equal(bounty.title, "宗门赏赐");
+  assert.equal(bounty.content, "宗门额外赏赐了一张镇煞符，酬谢你把这趟差事做干净了。");
+  const duty = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("sect-quest-complete"));
+  assert.equal(duty?.title, "宗门差事");
+  assert.equal(duty?.content, "青萝把宗门差事做完了。");
+
+  const named = finishDual(world, created.id, { dualTaskId: "dwt-01", dualRole: "partner" });
+  assert.equal(named, "青萝完成了双人荒野任务：联手猎妖。");
+  const unnamed = finishDual(world, created.id, {});
+  assert.equal(unnamed, "青萝完成了双人荒野任务。");
+});
+
+function rawRegistrationRecord(): CultivationRegistrationRecord {
+  return {
+    record_type: "registration_record",
+    questionnaire_version: "immortal-claw-oc-v2",
+    answers: {
+      Q1: "C", Q2: "C", Q3: "C", Q4: "C", Q5: "C", Q6: "C",
+      Q7: "C", Q8: "A", Q9: "C", Q10: "C", Q11: "C", Q12: "C",
+      Q13: "B", Q14: "B", Q15: "B", Q16: "B", Q17: "C", Q18: "B",
+    },
+    result: {
+      label_locale: "en",
+      core_temperament_id: "qian_yuan",
+      core_temperament: "qian_yuan",
+      secondary_temperament_id: "guan_lan",
+      secondary_temperament: "guan_lan",
+      behavior_aspect_id: "water-earth",
+      behavior_aspect: "water-earth",
+      cultivation_motive_id: "seek-truth",
+      cultivation_motive: "seek-truth",
+      five_element_scores: { metal: 5, wood: 6, water: 11, fire: 3, earth: 9 },
+      spirit_root_kind_id: "dual-root",
+      spirit_root_result: "Water-Earth dual root",
+      confidence: { core: "high", behavior: "high", motive: "medium", overall: "high" },
+    },
+    summary: "问心已定。",
+  };
+}
+
+function seedQingyun(world: WorldState): Sect {
+  const sect: Sect = {
+    id: "qing-yun-sect",
+    name: "青云宗",
+    alignment: "正道",
+    stateId: "qingzhou",
+    founderCultivatorId: CULTIVATOR_ID,
+    treasury: 1000,
+    memberIds: [],
+    spiritVeins: [],
+    headquarters: "qingzhou:sect-outpost:qing-yun-sect",
+    titleSlots: [
+      { title: "外门", threshold: 0, maxSlots: Number.POSITIVE_INFINITY },
+      { title: "内门", threshold: 200, maxSlots: 32 },
+      { title: "精英", threshold: 600, maxSlots: 16 },
+      { title: "长老", threshold: 1500, maxSlots: 4 },
+      { title: "宗主", threshold: Number.POSITIVE_INFINITY, maxSlots: 1 },
+    ],
+    titleUpdateInterval: 2880,
+    lastTitleUpdateTick: 0,
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+    admissionPolicyUpdatedAtTick: 0,
+  };
+  world.sects[sect.id] = sect;
+  world.locations[sect.headquarters] = {
+    id: sect.headquarters as WorldState["locations"][string]["id"],
+    stateId: "qingzhou",
+    nodeType: "sect-outpost",
+    name: "青云宗山门",
+    kind: "safe",
+    risk: "safe",
+    description: "宗门山门。",
+    organizationId: sect.id,
+    organizationType: "player-sect",
+  };
+  return sect;
+}
+
+function finishDual(world: WorldState, cultivatorId: string, meta: NonNullable<ActionJob["meta"]>): string {
+  const cultivator = world.cultivators[cultivatorId]!;
+  assert.equal(cultivator.activeJobId, null);
+  const job: ActionJob = {
+    id: `job-dual-${world.nextJobSequence++}`,
+    cultivatorId,
+    actionId: "dual-survey-wilderness",
+    label: "同行历练",
+    remainingTicks: 1,
+    totalTicks: 1,
+    meta,
+  };
+  world.jobs[job.id] = job;
+  cultivator.activeJobId = job.id;
+  const finished = advanceWorld(world, 1);
+  const done = finished.completedJobs.find((entry) => entry.cultivatorId === cultivatorId && entry.actionId === "dual-survey-wilderness");
+  assert.ok(done);
+  return done.summary;
+}
