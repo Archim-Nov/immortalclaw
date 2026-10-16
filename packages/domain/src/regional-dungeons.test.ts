@@ -429,3 +429,69 @@ test("cutting the vine is a fight the cultivator can finish, and leaving is not"
   assert.equal(leaving.regionalReport?.outcome, "withdrew");
   assert.match(leaving.regionalReport?.line ?? "", /瓶子是空的/);
 });
+
+function seatMate(world: WorldState, name: string): Cultivator {
+  const cultivator = leader(world);
+  ready(cultivator, 3, "qingzhou:main-city");
+  const summary = syncCultivatorFromPersona(world, { agentId: `agent-${name}`, name });
+  const mate = world.cultivators[summary.selectedCultivatorId]!;
+  mate.locationId = "qingzhou:main-city";
+  mate.injuryTicksRemaining = 0;
+  mate.activeJobId = null;
+  mate.realmLevel = 3;
+  mate.realm = "炼气";
+  performAction(world, cultivator.id, `chat-up:${mate.id}`);
+  performAction(world, cultivator.id, `party-invite:${mate.id}`);
+  const inviteId = Object.keys(world.partyInvitations ?? {})[0];
+  assert.ok(inviteId);
+  performAction(world, mate.id, `accept-party:${inviteId}`);
+  return mate;
+}
+
+function told(cultivator: Cultivator): string {
+  return [
+    ...(cultivator.travelNotes ?? []).map((note) => note.detail),
+    ...(cultivator.lifeLog ?? []).map((event) => event.text),
+  ].join("\n");
+}
+
+test("a side-room timeout keeps the captain's choice when the party abstains", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  const mate = seatMate(world, "周迟");
+  performAction(world, cultivator.id, "enter-regional:wanderer-cave");
+  const voted = performAction(world, cultivator.id, "regional-choice:room-wanderer-page");
+  assert.match(voted.summary, /先看了看旁边/);
+  assert.equal(world.regionalRuns?.[cultivator.id]?.interiorResolved, false);
+  assert.equal(actionIds(world, mate.id).includes("regional-choice:room-wanderer-page"), true);
+
+  advanceWorld(world, 2);
+
+  const captainTold = told(cultivator);
+  const mateTold = told(mate);
+  assert.match(captainTold, /有一页还没烂/);
+  assert.equal(captainTold.includes("没有翻"), false);
+  assert.match(mateTold, /有一页还没烂/);
+  const digest = [
+    getCultivatorState(world, cultivator.id).digest?.summary ?? "",
+    ...(getCultivatorState(world, cultivator.id).digest?.growth ?? []),
+  ].join("\n");
+  assert.match(digest, /有一页还没烂/);
+  assert.ok(cultivator.regionalReport);
+  assert.notEqual(cultivator.regionalReport?.line.includes("明处"), true);
+});
+
+test("a side-room timeout stays on the safe line when only a teammate has voted", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  const mate = seatMate(world, "石不语");
+  performAction(world, cultivator.id, "enter-regional:wanderer-cave");
+  performAction(world, mate.id, "regional-choice:room-wanderer-bag");
+  assert.equal(world.regionalRuns?.[cultivator.id]?.interiorResolved, false);
+
+  advanceWorld(world, 2);
+
+  const captainTold = told(cultivator);
+  assert.match(captainTold, /没有翻/);
+  assert.equal(captainTold.includes("整叠札塞进袋子"), false);
+});

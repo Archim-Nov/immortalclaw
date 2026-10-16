@@ -393,6 +393,7 @@ import {
   createDungeonExpeditionProgress,
   createDungeonExpeditionReport,
   describeDungeonExpeditionAction,
+  dungeonPostureLabel,
   enterDungeonActionIdOf,
   DUNGEON_EXPEDITION_DURATION_TICKS,
   DUNGEON_EXPEDITION_MAX_STEPS,
@@ -2696,6 +2697,24 @@ function buildSectApplicationView(world: WorldState, application: SectApplicatio
   };
 }
 
+function wildernessGateText(
+  layer: NonNullable<ReturnType<typeof getWildernessLayerForLocation>>,
+  gate: { allowed: boolean; reason?: string },
+): string {
+  if (!gate.allowed) {
+    if (gate.reason === "Realm requirement not met.") return "境界还没到这一层。";
+    if (gate.reason === "Sect contribution requirement not met.") return "宗门贡献还不够。";
+    if (gate.reason === "Entry ticket missing.") return "入场符还没备上。";
+    return "这会儿还进不去。";
+  }
+  const ticks = layer.survivalPressure.maxSurvivalTicks;
+  const ticket = layer.entryRequirement.entryTicket;
+  if (!ticket) return `不消耗入场符。这一层能撑${ticks}刻。`;
+  const ticketName = ITEM_CATALOG[ticket]?.name;
+  const name = ticketName && /[\u4e00-\u9fff]/u.test(ticketName) ? ticketName : "入场符";
+  return `要消耗一份${name}。这一层能撑${ticks}刻。`;
+}
+
 function buildEnterWildernessAction(
   world: WorldState,
   cultivator: Cultivator,
@@ -2703,14 +2722,13 @@ function buildEnterWildernessAction(
 ): AvailableAction {
   const gate = canEnterWilderness(cultivator, layer);
   const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
-  const gateText = gate.allowed
-    ? `Consumes ${layer.entryRequirement.entryTicket ?? "no ticket"} and grants ${layer.survivalPressure.maxSurvivalTicks} survival ticks.`
-    : gate.reason ?? "Cannot enter yet.";
+  const gateText = wildernessGateText(layer, gate);
+  const pressure = `每刻气血少${layer.survivalPressure.qiDamagePerTick}，灵力少${layer.survivalPressure.spiritualDamagePerTick}。`;
 
   return {
     actionId: `enter-wilderness:${layer.layerId}` as ActionId,
-    label: wild ? `走进${wild.name}` : `Enter ${layer.name}`,
-    description: wild ? `${wild.advice}${gateText}` : `${gateText} Pressure ${layer.survivalPressure.qiDamagePerTick}/${layer.survivalPressure.spiritualDamagePerTick} per tick.`,
+    label: wild ? `走进${wild.name}` : `进入${layer.name}`,
+    description: wild ? `${wild.advice}${gateText}` : `${gateText}${pressure}`,
     durationTicks: 0,
     kind: "immediate",
   };
@@ -4101,7 +4119,7 @@ function writeDungeonExpeditionSummaryEvent(
   addWorldEvent(world, {
     cultivatorId,
     locationId,
-    title: "Dungeon Expedition",
+    title: "地宫归来",
     content: report.summary,
     severity: report.outcome === "catastrophic" ? "high" : "medium",
     tags: ["dungeon-expedition", report.outcome, `rank-${report.targetRank}`, report.policy],
@@ -4756,6 +4774,7 @@ function finalizeDungeonExpedition(
     outcome,
     endedAtTick: world.tick,
     returnLocationId,
+    returnPlaceName: world.locations[returnLocationId]?.name,
     primaryMaterial: metadata.materialBand,
     relic: relic ?? undefined,
   });
@@ -5093,8 +5112,10 @@ function resolveDungeonExpeditionStepIfDue(
         effectiveProgress = settlement.progress;
       }
       world.dungeonExpeditions[cultivator.id] = effectiveProgress;
+      stampDungeonWake(job, effectiveProgress);
     } else {
       job.remainingTicks += 1;
+      stampDungeonWake(job, effectiveProgress);
       return;
     }
   }
@@ -5458,8 +5479,8 @@ function resolveDungeonExpeditionStepIfDue(
         const guardianCombat = getCombatJobState(syntheticJob);
         if (!guardianCombat) return [];
         const cfg = getEnemyConfig(guardianCombat.encounterTemplateId as unknown as EnemyConfigId);
-        const guardianName = cfg?.nameCn ?? cfg?.name ?? "Guardian";
-        return [`${guardianName} encounter`];
+        const guardianName = cfg?.nameCn && /[\u4e00-\u9fff]/u.test(cfg.nameCn) ? cfg.nameCn : "守关";
+        return [`${guardianName}这一场`];
       })();
 
   trimPrependedEntries(world.worldEvents, beforeEventCount);
@@ -5611,6 +5632,22 @@ function resolveDungeonExpeditionStepIfDue(
     dungeonExpeditionStepIndex: progressedWithWake.stepIndex,
     dungeonExpeditionNextResolutionTick: progressedWithWake.nextResolutionTick,
   };
+  stampDungeonWake(job, progressedWithWake);
+}
+
+function stampDungeonWake(job: ActionJob, progress: DungeonExpeditionProgress): void {
+  const wake = progress.pendingWakeNode;
+  const meta = { ...(job.meta ?? {}) };
+  if (!wake) {
+    delete meta.dungeonWake;
+  } else {
+    meta.dungeonWake = {
+      context: wake.context,
+      defaultOptionId: wake.defaultOptionId,
+      options: wake.options.map((option) => ({ optionId: option.optionId, label: option.label })),
+    };
+  }
+  job.meta = meta;
 }
 
 function preferredMaterialAction(
@@ -7857,8 +7894,8 @@ function ensureSafetyNetActions(
         ...actions,
         {
           actionId: travelActionIdOf(nearestSafeLocationId),
-          label: `Travel to ${world.locations[nearestSafeLocationId]?.name ?? nearestSafeLocationId}`,
-          description: "Fallback action to return to a safe location.",
+          label: `前往${world.locations[nearestSafeLocationId]?.name ?? "能歇脚的地方"}`,
+          description: "先回到能歇脚的地方。",
           durationTicks: ticks,
           kind: "timed",
         },
@@ -7946,8 +7983,8 @@ function travelCardFor(world: WorldState, locationId: string): { label: string; 
     }
   }
   return {
-    label: `Travel to ${name}`,
-    description: `Travel to ${name}.`,
+    label: `前往${name}`,
+    description: `前往${name}。`,
   };
 }
 
@@ -8490,10 +8527,11 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
     if (gate.allowed) {
       for (const posture of ["conservative", "balanced", "aggressive"] as const) {
+        const stance = dungeonPostureLabel(posture);
         actions.push({
           actionId: `enter-bahuang:${posture}` as ActionId,
-          label: `Enter Bahuang (${posture})`,
-          description: `${bahuangBandForDepth(0).advice}姿态是 ${posture}。`,
+          label: `进八荒（${stance}）`,
+          description: `${bahuangBandForDepth(0).advice}姿态是${stance}。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -8547,18 +8585,20 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (dungeonView && !dungeonView.lockReason) {
       for (const rank of dungeonView.availableRanks) {
         for (const posture of ["conservative", "balanced", "aggressive"] as const) {
+          const stance = dungeonPostureLabel(posture);
           actions.push({
             actionId: enterDungeonActionIdOf(rank, posture),
-            label: `Enter dungeon (${posture}, rank ${rank})`,
-            description: `Preferred low-wake entry. Uses ${posture} posture strategy with timeout defaults.${shareSuffix}`,
+            label: `进${dungeonView.grade}级地宫第${rank}阶（${stance}）`,
+            description: `从这一层的门口进去。姿态是${stance}。时辰到了还没开口，就按这个姿态里稳的那一边走。${shareSuffix}`,
             durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
           });
         }
         for (const policy of DUNGEON_EXPEDITION_POLICIES) {
+          const stance = dungeonPostureLabel(policy);
           actions.push({
             actionId: startDungeonExpeditionActionIdOf(rank, policy),
-            label: `Dungeon expedition (${policy}, rank ${rank})`,
+            label: `地宫远征（${stance}，第${rank}阶）`,
             description: `${describeDungeonExpeditionAction({ dungeon: dungeonView, rank, policy })}${shareSuffix}`,
             durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
@@ -12210,6 +12250,11 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       locationId: cultivator.locationId,
       mood: report.outcome === "catastrophic" ? "劫后余生" : report.outcome === "completed" ? "这一趟值得讲" : "人回来了，账也算清了",
     }));
+    recordLife(cultivator, {
+      tick: world.tick,
+      kind: report.outcome === "completed" ? "growth" : "fight",
+      text: report.summary,
+    });
     return report.summary;
   }
   if (job.actionId === "heal") {
@@ -12626,7 +12671,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       cultivator.activeJobId = null;
     }
     const report = finalizeDungeonExpedition(world, cultivator, progress, "aborted");
-    addDaoLog(world, cultivator.id, "Dungeon Expedition", report.summary, ["dungeon-expedition", "aborted"]);
+    addDaoLog(world, cultivator.id, "地宫远征", report.summary, ["dungeon-expedition", "aborted"]);
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
@@ -12663,6 +12708,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         });
       }
       world.dungeonExpeditions[progress.cultivatorId] = next;
+      const leaderJobId = world.cultivators[progress.cultivatorId]?.activeJobId;
+      if (leaderJobId && world.jobs[leaderJobId]) stampDungeonWake(world.jobs[leaderJobId], next);
       const title = next.beats?.[next.beats.length - 1]?.title;
       const summary = ready && title
         ? `${cultivator.name}在地宫里选择了${title}。`
@@ -12672,6 +12719,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     const settlement = settleDungeonWakeNode(progress, dungeonWakeOptionId);
     applyDungeonWakeSettlement(world, cultivator, settlement);
     world.dungeonExpeditions[cultivator.id] = settlement.progress;
+    if (cultivator.activeJobId && world.jobs[cultivator.activeJobId]) {
+      stampDungeonWake(world.jobs[cultivator.activeJobId], settlement.progress);
+    }
     const summary = settlement.beat
       ? `${cultivator.name}在地宫里选择了${settlement.beat.title}。`
       : `${cultivator.name}在地宫岔路做出了选择。`;
@@ -12944,7 +12994,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
       const directNeighbor = getNeighborLocations(world, cultivator.locationId).some((neighbor) => neighbor.locationId === travelDestination);
       if (!directNeighbor) throw new Error("Travel destination is not directly reachable from current location.");
-      return startJob(world, cultivator, actionId as TimedActionId, `Travel to ${destination.name}`);
+      return startJob(world, cultivator, actionId as TimedActionId, `前往${destination.name}`);
     }
     if (questAction?.phase === "execute") {
       const quest = getActiveQuestByReadableIndex(cultivator, questAction.questType, questAction.index);
@@ -13092,7 +13142,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         world,
         cultivator,
         actionId as TimedActionId,
-        `Dungeon expedition rank ${parsedExpedition.rank}`,
+        `地宫远征：${metadata.grade}级第${parsedExpedition.rank}阶（${dungeonPostureLabel(parsedExpedition.policy)}）`,
         {
           dungeonGrade: metadata.grade,
           dungeonRank: parsedExpedition.rank,
@@ -13298,6 +13348,7 @@ function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown)
         locationId: cultivator.locationId,
         mood: "人出来了，这一趟不算完",
       }));
+      recordLife(cultivator, { tick: world.tick, kind: "fight", text: report.summary });
       return report.summary;
     } catch {
       delete world.dungeonExpeditions[cultivator.id];

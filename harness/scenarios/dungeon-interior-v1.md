@@ -4,4 +4,4 @@ A ranked run still wakes at most three times. Step 3 is still the wounded travel
 
 Between those pauses the travelogue picks up 探路, 歇脚, or 侧室, and a search step can put a named pack on `combatRounds`. 雷泽残阵 uses 雷枪客 and 断法修. The finale followers stay 阵脚 and 残雷.
 
-A state dungeon still lists its signature choice. `state.regionalDungeons.active.interior` is the side room. `regional-choice` answers either one. The side room does not grant the drop. A timeout still takes the safe signature option.
+A state dungeon still lists its signature choice. `state.regionalDungeons.active.interior` is the side room. `regional-choice` answers either one. The side room does not grant the drop. A timeout still takes the safe signature option. If the captain already answered the side room and the others never lock a majority, that answer is the one written when the window closes. An empty side-room tally still writes the safe line.

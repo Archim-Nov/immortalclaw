@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### 地宫回来怎么说，侧室听谁的 / Expedition wording and the side-room vote
+
+丙级地宫回来以后，战报、游记和六个时辰的摘要用中文写带回的东西和回到的地方。袋子里的 id 还在，给人看的句子里不再出现 `cloud-heart-grass`、`ruin-fragment` 或 `yangzhou:main-city` 这种内部名字，也不再附一句英文结果。前往、进地宫、走进荒野的行动卡也改成中文。
+
+同队进散修旧洞这类州府秘境时，侧室仍要超过一半才当场锁。队长已经选了、其他人没在时辰里投出多数，窗口关上时留下队长那一句，不再改成稳的那一间。谁都没答，才补上稳的那一句。签名选择超时仍走稳的那一边，掉落和战斗不改。
+
+A finished 丙 expedition now names items and the return place in Chinese on the report, the travelogue, and the six-tick digest. Internal ids stay on the state. Travel, dungeon, and wilderness action cards use Chinese labels. On a party regional run, a side room the captain already chose is kept when the others abstain; an empty tally still writes the safe line. The signature choice still times out to its safe option.
+
+稳妥的丙级第一阶同样会在中途停下来问人。选择写在 `currentJob.meta.dungeonWake` 上，行动列表里也不只剩中止。没人答的时候仍走安全的那一边，不会改成冒进。
+
+A conservative 丙 rank-1 run still pauses for the mid-run choice. The pending scene is on `currentJob.meta.dungeonWake`, and the action list is not abort alone. An unanswered pause still takes the safe option.
+
 ### 甲级通关留下的一件东西 / A relic from a finished 甲 run
 
 丹霞内府、婴火莲池、神纹天隙走完以后，袋子里会多一件能拿回去说的东西。丹霞是残页、炉灰或纹屑，婴火和神纹各有自己的三件。只有一份，坊市不收，守关的算法也不改。`lastReport.relic.arcLine` 是那一句。同队的人在自己的战报、游记和六个时辰的摘要里引用同一句，袋子里不会多出一份。中止、撤出，以及丙级和乙级，都没有这件。

@@ -1,6 +1,7 @@
 import { interiorWakeDraft, interiorWakeEffect, pickLateWakeKind } from "./dungeon-interior.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
+import { ITEM_CATALOG } from "./items/catalog.js";
 import { jiaRelicHint } from "./jia-relics.js";
 import { lightMysteryHint } from "./yi-mystery.js";
 import type {
@@ -170,12 +171,12 @@ export function buildDungeonRankYieldHints(
 
 function riskLabelForPolicy(policy: DungeonExpeditionPolicy): string {
   if (policy === "conservative") {
-    return "Low risk; withdraw after any real warning sign.";
+    return "姿态稳妥，有真正的警示就撤。";
   }
   if (policy === "balanced") {
-    return "Medium risk; push when the frontier looks worthwhile.";
+    return "姿态均衡，前面值得的时候再往里走。";
   }
-  return "High risk; pressures the frontier and tolerates deeper damage.";
+  return "姿态冒进，会压着门口往里，也受得住更深的伤。";
 }
 
 export function describeDungeonExpeditionAction(input: {
@@ -185,14 +186,13 @@ export function describeDungeonExpeditionAction(input: {
 }): string {
   const hint = input.dungeon.rankYieldHints.find((entry) => entry.rank === input.rank);
   const estimate = hint?.estimatedExpeditionYieldByPolicy[input.policy];
-  const primaryMaterial = hint?.primaryMaterial ?? input.dungeon.materialBand;
-  const estimatedRange = estimate ? `${estimate.min}-${estimate.max}` : "several";
+  const primaryName = playerItemName(hint?.primaryMaterial ?? input.dungeon.materialBand);
+  const estimatedRange = estimate ? `${estimate.min}到${estimate.max}` : "一些";
   const frontierNote = input.rank === input.dungeon.frontierRank
-    ? "May challenge the frontier guardian if the run stays stable."
-    : "Farms an already unlocked rank without pushing higher."
-    ;
+    ? "这一阶还是门口。跑得稳的话，会去碰守关。"
+    : "这一阶已经开过，这一趟不往上推。";
 
-  return `Run a 30-minute ${input.dungeon.grade}${input.rank} expedition for about ${estimatedRange} ${primaryMaterial}. ${frontierNote} ${riskLabelForPolicy(input.policy)}`;
+  return `这一趟要三十刻，走${input.dungeon.grade}级第${input.rank}阶，大约能带回${estimatedRange}份${primaryName}。${frontierNote}${riskLabelForPolicy(input.policy)}`;
 }
 
 export function createDungeonExpeditionProgress(input: {
@@ -976,27 +976,20 @@ export function recordDungeonExpeditionStep(input: {
   };
 }
 
-function summarizeSecondaryDrops(drops: Partial<Record<ItemId, number>>): string {
+function playerItemName(itemId: string): string {
+  const name = ITEM_CATALOG[itemId as ItemId]?.name;
+  if (name && /[\u4e00-\u9fff]/u.test(name)) return name;
+  return "一件东西";
+}
+
+function summarizeSecondaryDrops(drops: Partial<Record<ItemId, number>>): string | null {
   const topDrops = (Object.entries(drops) as Array<[ItemId, number | undefined]>)
     .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
-    .map(([itemId, count]) => `${count} ${itemId}`);
+    .map(([itemId, count]) => `${count}份${playerItemName(itemId)}`);
 
-  return topDrops.length > 0 ? topDrops.join(", ") : "no notable side loot";
-}
-
-function outcomeVerb(outcome: DungeonExpeditionReport["outcome"]): string {
-  if (outcome === "completed") {
-    return "completed";
-  }
-  if (outcome === "withdrew") {
-    return "withdrew from";
-  }
-  if (outcome === "aborted") {
-    return "aborted";
-  }
-  return "barely escaped";
+  return topDrops.length > 0 ? topDrops.join("，") : null;
 }
 
 function fightLine(progress: DungeonExpeditionProgress): string | null {
@@ -1027,6 +1020,10 @@ const POSTURE_LABEL: Record<DungeonExpeditionPolicy, string> = {
   balanced: "均衡",
   aggressive: "冒进",
 };
+
+export function dungeonPostureLabel(policy: DungeonExpeditionPolicy): string {
+  return POSTURE_LABEL[policy];
+}
 
 const RANK_ONE_BEATS: readonly DungeonBeat[] = [
   {
@@ -1415,6 +1412,7 @@ export function createDungeonExpeditionReport(input: {
   outcome: DungeonExpeditionReport["outcome"];
   endedAtTick: number;
   returnLocationId: string;
+  returnPlaceName?: string;
   primaryMaterial: ItemId;
   relic?: DungeonExpeditionReport["relic"];
 }): DungeonExpeditionReport {
@@ -1423,17 +1421,18 @@ export function createDungeonExpeditionReport(input: {
   if (input.relic) {
     secondaryDrops[input.relic.itemId] = (secondaryDrops[input.relic.itemId] ?? 0) + 1;
   }
+  const place = input.returnPlaceName?.trim() || "能歇脚的地方";
+  const sideLoot = summarizeSecondaryDrops(secondaryDrops);
   const summary = [
-    `地宫${outcomePhrase(input.outcome)}${input.progress.grade}${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
-    `带回 ${input.progress.primaryMaterialCount} ${input.primaryMaterial}，旁支 ${summarizeSecondaryDrops(secondaryDrops)}，灵石 ${input.progress.spiritStoneGain}，修为 +${input.progress.realmProgressGain}。`,
-    `气血耗去 ${input.progress.qiSpent ?? 0}，灵力耗去 ${input.progress.spiritualPowerSpent ?? 0}。`,
-    (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石 ${input.progress.stonesLost}。` : null,
+    `地宫${outcomePhrase(input.outcome)}${input.progress.grade}级第${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
+    `带回${input.progress.primaryMaterialCount}份${playerItemName(input.primaryMaterial)}，${sideLoot ? `旁支${sideLoot}` : "没有显眼的旁支"}，灵石${input.progress.spiritStoneGain}枚，修为涨了${input.progress.realmProgressGain}。`,
+    `气血耗去${input.progress.qiSpent ?? 0}，灵力耗去${input.progress.spiritualPowerSpent ?? 0}。`,
+    (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石${input.progress.stonesLost}枚。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
     input.progress.carriedLine ?? null,
     input.relic?.arcLine ?? null,
     fightLine(input.progress),
-    `人已回到 ${input.returnLocationId}。`,
-    `(${outcomeVerb(input.outcome)} rank ${input.progress.targetRank} ${input.progress.policy})`,
+    `人已回到${place}。`,
   ].filter((part): part is string => Boolean(part)).join("");
 
   return {
