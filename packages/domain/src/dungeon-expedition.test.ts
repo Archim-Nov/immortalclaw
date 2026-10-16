@@ -385,3 +385,56 @@ test("wake node timeout auto-resolution follows run strategy", () => {
   assert.ok(aggressiveReport);
   assert.ok((aggressiveReport?.spiritStoneGain ?? 0) >= (conservativeReport?.spiritStoneGain ?? 0));
 });
+
+test("a conservative rank-1 run still offers a mid-run choice and a named pack", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID];
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  performAction(world, CULTIVATOR_ID, "enter-dungeon:rank-1:conservative" as never);
+
+  let sawChoice = false;
+  let sawMoral = false;
+  let sawPack = false;
+  let sawScout = false;
+  const scenes = new Set<string>();
+  while (cultivator.activeJobId) {
+    advanceWorld(world, 1);
+    const progress = world.dungeonExpeditions[CULTIVATOR_ID];
+    if (progress?.beats?.some((beat) => beat.title === "探路")) sawScout = true;
+    const state = getCultivatorState(world, CULTIVATOR_ID);
+    if (state.travelogue.notes.some((note) => note.title === "探路" || note.detail.includes("探路"))) sawScout = true;
+    const actions = listAvailableActions(world, CULTIVATOR_ID).map((action) => String(action.actionId));
+    const choices = actions.filter((actionId) => actionId.startsWith("dungeon-wake-decision:"));
+    const wake = state.currentJob?.meta?.dungeonWake;
+    const hint = state.dungeonExpedition.wakeNodeHint;
+    if (choices.length > 0) {
+      sawChoice = true;
+      assert.ok(actions.includes("abort-dungeon-expedition"));
+      assert.ok(wake);
+      assert.equal(wake.defaultOptionId, hint?.defaultOptionId);
+      scenes.add(wake.context);
+    }
+    if (choices.includes("dungeon-wake-decision:aid-wounded")) {
+      sawMoral = true;
+      assert.ok(choices.includes("dungeon-wake-decision:take-pouch"));
+      assert.equal(hint?.defaultOptionId, "aid-wounded");
+      assert.match(wake?.context ?? "", /水囊|袋子/);
+    }
+    const rounds = world.dungeonExpeditions[CULTIVATOR_ID]?.combatRounds ?? [];
+    if (rounds.some((round) => /石刀客/.test(round.enemyName))) sawPack = true;
+  }
+
+  assert.equal(sawChoice, true);
+  assert.equal(sawMoral, true);
+  assert.ok(scenes.size >= 2);
+  assert.equal(sawPack, true);
+  assert.equal(sawScout, true);
+  const finished = getCultivatorState(world, CULTIVATOR_ID);
+  const notes = finished.travelogue.notes.map((note) => `${note.title} ${note.detail}`).join("\n");
+  assert.match(notes, /扶起伤者/);
+  assert.equal(notes.includes("拿走了袋子"), false);
+  assert.equal(finished.currentJob ?? null, null);
+  const enemies = (finished.dungeonExpedition.lastReport?.combatRounds ?? []).map((round) => round.enemyName).join("\n");
+  assert.match(enemies, /石刀客/);
+});

@@ -10,6 +10,10 @@
 
 A finished 丙 expedition now names items and the return place in Chinese on the report, the travelogue, and the six-tick digest. Internal ids stay on the state. Travel, dungeon, and wilderness action cards use Chinese labels. On a party regional run, a side room the captain already chose is kept when the others abstain; an empty tally still writes the safe line. The signature choice still times out to its safe option.
 
+稳妥的丙级第一阶同样会在中途停下来问人。选择写在 `currentJob.meta.dungeonWake` 上，行动列表里也不只剩中止。没人答的时候仍走安全的那一边，不会改成冒进。
+
+A conservative 丙 rank-1 run still pauses for the mid-run choice. The pending scene is on `currentJob.meta.dungeonWake`, and the action list is not abort alone. An unanswered pause still takes the safe option.
+
 ### 甲级通关留下的一件东西 / A relic from a finished 甲 run
 
 丹霞内府、婴火莲池、神纹天隙走完以后，袋子里会多一件能拿回去说的东西。丹霞是残页、炉灰或纹屑，婴火和神纹各有自己的三件。只有一份，坊市不收，守关的算法也不改。`lastReport.relic.arcLine` 是那一句。同队的人在自己的战报、游记和六个时辰的摘要里引用同一句，袋子里不会多出一份。中止、撤出，以及丙级和乙级，都没有这件。

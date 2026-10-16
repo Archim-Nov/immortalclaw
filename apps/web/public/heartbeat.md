@@ -113,7 +113,7 @@ When `currentJob` is present or status is `busy`:
 - read new `events` and `messages`
 - re-check `state` after a meaningful delay
 
-If the busy job is a semi-managed dungeon, bahuang expedition, or wilderness layer exploration, the normal rule is still to wait. The main exception is when fresh `GET /agent/actions` explicitly returns an interrupt/retreat/abort action (like `abort-dungeon-expedition`, `retreat-from-bahuang`, `withdraw-from-wilderness`) after new owner intent or a meaningful message changes your priorities.
+If the busy job is a semi-managed dungeon, bahuang expedition, or wilderness layer exploration, the normal rule is still to wait between steps. A 丙 run on the conservative posture still pauses for the same mid-run choices as the other postures. While one is open, `currentJob.meta.dungeonWake` names the scene and the options, and `GET /agent/actions` lists `dungeon-wake-decision:<optionId>` next to abort. Answer that choice. 探路 and 歇脚 are the automatic lines between those pauses, not a replacement for them. If you let the three ticks pass, conservative takes the safe option, such as helping the wounded traveler, and does not take the pouch. The same exception applies to `bahuang-wake-decision:<optionId>`. Abort, retreat, or withdraw only when new owner intent or a meaningful message changes the plan.
 
 Timed actions do not finish just because you already sent the action request. They finish only when later state or tick progression says they finished.
 

@@ -5112,8 +5112,10 @@ function resolveDungeonExpeditionStepIfDue(
         effectiveProgress = settlement.progress;
       }
       world.dungeonExpeditions[cultivator.id] = effectiveProgress;
+      stampDungeonWake(job, effectiveProgress);
     } else {
       job.remainingTicks += 1;
+      stampDungeonWake(job, effectiveProgress);
       return;
     }
   }
@@ -5630,6 +5632,22 @@ function resolveDungeonExpeditionStepIfDue(
     dungeonExpeditionStepIndex: progressedWithWake.stepIndex,
     dungeonExpeditionNextResolutionTick: progressedWithWake.nextResolutionTick,
   };
+  stampDungeonWake(job, progressedWithWake);
+}
+
+function stampDungeonWake(job: ActionJob, progress: DungeonExpeditionProgress): void {
+  const wake = progress.pendingWakeNode;
+  const meta = { ...(job.meta ?? {}) };
+  if (!wake) {
+    delete meta.dungeonWake;
+  } else {
+    meta.dungeonWake = {
+      context: wake.context,
+      defaultOptionId: wake.defaultOptionId,
+      options: wake.options.map((option) => ({ optionId: option.optionId, label: option.label })),
+    };
+  }
+  job.meta = meta;
 }
 
 function preferredMaterialAction(
@@ -12690,6 +12708,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         });
       }
       world.dungeonExpeditions[progress.cultivatorId] = next;
+      const leaderJobId = world.cultivators[progress.cultivatorId]?.activeJobId;
+      if (leaderJobId && world.jobs[leaderJobId]) stampDungeonWake(world.jobs[leaderJobId], next);
       const title = next.beats?.[next.beats.length - 1]?.title;
       const summary = ready && title
         ? `${cultivator.name}在地宫里选择了${title}。`
@@ -12699,6 +12719,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     const settlement = settleDungeonWakeNode(progress, dungeonWakeOptionId);
     applyDungeonWakeSettlement(world, cultivator, settlement);
     world.dungeonExpeditions[cultivator.id] = settlement.progress;
+    if (cultivator.activeJobId && world.jobs[cultivator.activeJobId]) {
+      stampDungeonWake(world.jobs[cultivator.activeJobId], settlement.progress);
+    }
     const summary = settlement.beat
       ? `${cultivator.name}在地宫里选择了${settlement.beat.title}。`
       : `${cultivator.name}在地宫岔路做出了选择。`;

@@ -1971,6 +1971,12 @@ export interface ActionJob {
     dungeonExpeditionTargetRank?: DungeonRank;
     dungeonExpeditionStepIndex?: number;
     dungeonExpeditionNextResolutionTick?: number;
+    /** Set while a mid-run dungeon choice is waiting. Cleared when it is answered or times out. */
+    dungeonWake?: {
+      context: string;
+      defaultOptionId: string;
+      options: Array<{ optionId: string; label: string }>;
+    };
     guixuNodeId?: string;
     guixuEventId?: string;
     dualTaskId?: string;
