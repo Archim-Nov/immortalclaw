@@ -3878,6 +3878,32 @@ const STATUS_FACING: Record<string, { name: string; description: string }> = {
 function facingStatus(id: string, fallbackName: string, fallbackDescription: string) {
   return STATUS_FACING[id] ?? { name: fallbackName, description: fallbackDescription };
 }
+function publicStatusName(statusId: string, statusName: string): string {
+  return facingStatus(statusId, statusName, "").name;
+}
+function publicCombatLog(entry: CombatLogEntry): CombatLogEntry {
+  const rename = <T extends { statusName: string; statusId: string }>(row: T): T => ({
+    ...row,
+    statusName: publicStatusName(row.statusId, row.statusName),
+  });
+  return {
+    ...entry,
+    outcomeLabel: entry.outcome === "victory" ? "胜" : "负",
+    ...(entry.statusChanges ? { statusChanges: entry.statusChanges.map(rename) } : {}),
+    ...(entry.statusEffectsRemaining ? { statusEffectsRemaining: entry.statusEffectsRemaining.map(rename) } : {}),
+    ...(entry.rounds
+      ? {
+          rounds: entry.rounds.map((round) => ({
+            ...round,
+            ...(round.appliedStatuses ? { appliedStatuses: round.appliedStatuses.map(rename) } : {}),
+            ...(round.tickEvents ? { tickEvents: round.tickEvents.map(rename) } : {}),
+            ...(round.consumedStatuses ? { consumedStatuses: round.consumedStatuses.map(rename) } : {}),
+            ...(round.expiredStatuses ? { expiredStatuses: round.expiredStatuses.map(rename) } : {}),
+          })),
+        }
+      : {}),
+  };
+}
 function resolveItemEffectBundle(
   definition: WorldState["itemDefinitions"][ItemId],
   registration?: ReturnType<typeof registrationModifiersOf>,
@@ -7858,7 +7884,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       standing: standing(value),
     })),
     recentEvents: getRecentWorldEvents(world, cultivatorId, 5).map((event) => ({ ...event, title: publicEventTitle(event.title) })),
-    recentCombats: getCombatLogs(world, cultivatorId, 4),
+    recentCombats: getCombatLogs(world, cultivatorId, 4).map(publicCombatLog),
     travelogue: {
       mood: describeMood(cultivator, Boolean(getActiveDungeonExpedition(world, cultivator.id))),
       notes: [...(cultivator.travelNotes ?? [])],
@@ -9062,18 +9088,19 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if ((cultivator.lastGiftTick ?? -1) < world.tick) {
         const giftableItems = Object.entries(cultivator.inventory).filter(([, count]) => count > 0);
         for (const [itemId] of giftableItems.slice(0, 2)) {
+          const itemName = itemDisplayName(itemId);
           const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
           const fellow = sameSectBond(cultivator, target);
           actions.push({
             actionId: `send-message:${target.id}:gift-item` as ActionId,
-            label: `赠送物品：${itemId} → ${target.name}`,
+            label: `赠送${itemName}：${target.name}`,
             description: feud === "宿怨"
-              ? `${target.name}和你是宿怨，见面剑拔弩张。礼递过去也会被退回，东西还在你手里，好感不会涨。要说话就当面拒礼，或者再战。`
+              ? `${target.name}和你是宿怨，见面剑拔弩张。${itemName}递过去也会被退回，东西还在你手里，好感不会涨。要说话就当面拒礼，或者再战。`
               : feud
-                ? `${target.name}和你有嫌隙，见面剑拔弩张。礼可以先放下，但好感不会涨。对方可以拒。`
+                ? `${target.name}和你有嫌隙，见面剑拔弩张。${itemName}可以先放下，但好感不会涨。对方可以拒。`
               : fellow
-                ? `把1个${itemId}递给同门${target.name}。同门之间，这份礼更顺。`
-                : `将1个${itemId}赠予${target.name}，增进好感。`,
+                ? `把1个${itemName}递给同门${target.name}。同门之间，这份礼更顺。`
+                : `将1个${itemName}赠予${target.name}，增进好感。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -13208,7 +13235,10 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
       const directNeighbor = getNeighborLocations(world, cultivator.locationId).some((neighbor) => neighbor.locationId === travelDestination);
       if (!directNeighbor) throw new Error("Travel destination is not directly reachable from current location.");
-      return startJob(world, cultivator, actionId as TimedActionId, `前往${destination.name}`);
+      const placeName = destination.nodeType === "wilderness"
+        ? (wildPlaceForState(destination.stateId)?.name ?? destination.name)
+        : destination.name;
+      return startJob(world, cultivator, actionId as TimedActionId, `前往${placeName}`);
     }
     if (questAction?.phase === "execute") {
       const quest = getActiveQuestByReadableIndex(cultivator, questAction.questType, questAction.index);

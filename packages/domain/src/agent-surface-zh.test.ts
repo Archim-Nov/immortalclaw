@@ -10,6 +10,7 @@ import {
   performAction,
   syncCultivatorFromPersona,
 } from "./index.js";
+import { ITEM_CATALOG } from "./items/catalog.js";
 import type { ItemId } from "./model.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
@@ -215,4 +216,124 @@ test("resolve-morality-event-choice tells the caller to use the dedicated route"
   assert.match(result.summary, /morality-choice-test/);
   assert.match(result.summary, /搭把手（aid）/);
   assert.equal(result.summary.includes("dedicated route"), false);
+});
+
+test("gift-item cards use the Chinese item name and keep the action id", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-gift-names", name: "青萝" });
+  const second = world.cultivators[summary.selectedCultivatorId]!;
+  first.locationId = "yangzhou:main-city";
+  second.locationId = "yangzhou:main-city";
+  for (const itemId of Object.keys(first.inventory) as ItemId[]) {
+    first.inventory[itemId] = 0;
+  }
+  first.inventory["ward-talisman"] = 1;
+  first.inventory["ruin-fragment"] = 1;
+  first.inventory["healing-pill"] = 1;
+  first.inventory["qi-pill"] = 1;
+
+  const gifts = listAvailableActions(world, first.id).filter((action) => action.actionId === `send-message:${second.id}:gift-item`);
+  const shown = Object.entries(first.inventory).filter(([, count]) => count > 0).slice(0, 2);
+  assert.equal(gifts.length, shown.length);
+  for (const [index, card] of gifts.entries()) {
+    const [itemId] = shown[index]!;
+    const name = ITEM_CATALOG[itemId as ItemId].name;
+    assert.equal(card.actionId, `send-message:${second.id}:gift-item`);
+    assert.match(card.label, new RegExp(name));
+    assert.match(card.description, new RegExp(name));
+    assert.equal(card.label.includes(itemId), false);
+    assert.equal(card.description.includes(itemId), false);
+  }
+});
+
+test("recentCombats keeps victory and defeat, and shows Chinese status names", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  world.combatLogs.unshift({
+    id: "combat-soak-defeat",
+    tick: world.tick,
+    cultivatorId: CULTIVATOR_ID,
+    locationId: cultivator.locationId,
+    encounterId: "soak-defeat",
+    enemyName: "潮蟹",
+    outcome: "defeat",
+    damageTaken: 8,
+    spiritualPowerSpent: 2,
+    loot: {},
+    summary: "没打过潮蟹。",
+    statusChanges: [{ statusId: "clear-mind", statusName: "Clear Mind", applied: false }],
+  });
+  world.combatLogs.unshift({
+    id: "combat-soak-victory",
+    tick: world.tick,
+    cultivatorId: CULTIVATOR_ID,
+    locationId: cultivator.locationId,
+    encounterId: "soak-victory",
+    enemyName: "露蛛",
+    outcome: "victory",
+    damageTaken: 3,
+    spiritualPowerSpent: 4,
+    loot: {},
+    summary: "斗过露蛛。",
+    statusChanges: [
+      { statusId: "clear-mind", statusName: "Clear Mind", applied: true },
+      { statusId: "qi-surge", statusName: "Qi Surge", applied: true },
+    ],
+    statusEffectsRemaining: [
+      { statusId: "clear-mind", statusName: "Clear Mind" },
+      { statusId: "qi-surge", statusName: "Qi Surge" },
+    ],
+    rounds: [{
+      round: 1,
+      playerInitiative: 1,
+      enemyInitiative: 1,
+      firstActor: "player",
+      playerAttack: null,
+      enemyAttack: null,
+      playerHpAfter: 10,
+      enemyHpAfter: 0,
+      playerDied: false,
+      enemyDied: true,
+      appliedStatuses: [{
+        statusId: "burning" as never,
+        statusName: "焚灼",
+        targetSide: "enemy",
+        sourceSide: "player",
+        magnitude: 1,
+        isRefresh: false,
+      }],
+    }],
+  });
+
+  const shown = getCultivatorState(world, CULTIVATOR_ID).recentCombats;
+  assert.equal(shown[0]?.outcome, "victory");
+  assert.equal(shown[0]?.outcomeLabel, "胜");
+  assert.equal(shown[0]?.statusChanges?.[0]?.statusName, "心神清明");
+  assert.equal(shown[0]?.statusChanges?.[1]?.statusName, "气血上涌");
+  assert.equal(shown[0]?.statusEffectsRemaining?.[0]?.statusName, "心神清明");
+  assert.equal(shown[0]?.statusEffectsRemaining?.[1]?.statusName, "气血上涌");
+  assert.equal(shown[0]?.rounds?.[0]?.appliedStatuses?.[0]?.statusName, "焚灼");
+  assert.equal(shown[1]?.outcome, "defeat");
+  assert.equal(shown[1]?.outcomeLabel, "负");
+  assert.equal(shown[1]?.statusChanges?.[0]?.statusName, "心神清明");
+  assert.equal(world.combatLogs[0]?.outcome, "victory");
+  assert.equal(world.combatLogs[0]?.outcomeLabel, undefined);
+  assert.equal(world.combatLogs[0]?.statusChanges?.[0]?.statusName, "Clear Mind");
+  assert.equal(world.combatLogs[0]?.statusChanges?.[1]?.statusName, "Qi Surge");
+});
+
+test("travel-to a wilderness starts toward the place name", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "yangzhou:main-city";
+  cultivator.injuryTicksRemaining = 0;
+  const card = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "travel-to:yangzhou:wilderness");
+  assert.match(card?.label ?? "", /听潮浦/);
+  assert.equal((card?.label ?? "").includes("荒野"), false);
+  const started = performAction(world, CULTIVATOR_ID, "travel-to:yangzhou:wilderness" as never);
+  assert.match(started.summary, /动身前往听潮浦/);
+  assert.equal(started.summary.includes("扬州荒野"), false);
+  assert.equal(started.summary.includes("荒野"), false);
+  assert.equal(started.job?.label, "前往听潮浦");
 });
