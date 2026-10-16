@@ -415,16 +415,19 @@ test("acting while busy, or challenging someone busy, is refused in Chinese", ()
 
 test("residence breakthrough cards stay in Chinese", () => {
   const world = createSeedWorld();
-  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  const created = createCultivator(world, { name: "破境弟子" });
+  const cultivator = world.cultivators[created.id]!;
   cultivator.locationId = cultivator.residence.locationId;
   cultivator.injuryTicksRemaining = 0;
+  cultivator.realmLevel = 1;
+  cultivator.realm = "炼气";
   cultivator.realmProgress = 100;
   cultivator.inventory["cloud-heart-grass"] = 1;
   cultivator.inventory["moon-dew-flower"] = 1;
   cultivator.inventory["clear-zhi-leaf"] = 1;
   cultivator.inventory["condensed-qi-dew"] = 1;
 
-  const minor = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "residence-breakthrough");
+  const minor = listAvailableActions(world, created.id).find((action) => action.actionId === "residence-breakthrough");
   assert.ok(minor);
   assert.equal(minor.label, "洞府破境");
   assert.match(minor.description, /炼气中期/);
@@ -432,11 +435,10 @@ test("residence breakthrough cards stay in Chinese", () => {
   assert.equal(minor.description.includes("breakthrough"), false);
 
   cultivator.realmLevel = 3;
-  cultivator.realm = "炼气";
   cultivator.inventory["spirit-brook-bamboo"] = 1;
   cultivator.inventory["pure-heart-orchid"] = 1;
   cultivator.inventory["meridian-lotus-essence"] = 1;
-  const major = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "residence-breakthrough");
+  const major = listAvailableActions(world, created.id).find((action) => action.actionId === "residence-breakthrough");
   assert.ok(major);
   assert.equal(major.label, "洞府破境（大境界）");
   assert.match(major.description, /筑基前期/);
