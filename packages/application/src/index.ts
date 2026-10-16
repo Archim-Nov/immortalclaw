@@ -32,6 +32,14 @@ export type { AgentOperationsRepository } from "./agent-operations.js";
 export { createRuntimeService } from "./runtime-service.js";
 export type { RuntimeRepository, RuntimeService } from "./runtime-service.js";
 export { registerAgentWorkflow } from "./agent-registration.js";
+export {
+  AGENT_PRESENTATION_VERSION,
+  buildAgentPresentationCatalog,
+  fillAgentTemplate,
+  listAgentTemplateIds,
+  listTemplatePlaceholderNames,
+  readAgentTemplateHtml,
+} from "./agent-presentation.js";
 export type {
   AgentRegistrationAuthClient,
   AgentRegistrationWorldRepository,

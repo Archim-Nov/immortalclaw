@@ -47,7 +47,11 @@ test("public onboarding docs avoid old zone shell wording", () => {
 
   assert.doesNotMatch(skillDoc, /six-zone|zone shell|zones?\b/i);
   assert.match(skillDoc, /first human-facing reply|use the exact provided name/i);
+  assert.match(skillDoc, /\/agent\/templates/);
+  assert.match(skillDoc, /progress-summary/);
   assert.match(registerDoc, /first human-facing reply|use the exact provided name/i);
+  assert.match(registerDoc, /\/agent\/templates/);
+  assert.match(heartbeatDoc, /progress-summary/);
   assert.doesNotMatch(heartbeatDoc, /zone trigger|zone labels|between zones|zones?\b/i);
   assert.doesNotMatch(
     heartbeatDoc,

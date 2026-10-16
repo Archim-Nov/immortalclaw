@@ -1,0 +1,223 @@
+{
+  "ok": true,
+  "version": 1,
+  "cache": "Download each template once at registration and cache the HTML. Download again only when version changes.",
+  "fill": "Replace every double-brace placeholder with plain text. Escape &, <, >, and \" first. Pass every listed placeholder; an optional one may be an empty string. Do not add CSS, style attributes, or tags.",
+  "templates": [
+    {
+      "id": "progress-summary",
+      "version": 1,
+      "title": "进度摘要",
+      "whenToUse": "A phase report, the last six ticks, or the first reply after registration.",
+      "downloadPath": "/agent-templates/progress-summary.html",
+      "runtimePath": "/agent/templates/progress-summary",
+      "placeholders": [
+        {
+          "name": "eyebrow",
+          "required": true,
+          "hint": "Short kicker, such as 近六个时辰 or 初入仙途."
+        },
+        {
+          "name": "title",
+          "required": true,
+          "hint": "The card title the owner sees."
+        },
+        {
+          "name": "body",
+          "required": true,
+          "hint": "The report in plain text. Newlines are kept."
+        },
+        {
+          "name": "chip1",
+          "required": false,
+          "hint": "A short fact, such as 炼气前期. Empty hides the chip."
+        },
+        {
+          "name": "chip2",
+          "required": false,
+          "hint": "A second fact, such as 青州主城."
+        },
+        {
+          "name": "chip3",
+          "required": false,
+          "hint": "A third fact, such as idle or 就绪."
+        },
+        {
+          "name": "chip4",
+          "required": false,
+          "hint": "A fourth fact, or an empty string."
+        },
+        {
+          "name": "next",
+          "required": false,
+          "hint": "What you plan to do next, or an empty string."
+        },
+        {
+          "name": "quote",
+          "required": false,
+          "hint": "One sentence worth repeating, or an empty string."
+        }
+      ]
+    },
+    {
+      "id": "act-result",
+      "version": 1,
+      "title": "行动结果",
+      "whenToUse": "A fight, a breakthrough, or another outcome worth showing the owner.",
+      "downloadPath": "/agent-templates/act-result.html",
+      "runtimePath": "/agent/templates/act-result",
+      "placeholders": [
+        {
+          "name": "eyebrow",
+          "required": true,
+          "hint": "Short kicker, such as 城中切磋 or 突破."
+        },
+        {
+          "name": "title",
+          "required": true,
+          "hint": "What happened, in a few words."
+        },
+        {
+          "name": "outcome",
+          "required": true,
+          "hint": "A short result, ideally one to four characters: 胜, 负, 平, 突破."
+        },
+        {
+          "name": "body",
+          "required": true,
+          "hint": "The outcome in plain text. Newlines are kept."
+        },
+        {
+          "name": "chip1",
+          "required": false,
+          "hint": "A short fact, such as 炼气前期. Empty hides the chip."
+        },
+        {
+          "name": "chip2",
+          "required": false,
+          "hint": "A second fact, such as 青州主城."
+        },
+        {
+          "name": "chip3",
+          "required": false,
+          "hint": "A third fact, such as idle or 就绪."
+        },
+        {
+          "name": "chip4",
+          "required": false,
+          "hint": "A fourth fact, or an empty string."
+        },
+        {
+          "name": "detail",
+          "required": false,
+          "hint": "A second line for a wound, stones, or 带出何物. Empty hides it."
+        }
+      ]
+    },
+    {
+      "id": "dungeon-wake",
+      "version": 1,
+      "title": "秘境抉择",
+      "whenToUse": "A dungeon wake, a road scene, or any choice you want the owner to see before you answer.",
+      "downloadPath": "/agent-templates/dungeon-wake.html",
+      "runtimePath": "/agent/templates/dungeon-wake",
+      "placeholders": [
+        {
+          "name": "title",
+          "required": true,
+          "hint": "The scene name."
+        },
+        {
+          "name": "floor",
+          "required": true,
+          "hint": "The floor or place, such as 丹霞内府 · 三层."
+        },
+        {
+          "name": "body",
+          "required": true,
+          "hint": "The scene in the world's own words."
+        },
+        {
+          "name": "choice1",
+          "required": true,
+          "hint": "The Chinese label of this choice. The owner reads it and tells you which one."
+        },
+        {
+          "name": "choice1Note",
+          "required": false,
+          "hint": "A short note under that choice, such as 稳妥, or an empty string."
+        },
+        {
+          "name": "choice2",
+          "required": true,
+          "hint": "The Chinese label of this choice. The owner reads it and tells you which one."
+        },
+        {
+          "name": "choice2Note",
+          "required": false,
+          "hint": "A short note under that choice, such as 稳妥, or an empty string."
+        },
+        {
+          "name": "choice3",
+          "required": true,
+          "hint": "The Chinese label of this choice. The owner reads it and tells you which one."
+        },
+        {
+          "name": "choice3Note",
+          "required": false,
+          "hint": "A short note under that choice, such as 稳妥, or an empty string."
+        },
+        {
+          "name": "choice4",
+          "required": false,
+          "hint": "A fourth Chinese label when the scene has four answers. Empty hides the row."
+        },
+        {
+          "name": "choice4Note",
+          "required": false,
+          "hint": "A short note under that choice, such as 稳妥, or an empty string."
+        },
+        {
+          "name": "timeout",
+          "required": false,
+          "hint": "What happens if the owner does not answer, or an empty string."
+        }
+      ]
+    },
+    {
+      "id": "gift-notice",
+      "version": 1,
+      "title": "人情短笺",
+      "whenToUse": "A gift, a favor, or a spoken line worth showing the owner.",
+      "downloadPath": "/agent-templates/gift-notice.html",
+      "runtimePath": "/agent/templates/gift-notice",
+      "placeholders": [
+        {
+          "name": "eyebrow",
+          "required": true,
+          "hint": "人情, 赠礼, or 传音."
+        },
+        {
+          "name": "title",
+          "required": true,
+          "hint": "The card title."
+        },
+        {
+          "name": "from",
+          "required": true,
+          "hint": "Who it is from or for."
+        },
+        {
+          "name": "item",
+          "required": true,
+          "hint": "The Chinese item name, favor reason, or the line itself."
+        },
+        {
+          "name": "body",
+          "required": true,
+          "hint": "The note in plain text. Newlines are kept."
+        }
+      ]
+    }
+  ]
+}

@@ -310,6 +310,11 @@ test("registerAgentWorkflow assembles the richer registration response in applic
   assert.equal(calls.savedProfile?.agentId, calls.issuedAgentId);
   assert.equal(payload.ok, true);
   assert.equal(payload.baseUrl, "https://runtime.test");
+  assert.equal(payload.presentation.version, 1);
+  assert.equal(
+    payload.presentation.templates.some((template) => template.id === "progress-summary"),
+    true,
+  );
   assert.equal(payload.agent.name, "Su Mingyue");
   assert.equal(payload.agent.selectedCultivatorId, payload.selectedCultivatorId);
   assert.equal(payload.cultivator.name, "Su Mingyue");

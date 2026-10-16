@@ -23,6 +23,9 @@ interface RegistrationResponse {
   decisionPolicy: {
     tutorialMode: string;
   };
+  presentation?: {
+    version: number;
+  };
 }
 
 interface AgentStateResponse {
@@ -88,15 +91,52 @@ test("public onboarding docs are exposed as markdown", async () => {
   const registerResponse = await app.request("https://runtime.test/register.md");
   const heartbeatResponse = await app.request("https://runtime.test/heartbeat.md");
 
+  const skillText = await skillResponse.text();
+  const registerText = await registerResponse.text();
+  const heartbeatText = await heartbeatResponse.text();
+
   assert.equal(skillResponse.status, 200);
   assert.match(String(skillResponse.headers.get("content-type")), /text\/markdown/);
-  assert.match(await skillResponse.text(), /first breakthrough|neutral sect|first human-facing reply/i);
+  assert.match(skillText, /first breakthrough|neutral sect|first human-facing reply/i);
+  assert.match(skillText, /\/agent\/templates/);
 
   assert.equal(registerResponse.status, 200);
-  assert.match(await registerResponse.text(), /Qingzhou|Yangzhou|Wanzhou|use the exact provided name|first human-facing reply/i);
+  assert.match(registerText, /Qingzhou|Yangzhou|Wanzhou|use the exact provided name|first human-facing reply/i);
+  assert.match(registerText, /progress-summary/);
 
   assert.equal(heartbeatResponse.status, 200);
-  assert.match(await heartbeatResponse.text(), /neutral-duty|first breakthrough/i);
+  assert.match(heartbeatText, /neutral-duty|first breakthrough/i);
+  assert.match(heartbeatText, /\/agent\/templates/);
+});
+
+test("agent template catalog and documents are public", async () => {
+  const app = createTestApp();
+  const catalogResponse = await app.request("https://runtime.test/agent/templates");
+  const catalog = await catalogResponse.json() as {
+    version: number;
+    templates: Array<{ id: string; runtimePath: string; placeholders: Array<{ name: string }> }>;
+  };
+
+  assert.equal(catalogResponse.status, 200);
+  assert.match(String(catalogResponse.headers.get("content-type")), /application\/json/);
+  assert.equal(catalog.version, 1);
+  assert.deepEqual(
+    catalog.templates.map((template) => template.id),
+    ["progress-summary", "act-result", "dungeon-wake", "gift-notice"],
+  );
+
+  const documentResponse = await app.request("https://runtime.test/agent/templates/dungeon-wake");
+  const document = await documentResponse.text();
+  assert.equal(documentResponse.status, 200);
+  assert.match(String(documentResponse.headers.get("content-type")), /text\/html/);
+  assert.match(document, /\{\{choice1\}\}/);
+  assert.match(document, /glass-panel/);
+  assert.doesNotMatch(document, /<script/i);
+
+  const missing = await app.request("https://runtime.test/agent/templates/free-form");
+  assert.equal(missing.status, 404);
+  const missingPayload = await missing.json() as { error: string };
+  assert.match(missingPayload.error, /Unknown template/);
 });
 
 test("registration returns a credential and state route accepts it", async () => {
@@ -118,6 +158,7 @@ test("registration returns a credential and state route accepts it", async () =>
   assert.equal(registerPayload.agent.selectedCultivatorId, registerPayload.selectedCultivatorId);
   assert.equal(registerPayload.onboarding.stage, "registered");
   assert.equal(registerPayload.decisionPolicy.tutorialMode, "optional");
+  assert.equal(registerPayload.presentation?.version, 1);
 
   const stateResponse = await app.request("https://runtime.test/agent/state", {
     headers: {

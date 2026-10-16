@@ -248,6 +248,30 @@ export interface AgentStateResponse extends CultivatorStateView, DerivedAttribut
   agent: AgentView;
 }
 
+export interface AgentPresentationSlot {
+  name: string;
+  required: boolean;
+  hint: string;
+}
+
+export interface AgentPresentationTemplateSummary {
+  id: string;
+  version: number;
+  title: string;
+  whenToUse: string;
+  downloadPath: string;
+  runtimePath: string;
+  placeholders: AgentPresentationSlot[];
+}
+
+export interface AgentPresentationCatalog {
+  ok: true;
+  version: number;
+  cache: string;
+  fill: string;
+  templates: AgentPresentationTemplateSummary[];
+}
+
 export interface AgentRegistrationResponse extends AgentStateResponse {
   ok: true;
   agentId: string;
@@ -258,6 +282,7 @@ export interface AgentRegistrationResponse extends AgentStateResponse {
   registration: CultivationRegistrationView | null;
   registrationEffects: RegistrationGameplayEffectsView | null;
   registrationProfile: RegistrationProfileView | null;
+  presentation: AgentPresentationCatalog;
   message: string;
 }
 

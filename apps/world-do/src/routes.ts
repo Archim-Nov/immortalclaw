@@ -25,6 +25,8 @@ import {
   readAuthenticatedAgentSectInfo,
   readAuthenticatedAgentStrategy,
   registerAgentWorkflow,
+  buildAgentPresentationCatalog,
+  readAgentTemplateHtml,
   resetAuthenticatedAgentCredential,
   resolveMessageWebhookTarget,
   resolveWebhookTargets,
@@ -323,6 +325,23 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
   app.get("/register.md", (context) => markdownResponse(renderRegisterMarkdown(new URL(context.req.url).origin)));
   app.get("/heartbeat.md", (context) => markdownResponse(renderHeartbeatMarkdown(new URL(context.req.url).origin)));
   app.get("/agent/guide", (context) => markdownResponse(renderSkillMarkdown(new URL(context.req.url).origin)));
+  app.get("/agent/templates", (context) => {
+    context.header("cache-control", "no-cache");
+    return context.json(buildAgentPresentationCatalog());
+  });
+  app.get("/agent/templates/:id", (context) => {
+    const html = readAgentTemplateHtml(context.req.param("id"));
+    if (!html) {
+      return context.json({ error: "Unknown template." }, 404);
+    }
+    return new Response(html, {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      },
+    });
+  });
   app.get("/agent/register/questions", (context) => context.json(getRegistrationQuestionnaire()));
 
   app.get("/world/status", async (context) => {

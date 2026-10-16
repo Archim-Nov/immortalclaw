@@ -9,6 +9,7 @@ import type {
   WorldState,
 } from "../../domain/src/runtime.js";
 import type { AgentRegistrationResponse } from "../../contracts/src/runtime-api.js";
+import { buildAgentPresentationCatalog } from "./agent-presentation.js";
 import type {
   AgentCredentialResetResult,
   AgentProfileRecord,
@@ -138,6 +139,7 @@ export async function registerAgentWorkflow(
     selectedCultivatorId: payload.selectedCultivatorId,
     createdCultivator: sync.created,
     registrationProfile,
+    presentation: buildAgentPresentationCatalog(),
     message: buildRegistrationMessage({
       agentName: state.agent.name,
       questionnaireSource,
