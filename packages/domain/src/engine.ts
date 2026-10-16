@@ -2322,6 +2322,18 @@ function moralityAlignmentOfCultivator(cultivator: Cultivator): MoralityAlignmen
   return moralityAlignmentOfScore(cultivator.moralityScore);
 }
 
+function moralityReasonPhrase(reason: string): string {
+  if (reason === "dungeon-wake") return "地宫里的岔路";
+  if (reason === "dungeon-encounter") return "地宫里的遭遇";
+  if (reason === "join-sect") return "入门";
+  if (reason === "take-sect-errand") return "宗门差事";
+  if (reason.startsWith("sect-task:")) return "宗门事务";
+  if (reason.startsWith("morality-choice:")) return "道心岔路";
+  if (reason === "found-sect") return "开宗";
+  if (reason === "sect-approved") return "宗门收录";
+  return "这一遭";
+}
+
 function applyMoralityDelta(
   world: WorldState,
   cultivator: Cultivator,
@@ -2332,8 +2344,8 @@ function applyMoralityDelta(
   addDaoLog(
     world,
     cultivator.id,
-    "Morality Shift",
-    `${cultivator.name} ${delta >= 0 ? "gained" : "lost"} ${Math.abs(delta)} morality from ${reason}.`,
+    "心性偏移",
+    `${cultivator.name}因${moralityReasonPhrase(reason)}，心性${delta >= 0 ? "往正道偏了" : "往魔道偏了"}${Math.abs(delta)}分。`,
     ["morality", reason, delta >= 0 ? "positive" : "negative"],
   );
   return {
@@ -5444,6 +5456,7 @@ function resolveDungeonExpeditionStepIfDue(
   const pressure = expeditionPressureFor({
     policy: effectiveProgress.policy,
     rank: effectiveProgress.targetRank,
+    grade: effectiveProgress.grade,
     action: actionKind,
     seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:${actionKind}`,
     qiRatio: qiRatioBefore,
@@ -9820,13 +9833,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       throw new Error(`要到${bandForTier(def.weaponTier ?? 1).realm}才能装备${def.name}。`);
     }
     equipWeapon(cultivator, equipWeaponId);
-    addDaoLog(world, cultivator.id, "装配切换", `${cultivator.name} equipped ${def.name}.`, ["combat-loadout", "equip-weapon"]);
+    const equipped = `${cultivator.name}换上了${def.name}。`;
+    addDaoLog(world, cultivator.id, "装配切换", equipped, ["combat-loadout", "equip-weapon"]);
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name}换上了${def.name}。`,
+      summary: equipped,
     };
   }
 
@@ -9839,13 +9853,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       throw new Error(`要到${bandForTier(def.spellTier ?? 1).realm}才能装备${def.name}。`);
     }
     equipSpell(cultivator, equipSpellId);
-    addDaoLog(world, cultivator.id, "装配切换", `${cultivator.name} equipped ${def.name}.`, ["combat-loadout", "equip-spell"]);
+    const equipped = `${cultivator.name}换上了${def.name}。`;
+    addDaoLog(world, cultivator.id, "装配切换", equipped, ["combat-loadout", "equip-spell"]);
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name}换上了${def.name}。`,
+      summary: equipped,
     };
   }
 
@@ -9985,9 +10000,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     cultivator.neutralContribution = 0;
     addCurrentStateReputation(cultivator, 4);
     neutralSect.memberIds.push(cultivator.id);
-    addMessage(world, cultivator.id, neutralSect.name, "Accepted", `${cultivator.name} joined ${neutralSect.name}.`);
-    addDaoLog(world, cultivator.id, "Joined Neutral Sect", `${cultivator.name} joined ${neutralSect.name}.`, ["neutral-sect", "join-neutral-sect"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${neutralSect.name}.` };
+    const joined = `${cultivator.name}入了${neutralSect.name}。`;
+    addMessage(world, cultivator.id, neutralSect.name, "入门", joined);
+    addDaoLog(world, cultivator.id, "入门", joined, ["neutral-sect", "join-neutral-sect"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: joined };
   }
   if (actionId === "leave-neutral-sect") {
     const neutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -9997,8 +10013,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     cultivator.neutralSectId = null;
     cultivator.neutralContribution = 0;
     clearSectPost(cultivator);
-    addDaoLog(world, cultivator.id, "Left Neutral Sect", `${cultivator.name} left ${neutralSect.name}.`, ["neutral-sect", "leave-neutral-sect"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left ${neutralSect.name}.` };
+    const left = `${cultivator.name}离开了${neutralSect.name}。`;
+    addDaoLog(world, cultivator.id, "离宗", left, ["neutral-sect", "leave-neutral-sect"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: left };
   }
   if (actionId === "join-sect") {
     const location = world.locations[cultivator.locationId];
@@ -10018,9 +10035,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addFactionReputation(cultivator, sect.id, 15);
     applyMoralityDelta(world, cultivator, sect.alignment === "正道" ? 8 : -8, "join-sect");
     sect.memberIds.push(cultivator.id);
-    addMessage(world, cultivator.id, sect.name, "Accepted", `${cultivator.name} joined ${sect.name}.`);
-    addDaoLog(world, cultivator.id, "Joined Sect", `${cultivator.name} joined ${sect.name}.`, ["sect", "join-sect", "sect-join-log"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${sect.name}.` };
+    const joined = `${cultivator.name}入了${sect.name}。`;
+    addMessage(world, cultivator.id, sect.name, "入门", joined);
+    addDaoLog(world, cultivator.id, "入门", joined, ["sect", "join-sect", "sect-join-log"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: joined };
   }
   if (actionId === "withdraw-from-wilderness") {
     const summary = withdrawFromWilderness(world, cultivator, "manual-withdraw");
@@ -13942,7 +13960,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
 
       const summary = resolveEnhancedJob(world, job);
       completedJobs.push({ cultivatorId: job.cultivatorId, actionId: job.actionId, summary });
-      addDaoLog(world, job.cultivatorId, "Action Complete", summary, ["action-complete", job.actionId]);
+      addDaoLog(world, job.cultivatorId, "行动完成", summary, ["action-complete", job.actionId]);
       delete world.jobs[job.id];
       } catch (error) {
         const summary = settleFailedTimedJob(world, job, error);

@@ -7,8 +7,8 @@ import {
   listAvailableActions,
   performAction,
 } from "./index.js";
-import { createDungeonExpeditionReport } from "./dungeon-expedition-service.js";
-import type { DungeonExpeditionProgress } from "./model.js";
+import { createDungeonExpeditionReport, expeditionPressureFor } from "./dungeon-expedition-service.js";
+import type { DungeonBeat, DungeonExpeditionProgress, DungeonGrade, DungeonRank } from "./model.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -521,4 +521,116 @@ test("a conservative rank-1 run still offers a mid-run choice and a named pack",
   assert.equal(finished.currentJob ?? null, null);
   const enemies = (finished.dungeonExpedition.lastReport?.combatRounds ?? []).map((round) => round.enemyName).join("\n");
   assert.match(enemies, /石刀客/);
+});
+
+function herbGathererBeat(grade: DungeonGrade): DungeonBeat | null {
+  for (let n = 0; n < 48; n += 1) {
+    const pressure = expeditionPressureFor({
+      policy: "conservative",
+      rank: 1,
+      grade,
+      action: "search",
+      seed: `herb:${grade}:${n}`,
+      qiRatio: 1,
+    });
+    if (pressure.beat.title === "灯下的采药人") return pressure.beat;
+  }
+  return null;
+}
+
+function reportWithBeat(grade: DungeonGrade, beat: DungeonBeat) {
+  const progress = {
+    cultivatorId: CULTIVATOR_ID,
+    jobId: `job-${grade}`,
+    locationId: grade === "乙" ? "yangzhou:dungeon-b" : grade === "甲" ? "yangzhou:dungeon-a" : "yangzhou:dungeon-c",
+    grade,
+    targetRank: 1,
+    policy: "conservative",
+    strategy: { posture: "conservative", bias: "survival-first", pushPreference: "neutral" },
+    startedAtTick: 0,
+    stepIndex: 4,
+    maxSteps: 10,
+    nextResolutionTick: 12,
+    searchSteps: 3,
+    guardianSteps: 1,
+    primaryMaterialCount: 1,
+    secondaryDrops: {},
+    spiritStoneGain: 12,
+    realmProgressGain: 4,
+    unlockedNextRank: false,
+    lastResolvedAction: "search",
+    flavorEventTitles: [],
+    wakeNodesEncountered: 0,
+    maxWakeNodes: 3,
+    pendingWakeNode: null,
+    pendingWakeNodeDeadlineTick: null,
+    resolvedWakeNodeCount: 0,
+    beats: [beat],
+  } satisfies DungeonExpeditionProgress;
+  return createDungeonExpeditionReport({
+    progress,
+    outcome: "completed",
+    endedAtTick: 30,
+    returnLocationId: "yangzhou:main-city",
+    returnPlaceName: "广津城",
+    primaryMaterial: "cloud-heart-grass",
+  });
+}
+
+test("乙级 rank-1 报告按当前等级写第一层，不写死丙级地宫", () => {
+  for (const grade of ["丙", "乙", "甲"] as const) {
+    const beat = herbGathererBeat(grade);
+    assert.ok(beat, `${grade} rank-1 should still roll 灯下的采药人`);
+    assert.match(beat.detail, new RegExp(`^${grade}级地宫的第一层里`));
+    const report = reportWithBeat(grade, beat);
+    const text = (report.beats ?? []).map((entry) => `${entry.title}\n${entry.detail}`).join("\n");
+    assert.match(text, new RegExp(`${grade}级地宫的第一层`));
+    assert.match(report.summary, new RegExp(`${grade}级地宫的第一层`));
+    if (grade !== "丙") {
+      assert.equal(text.includes("丙级地宫"), false, text);
+      assert.equal(report.summary.includes("丙级地宫"), false, report.summary);
+    }
+  }
+
+  for (const rank of [2, 3, 4, 5, 6, 7, 8, 9] as const satisfies readonly DungeonRank[]) {
+    for (let n = 0; n < 16; n += 1) {
+      const pressure = expeditionPressureFor({
+        policy: "balanced",
+        rank,
+        grade: "乙",
+        action: "search",
+        seed: `other-rank:${rank}:${n}`,
+        qiRatio: 0.9,
+      });
+      assert.equal(pressure.beat.detail.includes("丙级地宫"), false, pressure.beat.detail);
+      assert.equal(pressure.beat.title === "灯下的采药人", false);
+    }
+  }
+});
+
+test("筑基走完乙级第一层后，报告见闻里没有丙级地宫", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "yangzhou:dungeon-b";
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 4;
+  cultivator.qi = cultivator.maxQi = 400;
+  cultivator.spiritualPower = cultivator.maxSpiritualPower = 400;
+  cultivator.injuryTicksRemaining = 0;
+  performAction(world, CULTIVATOR_ID, "enter-dungeon:rank-1:conservative" as never);
+
+  for (let tick = 0; tick < 40 && cultivator.activeJobId; tick += 1) {
+    advanceWorld(world, 1);
+  }
+
+  const report = getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.lastReport;
+  assert.ok(report);
+  assert.equal(report.grade, "乙");
+  assert.equal(report.targetRank, 1);
+  assert.equal(cultivator.activeJobId, null);
+  const text = (report.beats ?? []).map((beat) => `${beat.title}\n${beat.detail}`).join("\n");
+  assert.equal(text.includes("丙级地宫"), false, text);
+  assert.equal((report.summary ?? "").includes("丙级地宫"), false, report.summary);
+  const herb = report.beats?.find((beat) => beat.title === "灯下的采药人");
+  if (herb) assert.match(herb.detail, /^乙级地宫的第一层里/);
 });
