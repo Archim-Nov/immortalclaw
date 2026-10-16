@@ -292,12 +292,15 @@ import {
   resolveBehaviorAspectId,
   normalizeCultivationRegistrationRecord,
   behaviorAspectDescription,
+  behaviorAspectLabel,
   motiveDescription,
+  motiveLabel,
   registrationLocaleOf,
   resolveCultivationMotiveId,
   resolveSpiritRootKindId,
   spiritRootDescription,
   temperamentDescription,
+  temperamentLabel,
   resolveTemperamentId,
   deriveSpiritRootKindId,
   sortedElementEntries,
@@ -3621,7 +3624,7 @@ export function createCultivator(world: WorldState, input: CreateCultivatorInput
     binding.selectedCultivatorId = cultivator.id;
     selectedCultivatorId = cultivator.id;
   }
-  addDaoLog(world, cultivator.id, "Character Created", `${cultivator.name} enters the realm.`, ["character"]);
+  addDaoLog(world, cultivator.id, "初入尘世", `${cultivator.name}踏入了这一界。`, ["character"]);
   addMessage(world, cultivator.id, "Registry", "Created", `${cultivator.name} is now active.`);
   return toSummary(cultivator, selectedCultivatorId);
 }
@@ -3707,6 +3710,17 @@ export function sendDirectMessage(
 export function getCultivationRegistration(world: WorldState, cultivatorId: string): CultivationRegistrationRecord | null {
   return structuredClone(getCultivatorOrThrow(world, cultivatorId).registrationRecord ?? null);
 }
+function registrationDaoContent(name: string, result: CultivationRegistrationRecord["result"]): string {
+  const temperamentId = result.core_temperament_id ?? resolveTemperamentId(result.core_temperament);
+  const aspectId = result.behavior_aspect_id ?? resolveBehaviorAspectId(result.behavior_aspect);
+  const motiveId = result.cultivation_motive_id ?? resolveCultivationMotiveId(result.cultivation_motive);
+  const temperament = temperamentId ? temperamentLabel(temperamentId, "zh-CN") : result.core_temperament;
+  const aspect = aspectId ? behaviorAspectLabel(aspectId, "zh-CN") : result.behavior_aspect;
+  const motive = motiveId ? motiveLabel(motiveId, "zh-CN") : result.cultivation_motive;
+  const aspectMeaning = aspect.split(" / ")[1]?.trim() || aspect;
+  return `${name}问心已定。心性落在${temperament}，行路以${aspectMeaning}为先，所求偏${motive}。`;
+}
+
 export function saveCultivationRegistration(
   world: WorldState,
   cultivatorId: string,
@@ -3732,7 +3746,7 @@ export function saveCultivationRegistration(
   cultivator.unlockedWeaponLoadoutIds = [...weaponLoadouts.unlockedLoadoutIds];
   cultivator.unlockedSpellLoadoutIds = [...spellLoadouts.unlockedLoadoutIds];
 
-  addDaoLog(world, cultivator.id, "问心定档", `${cultivator.name} completed registration: ${stored.result.core_temperament}, ${stored.result.behavior_aspect}, ${stored.result.cultivation_motive}.`, ["registration", "attunement"]);
+  addDaoLog(world, cultivator.id, "问心定档", registrationDaoContent(cultivator.name, stored.result), ["registration", "attunement"]);
   addMessage(world, cultivator.id, "Immortal Registry", "Registration Locked", `${cultivator.name}'s cultivation registration has been recorded.`);
   return structuredClone(stored);
 }
@@ -11639,9 +11653,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
         addMutualAffinity(world, cultivator.id, partnerId, task.affinityGain);
       }
       addSpiritStoneGainLog(world, cultivator.id, "同行历练", `${cultivator.name}完成了双人荒野任务：${task.nameCn}，获得${task.spiritStoneReward}灵石。`, ["social", "dual-wilderness"]);
-      return `${cultivator.name} completed dual wilderness task: ${task.nameCn}.`;
+      return `${cultivator.name}完成了双人荒野任务：${task.nameCn}。`;
     }
-    return `${cultivator.name} completed a dual wilderness task.`;
+    return `${cultivator.name}完成了双人荒野任务。`;
   }
   // ---- Dual Cultivate resolution ----
   if (job.actionId === "dual-cultivate") {
@@ -11938,7 +11952,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     }
     const warProgress = recordFactionWarContribution(world, cultivator, Math.max(20, contributionDelta));
     upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 });
-    addDaoLog(world, cultivator.id, "Sect Duty", `${cultivator.name} completed a sect errand.`, ["sect", "sect-quest-complete"]);
+    addDaoLog(world, cultivator.id, "宗门差事", `${cultivator.name}把宗门差事做完了。`, ["sect", "sect-quest-complete"]);
     noteSectLife(world, cultivator, "宗门差事");
     if (warProgress) {
       addWorldEvent(world, {
@@ -11950,7 +11964,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
         tags: ["sect", "faction-war", warProgress.faction],
       });
     }
-    return `${cultivator.name} finished a sect errand.`;
+    return `${cultivator.name}把宗门差事做完了。`;
   }
   // ---- New sect task system (spec Chapter 7) ----
   const sectTaskId = parseSectTaskId(job.actionId);
@@ -12049,7 +12063,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   if (job.actionId === "heal") { cultivator.qi = clamp(cultivator.qi + 45 + (registration?.healBonus ?? 0), 0, cultivator.maxQi); cultivator.injuryTicksRemaining = Math.max(0, cultivator.injuryTicksRemaining - 4 - Math.floor((registration?.healBonus ?? 0) / 4)); cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned"); upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 }); syncWounded(cultivator); return `${cultivator.name} recovered from injuries.`; }
   if (job.actionId === "cultivate") { cultivator.realmProgress = clamp(cultivator.realmProgress + 18 + Math.floor(cultivator.realmLevel / 2) + (hasEffect(cultivator, "clear-mind") ? 8 : 0) + (hasEffect(cultivator, "qi-surge") ? 6 : 0) - (hasEffect(cultivator, "poisoned") ? 8 : 0), 0, 200); if (cultivator.realmProgress >= 100 && cultivator.realmLevel < 9) { cultivator.realmProgress -= 100; cultivator.realmLevel += 1; cultivator.realm = cultivator.realmLevel <= 3 ? "炼气" : cultivator.realmLevel <= 6 ? "筑基" : "金丹"; cultivator.maxQi += 12; cultivator.maxSpiritualPower += 12; cultivator.qi = cultivator.maxQi; cultivator.spiritualPower = cultivator.maxSpiritualPower; cultivator.lifespan += 12; return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`; } return `${cultivator.name} gained cultivation progress.`; }
   if (job.actionId === "take-mortal-task") { cultivator.spiritStones += 140; cultivator.reputation += 8; cultivator.karma = Math.max(0, cultivator.karma - 2); return `${cultivator.name} finished a town task.`; }
-  if (job.actionId === "take-sect-errand") { cultivator.spiritStones += 180; cultivator.reputation += 6; upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 }); return `${cultivator.name} finished a sect errand.`; }
+  if (job.actionId === "take-sect-errand") { cultivator.spiritStones += 180; cultivator.reputation += 6; upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sect", remainingTicks: 3, intensity: 1 }); return `${cultivator.name}把宗门差事做完了。`; }
   if (job.actionId === "mine-spirit-stones") { const roll = hashString(`${world.tick}:${job.id}`); cultivator.spiritStones += 110 + (roll % 80); cultivator.inventory["spirit-ore"] += 1 + (roll % 2); cultivator.qi = clamp(cultivator.qi - 14, 1, cultivator.maxQi); if (roll % 5 === 0) { cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, 5); syncWounded(cultivator); } return `${cultivator.name} mined stones and ore.`; }
   if (job.actionId === "search-fortune") { const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}`); if (roll % 3 === 0) cultivator.inventory["ruin-fragment"] += hasEffect(cultivator, "fortune-marked") ? 2 : 1; else if (roll % 3 === 1) { cultivator.realmProgress = clamp(cultivator.realmProgress + 10, 0, 200); upsertEffect(cultivator, { id: "fortune-marked", name: "Fortune Marked", description: "Better ruins outcomes.", source: "ruins", remainingTicks: 5, intensity: 1 }); } else { cultivator.spiritStones += 220; cultivator.inventory["ruin-fragment"] += 1; } return `${cultivator.name} searched the ruins.`; }
   const encounterId = job.actionId === "hunt-mine-beast" ? "mine-beast" : "ruins-guardian"; const roll = hashString(`${world.tick}:${job.id}:${encounterId}`); const power = cultivator.qi + Math.floor(cultivator.spiritualPower * 0.6) + cultivator.realmLevel * 10 + Math.floor(cultivator.reputation / 3) + (hasEffect(cultivator, "qi-surge") ? 18 : 0) + (hasEffect(cultivator, "warded") ? 14 : 0) + (job.actionId === "challenge-guardian" && hasEffect(cultivator, "fortune-marked") ? 12 : 0) - (hasEffect(cultivator, "poisoned") ? 12 : 0) + (roll % 22); const threat = job.actionId === "hunt-mine-beast" ? 145 + (roll % 20) : 172 + (roll % 24); cultivator.spiritualPower = clamp(cultivator.spiritualPower - (job.actionId === "hunt-mine-beast" ? 16 : 24), 0, cultivator.maxSpiritualPower);
@@ -12665,7 +12679,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     const summary = resolveJob(world, job);
     if (hashString(`${world.tick}:${job.id}:sect`) % 3 === 0) {
       cultivator.inventory["ward-talisman"] += 1;
-      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Sect Bounty", content: "The sect added a protective talisman to your reward for finishing the errand cleanly.", severity: "medium", tags: ["event", "sect", "bounty"] });
+      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "宗门赏赐", content: "宗门额外赏赐了一张镇煞符，酬谢你把这趟差事做干净了。", severity: "medium", tags: ["event", "sect", "bounty"] });
     }
     return summary;
   }
@@ -13446,7 +13460,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       startJob(world, partner, "dual-survey-wilderness" as TimedActionId, `同行历练：${task.nameCn}`, {
         ...dualMeta, dualPartnerId: cultivator.id, dualRole: "partner" as const,
       });
-      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} and ${partner.name} started dual wilderness task: ${task.nameCn}.` };
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}和${partner.name}开始同行历练：${task.nameCn}。` };
     }
     // ---- Dual Cultivate (同行修炼) ----
     if (actionId === "dual-cultivate") {
