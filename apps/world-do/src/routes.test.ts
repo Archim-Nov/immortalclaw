@@ -297,6 +297,21 @@ test("world agent directory returns registered agents", async () => {
   assert.equal(response.status, 200);
   assert.ok(Array.isArray(payload.agents));
   assert.equal(payload.agents.length, 1);
+  const entry = payload.agents[0] as {
+    cultivator: {
+      location: string;
+      locationId: string;
+      stateId: string;
+      currentAction: string | null;
+      currentActionLabel: string | null;
+    };
+  };
+  assert.match(entry.cultivator.locationId, /:main-city$/);
+  assert.ok(entry.cultivator.stateId);
+  assert.ok(entry.cultivator.location);
+  assert.equal(entry.cultivator.currentAction, null);
+  assert.equal(entry.cultivator.currentActionLabel, null);
+  assert.equal(JSON.stringify(payload).includes("webhookSecret"), false);
 });
 
 test("world agent detail returns 404 when agent binding points to a missing cultivator", async () => {

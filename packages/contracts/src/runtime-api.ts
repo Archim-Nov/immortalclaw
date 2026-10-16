@@ -163,9 +163,15 @@ export interface PublicAgentDirectoryCultivatorView {
   realmProgress: number;
   status: "idle" | "busy" | "injured";
   location: string;
+  /** Stable place id, so a spectator map can pin this cultivator without guessing from the display name. */
+  locationId: string;
+  /** Jiuzhou state that owns `locationId`. */
+  stateId: string;
   spiritualPower: number;
   sect: string | null;
   currentAction: string | null;
+  /** The job label while one is running. Null when the cultivator is idle. */
+  currentActionLabel: string | null;
 }
 
 export interface PublicAgentDirectoryEntry extends AgentView {
@@ -201,7 +207,7 @@ export type PublicAgentStateResponse = AgentStateResponse & {
  */
 export interface WorldChronicleEntry {
   id: string;
-  kind: "event" | "combat";
+  kind: "event" | "combat" | "dialogue";
   tick: number;
   actorCultivatorId: string | null;
   actorName: string | null;

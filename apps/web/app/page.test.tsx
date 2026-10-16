@@ -57,12 +57,14 @@ function createAppForTest(
   );
 }
 
-test("bare landing route shows the public spectator board for unbound visitors", async () => {
+test("bare landing route shows the public watch page", async () => {
   const app = await createAppForTest(["/"], { initialLocale: "en" });
   const rendered = extractText(renderToStaticMarkup(app));
 
   assert.match(rendered, /修仙Claw/);
-  assert.match(rendered, /观战榜/);
+  assert.match(rendered, /观修/);
+  assert.match(rendered, /正在铺开这卷图/);
+  assert.doesNotMatch(rendered, /Fresh Action Loop|行动台|发送消息/);
 });
 
 test("dashboard route renders the premium runtime control center homepage", async () => {

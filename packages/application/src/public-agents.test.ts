@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeedWorld, getCultivatorState } from "../../domain/src/runtime.js";
+import { createSeedWorld, getCultivatorState, performAction } from "../../domain/src/runtime.js";
 import { buildPublicAgentDirectory, buildPublicAgentState } from "./public-agents.js";
 
 test("buildPublicAgentDirectory returns only agents that still map to world cultivators", async () => {
@@ -50,6 +50,52 @@ test("buildPublicAgentDirectory returns only agents that still map to world cult
   assert.equal(payload.agents[0]?.cultivator.id, cultivatorId);
   assert.equal(payload.agents[0]?.cultivator.realmPhase, "后期");
   assert.equal(payload.agents[0]?.cultivator.status, "idle");
+  const cultivator = world.cultivators[cultivatorId]!;
+  const location = world.locations[cultivator.locationId]!;
+  assert.equal(payload.agents[0]?.cultivator.locationId, cultivator.locationId);
+  assert.equal(payload.agents[0]?.cultivator.stateId, location.stateId);
+  assert.equal(payload.agents[0]?.cultivator.location, location.name);
+  assert.equal(payload.agents[0]?.cultivator.currentAction, null);
+  assert.equal(payload.agents[0]?.cultivator.currentActionLabel, null);
+  assert.equal(JSON.stringify(payload).includes("webhookSecret"), false);
+});
+
+test("buildPublicAgentDirectory names the running job without leaking the webhook secret", async () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const started = performAction(world, cultivatorId, "cultivate");
+  assert.equal(started.accepted, true);
+
+  const payload = await buildPublicAgentDirectory({
+    world: {
+      async readWorld() {
+        return world;
+      },
+    },
+    auth: {
+      async listAgentProfiles() {
+        return [
+          {
+            agentId: "agent-1",
+            name: "云中鹤",
+            selectedCultivatorId: cultivatorId,
+            webhookUrl: "https://example.invalid/hook",
+            webhookSecret: "super-secret-token",
+            createdAt: "2026-03-17T00:00:00.000Z",
+            updatedAt: "2026-03-17T00:00:00.000Z",
+            lastSeenAt: "2026-03-17T00:00:00.000Z",
+          },
+        ];
+      },
+    },
+  });
+
+  assert.equal(payload.agents[0]?.cultivator.currentAction, "cultivate");
+  assert.equal(payload.agents[0]?.cultivator.currentActionLabel, "运功");
+  assert.equal(payload.agents[0]?.cultivator.locationId, "qingzhou:main-city");
+  assert.equal(payload.agents[0]?.cultivator.stateId, "qingzhou");
+  assert.equal(JSON.stringify(payload).includes("super-secret-token"), false);
+  assert.equal(JSON.stringify(payload).includes("example.invalid"), false);
 });
 
 test("buildPublicAgentState assembles the stat-page payload for a registered agent", async () => {

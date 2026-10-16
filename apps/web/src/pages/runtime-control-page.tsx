@@ -1070,7 +1070,8 @@ function AgentsTab() {
                       {rankLabel}
                     </span>
                     <span className={`chip ${statusChipClass(agent.cultivator.currentAction || agent.cultivator.status)}`}>
-                      {(agent.cultivator.currentAction || agent.cultivator.status).toUpperCase()}
+                      {agent.cultivator.currentActionLabel
+                        || (agent.cultivator.status === "injured" ? "养伤" : agent.cultivator.status === "busy" ? "在做事" : "闲着")}
                     </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", margin: "0.7rem 0 0.3rem" }}>
@@ -1093,7 +1094,7 @@ function AgentsTab() {
                         value: <span className="stat-highlight">{agent.cultivator.spiritualPower.toLocaleString("en-US")}</span>,
                       },
                       { label: "宗门", value: agent.cultivator.sect ?? "散修" },
-                      { label: "动向", value: agent.cultivator.currentAction ?? "闭关" },
+                      { label: "动向", value: agent.cultivator.currentActionLabel ?? (agent.cultivator.status === "injured" ? "养伤" : "闲着") },
                       { label: "所在", value: agent.cultivator.location },
                     ]}
                   />
@@ -2582,8 +2583,8 @@ function ChronicleTab() {
             {chronicle.entries.map((entry) => (
               <article key={entry.id} className="runtime-feed-card">
                 <div className="runtime-chip-row">
-                  <span className={`chip ${entry.kind === "combat" ? "danger" : "jade"}`}>
-                    {entry.kind === "combat" ? "战斗" : "事件"}
+                  <span className={`chip ${entry.kind === "combat" ? "danger" : entry.kind === "dialogue" ? "gold" : "jade"}`}>
+                    {entry.kind === "combat" ? "交手" : entry.kind === "dialogue" ? "传音" : "见闻"}
                   </span>
                   {entry.actorName ? <span className="chip gold">{entry.actorName}</span> : null}
                   <span className="chip purple">{`刻 ${entry.tick}`}</span>
@@ -2615,10 +2616,10 @@ function PremiumSidebar({ activeRoute }: { activeRoute: PremiumControlRoute }) {
 
   return (
     <nav className="sidebar" aria-label="Primary">
-      <div className="logo">
+      <Link to="/" className="logo">
         <span>修仙Claw</span>
-        <span className="logo-eng">问道 · 长生 · 飞升</span>
-      </div>
+        <span className="logo-eng">回观修</span>
+      </Link>
 
       <div className="sidebar-index">目 录 · INDEX</div>
 
@@ -2694,12 +2695,7 @@ function ControlCenterContent({ activeRoute }: { activeRoute: PremiumControlRout
 
 export function RuntimeControlPage() {
   const location = useLocation();
-  const session = useRuntimeSession();
-  const matchedRoute = getPremiumControlRouteByPath(location.pathname) ?? premiumControlRoutes[0];
-  // Unbound visitors landing on the bare home see the public 观战榜 (spectator board)
-  // rather than the auth-gated dashboard — so the lively world greets them first.
-  const spectatorRoute = premiumControlRoutes.find((route) => route.id === "agents") ?? matchedRoute;
-  const activeRoute = location.pathname === "/" && !session.isBound ? spectatorRoute : matchedRoute;
+  const activeRoute = getPremiumControlRouteByPath(location.pathname) ?? premiumControlRoutes[0];
 
   return (
     <div className="premium-landing-page">

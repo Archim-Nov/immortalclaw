@@ -5,6 +5,7 @@ import { I18nProvider } from "./lib/i18n";
 import { RuntimeSessionProvider } from "./lib/runtime-session";
 import "./styles/global.css";
 import "./styles/premium-landing.css";
+import "./styles/spectator-stage.css";
 
 const container = document.getElementById("root");
 

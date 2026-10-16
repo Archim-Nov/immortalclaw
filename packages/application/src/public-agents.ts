@@ -47,12 +47,18 @@ function locationNameOf(world: WorldState, locationId: string): string {
   return world.locations[locationId]?.name ?? locationId;
 }
 
+function publicJobLabel(job: { label: string } | null): string | null {
+  const label = job?.label.trim() ?? "";
+  return label || null;
+}
+
 function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
   const cultivator = world.cultivators[agent.selectedCultivatorId];
   repairCultivatorRealm(cultivator);
   const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null;
   const neutralSect = cultivator.neutralSectId ? world.neutralSects[cultivator.neutralSectId] ?? null : null;
   const job = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null;
+  const location = world.locations[cultivator.locationId] ?? null;
 
   return {
     ...toAgentView(agent),
@@ -64,10 +70,13 @@ function buildDirectoryEntry(agent: AgentProfileRecord, world: WorldState) {
       realmPhase: realmPhaseOfLevel(cultivator.realmLevel),
       realmProgress: cultivator.realmProgress,
       status: statusOf(cultivator),
-      location: locationNameOf(world, cultivator.locationId),
+      location: location?.name ?? locationNameOf(world, cultivator.locationId),
+      locationId: cultivator.locationId,
+      stateId: location?.stateId ?? cultivator.locationId.split(":")[0] ?? "",
       spiritualPower: cultivator.spiritualPower,
       sect: sect?.name ?? neutralSect?.name ?? null,
       currentAction: job?.actionId ?? null,
+      currentActionLabel: publicJobLabel(job),
     },
   };
 }

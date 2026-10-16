@@ -7,13 +7,13 @@ import {
 } from "react-router-dom";
 import { AppShell } from "./app-shell";
 import { HomePage } from "../pages/home-page";
+import { SpectatorStage } from "../pages/spectator-stage";
 
 const PlayerStatPage = lazy(() =>
   import("../pages/player-stat-page").then((m) => ({ default: m.PlayerStatPage })),
 );
 
 const premiumControlPaths = [
-  "/",
   "/dashboard",
   "/agents",
   "/chronicle",
@@ -30,6 +30,14 @@ export const appRoutes: RouteObject[] = [
   {
     element: <AppShell />,
     children: [
+      {
+        path: "/",
+        element: <SpectatorStage />,
+      },
+      {
+        path: "/watch",
+        element: <SpectatorStage />,
+      },
       ...premiumControlPaths.map((path) => ({
         path,
         element: <HomePage />,

@@ -1,0 +1,468 @@
+.spectator-page {
+  --spectator-paper: #f4efe4;
+  --spectator-card: #fbf7ee;
+  --spectator-ink: #241f1a;
+  --spectator-ink-soft: #5c5348;
+  --spectator-line: rgba(36, 31, 26, 0.14);
+  --spectator-jade: #3f6b58;
+  --spectator-cinnabar: #9d3b2f;
+  --spectator-gold: #8c6b2f;
+  position: relative;
+  min-height: 100vh;
+  color: var(--spectator-ink);
+  background: var(--spectator-paper);
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+}
+
+.spectator-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 60% at 8% 0%, rgba(251, 247, 238, 0.95), transparent 60%),
+    radial-gradient(70% 50% at 100% 0%, rgba(157, 59, 47, 0.06), transparent 55%),
+    linear-gradient(180deg, #f7f2e8 0%, var(--spectator-paper) 42%, #ebe3d2 100%);
+}
+
+.spectator-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100% - 1.5rem));
+  margin: 0 auto;
+  padding: 1.4rem 0 2.5rem;
+}
+
+.spectator-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-end;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--spectator-line);
+}
+
+.spectator-kicker,
+.spectator-tick,
+.spectator-count,
+.spectator-panel-head p,
+.spectator-footer,
+.life-preview-meta {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+.spectator-kicker {
+  margin: 0;
+  color: var(--spectator-gold);
+  font-size: 0.75rem;
+}
+
+.spectator-header h1 {
+  margin: 0.15rem 0 0.35rem;
+  font-family: "Ma Shan Zheng", "Noto Serif SC", cursive;
+  font-size: 3.4rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.12em;
+}
+
+.spectator-lead,
+.spectator-map-note,
+.spectator-empty,
+.spectator-status p,
+.life-preview-empty,
+.life-preview-list p {
+  margin: 0;
+  color: var(--spectator-ink-soft);
+  line-height: 1.7;
+}
+
+.spectator-header-side {
+  text-align: right;
+}
+
+.spectator-tick,
+.spectator-count {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.spectator-tick {
+  color: var(--spectator-cinnabar);
+}
+
+.spectator-status,
+.spectator-panel {
+  margin-top: 1rem;
+  padding: 1rem 1rem 1.1rem;
+  background: var(--spectator-card);
+  border: 1px solid var(--spectator-line);
+  box-shadow: 0 16px 30px -28px rgba(36, 31, 26, 0.7);
+}
+
+.spectator-status h2,
+.spectator-panel-head h2,
+.life-preview h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.spectator-status.is-error {
+  border-color: rgba(157, 59, 47, 0.45);
+}
+
+.spectator-retry,
+.spectator-person,
+.spectator-pin {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.spectator-retry {
+  margin-top: 0.8rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--spectator-line);
+  background: transparent;
+}
+
+.spectator-columns {
+  display: grid;
+  grid-template-columns: minmax(15rem, 20rem) minmax(0, 1.4fr) minmax(16rem, 22rem);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.spectator-panel-head p {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.spectator-roster,
+.spectator-stream {
+  max-height: calc(100vh - 9rem);
+  overflow: auto;
+}
+
+.spectator-roster-list,
+.spectator-stream-list,
+.life-preview-list {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+}
+
+.spectator-roster-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.6rem;
+  align-items: start;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--spectator-line);
+}
+
+.spectator-roster-list li.is-selected .spectator-person-name {
+  color: var(--spectator-cinnabar);
+}
+
+.spectator-person {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1rem 0.45rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.spectator-status-dot,
+.spectator-pin-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.4rem;
+  border-radius: 50%;
+  background: var(--spectator-ink);
+}
+
+.spectator-status-dot.is-busy,
+.spectator-pin.is-busy .spectator-pin-dot {
+  background: var(--spectator-cinnabar);
+}
+
+.spectator-status-dot.is-injured,
+.spectator-pin.is-injured .spectator-pin-dot {
+  background: var(--spectator-gold);
+}
+
+.spectator-status-dot.is-idle,
+.spectator-pin.is-idle .spectator-pin-dot {
+  background: var(--spectator-ink);
+}
+
+.spectator-person-name {
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+}
+
+.spectator-person-realm,
+.spectator-person-place,
+.spectator-person-action,
+.spectator-detail-link {
+  grid-column: 2;
+  color: var(--spectator-ink-soft);
+  font-size: 0.92rem;
+}
+
+.spectator-person-action {
+  color: var(--spectator-jade);
+}
+
+.spectator-detail-link,
+.spectator-map-note a,
+.spectator-footer a {
+  color: var(--spectator-cinnabar);
+  text-decoration: none;
+}
+
+.spectator-detail-link:hover,
+.spectator-map-note a:hover,
+.spectator-footer a:hover {
+  text-decoration: underline;
+}
+
+.spectator-map-frame {
+  position: relative;
+  margin-top: 0.7rem;
+  background:
+    radial-gradient(80% 70% at 50% 45%, rgba(255, 252, 245, 0.4), transparent 70%),
+    #f3ecdd;
+  border: 1px solid var(--spectator-line);
+}
+
+.spectator-map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.spectator-map-frame-line {
+  fill: none;
+  stroke: rgba(36, 31, 26, 0.28);
+  stroke-width: 0.35;
+}
+
+.spectator-road {
+  fill: none;
+  stroke: rgba(36, 31, 26, 0.28);
+  stroke-width: 0.35;
+  stroke-dasharray: 0.4 0.7;
+}
+
+.spectator-region-wash {
+  fill: rgba(63, 107, 88, 0.08);
+}
+
+.spectator-region-name {
+  fill: var(--spectator-ink);
+  font-family: "Noto Serif SC", serif;
+  font-size: 3.1px;
+}
+
+.spectator-region-capital,
+.spectator-compass {
+  fill: var(--spectator-ink-soft);
+  font-family: "Noto Serif SC", serif;
+  font-size: 1.8px;
+}
+
+.spectator-map-pins {
+  position: absolute;
+  inset: 0;
+}
+
+.spectator-pin {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 1.6rem;
+  min-height: 1.6rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+}
+
+.spectator-pin-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin: 0;
+  box-shadow: 0 0 0 2px rgba(251, 247, 238, 0.9);
+}
+
+.spectator-pin.is-selected .spectator-pin-dot {
+  box-shadow: 0 0 0 2px #fbf7ee, 0 0 0 4px var(--spectator-cinnabar);
+}
+
+.spectator-pin-name {
+  max-width: 4.5rem;
+  overflow: hidden;
+  color: var(--spectator-ink);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 0 4px #fbf7ee;
+}
+
+.spectator-map-note {
+  margin-top: 0.7rem;
+}
+
+.spectator-map-note a {
+  margin-left: 0.4rem;
+}
+
+.spectator-stream-list li {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--spectator-line);
+}
+
+.spectator-stream-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  color: var(--spectator-ink-soft);
+  font-size: 0.78rem;
+}
+
+.spectator-kind {
+  color: var(--spectator-gold);
+}
+
+.spectator-kind.is-dialogue {
+  color: var(--spectator-jade);
+}
+
+.spectator-kind.is-combat {
+  color: var(--spectator-cinnabar);
+}
+
+.spectator-stream-list h3 {
+  margin: 0.25rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.spectator-stream-list p {
+  margin: 0;
+  color: var(--spectator-ink-soft);
+  line-height: 1.65;
+}
+
+.spectator-footer {
+  margin-top: 1.2rem;
+  color: var(--spectator-ink-soft);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+}
+
+.spectator-footer p {
+  margin: 0;
+}
+
+.life-preview {
+  margin: 0 0 1.25rem;
+  padding: 1.2rem 1.2rem 0.4rem;
+  background: var(--spectator-card, #fbf7ee);
+  border: 1px solid var(--spectator-line, rgba(36, 31, 26, 0.14));
+}
+
+.life-preview-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 0 0 1rem;
+}
+
+.life-preview-facts div {
+  min-width: 0;
+}
+
+.life-preview dt {
+  color: var(--spectator-ink-soft, #5c5348);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+}
+
+.life-preview dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+}
+
+.life-preview-list li {
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--spectator-line, rgba(36, 31, 26, 0.14));
+}
+
+.life-preview-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  color: var(--spectator-ink-soft, #5c5348);
+  font-size: 0.75rem;
+}
+
+.life-preview-subject {
+  margin-top: 0.25rem;
+}
+
+.life-preview-empty {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 980px) {
+  .spectator-columns,
+  .life-preview-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .spectator-map-panel {
+    order: -1;
+  }
+
+  .spectator-roster,
+  .spectator-stream {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .spectator-header {
+    align-items: flex-start;
+  }
+
+  .spectator-header h1 {
+    font-size: 2.7rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .spectator-sheet {
+    width: min(100% - 1rem, 1180px);
+  }
+
+  .spectator-header {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .spectator-header-side {
+    text-align: left;
+  }
+}
