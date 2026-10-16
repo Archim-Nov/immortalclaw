@@ -48,7 +48,17 @@ test("dungeon actions expose managed expeditions and rank yield hints to agents"
   assert.ok(enterAction);
   assert.match(enterAction.label, /进丙级地宫第1阶/);
   assert.match(enterAction.label, /稳妥/);
+  assert.match(enterAction.description, /稳妥偏守/);
   assert.equal(/Enter dungeon|conservative|balanced|aggressive/i.test(`${enterAction.label} ${enterAction.description}`), false);
+  const balancedEnter = actions.find((action) => action.actionId === "enter-dungeon:rank-1:balanced");
+  const aggressiveEnter = actions.find((action) => action.actionId === "enter-dungeon:rank-1:aggressive");
+  assert.ok(balancedEnter);
+  assert.ok(aggressiveEnter);
+  assert.match(balancedEnter.description, /这一趟走均衡/);
+  assert.match(aggressiveEnter.description, /凶猛偏攻/);
+  assert.equal(enterAction.description === balancedEnter.description, false);
+  assert.equal(balancedEnter.description === aggressiveEnter.description, false);
+  assert.equal(enterAction.description.includes("按这个姿态里稳的那一边走"), false);
 
   assert.ok(dungeonState);
   assert.ok(Array.isArray(dungeonState.rankYieldHints));
@@ -172,6 +182,74 @@ test("an expedition report keeps item ids in state and Chinese names in the summ
   assert.match(report.summary, /人已回到广津城/);
   assert.match(report.summary, /姿态是均衡/);
   assertNoRawIds(report.summary);
+});
+
+test("a rank-c run lists a side choice beside abort after the first step", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  performAction(world, CULTIVATOR_ID, "enter-dungeon:rank-1:balanced" as never);
+
+  let side: { actionId: string; description: string }[] = [];
+  for (let step = 0; step < 6 && side.length === 0; step += 1) {
+    advanceWorld(world, 1);
+    const actions = listAvailableActions(world, CULTIVATOR_ID);
+    assert.ok(actions.some((action) => action.actionId === "abort-dungeon-expedition"));
+    side = actions.filter((action) => String(action.actionId).startsWith("choose-event:"));
+  }
+  assert.ok(side.length >= 3, "expected a mid-run scene choice beside abort");
+  for (const action of side) {
+    assert.match(action.description, /地宫里岔开一件闲事/);
+    assert.doesNotMatch(action.description, /口袋里多了|薄人情|灵力沉了|修为涨了/);
+  }
+});
+
+test("a full cultivation bar says the next gain waits on breakthrough", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  cultivator.realmProgress = 100;
+  performAction(world, CULTIVATOR_ID, "enter-dungeon:rank-1:conservative" as never);
+  const aborted = performAction(world, CULTIVATOR_ID, "abort-dungeon-expedition" as never);
+  assert.match(aborted.summary, /修为已经满了，再涨要等破境/);
+  assert.equal(aborted.summary.includes("修为涨了0"), false);
+
+  const open = createDungeonExpeditionReport({
+    progress: {
+      cultivatorId: CULTIVATOR_ID,
+      jobId: "job-open-bar",
+      locationId: "qingzhou:dungeon-c",
+      grade: "丙",
+      targetRank: 1,
+      policy: "balanced",
+      strategy: { posture: "balanced", bias: "survival-first", pushPreference: "neutral" },
+      startedAtTick: 0,
+      stepIndex: 1,
+      maxSteps: 10,
+      nextResolutionTick: 3,
+      searchSteps: 1,
+      guardianSteps: 0,
+      primaryMaterialCount: 0,
+      secondaryDrops: {},
+      spiritStoneGain: 0,
+      realmProgressGain: 0,
+      unlockedNextRank: false,
+      lastResolvedAction: "search",
+      flavorEventTitles: [],
+      wakeNodesEncountered: 0,
+      maxWakeNodes: 3,
+      pendingWakeNode: null,
+      pendingWakeNodeDeadlineTick: null,
+      resolvedWakeNodeCount: 0,
+    },
+    outcome: "aborted",
+    endedAtTick: 1,
+    returnLocationId: "qingzhou:main-city",
+    primaryMaterial: "cloud-heart-grass",
+  });
+  assert.match(open.summary, /修为涨了0/);
 });
 
 test("managed expeditions can be aborted while the cultivator is busy", () => {

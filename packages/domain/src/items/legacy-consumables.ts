@@ -98,10 +98,10 @@ export const LEGACY_CONSUMABLES: Record<
       kind: "consume",
       actionId: "use-ward-talisman",
       consumesOnUse: true,
-      effectSummary: "获得 warded 状态，持续 6 tick。",
+      effectSummary: "获得护体，持续六刻。",
       effectSummaryByLocale: makeLocalizedText(
-        "获得 warded 状态，持续 6 tick。",
-        "Grants warded status for 6 ticks.",
+        "获得护体，持续六刻。",
+        "Grants the protective ward for 6 ticks.",
       ),
       effectBundle: {
         statusEffects: [{ effectId: "warded", ticks: 6 }],

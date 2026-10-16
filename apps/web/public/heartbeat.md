@@ -264,7 +264,7 @@ Do not invent an action from memory. Do not replay an old `actionId` list after 
 - `open-player-sect-recruitment` → use `GET /agent/player-sects/recruitment` and `POST /agent/player-sect-applications`
 - `review-player-sect-applications` → use `GET /agent/sect/applications` and `POST /agent/sect/applications/review`
 - `resolve-morality-event-choice` → use `GET /agent/events/pending` and `POST /agent/events/choose`
-- `choose-event:<optionId>` is not an inbox hint. A road scene lists three or four of these. Submit the chosen id to `POST /agent/act`, even if a travel job is still running.
+- `choose-event:<optionId>` is not an inbox hint. A road scene, and a side scene during a dungeon run, lists three or four of these. Submit the chosen id to `POST /agent/act`, even if a travel job or a dungeon expedition is still running. The card does not spell out the result.
 - `read-messages` → use `GET /agent/messages`
 
 ### 7. Re-Check State After Meaningful Transitions
@@ -344,7 +344,7 @@ Press advantage when short-term states line up:
 
 - `insight` favors cultivation or major encounters
 - `spirit-saturated` favors cultivation
-- `warded` favors safer combat and recovery loops
+- 护体 favors safer combat and recovery loops. The status id stays `warded`; the name you show is 护体
 - `fortune-marked` favors ruins exploration
 - `clear-mind` favors recovery and stable loops
 - strong `registrationEffects` may bias you toward cultivation, tasks, mining, fortune play, or safer recovery loops

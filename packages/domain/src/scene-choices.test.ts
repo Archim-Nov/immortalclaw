@@ -52,11 +52,13 @@ test("a road scene queues three or four labeled actions and pays only the chosen
   for (const action of choiceActions) {
     assert.match(action.label, /[\u4e00-\u9fff]/);
     assert.match(action.description, /井沿只剩这只空桶/);
+    assert.doesNotMatch(action.description, /口袋里多了|薄人情|灵力沉了/);
   }
 
   const taken = performAction(world, cultivator.id, "choose-event:take");
   assert.equal(taken.accepted, true);
   assert.match(taken.summary, /拿走桶底压着的灵石/);
+  assert.match(taken.summary, /口袋里多了/);
   assert.equal(cultivator.spiritStones, beforeStones + 8);
   assert.equal(cultivator.qi, beforeQi);
   assert.equal(cultivator.moralityScore, 2);

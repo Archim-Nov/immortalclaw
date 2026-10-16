@@ -1993,6 +1993,8 @@ export interface ActionJob {
     dungeonExpeditionTargetRank?: DungeonRank;
     dungeonExpeditionStepIndex?: number;
     dungeonExpeditionNextResolutionTick?: number;
+    /** How many event-pool side choices this expedition has already offered. */
+    dungeonSideChoicesQueued?: number;
     /** Set while a mid-run dungeon choice is waiting. Cleared when it is answered or times out. */
     dungeonWake?: {
       context: string;
@@ -2688,7 +2690,8 @@ export interface DungeonStateView {
 export interface PlayerSectView {
   id: string;
   name: string;
-  alignment: SectAlignment;
+  /** 中立 is a joined neutral outpost. Player sects stay 正道 or 魔道. */
+  alignment: SectAlignment | "中立";
   role: string;
   treasury: number;
   memberCount: number;

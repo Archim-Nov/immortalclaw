@@ -4,7 +4,13 @@
     "/health",
     "/agent/*",
     "/cultivator/*",
-    "/world/*"
+    "/world/*",
+    "/agent-templates/dungeon-wake",
+    "/agent-templates/dungeon-wake.html",
+    "/agent-templates/progress-summary",
+    "/agent-templates/progress-summary.html",
+    "/agent-templates/gift-notice",
+    "/agent-templates/gift-notice.html"
   ],
   "exclude": []
 }
