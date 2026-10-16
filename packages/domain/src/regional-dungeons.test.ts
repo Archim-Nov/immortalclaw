@@ -494,4 +494,22 @@ test("a side-room timeout stays on the safe line when only a teammate has voted"
   const captainTold = told(cultivator);
   assert.match(captainTold, /没有翻/);
   assert.equal(captainTold.includes("整叠札塞进袋子"), false);
+  assert.match(captainTold, /字还在墙上/);
+});
+
+test("a farther-room timeout keeps the captain's choice when the party abstains", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  seatMate(world, "林晚");
+  performAction(world, cultivator.id, "enter-regional:wanderer-cave");
+  const voted = performAction(world, cultivator.id, "regional-choice:deep-wanderer-read");
+  assert.match(voted.summary, /先看了看更里面/);
+  assert.equal(world.regionalRuns?.[cultivator.id]?.deeperResolved, false);
+
+  advanceWorld(world, 2);
+
+  const captainTold = told(cultivator);
+  assert.match(captainTold, /墙上的字还能认/);
+  assert.equal(captainTold.includes("抠下一块"), false);
+  assert.match(captainTold, /没有翻/);
 });

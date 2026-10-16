@@ -117,21 +117,49 @@ function bahuangWakeOf(kind: number, progress: BahuangExpeditionProgress, nodeId
       defaultOptionId: progress.strategy.posture === "aggressive" ? "detour-hazard" : "safe-route",
     });
   }
+  if (kind === 3) {
+    return finishBahuangWake({
+      nodeId,
+      sceneKind: "retreat",
+      context: "压力已经顶到该撤的地方。可以守住原来的走法、立刻撤出，或者把脚步放慢。",
+      options: [
+        { optionId: "hold-line", label: "守住原来的走法", description: "不改路线，按进八荒时定的姿态走。" },
+        { optionId: "emergency-retreat", label: "立刻撤出", description: "这一趟到此为止，人先出去。" },
+        { optionId: "slow-step", label: "把脚步放慢", description: "不撤，只是这一段走得轻一点。" },
+      ],
+      defaultOptionId: progress.strategy.pushPreference === "retreat" ? "emergency-retreat" : "hold-line",
+    });
+  }
+  if (kind === 4) {
+    return finishBahuangWake({
+      nodeId,
+      sceneKind: "trace",
+      context: "尘上有一串还没被盖住的脚印。可以顺着走、把脚印抹平、在旁边加一个自己的记号，或者踩着脚印追。",
+      options: [
+        { optionId: "smooth-trace", label: "把脚印抹平", description: "后来的人少被这串脚印带偏。" },
+        { optionId: "mark-trace", label: "在旁边做记号", description: "自己的记号留下，脚印不动。" },
+        { optionId: "follow-trace", label: "顺着脚印走", description: "不追人，只沿着印子走一段。" },
+        { optionId: "chase-trace", label: "踩着脚印追", description: "追得上也许有东西，尘也会扬起来。" },
+      ],
+      defaultOptionId: progress.strategy.bias === "reward-first" ? "chase-trace" : "smooth-trace",
+    });
+  }
   return finishBahuangWake({
     nodeId,
-    sceneKind: "retreat",
-    context: "压力已经顶到该撤的地方。可以守住原来的走法、立刻撤出，或者把脚步放慢。",
+    sceneKind: "camp",
+    context: "背风处有一堆灭掉的火。可以烤一会儿、把剩下的干柴留下、只看灰里有没有字，或者把灰翻开。",
     options: [
-      { optionId: "hold-line", label: "守住原来的走法", description: "不改路线，按进八荒时定的姿态走。" },
-      { optionId: "emergency-retreat", label: "立刻撤出", description: "这一趟到此为止，人先出去。" },
-      { optionId: "slow-step", label: "把脚步放慢", description: "不撤，只是这一段走得轻一点。" },
+      { optionId: "warm-camp", label: "烤一会儿", description: "火已经灭了，余温还在。" },
+      { optionId: "leave-camp", label: "把干柴留下", description: "自己不烤，留给后来的人。" },
+      { optionId: "read-camp", label: "只看灰里的字", description: "有字就记下，灰不翻。" },
+      { optionId: "rake-camp", label: "把灰翻开", description: "灰里可能有东西，尘也会扑到脸上。" },
     ],
-    defaultOptionId: progress.strategy.pushPreference === "retreat" ? "emergency-retreat" : "hold-line",
+    defaultOptionId: progress.strategy.posture === "aggressive" ? "rake-camp" : "warm-camp",
   });
 }
 
 export function previewBahuangWakes(progress: BahuangExpeditionProgress): WakeNode[] {
-  return [0, 1, 2, 3].map((kind) => placeWake(progress, bahuangWakeOf(kind, progress, `bahuang-preview-${kind}`)));
+  return [0, 1, 2, 3, 4, 5].map((kind) => placeWake(progress, bahuangWakeOf(kind, progress, `bahuang-preview-${kind}`)));
 }
 
 function placeWake(progress: BahuangExpeditionProgress, node: WakeNode): WakeNode {
@@ -153,7 +181,7 @@ function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number):
   }
 
   const nodeId = `bahuang-wake-${progress.cultivatorId}-${progress.depth}-${progress.encounteredWakeNodes.length + 1}`;
-  const type = hashString(`${nodeId}:type`) % 4;
+  const type = hashString(`${nodeId}:type`) % 6;
   return placeWake(progress, bahuangWakeOf(type, progress, nodeId));
 }
 
@@ -566,6 +594,24 @@ export function resolveBahuangWakeDecision(
     const bonusProgress = 5 + (hashString(`${cultivator.id}:${world.tick}:wake-detour`) % 8);
     progress.rewards.realmProgress += bonusProgress;
     cultivator.realmProgress = Math.min(100, cultivator.realmProgress + bonusProgress);
+  } else if (optionId === "smooth-trace" || optionId === "leave-camp") {
+    progress.pressure = Math.max(0, progress.pressure - 1);
+  } else if (optionId === "mark-trace") {
+    progress.rewards.spiritStones += 2;
+    cultivator.spiritStones += 2;
+  } else if (optionId === "follow-trace") {
+    progress.pressure += 1;
+    progress.rewards.spiritStones += 6;
+    cultivator.spiritStones += 6;
+  } else if (optionId === "chase-trace" || optionId === "rake-camp") {
+    progress.pressure += 2;
+    progress.rewards.spiritStones += 8;
+    cultivator.spiritStones += 8;
+  } else if (optionId === "warm-camp") {
+    progress.pressure = Math.max(0, progress.pressure - 2);
+  } else if (optionId === "read-camp") {
+    progress.rewards.spiritStones += 4;
+    cultivator.spiritStones += 4;
   } else if (optionId === "emergency-retreat") {
     const sentence = `${cultivator.name}在八荒里选了「${option.label}」。${option.description}`;
     rememberBahuangLine(world, cultivator, "八荒里的抉择", sentence);

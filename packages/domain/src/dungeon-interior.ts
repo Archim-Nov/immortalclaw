@@ -1,3 +1,13 @@
+import {
+  EXTRA_BAHUANG_ROOMS,
+  EXTRA_WAKE_EFFECTS,
+  EXTRA_WILD_ROOMS,
+  LATER_PACKS,
+  PLACE_HINT,
+  REGIONAL_DEEPER,
+  ROOM_LINE_LATER,
+  extraWakeScene,
+} from "./dungeon-interior-round2.js";
 import { mysteryForRank } from "./high-realm.js";
 import { jiaPackShape, type GuardianThreat } from "./high-realm-dungeon.js";
 import { lightPackFlavor } from "./yi-mystery.js";
@@ -46,7 +56,9 @@ export interface WakeEffect {
 
 type BandKey = "bing" | "yi" | "lei" | "wu" | "tong" | "danxia" | "infant-pool" | "divine-rift";
 type RoomKind = "scout" | "rest" | "side" | "approach";
-type FreshWake = "trap" | "shrine" | "chamber" | "nest" | "sealed";
+type FreshWake = "trap" | "shrine" | "chamber" | "nest" | "sealed" | "well" | "span" | "lantern" | "voice" | "ford";
+
+const FRESH_WAKES: readonly FreshWake[] = ["trap", "shrine", "chamber", "nest", "sealed", "well", "span", "lantern", "voice", "ford"];
 
 const FLOOR_PACKS: Record<BandKey, { place: string; foes: readonly NamedFoe[]; elite: NamedFoe }> = {
   bing: {
@@ -307,6 +319,7 @@ const WILD_ROOMS = [
   (place: string) => `${place}路边有一块能坐的石头。你歇了歇脚，把靴上的土磕掉，再往前。`,
   (place: string) => `${place}侧面有一处浅窝。你看了看，没有伸手，窝里的东西也没有出来。`,
   (place: string) => `${place}前面的风变了。还没到要打的时候，你先把袋子系紧。`,
+  ...EXTRA_WILD_ROOMS,
 ] as const;
 
 const BAHUANG_ROOMS = [
@@ -314,6 +327,7 @@ const BAHUANG_ROOMS = [
   (place: string) => `${place}有一处背风的缺口。你歇了歇，干粮没动，只把气顺过来。`,
   (place: string) => `${place}侧面露出一扇没合严的石门。你看了看门后的黑，没有进去。`,
   (place: string) => `${place}前面有人留下的记号。你照着记号走了几步，没有把记号抹掉。`,
+  ...EXTRA_BAHUANG_ROOMS,
 ] as const;
 
 function bandKey(grade: DungeonGrade, rank: number): BandKey {
@@ -332,8 +346,14 @@ function bandThreat(grade: DungeonGrade, rank: number): GuardianThreat | undefin
   return { ...raw, selfStatusId: undefined };
 }
 
-export function floorPack(grade: DungeonGrade, rank: number, withElite: boolean): NamedFoe[] {
-  const band = FLOOR_PACKS[bandKey(grade, rank)];
+export function floorPack(
+  grade: DungeonGrade,
+  rank: number,
+  withElite: boolean,
+  which: "gate" | "later" = "gate",
+): NamedFoe[] {
+  const key = bandKey(grade, rank);
+  const band = which === "later" ? LATER_PACKS[key] : FLOOR_PACKS[key];
   return withElite ? [...band.foes, band.elite] : [...band.foes];
 }
 
@@ -359,27 +379,49 @@ export function regionalInteriorIds(): string[] {
   return Object.keys(REGIONAL_SCENES);
 }
 
+export function regionalDeeper(dungeonId: string): InteriorScene | null {
+  return REGIONAL_DEEPER[dungeonId] ?? null;
+}
+
+export function regionalDeeperIds(): string[] {
+  return Object.keys(REGIONAL_DEEPER);
+}
+
+export function interiorPlaceName(grade: DungeonGrade, rank: number): string {
+  return FLOOR_PACKS[bandKey(grade, rank)].place;
+}
+
 export function interiorContentCounts(): {
   wakeScenes: number;
   wakeOptions: number;
   regionalScenes: number;
   regionalOptions: number;
+  deeperScenes: number;
+  deeperOptions: number;
   floorPacks: number;
+  laterPacks: number;
   regionalEscorts: number;
   roomLines: number;
 } {
-  const wakeOptions = (["trap", "shrine", "chamber", "nest", "sealed"] as const)
+  const wakeOptions = FRESH_WAKES
     .reduce((sum, kind) => sum + (interiorWakeDraft(kind, "balanced")?.options.length ?? 0), 0);
   const regionalOptions = Object.values(REGIONAL_SCENES)
     .reduce((sum, scene) => sum + scene.options.length, 0);
+  const deeperOptions = Object.values(REGIONAL_DEEPER)
+    .reduce((sum, scene) => sum + scene.options.length, 0);
   const roomLines = Object.values(ROOM_LINES)
-    .reduce((sum, kinds) => sum + Object.keys(kinds).length, 0);
+    .reduce((sum, kinds) => sum + Object.keys(kinds).length, 0)
+    + Object.values(ROOM_LINE_LATER)
+      .reduce((sum, kinds) => sum + Object.keys(kinds).length, 0);
   return {
-    wakeScenes: 5,
+    wakeScenes: FRESH_WAKES.length,
     wakeOptions,
     regionalScenes: Object.keys(REGIONAL_SCENES).length,
     regionalOptions,
+    deeperScenes: Object.keys(REGIONAL_DEEPER).length,
+    deeperOptions,
     floorPacks: Object.keys(FLOOR_PACKS).length,
+    laterPacks: Object.keys(LATER_PACKS).length,
     regionalEscorts: Object.keys(REGIONAL_ESCORTS).length,
     roomLines,
   };
@@ -400,7 +442,9 @@ export function interiorRoomBeat(input: {
       : input.step === 4 || input.step === 9
         ? "rest"
         : "side";
-  const line = ROOM_LINES[bandKey(input.grade, input.rank)][kind];
+  const key = bandKey(input.grade, input.rank);
+  const useLater = (input.step >= 5 && input.step !== 10) || (input.step === 10 && input.rank % 2 === 0);
+  const line = useLater ? ROOM_LINE_LATER[key][kind] : ROOM_LINES[key][kind];
   const beatKind: DungeonBeat["kind"] = kind === "rest" ? "mood" : kind === "side" ? "find" : "insight";
   return { kind: beatKind, title: line.title, detail: line.detail, mood: line.mood };
 }
@@ -425,7 +469,7 @@ export function pickLateWakeKind(input: {
   const extra: Array<"elite" | "bank"> = [];
   if (input.elite && !input.used.has("elite")) extra.push("elite");
   if (input.bank && !input.used.has("bank")) extra.push("bank");
-  const fresh = (["trap", "shrine", "chamber", "nest", "sealed"] as const).filter((kind) => !input.used.has(kind));
+  const fresh = FRESH_WAKES.filter((kind) => !input.used.has(kind));
   const familiar = [...classic, ...extra];
   if (familiar.length === 0 && fresh.length === 0) return null;
   const takeFresh = familiar.length >= 2 && fresh.length > 0 && input.roll % 5 === 0;
@@ -434,6 +478,16 @@ export function pickLateWakeKind(input: {
 }
 
 export function interiorWakeDraft(
+  kind: string,
+  posture: DungeonExpeditionPolicy,
+  place?: string,
+): { sceneKind: FreshWake; context: string; options: Array<{ optionId: string; label: string; description: string }>; defaultOptionId: string } | null {
+  const scene = bareWake(kind, posture);
+  if (!scene) return null;
+  return placeWake(scene, place);
+}
+
+function bareWake(
   kind: string,
   posture: DungeonExpeditionPolicy,
 ): { sceneKind: FreshWake; context: string; options: Array<{ optionId: string; label: string; description: string }>; defaultOptionId: string } | null {
@@ -502,7 +556,14 @@ export function interiorWakeDraft(
       defaultOptionId: posture === "aggressive" ? "force-seal" : posture === "balanced" ? "stable-seal" : "leave-seal",
     };
   }
-  return null;
+  return extraWakeScene(kind, posture);
+}
+
+function placeWake<T extends { context: string }>(scene: T, place?: string): T {
+  if (!place) return scene;
+  const key = (Object.keys(FLOOR_PACKS) as BandKey[]).find((band) => FLOOR_PACKS[band].place === place);
+  const hint = key ? PLACE_HINT[key] : "";
+  return { ...scene, context: `${place}里。${hint}${scene.context}` };
 }
 
 const WAKE_EFFECTS: Record<string, WakeEffect> = {
@@ -549,7 +610,7 @@ function effect(
 }
 
 export function interiorWakeEffect(optionId: string): WakeEffect | null {
-  return WAKE_EFFECTS[optionId] ?? null;
+  return WAKE_EFFECTS[optionId] ?? EXTRA_WAKE_EFFECTS[optionId] ?? null;
 }
 
 function foeBody(
@@ -597,9 +658,14 @@ export function resolveInteriorSkirmish(input: {
   policy: DungeonExpeditionPolicy;
 }): PartyBattleResult | null {
   if (input.actionKind !== "search") return null;
-  const kind = input.stepIndex === 1 ? "skirmish" : input.stepIndex === 4 ? "midboss" : null;
+  const later = input.stepIndex === 2 || input.stepIndex === 5;
+  const kind = input.stepIndex === 1 || input.stepIndex === 2
+    ? "skirmish"
+    : input.stepIndex === 4 || input.stepIndex === 5
+      ? "midboss"
+      : null;
   if (!kind) return null;
-  const named = floorPack(input.grade, input.rank, kind === "midboss");
+  const named = floorPack(input.grade, input.rank, kind === "midboss", later ? "later" : "gate");
   const leader = input.allies[0];
   const threat = bandThreat(input.grade, input.rank);
   const factors = kind === "midboss" ? [0.46, 0.4, 0.58] : [0.36, 0.3];

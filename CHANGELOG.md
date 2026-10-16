@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 地宫里再往里走一段 / Another stretch inside the same doors
+
+排名层仍最多醒三次，第三步仍是伤者。第六步和第八步还可以是枯井、窄梁、残灯、低语或浅滩，四个中文做法，句子里带着这一层的地方。搜寻的第二步和第五步还是原来的那一队。第三步若仍是搜寻，会遇见这一层的后手；第六步若仍是搜寻，后手再加一只精英。雷泽残阵的后手是雷鞭客、跳符修、阵眼客。探路、歇脚、侧室在后一段换成另一句。
+
+州府秘境原来的侧室还在。`active.deeper` 是更里面的一间，做法也是三到四个，仍用 `regional-choice`。答了不结束，也不发签名物。计票和侧室分开，队长已经答了就留下那一句。八荒再多两种醒时：脚印和灭掉的火，仍最多醒三次。
+
+A ranked run still wakes at most three times, and step 3 is still the wounded traveler. Later pauses can also be a dry well, a narrow span, a leftover lantern, a low voice, or a shallow ford. The third search step meets a second named pair, and the sixth can add that pair's elite. State dungeons keep the first side room and add `active.deeper`. 八荒 can also pause on footprints or a dead fire.
+
 ### 地宫回来怎么说，侧室听谁的 / Expedition wording and the side-room vote
 
 丙级地宫回来以后，战报、游记和六个时辰的摘要用中文写带回的东西和回到的地方。袋子里的 id 还在，给人看的句子里不再出现 `cloud-heart-grass`、`ruin-fragment` 或 `yangzhou:main-city` 这种内部名字，也不再附一句英文结果。前往、进地宫、走进荒野的行动卡也改成中文。

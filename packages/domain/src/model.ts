@@ -1043,6 +1043,10 @@ export interface RegionalRunState {
   interiorResolved?: boolean;
   /** Votes on the side room, separate from the signature choice. */
   interiorVotes?: Record<string, string>;
+  /** Farther room already answered. Absent on runs saved before that room. */
+  deeperResolved?: boolean;
+  /** Votes on the farther room, separate from the side room and the signature choice. */
+  deeperVotes?: Record<string, string>;
 }
 
 export interface RegionalPlaceView {
@@ -1080,6 +1084,12 @@ export interface RegionalDungeonsView {
     options: Array<{ optionId: string; label: string; description: string }>;
     /** Side room still open beside the signature choice. Absent once it is answered. */
     interior: {
+      prompt: string;
+      safeOptionId: string;
+      options: Array<{ optionId: string; label: string; description: string }>;
+    } | null;
+    /** Farther room, still open. Same shape as the side room, tallied apart from it. */
+    deeper: {
       prompt: string;
       safeOptionId: string;
       options: Array<{ optionId: string; label: string; description: string }>;

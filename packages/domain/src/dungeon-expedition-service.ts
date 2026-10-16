@@ -1,4 +1,4 @@
-import { interiorWakeDraft, interiorWakeEffect, pickLateWakeKind } from "./dungeon-interior.js";
+import { interiorPlaceName, interiorWakeDraft, interiorWakeEffect, pickLateWakeKind } from "./dungeon-interior.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
@@ -658,7 +658,7 @@ export function settleDungeonWakeNode(
   const extra = interiorWakeEffect(chosenOptionId);
   const known = MORAL_WAKE_EFFECTS[chosenOptionId] ?? extra;
   const risky = !isSafeDungeonWakeOption(chosenOptionId);
-  const beat: DungeonBeat | null = known
+  const rawBeat: DungeonBeat | null = known
     ? known.beat
     : risky
       ? {
@@ -673,6 +673,10 @@ export function settleDungeonWakeNode(
           detail: "岔路选了更稳的一条。慢，可灯还在。",
           mood: "心里定一点",
         };
+  const place = extra ? interiorPlaceName(progress.grade, progress.targetRank) : "";
+  const beat: DungeonBeat | null = rawBeat && place && !rawBeat.detail.startsWith(place)
+    ? { ...rawBeat, detail: `${place}里。${rawBeat.detail}` }
+    : rawBeat;
   const stoneDelta = known ? known.stoneDelta : 0;
   const reportStone = known ? known.stoneDelta : (risky ? 18 : 0);
   const reportRealm = known?.realmDelta ?? (known ? 0 : (risky ? 2 : 0));
@@ -703,7 +707,7 @@ export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgr
   return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress)).progress;
 }
 
-type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank" | "trap" | "shrine" | "chamber" | "nest" | "sealed";
+type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank" | "trap" | "shrine" | "chamber" | "nest" | "sealed" | "well" | "span" | "lantern" | "voice" | "ford";
 
 function finishWake(input: {
   nodeId: string;
@@ -873,7 +877,7 @@ export function maybeCreateDungeonWakeNode(input: {
   if (kind === "loot") return lootWake(nodeId, posture);
   if (kind === "elite") return eliteWake(nodeId, posture);
   if (kind === "bank") return bankWake(nodeId, posture);
-  const draft = interiorWakeDraft(kind, posture);
+  const draft = interiorWakeDraft(kind, posture, interiorPlaceName(progress.grade, progress.targetRank));
   if (!draft) return bankWake(nodeId, posture);
   return finishWake({ nodeId, ...draft });
 }
