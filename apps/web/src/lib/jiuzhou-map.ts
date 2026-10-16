@@ -1,8 +1,11 @@
 /**
- * Pin slots for the drawn 九州 map in public/assets/jiuzhou-map.svg.
- * Coordinates share that file's viewBox. They are stable places on the drawing,
- * not a survey. A place id such as `qingzhou:main-city` lands on its capital,
- * then nudges by node type so a town does not sit on the city dot.
+ * Pin slots for the ink-wash 九州 map in public/assets/jiuzhou-ink-wash.png.
+ * The spectator stretches that painting into this 960×680 frame. Region anchors
+ * are the painted capitals on that image, scaled into the frame, so a pin lands
+ * in the state it names. The older line drawing, jiuzhou-map.svg, is a different
+ * arrangement and is not the coordinate source. A place id such as
+ * `qingzhou:main-city` lands on its capital, then nudges by node type so a town
+ * does not sit on the city dot.
  */
 
 export const MAP_VIEW = { width: 960, height: 680 } as const;
@@ -16,15 +19,15 @@ export interface JiuzhouRegion {
 }
 
 export const JIUZHOU_REGIONS: readonly JiuzhouRegion[] = [
-  { id: "youzhou", name: "幽州", capital: "朔宁城", x: 198, y: 142 },
-  { id: "qingzhou", name: "青州", capital: "青岚城", x: 458, y: 138 },
-  { id: "liangzhou", name: "凉州", capital: "砺关城", x: 138, y: 318 },
-  { id: "shuzhou", name: "蜀州", capital: "栖云城", x: 286, y: 278 },
-  { id: "zhongzhou", name: "中州", capital: "天衡城", x: 472, y: 276 },
-  { id: "yangzhou", name: "扬州", capital: "广津城", x: 742, y: 236 },
-  { id: "wanzhou", name: "宛州", capital: "长和城", x: 286, y: 478 },
-  { id: "cangzhou", name: "沧州", capital: "沧澜城", x: 478, y: 468 },
-  { id: "leizhou", name: "雷州", capital: "惊霆城", x: 708, y: 446 },
+  { id: "youzhou", name: "幽州", capital: "朔宁城", x: 426, y: 170 },
+  { id: "qingzhou", name: "青州", capital: "青岚城", x: 614, y: 195 },
+  { id: "liangzhou", name: "凉州", capital: "砺关城", x: 329, y: 280 },
+  { id: "shuzhou", name: "蜀州", capital: "栖云城", x: 335, y: 438 },
+  { id: "zhongzhou", name: "中州", capital: "天衡城", x: 489, y: 331 },
+  { id: "yangzhou", name: "扬州", capital: "广津城", x: 446, y: 536 },
+  { id: "wanzhou", name: "宛州", capital: "长和城", x: 542, y: 465 },
+  { id: "cangzhou", name: "沧州", capital: "沧澜城", x: 681, y: 319 },
+  { id: "leizhou", name: "雷州", capital: "惊霆城", x: 684, y: 489 },
 ];
 
 export const JIUZHOU_ROADS: readonly (readonly [string, string])[] = [

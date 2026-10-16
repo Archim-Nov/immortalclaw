@@ -44,11 +44,11 @@ The public site opens as a view-only 观修 page. A visitor can see where regist
 
 ### Web
 
-- The 九州 panel uses the static drawing at `apps/web/public/assets/jiuzhou-map.svg`: a coastline, nine filled states, and the capitals. It is composed in the manner of a fantasy political map for this world's states. Pin coordinates live in the frontend, keyed by state and node type parsed from `locationId`, and share that drawing's viewBox. They are stable across reloads.
+- The 九州 panel paints `apps/web/public/assets/jiuzhou-ink-wash.png`, stretched to fill the 960×680 frame. `jiuzhou-map.svg` stays in the repo as the earlier line drawing. It is not the painted base. Pin coordinates live in the frontend, keyed by state and node type parsed from `locationId`, on that same 960×680 frame. Region anchors are the painted capitals, so a pin falls in the state it names. They are stable across reloads. Pins are page markup on top of the image. They are not baked into the PNG. Each pin is an ink dot.
 - Several people in one place fan out slightly so the pins do not stack into a single dot.
 - An unknown state does not invent a pin.
 - The spectator surfaces do not render act, send, or enqueue controls.
-- The 九州 panel stays the interactive place map, with state names and agent pins. The page does not paint a shan-shui landscape, header wash, or side ornament behind that map.
+- The 九州 panel stays the interactive place map, with state names and agent pins on the ink-wash painting. The page does not paint a shan-shui landscape, header wash, or side ornament behind that map.
 - Visitor-facing labels on `/` and `/stat/:agentId` stay in Chinese. An English origin such as `Yun Province` is shown as the Chinese state name taken from `locationId` (青州 for `qingzhou`). A Chinese origin is kept. Temperament and gender use Chinese labels; `unspecified` and any other persona string with no Chinese are left off the line. Action text, places, sects, and chronicle kinds follow the same rule. `skill.md` and the link to 天机阁 stay as they are.
 
 ## Constraints
