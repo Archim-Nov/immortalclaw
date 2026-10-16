@@ -62,10 +62,10 @@ export const LEGACY_CONSUMABLES: Record<
       kind: "consume",
       actionId: "use-qi-pill",
       consumesOnUse: true,
-      effectSummary: "恢复 30 点灵力，并获得 spirit-saturated。",
+      effectSummary: "恢复 30 点灵力，并获得灵气充盈。",
       effectSummaryByLocale: makeLocalizedText(
-        "恢复 30 点灵力，并获得 spirit-saturated。",
-        "Restores 30 spiritual power and grants spirit-saturated.",
+        "恢复 30 点灵力，并获得灵气充盈。",
+        "Restores 30 spiritual power and grants a spirit-saturated state.",
       ),
       effectBundle: {
         spiritualPower: 30,

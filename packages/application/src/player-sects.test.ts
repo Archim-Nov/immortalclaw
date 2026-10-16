@@ -159,6 +159,10 @@ test("buildAuthenticatedAgentActions adds only one generic player-sect review to
   const actionIds = payload.actions.map((action) => action.actionId);
   assert.equal(actionIds.filter((actionId) => actionId === "review-player-sect-applications").length, 1);
   assert.equal(actionIds.some((actionId) => actionId.startsWith("review-player-sect-applications:")), false);
+  const review = payload.actions.find((action) => action.actionId === "review-player-sect-applications");
+  assert.match(review?.description ?? "", /审/);
+  assert.equal((review?.label ?? "").includes("/agent/"), false);
+  assert.equal((review?.description ?? "").includes("/agent/"), false);
 });
 
 test("application package exports player-sect workflow helpers", () => {

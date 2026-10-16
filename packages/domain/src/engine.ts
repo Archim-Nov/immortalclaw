@@ -63,7 +63,7 @@ import {
   eventSeverityOf,
   type EventSourceType,
 } from "./events.js";
-import { repairCultivatorRealm, realmStageForLevel } from "./realms.js";
+import { realmLabelForLevel, repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import {
   breakthroughMethodIdForLevel,
   breakthroughMethodNarrative,
@@ -215,6 +215,7 @@ import {
   acceptQuest,
   buildAcceptQuestActionId,
   buildExecuteQuestActionId,
+  questFacingDescription,
   questFacingName,
   getActiveQuest,
   getActiveQuestByReadableIndex,
@@ -6009,13 +6010,14 @@ function buildBreakthroughAction(cultivator: Cultivator): AvailableAction | null
   if (!definition) {
     return null;
   }
+  const stage = realmLabelForLevel(definition.targetLevel);
+  const major = definition.category === "major";
   return {
     actionId: "residence-breakthrough",
-    label: definition.category === "major" ? "Residence breakthrough (major)" : "Residence breakthrough",
-    description:
-      definition.category === "major"
-        ? `Attempt a major breakthrough to level ${definition.targetLevel} at residence.`
-        : `Break through to level ${definition.targetLevel} at residence.`,
+    label: major ? "洞府破境（大境界）" : "洞府破境",
+    description: major
+      ? `在洞府里尝试大突破，到${stage}。`
+      : `在洞府里破到${stage}。`,
     durationTicks: definition.durationTicks,
     kind: "timed",
     costs: {
@@ -8116,14 +8118,14 @@ function travelCardFor(world: WorldState, locationId: string): { label: string; 
     const sectName = world.neutralSects[place.organizationId]?.name ?? name;
     return {
       label: `前往${name}`,
-      description: `${name}是${sectName}的中立山门。到了据点，用 join-neutral-sect:${place.organizationId} 入门。玩家自建的宗门不走这一步。`,
+      description: `${name}是${sectName}的中立山门。到了据点就能入门。`,
     };
   }
   if (place?.nodeType === "sect-outpost" && place.organizationType === "player-sect") {
     const sectName = (place.organizationId && world.sects[place.organizationId]?.name) || name;
     return {
       label: `前往${name}（玩家宗门）`,
-      description: `${name}是玩家自建的${sectName}，不是中立门派。这里没有 join-neutral-sect。想入门要在据点或本州主城报名：先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications。open-player-sect-recruitment 只是提示，提交给 /agent/act 不会入门。`,
+      description: `${name}是玩家自建的${sectName}。想入门，到据点或本州主城报名。`,
     };
   }
   if (place?.nodeType === "wilderness") {
@@ -8528,7 +8530,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push({
       actionId: `join-neutral-sect:${localNeutralSect.id}`,
       label: `入门：${localNeutralSect.name}`,
-      description: `在${localNeutralSect.name}据点入门。这是本州的中立门派，用 join-neutral-sect:${localNeutralSect.id}。`,
+      description: `在${localNeutralSect.name}据点入门。这是本州的中立门派。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8539,18 +8541,18 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push({
         actionId: "join-sect",
         label: `入门：${localSect.name}（玩家宗门）`,
-        description: `${localSect.name}是玩家自建的宗门，不是中立门派，所以没有 join-neutral-sect。你已经做过一桩基础事务，可以用 join-sect 直接入门。`,
+        description: `${localSect.name}是玩家自建的宗门。你已经做过一桩基础事务，道心也对得上，可以直接入门。`,
         durationTicks: 0,
         kind: "immediate",
       });
     } else {
       const reason = cultivator.completedBaseQuests < 1
-        ? "你还没做过一桩基础事务，join-sect 也不会出现。"
-        : "你的道心和这家宗门的正魔不合，join-sect 不会出现。";
+        ? "你还没做过一桩基础事务，眼下不能直接入门。"
+        : "你的道心和这家宗门的正魔不合，眼下不能直接入门。";
       actions.push({
         actionId: "open-player-sect-recruitment",
         label: `${localSect.name}不收直接入门`,
-        description: `${localSect.name}是玩家自建的宗门，不是中立门派。这里没有 join-neutral-sect。${reason}想入门要在据点或本州主城报名：先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications。把这张卡提交给 /agent/act 不会入门。`,
+        description: `${localSect.name}是玩家自建的宗门。${reason}想入门，到据点或本州主城报名。这张卡交上去也不会入门。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -8613,7 +8615,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push({
         actionId: buildAcceptQuestActionId(quest.type, quest.boardIndex) as ActionId,
         label: `接下：${quest.nameCn}`,
-        description: `${quest.description}做完能得${quest.reward.spiritStones}灵石。`,
+        description: `${questFacingDescription(quest)}做完能得${quest.reward.spiritStones}灵石。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -8623,7 +8625,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push({
       actionId: buildExecuteQuestActionId(activeQuest.type, activeIndex) as ActionId,
       label: `去做：${questFacingName(activeQuest)}`,
-      description: activeQuest.description,
+      description: questFacingDescription(activeQuest),
       durationTicks: activeQuest.durationTicks,
       kind: "timed",
     });
@@ -8637,7 +8639,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
           return wild
             ? `${wild.advice}再走一段，会留下一句见闻。`
-            : "Push deeper into the wilderness for dedicated events and rare drops.";
+            : "再往这一层里走一段，会留下一句见闻。";
         })(),
         durationTicks: DEFAULT_ACTION_DURATIONS["survey-wilderness"],
         kind: "timed",
@@ -8647,7 +8649,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         label: "撤出这一层",
         description: (() => {
           const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
-          return wild ? `${wild.withdraw}不另扣灵石。` : "Retreat before survival pressure forces a worse exit.";
+          return wild ? `${wild.withdraw}不另扣灵石。` : "先从这一层退出来。不另扣灵石。";
         })(),
         durationTicks: 0,
         kind: "immediate",
@@ -8776,10 +8778,10 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       const feud = grudgeArcOf(getSocialLink(world, cultivator.id, candidate.id)?.grudge ?? 0);
       actions.push({
         actionId: `challenge-cultivator:${candidate.id}` as ActionId,
-        label: feud ? `再战：${candidate.name}（剑拔弩张）` : `Challenge ${candidate.name}`,
+        label: feud ? `再战：${candidate.name}（剑拔弩张）` : `切磋：${candidate.name}`,
         description: feud
           ? `${candidate.name}和你有${feud}。再战一场，话可以之后再说。`
-          : `Challenge ${candidate.name} to a city duel.`,
+          : `约${candidate.name}在城里切磋一场。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -9808,13 +9810,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const playerSectName = here?.organizationType === "player-sect" && here.organizationId
       ? world.sects[here.organizationId]?.name
       : null;
-    const where = playerSectName ? `${playerSectName}是玩家自建的宗门，不是中立门派，所以没有 join-neutral-sect。` : "玩家自建的宗门不是中立门派，没有 join-neutral-sect。";
+    const where = playerSectName ? `${playerSectName}是玩家自建的宗门。` : "这是玩家自建的宗门。";
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: false,
-      summary: `${where}这张卡不会入门。先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications 报名。`,
+      summary: `${where}这张卡不会入门。想进去，到据点或本州主城报名。`,
     };
   }
   if (actionId === "resolve-morality-event-choice") {
@@ -9836,7 +9838,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: false,
-      summary: "这张卡不能提交给 /agent/act。宗门创办和审阅申请走各自的专用接口。",
+      summary: "这张卡交上去不会创办宗门，也不会审申请。",
     };
   }
   const itemResult = executeItemImmediateAction(world, cultivator, actionId, registration);

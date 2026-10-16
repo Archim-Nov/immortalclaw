@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createCultivator } from "./engine.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import {
   advanceWorld,
@@ -13,6 +14,7 @@ import {
 } from "./index.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
 import type { ItemId } from "./model.js";
+import { writeSocialLink } from "./social.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -94,6 +96,8 @@ test("town, residence, mine, and quest cards use Chinese labels and start summar
   cultivator.locationId = "qingzhou:main-city";
   const pill = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "use-qi-pill");
   assert.match(pill?.label ?? "", /回气丹/);
+  assert.match(pill?.description ?? "", /灵气充盈/);
+  assert.equal((pill?.description ?? "").includes("spirit-saturated"), false);
   assert.equal((pill?.label ?? "").includes("qi-pill"), false);
   const used = performAction(world, CULTIVATOR_ID, "use-qi-pill");
   assert.match(used.summary, /服用了回气丹/);
@@ -407,4 +411,125 @@ test("acting while busy, or challenging someone busy, is refused in Chinese", ()
       && error.message.includes("abort-dungeon-expedition")
       && !error.message.includes("Cultivator is busy"),
   );
+});
+
+test("residence breakthrough cards stay in Chinese", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = cultivator.residence.locationId;
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.realmProgress = 100;
+  cultivator.inventory["cloud-heart-grass"] = 1;
+  cultivator.inventory["moon-dew-flower"] = 1;
+  cultivator.inventory["clear-zhi-leaf"] = 1;
+  cultivator.inventory["condensed-qi-dew"] = 1;
+
+  const minor = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "residence-breakthrough");
+  assert.ok(minor);
+  assert.equal(minor.label, "洞府破境");
+  assert.match(minor.description, /炼气中期/);
+  assert.equal(minor.label.includes("Residence breakthrough"), false);
+  assert.equal(minor.description.includes("breakthrough"), false);
+
+  cultivator.realmLevel = 3;
+  cultivator.realm = "炼气";
+  cultivator.inventory["spirit-brook-bamboo"] = 1;
+  cultivator.inventory["pure-heart-orchid"] = 1;
+  cultivator.inventory["meridian-lotus-essence"] = 1;
+  const major = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "residence-breakthrough");
+  assert.ok(major);
+  assert.equal(major.label, "洞府破境（大境界）");
+  assert.match(major.description, /筑基前期/);
+  assert.equal(major.label.includes("Residence breakthrough"), false);
+  assert.equal(major.description.includes("Attempt"), false);
+});
+
+test("city duel cards stay Chinese with or without a grudge", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const created = createCultivator(world, { name: "青萝" });
+  const second = world.cultivators[created.id]!;
+  first.locationId = "qingzhou:main-city";
+  second.locationId = "qingzhou:main-city";
+  first.activeJobId = null;
+  second.activeJobId = null;
+  first.qi = first.maxQi;
+  second.qi = second.maxQi;
+  first.realm = "炼气";
+  second.realm = "炼气";
+
+  const calm = listAvailableActions(world, first.id).find((action) => action.actionId === `challenge-cultivator:${second.id}`);
+  assert.ok(calm);
+  assert.equal(calm.label, "切磋：青萝");
+  assert.match(calm.description, /约青萝在城里切磋一场/);
+  assert.equal(calm.label.includes("Challenge"), false);
+  assert.equal(calm.description.includes("Challenge"), false);
+
+  writeSocialLink(world, first.id, {
+    targetCultivatorId: second.id,
+    affinity: 0,
+    specialBond: null,
+    firstMetTick: 0,
+    lastInteractionTick: 0,
+    grudge: 8,
+  });
+  const feud = listAvailableActions(world, first.id).find((action) => action.actionId === `challenge-cultivator:${second.id}`);
+  assert.ok(feud);
+  assert.equal(feud.label, "再战：青萝（剑拔弩张）");
+  assert.match(feud.description, /嫌隙/);
+  assert.match(feud.description, /再战一场/);
+  assert.equal(feud.label.includes("Challenge"), false);
+  assert.equal(feud.description.includes("Challenge"), false);
+});
+
+test("upgrade-residence describes the next tier without naming the action id", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = cultivator.residence.locationId;
+  cultivator.injuryTicksRemaining = 0;
+  const card = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "upgrade-residence");
+  assert.ok(card);
+  assert.match(card.label, /修府/);
+  assert.match(card.description, /灵石/);
+  assert.equal(card.description.includes("upgrade-residence"), false);
+});
+
+test("an old English quest description is shown in Chinese on the execute card", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "qingzhou:main-city";
+  cultivator.activeJobId = null;
+  const board = world.questBoards["qingzhou:main-city"]!;
+  const gathering = board.quests.find((quest) => quest.type === "gathering") ?? board.quests[0]!;
+  performAction(world, CULTIVATOR_ID, `quest:accept:${gathering.type}:${gathering.boardIndex}` as never);
+  const active = cultivator.activeQuests[0]!;
+  active.type = "gathering";
+  active.templateId = "tpl-gathering";
+  active.description = "Collect requested materials outside town.";
+  const card = listAvailableActions(world, CULTIVATOR_ID).find((action) => String(action.actionId).startsWith("quest:execute:"));
+  assert.ok(card);
+  assert.equal(card.description, "出城把要的材料采回来。");
+  assert.equal(card.description.includes("Collect"), false);
+  assert.equal(card.description.includes("outside town"), false);
+});
+
+test("wilderness survey and withdraw stay Chinese when the place name is missing", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "yangzhou:wilderness";
+  cultivator.injuryTicksRemaining = 0;
+  const entered = performAction(world, CULTIVATOR_ID, "enter-wilderness:starter-wilderness-tier-1" as never);
+  assert.equal(entered.accepted, true);
+  const place = world.locations[cultivator.locationId]!;
+  place.stateId = "missing-wild" as typeof place.stateId;
+  const actions = listAvailableActions(world, CULTIVATOR_ID);
+  const survey = actions.find((action) => action.actionId === "survey-wilderness");
+  const withdraw = actions.find((action) => action.actionId === "withdraw-from-wilderness");
+  assert.ok(survey);
+  assert.ok(withdraw);
+  assert.match(survey.description, /见闻/);
+  assert.equal(/[A-Za-z]/.test(survey.description), false);
+  assert.match(withdraw.description, /退出来/);
+  assert.match(withdraw.description, /不另扣灵石/);
+  assert.equal(withdraw.description.includes("Retreat"), false);
 });
