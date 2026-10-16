@@ -29,6 +29,11 @@ test("web app vite config stays buildable for the pages workspace", async () => 
     path.join(sourceRoot, "public", "skill.md"),
     path.join(sourceRoot, "public", "register.md"),
     path.join(sourceRoot, "public", "heartbeat.md"),
+    path.join(sourceRoot, "public", "agent-templates", "catalog.json"),
+    path.join(sourceRoot, "public", "agent-templates", "progress-summary.html"),
+    path.join(sourceRoot, "public", "agent-templates", "act-result.html"),
+    path.join(sourceRoot, "public", "agent-templates", "dungeon-wake.html"),
+    path.join(sourceRoot, "public", "agent-templates", "gift-notice.html"),
   ];
   const redirectsPath = path.join(sourceRoot, "public", "_redirects");
   const proxyFiles = [
