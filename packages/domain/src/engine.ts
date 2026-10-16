@@ -1957,8 +1957,8 @@ function getCityDuelChallengeBlockReason(
   if (!location || location.kind !== "safe") return "City duels can only be initiated in safe zones.";
   if (challenger.id === target.id) return "Cannot challenge yourself.";
   if (challenger.locationId !== target.locationId) return "Target must be in the same location.";
-  if (challenger.activeJobId) return "Cannot challenge while in an active job.";
-  if (target.activeJobId) return "Target is busy with an active job.";
+  if (challenger.activeJobId) return "你正忙着，这一手等手头的事做完再来。";
+  if (target.activeJobId) return `${target.name}正忙着，改日再来。`;
   if (target.pendingPvpChallengeId) return "Target already has a pending PVP challenge.";
   if (challenger.pendingPvpChallengeId) return "You already have a pending PVP challenge.";
   const hpRatio = challenger.maxQi > 0 ? challenger.qi / challenger.maxQi : 0;
@@ -9385,7 +9385,7 @@ const SPELL_BRANCH_NAMES_INLINE: Record<string, string> = {
 
 function requireIdle(cultivator: Cultivator) {
   if (cultivator.activeJobId) {
-    throw new GameplayRejection("Cultivator is busy with an active job. Wait until it finishes. If a dungeon expedition is running, abort-dungeon-expedition settles the report and returns you to a safe place.");
+    throw new GameplayRejection("你正忙着，手头的事还没做完。等这一趟结束再来。地宫还在走的话，用 abort-dungeon-expedition 结账，人会回到安全的地方。");
   }
 }
 function isResidenceAction(actionId: ActionId): actionId is ResidenceActionId {
@@ -9476,7 +9476,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
     const tpl = getSectTaskById(injuredSectTask);
     if (tpl && (tpl.riskLevel === "none" || tpl.riskLevel === "low")) return;
   }
-  if (!allowed.has(actionId)) throw new Error("Cultivator is injured and can only do safe actions.");
+  if (!allowed.has(actionId)) throw new Error("身上有伤，这一手做不了。先养伤、赶路，或做坊市里的稳妥事。");
 }
 function startJob(
   world: WorldState,
@@ -9974,7 +9974,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (challenger.activeJobId) {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
-      throw new Error("Challenger is busy.");
+      throw new Error(`${challenger.name}正忙着，这场切磋先作罢。`);
     }
 
     // Clean up challenge
@@ -10790,7 +10790,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (sendMessageParsed) {
     const { targetId, kind } = sendMessageParsed;
     const target = getCultivatorOrThrow(world, targetId);
-    if (cultivator.id === target.id) throw new Error("Cannot send message to yourself.");
+    if (cultivator.id === target.id) throw new Error("不能给自己传话。");
     if (kind === "rendezvous-at-gate" || kind === "ready-to-enter" || kind === "wait") {
       const party = getPartyOf(world, cultivator.id);
       if (!party || !party.memberIds.includes(target.id)) {
@@ -10804,6 +10804,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           title: `约${target.name}到门口`,
           replyTitle: `${cultivator.name}约在门口`,
           mood: "约在地宫门口",
+          summary: `${cultivator.name}约${target.name}到门口会合。`,
         },
         "ready-to-enter": {
           subject: "可以下了",
@@ -10811,6 +10812,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           title: `告诉${target.name}可以下了`,
           replyTitle: `${cultivator.name}说可以下了`,
           mood: "等人一起进",
+          summary: `${cultivator.name}告诉${target.name}可以下了。`,
         },
         wait: {
           subject: "先等一等",
@@ -10818,6 +10820,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           title: `让${target.name}先等`,
           replyTitle: `${cultivator.name}说先等`,
           mood: "先别进门",
+          summary: `${cultivator.name}让${target.name}先等一等。`,
         },
       } as const;
       const line = lines[kind];
@@ -10842,12 +10845,12 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: line.mood,
       }));
       shareMoment(world, [cultivator, target], line.title, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
-      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}.` };
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: line.summary };
     }
-    if (cultivator.locationId !== target.locationId) throw new Error("send-message requires same location.");
+    if (cultivator.locationId !== target.locationId) throw new Error("传话要当面。人现在不在一处。");
     if (kind === "gift-item") {
       // gift-item: deduct 1 of the first available item in inventory, create PendingGift
-      if ((cultivator.lastGiftTick ?? -1) >= world.tick) throw new Error("Already gifted this tick.");
+      if ((cultivator.lastGiftTick ?? -1) >= world.tick) throw new Error("这一刻已经送过礼了。下一刻再送。");
       const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
       if (feud === "宿怨") {
         const place = world.locations[cultivator.locationId]?.name ?? "这里";
@@ -10866,7 +10869,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       }
       // find an item to gift — use the first item with count > 0
       const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
-      if (!giftableEntry) throw new Error("No items to gift.");
+      if (!giftableEntry) throw new Error("身上没有能送的东西。");
       const [giftItemId] = giftableEntry;
       const giftName = itemDisplayName(giftItemId);
       const giftSpoken = openSpokenLine(world, cultivator.id, target.id, "gift-item", world.tick, speechLine, { giftName });
@@ -10930,7 +10933,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         accepted: true,
         summary: tenseGift
           ? `${cultivator.name}把1个${giftName}递给${target.name}。你们有嫌隙，剑拔弩张，好感没有涨。`
-          : `${cultivator.name} gifted 1 ${giftItemId} to ${target.name}. Affinity +${fellowGift ? 21 : 15}.`,
+          : `${cultivator.name}送了1个${giftName}给${fellowGift ? "同门" : ""}${target.name}。好感+${fellowGift ? 21 : 15}。`,
       };
     }
     // Non-gift message: greet / share-info / request-help
@@ -10994,17 +10997,22 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       }));
       shareMoment(world, [cultivator, target], note.title, `${note.detail}${said}`, `${cultivator.name}说：「${spoken}」`, "spoken");
     }
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent ${kind} to ${target.name}. Affinity +3.` };
+    const messageSummaries: Record<string, string> = {
+      greet: `${cultivator.name}向${target.name}问了好。好感+3。`,
+      "share-info": `${cultivator.name}把见闻说给了${target.name}。好感+3。`,
+      "request-help": `${cultivator.name}向${target.name}求了一手。好感+3。`,
+    };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: messageSummaries[kind] ?? `${cultivator.name}向${target.name}传了话。好感+3。` };
   }
 
   // ---- Social Verbs: read-messages ----
   if (actionId === "read-messages") {
     const myMessages = (world.messages ?? []).filter((m) => m.toCultivatorId === cultivator.id);
-    if (myMessages.length === 0) throw new Error("No messages to read.");
+    if (myMessages.length === 0) throw new Error("没有要看的消息。");
     // Remove read messages from world.messages
     world.messages = (world.messages ?? []).filter((m) => m.toCultivatorId !== cultivator.id);
     addDaoLog(world, cultivator.id, "阅读消息", `${cultivator.name}确认了${myMessages.length}条消息。`, ["social", "message"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} read ${myMessages.length} messages.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}看了${myMessages.length}条消息。` };
   }
 
   const acceptedBatch = parseGiftBatch(actionId, "accept-gift-batch:");
@@ -11014,7 +11022,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const matching = (cultivator.pendingGifts ?? []).filter(
       (gift) => gift.fromCultivatorId === parsed.fromId && gift.itemId === parsed.itemId,
     );
-    if (matching.length === 0) throw new Error("Gift not found.");
+    if (matching.length === 0) throw new Error("这份礼已经不在了。");
     const total = matching.reduce((sum, gift) => sum + gift.count, 0);
     const itemName = itemDisplayName(parsed.itemId);
     const ids = new Set(matching.map((gift) => gift.messageId));
@@ -11040,7 +11048,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail });
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}收下了${fromName}送来的${total}份${itemName}。` };
     }
-    if (!sender) throw new Error("Gift not found.");
+    if (!sender) throw new Error("这份礼已经不在了。");
     sender.inventory[parsed.itemId] = (sender.inventory[parsed.itemId] ?? 0) + total;
     rememberGiftExchange(world, cultivator.id, parsed.fromId, "returned", itemName);
     rememberGiftExchange(world, parsed.fromId, cultivator.id, "returned", itemName);
@@ -11061,7 +11069,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (acceptGiftMsgId) {
     const gifts = cultivator.pendingGifts ?? [];
     const giftIdx = gifts.findIndex((g) => g.messageId === acceptGiftMsgId);
-    if (giftIdx === -1) throw new Error("Gift not found.");
+    if (giftIdx === -1) throw new Error("这份礼已经不在了。");
     const gift = gifts[giftIdx];
     cultivator.inventory[gift.itemId] = (cultivator.inventory[gift.itemId] ?? 0) + gift.count;
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
@@ -11109,7 +11117,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (rejectGiftMsgId) {
     const gifts = cultivator.pendingGifts ?? [];
     const giftIdx = gifts.findIndex((g) => g.messageId === rejectGiftMsgId);
-    if (giftIdx === -1) throw new Error("Gift not found.");
+    if (giftIdx === -1) throw new Error("这份礼已经不在了。");
     const gift = gifts[giftIdx];
     // Return item to sender
     const sender = getCultivatorOrThrow(world, gift.fromCultivatorId);
@@ -13311,7 +13319,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     if (actionId === "dual-survey-wilderness") {
       const partner = getPartyPartner(world, cultivator.id);
       if (!partner) throw new Error("同行历练 requires being in a party.");
-      if (partner.activeJobId) throw new Error("Party partner is currently busy.");
+      if (partner.activeJobId) throw new Error(`${partner.name}正忙着，这趟等对方空了再来。`);
       const progress = getActiveWildernessProgress(world, cultivator.id);
       if (!progress) throw new Error("同行历练 requires an active wilderness expedition.");
       const layer = getWildernessLayerById(world, progress.layerId);
@@ -13331,7 +13339,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     if (actionId === "dual-cultivate") {
       const partner = getPartyPartner(world, cultivator.id);
       if (!partner) throw new Error("同行修炼 requires being in a party.");
-      if (partner.activeJobId) throw new Error("Party partner is currently busy.");
+      if (partner.activeJobId) throw new Error(`${partner.name}正忙着，这趟等对方空了再来。`);
       const party = getPartyOf(world, cultivator.id)!;
       const leader = world.cultivators[party.leaderId]!;
       if (cultivator.locationId !== leader.residence.locationId) throw new Error("同行修炼 must be at the party leader's residence location.");
