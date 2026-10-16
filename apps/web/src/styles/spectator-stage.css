@@ -267,46 +267,18 @@
 .spectator-map-frame {
   position: relative;
   margin-top: 0.7rem;
-  background:
-    radial-gradient(80% 70% at 50% 45%, rgba(255, 252, 245, 0.4), transparent 70%),
-    #f3ecdd;
+  aspect-ratio: 960 / 680;
+  background: #d5e0e2;
   border: 1px solid var(--spectator-line);
+  overflow: hidden;
 }
 
-.spectator-map-svg {
+.spectator-map-base {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: auto;
-}
-
-.spectator-map-frame-line {
-  fill: none;
-  stroke: rgba(36, 31, 26, 0.28);
-  stroke-width: 0.35;
-}
-
-.spectator-road {
-  fill: none;
-  stroke: rgba(36, 31, 26, 0.28);
-  stroke-width: 0.35;
-  stroke-dasharray: 0.4 0.7;
-}
-
-.spectator-region-wash {
-  fill: rgba(63, 107, 88, 0.08);
-}
-
-.spectator-region-name {
-  fill: var(--spectator-ink);
-  font-family: "Noto Serif SC", serif;
-  font-size: 3.1px;
-}
-
-.spectator-region-capital,
-.spectator-compass {
-  fill: var(--spectator-ink-soft);
-  font-family: "Noto Serif SC", serif;
-  font-size: 1.8px;
+  height: 100%;
 }
 
 .spectator-map-pins {
@@ -325,7 +297,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -0.35rem);
 }
 
 .spectator-pin-dot {

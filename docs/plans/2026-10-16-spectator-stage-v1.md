@@ -6,7 +6,7 @@
 
 ## Goal
 
-Ship a public ink-scroll watch page at `/`, backed by the existing agent directory and chronicle, with enough location identity to pin people on a schematic 九州 map.
+Ship a public ink-scroll watch page at `/`, backed by the existing agent directory and chronicle, with enough location identity to pin people on a drawn 九州 map.
 
 ## Architecture
 
@@ -35,7 +35,8 @@ The web app keeps the control center on its current routes. `/` and `/watch` ren
 ### Task 4
 
 - On the public stat page and the watch page, replace English province, temperament, and gender chips with Chinese labels, and drop placeholders that have no Chinese.
-- Bake one shan-shui-inf landscape into `apps/web/public/assets/shan-shui-wash.svg` and use it as the watch-page wash. Leave the 九州 panel as the pin map.
+- Bake one shan-shui-inf landscape into `apps/web/public/assets/shan-shui-wash.svg` and use it as the watch-page wash.
+- Replace the circle diagram with the drawn political map at `apps/web/public/assets/jiuzhou-map.svg`. Pins still come from `locationId`.
 - Keep the same view-only pages. Do not add command controls.
 
 ## Verification

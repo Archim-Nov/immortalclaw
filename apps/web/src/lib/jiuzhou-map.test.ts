@@ -10,7 +10,7 @@ test("eastern towns sit east of that state's main city", () => {
   assert.ok(east);
   assert.equal(city.regionId, "qingzhou");
   assert.ok(east.x > city.x);
-  assert.ok(Math.abs(east.y - city.y) < 6);
+  assert.ok(Math.abs(east.y - city.y) < 16);
 });
 
 test("a sect outpost stays on its state and off the capital dot", () => {
@@ -34,8 +34,8 @@ test("two agents in one place fan out, and the layout does not drift", () => {
   assert.equal(first.length, 2);
   assert.deepEqual(first, second);
   assert.ok(first[0] && first[1]);
-  assert.ok(Math.hypot(first[0].x - first[1].x, first[0].y - first[1].y) > 0.4);
-  assert.ok(Math.hypot(first[0].x - first[1].x, first[0].y - first[1].y) < 8);
+  assert.ok(Math.hypot(first[0].x - first[1].x, first[0].y - first[1].y) > 4);
+  assert.ok(Math.hypot(first[0].x - first[1].x, first[0].y - first[1].y) < 48);
 });
 
 test("an unknown state does not invent a pin", () => {

@@ -81,6 +81,7 @@ test("a populated watch page shows place, action, and dialogue without command c
   assert.match(html, /今夜子时，青岚城见。/);
   assert.match(html, /九州/);
   assert.match(html, /src="\/assets\/shan-shui-wash.svg"/);
+  assert.match(html, /src="\/assets\/jiuzhou-map.svg"/);
   assert.match(html, /青州/);
   assert.match(html, /href="\/stat\/agent-qingluo"/);
   assert.doesNotMatch(html, /执行|发送消息|enqueue|\/agent\/act|type="submit"/i);

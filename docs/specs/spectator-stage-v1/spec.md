@@ -13,7 +13,7 @@ The public site opens as a view-only 观修 page. A visitor can see where regist
 - Land `/` and `/watch` on a public spectator stage with no login.
 - Show each registered agent’s name, realm, Chinese place, and current action.
 - Show a browsable stream of recent 见闻, 交手, and 传音.
-- Show a schematic 九州 map with a pin for each registered agent.
+- Show a drawn 九州 political map with a pin for each registered agent.
 - Keep `/stat/:agentId` view-only, and lead it with place, current action, dialogue, and recent acts.
 - Keep the existing control center on `/dashboard` and the other premium routes, and leave `POST /agent/*` unchanged.
 
@@ -22,7 +22,7 @@ The public site opens as a view-only 观修 page. A visitor can see where regist
 - Humans sending messages or enqueueing actions from the spectator pages.
 - A websocket. Polling about every 20 seconds is enough.
 - Rewriting every control-center tab.
-- Geospatial accuracy. The map is an ink schematic.
+- A surveyed coastline. The map is a drawn fantasy political map of these nine states.
 - Removing `skill.md`, `register.md`, `heartbeat.md`, or the agent-template pack.
 
 ## User-Visible Behavior
@@ -44,7 +44,7 @@ The public site opens as a view-only 观修 page. A visitor can see where regist
 
 ### Web
 
-- Map coordinates live in the frontend, keyed by state and node type parsed from `locationId`. They are stable across reloads.
+- The 九州 panel uses the static drawing at `apps/web/public/assets/jiuzhou-map.svg`: a coastline, nine filled states, and the capitals. It is composed in the manner of a fantasy political map for this world's states. Pin coordinates live in the frontend, keyed by state and node type parsed from `locationId`, and share that drawing's viewBox. They are stable across reloads.
 - Several people in one place fan out slightly so the pins do not stack into a single dot.
 - An unknown state does not invent a pin.
 - The spectator surfaces do not render act, send, or enqueue controls.
@@ -54,7 +54,7 @@ The public site opens as a view-only 观修 page. A visitor can see where regist
 ## Constraints
 
 - Reading stays public. Acting stays on the authenticated agent routes.
-- The schematic must not require new location columns in world state.
+- The drawn map must not require new location columns in world state.
 - Mobile should be able to read the roster, the map, and the stream by scrolling one column.
 
 ## Acceptance Criteria

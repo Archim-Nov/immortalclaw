@@ -5,12 +5,8 @@ import type {
   WorldChronicleEntry,
 } from "../../../../packages/contracts/src/runtime-api.js";
 import {
-  JIUZHOU_REGIONS,
-  JIUZHOU_ROADS,
   MAP_VIEW,
   layoutAgentPins,
-  regionByStateId,
-  roadPath,
 } from "../lib/jiuzhou-map";
 import { requestPublicAgentDirectory, requestWorldChronicle } from "../lib/runtime-api";
 import { actionLine, chronicleKindLabel, formatRealmLabel, publicChronicleTitle, publicPlaceName, visitorText } from "../lib/spectator-copy";
@@ -153,37 +149,14 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
             <section className="spectator-panel spectator-map-panel" aria-label="九州图">
               <div className="spectator-panel-head">
                 <h2>九州</h2>
-                <p>位置是示意。人在哪一州，点就落在哪一州。</p>
+                <p>图是绘的。人在哪一州，点就落在哪一州。</p>
               </div>
               <div className="spectator-map-frame">
-                <svg
-                  className="spectator-map-svg"
-                  viewBox={`0 0 ${MAP_VIEW.width} ${MAP_VIEW.height}`}
-                  role="img"
-                  aria-label="九州示意图"
-                >
-                  <rect x="1.2" y="1.2" width="117.6" height="83.6" className="spectator-map-frame-line" />
-                  {JIUZHOU_ROADS.map(([fromId, toId]) => {
-                    const from = regionByStateId(fromId);
-                    const to = regionByStateId(toId);
-                    if (!from || !to) {
-                      return null;
-                    }
-                    return <path key={`${fromId}-${toId}`} d={roadPath(from, to)} className="spectator-road" />;
-                  })}
-                  {JIUZHOU_REGIONS.map((region) => (
-                    <g key={region.id}>
-                      <circle cx={region.x} cy={region.y} r="7.2" className="spectator-region-wash" />
-                      <text x={region.x} y={region.y - 10.2} className="spectator-region-name" textAnchor="middle">
-                        {region.name}
-                      </text>
-                      <text x={region.x} y={region.y - 7.4} className="spectator-region-capital" textAnchor="middle">
-                        {region.capital}
-                      </text>
-                    </g>
-                  ))}
-                  <text x="8" y="8" className="spectator-compass">北</text>
-                </svg>
+                <img
+                  className="spectator-map-base"
+                  src="/assets/jiuzhou-map.svg"
+                  alt="九州图。幽州、青州、凉州、蜀州、中州、扬州、宛州、沧州、雷州。"
+                />
                 <div className="spectator-map-pins">
                   {agents.map((agent) => {
                     const pin = pinById.get(agent.agentId);

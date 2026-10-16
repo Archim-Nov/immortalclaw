@@ -1,11 +1,11 @@
 /**
- * Schematic 九州 positions for the public watch map.
- * These are ink-scroll slots, not geographic measurements.
- * A place id such as `qingzhou:main-city` or `qingzhou:sect-outpost:cang-mu-gu`
- * lands on its state, then nudges by node type so towns do not sit on the capital.
+ * Pin slots for the drawn 九州 map in public/assets/jiuzhou-map.svg.
+ * Coordinates share that file's viewBox. They are stable places on the drawing,
+ * not a survey. A place id such as `qingzhou:main-city` lands on its capital,
+ * then nudges by node type so a town does not sit on the city dot.
  */
 
-export const MAP_VIEW = { width: 120, height: 86 } as const;
+export const MAP_VIEW = { width: 960, height: 680 } as const;
 
 export interface JiuzhouRegion {
   id: string;
@@ -16,15 +16,15 @@ export interface JiuzhouRegion {
 }
 
 export const JIUZHOU_REGIONS: readonly JiuzhouRegion[] = [
-  { id: "youzhou", name: "幽州", capital: "朔宁城", x: 34, y: 18 },
-  { id: "qingzhou", name: "青州", capital: "青岚城", x: 70, y: 16 },
-  { id: "liangzhou", name: "凉州", capital: "砺关城", x: 16, y: 42 },
-  { id: "shuzhou", name: "蜀州", capital: "栖云城", x: 42, y: 40 },
-  { id: "zhongzhou", name: "中州", capital: "天衡城", x: 68, y: 40 },
-  { id: "yangzhou", name: "扬州", capital: "广津城", x: 98, y: 34 },
-  { id: "wanzhou", name: "宛州", capital: "长和城", x: 46, y: 66 },
-  { id: "cangzhou", name: "沧州", capital: "沧澜城", x: 74, y: 64 },
-  { id: "leizhou", name: "雷州", capital: "惊霆城", x: 102, y: 60 },
+  { id: "youzhou", name: "幽州", capital: "朔宁城", x: 198, y: 142 },
+  { id: "qingzhou", name: "青州", capital: "青岚城", x: 458, y: 138 },
+  { id: "liangzhou", name: "凉州", capital: "砺关城", x: 138, y: 318 },
+  { id: "shuzhou", name: "蜀州", capital: "栖云城", x: 286, y: 278 },
+  { id: "zhongzhou", name: "中州", capital: "天衡城", x: 472, y: 276 },
+  { id: "yangzhou", name: "扬州", capital: "广津城", x: 742, y: 236 },
+  { id: "wanzhou", name: "宛州", capital: "长和城", x: 286, y: 478 },
+  { id: "cangzhou", name: "沧州", capital: "沧澜城", x: 478, y: 468 },
+  { id: "leizhou", name: "雷州", capital: "惊霆城", x: 708, y: 446 },
 ];
 
 export const JIUZHOU_ROADS: readonly (readonly [string, string])[] = [
@@ -45,15 +45,15 @@ export const JIUZHOU_ROADS: readonly (readonly [string, string])[] = [
 ];
 
 const NODE_OFFSETS: Record<string, { dx: number; dy: number }> = {
-  "main-city": { dx: 0, dy: 0 },
-  "sub-town-east": { dx: 4.4, dy: 1.3 },
-  "sub-town-west": { dx: -4.4, dy: 1.5 },
-  "sub-town-south": { dx: 0.8, dy: 4.4 },
-  wilderness: { dx: -2.8, dy: -3.4 },
-  "dungeon-c": { dx: 3.1, dy: -3.2 },
-  "dungeon-b": { dx: -3.3, dy: 3.5 },
-  "dungeon-a": { dx: 3.6, dy: 3.3 },
-  "sect-outpost": { dx: 0.4, dy: -4.2 },
+  "main-city": { dx: 12, dy: 14 },
+  "sub-town-east": { dx: 28, dy: 6 },
+  "sub-town-west": { dx: -28, dy: 8 },
+  "sub-town-south": { dx: 6, dy: 32 },
+  wilderness: { dx: -18, dy: -22 },
+  "dungeon-c": { dx: 22, dy: -20 },
+  "dungeon-b": { dx: -22, dy: 24 },
+  "dungeon-a": { dx: 24, dy: 22 },
+  "sect-outpost": { dx: 4, dy: -26 },
 };
 
 const regionById = new Map(JIUZHOU_REGIONS.map((region) => [region.id, region]));
@@ -94,7 +94,7 @@ function offsetForNode(node: string): { dx: number; dy: number } {
   }
   const hash = hashString(node || "place");
   const angle = ((hash % 360) * Math.PI) / 180;
-  return { dx: Math.cos(angle) * 3.2, dy: Math.sin(angle) * 2.4 };
+  return { dx: Math.cos(angle) * 22, dy: Math.sin(angle) * 16 };
 }
 
 export function regionByStateId(stateId: string | null | undefined): JiuzhouRegion | null {
@@ -114,8 +114,8 @@ export function anchorForLocation(locationId: string, stateId?: string | null): 
   const offset = offsetForNode(node);
   return {
     regionId: region.id,
-    x: clamp(region.x + offset.dx, 8, 112),
-    y: clamp(region.y + offset.dy, 10, 78),
+    x: clamp(region.x + offset.dx, 48, 912),
+    y: clamp(region.y + offset.dy, 40, 640),
   };
 }
 
@@ -138,14 +138,14 @@ export function layoutAgentPins(agents: readonly MapAgentRef[]): MapPin[] {
     const sorted = [...group].sort((left, right) => left.agent.agentId.localeCompare(right.agent.agentId));
     const count = sorted.length;
     sorted.forEach((item, index) => {
-      const radius = count === 1 ? 0 : Math.min(3.4, 1.15 + count * 0.28);
+      const radius = count === 1 ? 0 : Math.min(22, 8 + count * 1.8);
       const turn = ((hashString(item.agent.locationId) % 24) * Math.PI) / 12;
       const angle = turn + (index / count) * Math.PI * 2;
       pins.push({
         agentId: item.agent.agentId,
         regionId: item.anchor.regionId,
-        x: clamp(item.anchor.x + Math.cos(angle) * radius, 6, 114),
-        y: clamp(item.anchor.y + Math.sin(angle) * radius, 8, 80),
+        x: clamp(item.anchor.x + Math.cos(angle) * radius, 36, 924),
+        y: clamp(item.anchor.y + Math.sin(angle) * radius, 32, 648),
       });
     });
   }
