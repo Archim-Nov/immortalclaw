@@ -6216,7 +6216,7 @@ function listBreakthroughMethodActions(world: WorldState, cultivator: Cultivator
     return [{
       actionId: "begin-soul-vigil",
       label: "点上魂灯",
-      description: "在自己的洞府点上魂灯，守六个时辰。灯亮以后的八个时辰里，用 seal-soul-vigil 收口。这一步不耗材料。",
+      description: "在自己的洞府点上魂灯，守六个时辰。灯亮以后的八个时辰里收口。这一步不耗材料。",
       durationTicks: DEFAULT_ACTION_DURATIONS["begin-soul-vigil"] ?? 6,
       kind: "timed",
     }];
@@ -6251,7 +6251,7 @@ function listBreakthroughMethodActions(world: WorldState, cultivator: Cultivator
     return [{
       actionId: "begin-divine-step",
       label: "铺开神纹",
-      description: "在宗门驻地把神纹铺开，六个时辰。纹还在的时候用 seal-divine-step 落印。这一步不耗材料。",
+      description: "在宗门驻地把神纹铺开，六个时辰。纹还在的时候落印。这一步不耗材料。",
       durationTicks: DEFAULT_ACTION_DURATIONS["begin-divine-step"] ?? 6,
       kind: "timed",
     }];
@@ -6312,8 +6312,8 @@ function startBreakthroughJob(
 function openBreakthroughRite(world: WorldState, cultivator: Cultivator, method: "soul-vigil" | "divine-pattern"): string {
   cultivator.breakthroughRite = { method, stage: "open", untilTick: world.tick + 8 };
   const sentence = method === "soul-vigil"
-    ? `${cultivator.name}在洞府里点上了魂灯。八个时辰之内用 seal-soul-vigil 收口。灯灭了就要重新点，材料还在身上。`
-    : `${cultivator.name}在宗门驻地把神纹铺开了。八个时辰之内用 seal-divine-step 落印。材料还在身上。`;
+    ? `${cultivator.name}在洞府里点上了魂灯。八个时辰之内收口。灯灭了就要重新点，材料还在身上。`
+    : `${cultivator.name}在宗门驻地把神纹铺开了。八个时辰之内落印。材料还在身上。`;
   addDaoLog(world, cultivator.id, method === "soul-vigil" ? "点上魂灯" : "铺开神纹", sentence, ["breakthrough", method]);
   recordLife(cultivator, { tick: world.tick, kind: "growth", text: sentence });
   return sentence;
@@ -6355,7 +6355,7 @@ function performBreakthroughMethodAction(
     if (nodeType !== "sect-outpost" && !isAtResidence(cultivator)) {
       throw new GameplayRejection("催丹要在宗门驻地，或自己的洞府里，并且有人看着。");
     }
-    if (!company) throw new GameplayRejection("催丹要有人看着。请一位修士来护法，或等眼前有人，再用 core-rite:press。一个人的话，去宗门驻地用 core-rite:steady。");
+    if (!company) throw new GameplayRejection("催丹要有人看着。请一位修士来护法，或等眼前有人，再催丹。一个人的话，去宗门驻地走稳妥结丹仪。");
     return startBreakthroughJob(world, cultivator, actionId, "结丹仪（催丹）", definition, { companionId: company.id, press: true });
   }
   if (actionId === "infant-fire-temper") {
@@ -6375,8 +6375,8 @@ function performBreakthroughMethodAction(
     if (!isAtResidence(cultivator)) throw new GameplayRejection("魂灯要在自己的洞府里收口。先回去。");
     if (!activeBreakthroughRite(cultivator, world.tick, "soul-vigil")) {
       throw new GameplayRejection(cultivator.breakthroughRite
-        ? "魂灯已经灭了。材料还在，重新用 begin-soul-vigil 点一次。"
-        : "魂灯还没点上。先用 begin-soul-vigil。");
+        ? "魂灯已经灭了。材料还在，重新点一次。"
+        : "魂灯还没点上。先把魂灯点上。");
     }
     const named = company ? `${company.name}也守在这洞府里。` : "";
     const result = startJob(world, cultivator, "residence-breakthrough", "魂灯收口", {
@@ -6418,8 +6418,8 @@ function performBreakthroughMethodAction(
   if (nodeType !== "sect-outpost") throw new GameplayRejection("神纹要在宗门驻地落印。先到驻地。");
   if (!activeBreakthroughRite(cultivator, world.tick, "divine-pattern")) {
     throw new GameplayRejection(cultivator.breakthroughRite
-      ? "神纹已经散了。材料还在，重新用 begin-divine-step 铺一次。"
-      : "神纹还没铺开。先用 begin-divine-step。");
+      ? "神纹已经散了。材料还在，重新铺一次。"
+      : "神纹还没铺开。先把神纹铺开。");
   }
   const result = startJob(world, cultivator, "residence-breakthrough", "神纹落印", {
     breakthroughCategory: definition.category,
@@ -6557,18 +6557,21 @@ function resolveResidenceBreakthrough(
       successRate: successRate ?? undefined,
       rateBreakdown,
     });
+    const failureText = flavor?.failureLife ?? (lateWound
+      ? `${cultivator.name}撞${definition.targetRealm}没有成。材料已经耗了，进度退到六成，身上还挂着伤，气息也乱了一阵。`
+      : `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`);
     addDaoLog(
       world,
       cultivator.id,
-      "Breakthrough Failed",
-      `${cultivator.name} failed the breakthrough to level ${definition.targetLevel} and fell back to 60 progress.`,
+      "破境未成",
+      failureText,
       ["breakthrough", "failure", flavorTag, definition.category],
     );
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId: cultivator.locationId,
-      title: "Breakthrough Failed",
-      content: `${cultivator.name} failed a ${definition.category} breakthrough attempt.`,
+      title: "破境未成",
+      content: failureText,
       severity: "medium",
       tags: ["breakthrough", "failure", definition.category],
     });
@@ -6598,11 +6601,9 @@ function resolveResidenceBreakthrough(
     recordLife(cultivator, {
       tick: world.tick,
       kind: "growth",
-      text: flavor?.failureLife ?? (lateWound
-        ? `${cultivator.name}撞${definition.targetRealm}没有成。材料已经耗了，进度退到六成，身上还挂着伤，气息也乱了一阵。`
-        : `${cultivator.name}这一次破境没有成，进度退回到还能再试的地方。`),
+      text: failureText,
     });
-    return `${cultivator.name} failed the breakthrough to level ${definition.targetLevel}.`;
+    return failureText;
   }
 
   cultivator.realmLevel = definition.targetLevel;
@@ -6669,18 +6670,21 @@ function resolveResidenceBreakthrough(
     grantedFiveElementGrowth: elementGrowthPackage,
     grantedPercentageBonus: growthEntry?.percentageBonus,
   });
+  const successText = flavor?.successLife ?? (openedLateRealm
+    ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`
+    : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`);
   addDaoLog(
     world,
     cultivator.id,
-    "Breakthrough Success",
-    `${cultivator.name} advanced to level ${cultivator.realmLevel}.`,
+    "破境",
+    successText,
     ["breakthrough", "success", flavorTag, definition.category, "action-complete"],
   );
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: "Breakthrough Success",
-    content: `${cultivator.name} completed a ${definition.category} breakthrough and reached level ${cultivator.realmLevel}.`,
+    title: "破境",
+    content: successText,
     severity: definition.category === "major" ? "high" : "medium",
     tags: ["breakthrough", "success", definition.category],
   });
@@ -6692,9 +6696,7 @@ function resolveResidenceBreakthrough(
   recordLife(cultivator, {
     tick: world.tick,
     kind: "growth",
-    text: flavor?.successLife ?? (openedLateRealm
-      ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`
-      : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`),
+    text: successText,
   });
   if ((flavor?.successDeviationChance ?? 0) > 0 && (hashString(`${world.tick}:${job.id}:core-rite-press`) % 100) < (flavor?.successDeviationChance ?? 0)) {
     upsertEffect(cultivator, {
@@ -6724,7 +6726,7 @@ function resolveResidenceBreakthrough(
       mood: "境界松了，手上的招也顺了一点",
     }));
   }
-  return `${cultivator.name} broke through to level ${cultivator.realmLevel}.`;
+  return successText;
 }
 function buildItemAction(
   world: WorldState,

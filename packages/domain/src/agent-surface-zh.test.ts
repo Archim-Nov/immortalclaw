@@ -7,6 +7,7 @@ import {
   advanceWorld,
   createSeedWorld,
   getCultivatorState,
+  getDaoLogs,
   getStrategySnapshot,
   listAvailableActions,
   performAction,
@@ -521,6 +522,58 @@ test("residence breakthrough cards stay in Chinese", () => {
   assert.match(major.description, /筑基前期/);
   assert.equal(major.label.includes("Residence breakthrough"), false);
   assert.equal(major.description.includes("Attempt"), false);
+});
+
+test("major breakthrough world event and dao log stay in Chinese", () => {
+  let sawSuccess = false;
+  let sawFailure = false;
+  for (let seed = 1; seed <= 40 && (!sawSuccess || !sawFailure); seed += 1) {
+    const world = createSeedWorld();
+    const created = createCultivator(world, { name: "墨儿" });
+    const cultivator = world.cultivators[created.id]!;
+    cultivator.locationId = cultivator.residence.locationId;
+    cultivator.realm = "炼气";
+    cultivator.realmLevel = 3;
+    cultivator.realmProgress = 100;
+    cultivator.inventory["cloud-heart-grass"] = 1;
+    cultivator.inventory["spirit-brook-bamboo"] = 1;
+    cultivator.inventory["pure-heart-orchid"] = 1;
+    cultivator.inventory["meridian-lotus-essence"] = 1;
+    world.nextJobSequence = seed;
+    performAction(world, created.id, "residence-breakthrough");
+    idle(world, created.id);
+
+    const event = world.worldEvents.find((entry) =>
+      entry.cultivatorId === created.id && entry.tags.includes("breakthrough") && (entry.tags.includes("success") || entry.tags.includes("failure")),
+    );
+    assert.ok(event);
+    const outcome = cultivator.breakthroughRecords.at(-1)?.outcome;
+    const expected = outcome === "success"
+      ? "墨儿破境到了第4层。境界松动之后，整个人都轻了一点。"
+      : "墨儿这一次破境没有成，进度退回到还能再试的地方。";
+    assert.equal(event.title, outcome === "success" ? "破境" : "破境未成");
+    assert.equal(event.content, expected);
+    assert.equal(event.title.includes("Breakthrough"), false);
+    assert.equal(event.content.includes("breakthrough"), false);
+    assert.equal(event.content.includes("level"), false);
+
+    const state = getCultivatorState(world, created.id);
+    const shown = state.recentEvents.find((entry) => entry.tags.includes("breakthrough"));
+    if (shown) {
+      assert.equal(shown.title, event.title);
+      assert.equal(shown.content, expected);
+    }
+    assert.equal(state.recentEvents.some((entry) => entry.title === "Breakthrough Success" || entry.title === "Breakthrough Failed"), false);
+
+    const dao = getDaoLogs(world, created.id).find((entry) => entry.title === event.title && entry.tags.includes("breakthrough"));
+    assert.ok(dao);
+    assert.equal(dao.content, expected);
+    assert.ok((cultivator.lifeLog ?? []).some((row) => row.text === expected));
+    if (outcome === "success") sawSuccess = true;
+    else sawFailure = true;
+  }
+  assert.ok(sawSuccess);
+  assert.ok(sawFailure);
 });
 
 test("city duel cards stay Chinese with or without a grudge", () => {

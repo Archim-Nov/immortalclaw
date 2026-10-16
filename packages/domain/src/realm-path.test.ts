@@ -99,7 +99,8 @@ test("炼气仍走坊市，金丹后期才把下一境写成元婴", () => {
   assert.match(late.breakthrough?.materialSources.map((source) => source.note).join(""), /四层/);
   assert.equal(late.realmPath.catalogTier, "大圆满");
   assert.equal(late.realmPath.method, "infant-fire");
-  assert.match(late.realmPath.sequence?.join("") ?? "", /infant-fire-temper/);
+  assert.match(late.realmPath.sequence?.join("") ?? "", /婴火淬体/);
+  assert.equal((late.realmPath.sequence ?? []).join("").includes("infant-fire-temper"), false);
   assert.match(late.realmPath.goals.join(""), /婴火莲/);
   assert.match(late.realmPath.risk, /走火/);
   assert.match(late.digest?.nextStep ?? "", /婴火淬体/);
