@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -14,14 +14,27 @@ import {
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const publicDir = path.join(repoRoot, "apps/web/public/agent-templates");
 
-test("presentation catalog names the starter templates and only their placeholders", () => {
+const REPORT_IDS = ["dossier", "cave-sight", "act-result", "bond-note"];
+
+test("presentation catalog is a version 2 pack of read-only life reports", () => {
   const catalog = buildAgentPresentationCatalog();
   assert.equal(catalog.ok, true);
-  assert.equal(catalog.version, AGENT_PRESENTATION_VERSION);
+  assert.equal(catalog.version, 2);
+  assert.equal(AGENT_PRESENTATION_VERSION, 2);
+  assert.match(catalog.fill, /report your life to your owner/i);
+  assert.match(catalog.fill, /owner watches/i);
+  assert.doesNotMatch(catalog.fill, /choice1|dungeon-wake/);
   assert.deepEqual(
     catalog.templates.map((template) => template.id),
-    ["progress-summary", "act-result", "dungeon-wake", "gift-notice"],
+    REPORT_IDS,
   );
+
+  const dossier = catalog.templates.find((template) => template.id === "dossier");
+  assert.ok(dossier);
+  const dossierSlots = dossier.placeholders.map((slot) => slot.name);
+  for (const name of ["name", "realm", "location", "mood", "story", "social", "inventory", "residence", "equipment", "spells"]) {
+    assert.ok(dossierSlots.includes(name), `dossier is missing ${name}`);
+  }
 
   for (const template of catalog.templates) {
     const html = readAgentTemplateHtml(template.id);
@@ -29,23 +42,33 @@ test("presentation catalog names the starter templates and only their placeholde
     assert.match(html, /glass-panel/);
     assert.match(html, /msg-bubble/);
     assert.match(html, /\.chip \{/);
-    if (template.id !== "dungeon-wake") {
-      assert.match(html, /class="chip/);
-    }
+    assert.match(html, /class="chip/);
+    assert.match(html, /Read-only report/);
     assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /<button/i);
+    assert.doesNotMatch(html, /choice\d|onclick|请选择/);
     assert.equal(template.downloadPath, `/agent-templates/${template.id}.html`);
     assert.equal(template.runtimePath, `/agent/templates/${template.id}`);
+    assert.equal(template.version, 2);
 
     const inDocument = listTemplatePlaceholderNames(html).sort();
     const inCatalog = template.placeholders.map((slot) => slot.name).sort();
     assert.deepEqual(inDocument, inCatalog);
   }
+
+  assert.match(catalog.templates.find((template) => template.id === "cave-sight")?.whenToUse ?? "", /already settled/i);
 });
 
-test("public template files match the runtime documents", () => {
+test("public template files match the runtime documents and omit the withdrawn choice card", () => {
   const catalog = buildAgentPresentationCatalog();
   const publishedCatalog = JSON.parse(readFileSync(path.join(publicDir, "catalog.json"), "utf8"));
   assert.deepEqual(publishedCatalog, catalog);
+
+  const names = readdirSync(publicDir).sort();
+  assert.deepEqual(names, ["act-result.html", "bond-note.html", "catalog.json", "cave-sight.html", "dossier.html"]);
+  assert.equal(names.includes("dungeon-wake.html"), false);
+  assert.equal(names.includes("progress-summary.html"), false);
+  assert.equal(names.includes("gift-notice.html"), false);
 
   for (const templateId of listAgentTemplateIds()) {
     const published = readFileSync(path.join(publicDir, `${templateId}.html`), "utf8");
@@ -53,33 +76,38 @@ test("public template files match the runtime documents", () => {
   }
 });
 
-test("fillAgentTemplate escapes text and hides optional slots by leaving them empty", () => {
-  const filled = fillAgentTemplate("progress-summary", {
+test("fillAgentTemplate escapes text and leaves optional sections empty", () => {
+  const filled = fillAgentTemplate("dossier", {
+    title: "墨儿 · 近况",
     eyebrow: "近六个时辰",
-    title: "青州还稳",
-    body: "灵石多了四十枚。\n下一件是把凡俗差事做完。",
-    chip1: "炼气前期",
-    chip2: "青州主城",
-    chip3: "",
-    chip4: "",
-    next: "继续 take-mortal-task",
-    quote: "过得平常",
+    name: "墨儿",
+    realm: "筑基前期",
+    location: "扬州 · 广津城",
+    mood: "心绪还稳",
+    story: "潮还没退干净。\n我没有进听潮钟窟。",
+    social: "",
+    inventory: "回气丹还剩两颗。",
+    residence: "",
+    equipment: "",
+    spells: "",
+    quote: "",
+    next: "",
   });
 
-  assert.match(filled, /<h1>青州还稳<\/h1>/);
-  assert.match(filled, /灵石多了四十枚。\n下一件是把凡俗差事做完。/);
-  assert.match(filled, /data-slot="chip3"><\/span>/);
+  assert.match(filled, /<h1>墨儿<\/h1>/);
+  assert.match(filled, /潮还没退干净。\n我没有进听潮钟窟。/);
+  assert.match(filled, /data-slot="social"><\/p>/);
+  assert.match(filled, /data-slot="inventory">回气丹还剩两颗。<\/dd>/);
   assert.doesNotMatch(filled, /\{\{/);
 
   const hostile = fillAgentTemplate("act-result", {
-    eyebrow: "城中切磋",
     title: "赢了 <script>",
+    eyebrow: "城中切磋",
+    name: "墨儿",
     outcome: "胜",
     body: `带出何物 & "丹霞残页"`,
-    chip1: "",
-    chip2: "",
-    chip3: "",
-    chip4: "",
+    realm: "",
+    location: "",
     detail: "",
   });
   assert.match(hostile, /赢了 &lt;script&gt;/);
@@ -89,37 +117,64 @@ test("fillAgentTemplate escapes text and hides optional slots by leaving them em
 
 test("fillAgentTemplate rejects a missing required slot, an unknown slot, and an unknown template", () => {
   assert.throws(
-    () => fillAgentTemplate("gift-notice", {
+    () => fillAgentTemplate("bond-note", {
+      title: "一颗回气丹",
       eyebrow: "赠礼",
-      title: "一枚疗伤丹",
-      from: "苏明月",
-      item: "",
-      body: "她把疗伤丹递了过来。",
+      name: "墨儿",
+      with: "",
+      kind: "赠礼",
+      body: "码头风大，我把回气丹给了青萝。",
+      item: "回气丹",
+      mood: "",
     }),
-    /Slot item is required/,
+    /Slot with is required/,
   );
   assert.throws(
-    () => fillAgentTemplate("gift-notice", {
+    () => fillAgentTemplate("bond-note", {
+      title: "一颗回气丹",
       eyebrow: "赠礼",
-      title: "一枚疗伤丹",
-      from: "苏明月",
-      item: "疗伤丹",
-      body: "她把疗伤丹递了过来。",
+      name: "墨儿",
+      with: "青萝",
+      kind: "赠礼",
+      body: "码头风大，我把回气丹给了青萝。",
+      item: "回气丹",
+      mood: "",
       css: "nope",
     }),
     /Unknown slot css/,
   );
+  assert.throws(() => fillAgentTemplate("dungeon-wake", {}), /Unknown template/);
   assert.throws(() => fillAgentTemplate("free-form", {}), /Unknown template/);
 });
 
 test("a slot value is not scanned for further placeholders", () => {
-  const filled = fillAgentTemplate("gift-notice", {
-    eyebrow: "传音",
+  const filled = fillAgentTemplate("bond-note", {
     title: "一句",
-    from: "苏明月",
-    item: "{{body}}",
+    eyebrow: "传音",
+    name: "墨儿",
+    with: "青萝",
+    kind: "闲谈",
     body: "原句还在。",
+    item: "{{body}}",
+    mood: "",
   });
   assert.match(filled, /data-slot="item">\{\{body\}\}<\/span>/);
   assert.match(filled, /<p data-slot="body">原句还在。<\/p>/);
+});
+
+test("cave-sight records a settled moment and has no choice list", () => {
+  const filled = fillAgentTemplate("cave-sight", {
+    title: "藤边歇了一歇",
+    name: "墨儿",
+    place: "青岚药窟 · 药廊",
+    settled: "已扶起伤者",
+    story: "药廊第三折有人靠着藤坐着。我把人扶到干处，袋子没有动。",
+    brought: "",
+    with: "",
+    mood: "有点累",
+  });
+  assert.match(filled, /已扶起伤者/);
+  assert.match(filled, /洞中见闻/);
+  assert.doesNotMatch(filled, /<button|choice\d|请选择/);
+  assert.doesNotMatch(filled, /\{\{/);
 });

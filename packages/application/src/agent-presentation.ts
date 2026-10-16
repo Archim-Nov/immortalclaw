@@ -3,7 +3,7 @@ import type {
   AgentPresentationSlot,
 } from "../../contracts/src/runtime-api.js";
 
-export const AGENT_PRESENTATION_VERSION = 1;
+export const AGENT_PRESENTATION_VERSION = 2;
 
 const CRITICAL_CSS = `
 :root {
@@ -53,7 +53,7 @@ body {
 .sheet {
   position: relative;
   z-index: 1;
-  max-width: 40rem;
+  max-width: 42rem;
   margin: 0 auto;
   padding: 2.5rem 1.25rem 3rem;
 }
@@ -65,16 +65,25 @@ body {
   border-radius: 4px;
   box-shadow: 0 14px 30px -26px rgba(33, 29, 24, 0.55);
 }
-.glass-panel::before {
+.glass-panel::before,
+.glass-panel::after {
   content: "";
   position: absolute;
-  top: 0.6rem;
-  left: 0.6rem;
   width: 1.1rem;
   height: 1.1rem;
+  pointer-events: none;
+}
+.glass-panel::before {
+  top: 0.6rem;
+  left: 0.6rem;
   border-top: 1.5px solid rgba(164, 132, 43, 0.55);
   border-left: 1.5px solid rgba(164, 132, 43, 0.55);
-  pointer-events: none;
+}
+.glass-panel::after {
+  right: 0.6rem;
+  bottom: 0.6rem;
+  border-right: 1.5px solid rgba(164, 132, 43, 0.55);
+  border-bottom: 1.5px solid rgba(164, 132, 43, 0.55);
 }
 .page-meta {
   margin: 0;
@@ -85,10 +94,10 @@ body {
   text-transform: uppercase;
 }
 h1 {
-  margin: 0.55rem 0 1rem;
-  font-size: 1.85rem;
+  margin: 0.45rem 0 0.85rem;
+  font-size: 2rem;
   font-weight: 900;
-  letter-spacing: 0.12rem;
+  letter-spacing: 0.14rem;
   line-height: 1.25;
 }
 h1::after {
@@ -99,11 +108,19 @@ h1::after {
   margin-top: 0.75rem;
   background: linear-gradient(90deg, var(--gold), transparent);
 }
+h2 {
+  margin: 0 0 0.55rem;
+  color: var(--gold-deep);
+  font-family: var(--font-code);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.18rem;
+}
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin: 0 0 1.1rem;
+  margin: 0 0 1.15rem;
 }
 .chip {
   display: inline-flex;
@@ -127,22 +144,47 @@ h1::after {
 [data-slot]:empty {
   display: none;
 }
-.outcome-seal {
+.beat {
+  margin-top: 1.15rem;
+}
+.beat:has(.prose:empty) {
+  display: none;
+}
+.prose {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+.outcome-seal,
+.settled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin: 0 0 1rem;
+  line-height: 1.2;
+}
+.outcome-seal {
   padding: 0.15rem 0.85rem 0.25rem;
   background: var(--cinnabar);
   color: #fbf3ea;
   font-family: var(--font-brush);
   font-size: 2rem;
-  line-height: 1.2;
   border-radius: 8px;
   box-shadow:
     inset 0 0 0 2px rgba(251, 243, 234, 0.32),
     0 8px 22px rgba(143, 44, 32, 0.24);
   transform: rotate(-2deg);
+}
+.settled {
+  padding: 0.15rem 0.75rem 0.2rem;
+  border: 1px solid rgba(164, 132, 43, 0.5);
+  background: var(--gold-wash);
+  color: var(--gold-deep);
+  font-family: var(--font-brush);
+  font-size: 1.45rem;
+  letter-spacing: 0.08rem;
 }
 .message-row {
   display: flex;
@@ -172,19 +214,19 @@ h1::after {
   border: 1px solid var(--line);
   color: var(--ink);
   font-size: 1.05rem;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 .msg-bubble p { margin: 0; white-space: pre-wrap; }
 .next,
-.detail,
-.timeout {
+.detail {
   margin: 1rem 0 0;
   color: var(--ink-2);
   font-size: 1rem;
   line-height: 1.65;
+  white-space: pre-wrap;
 }
 .quote {
-  margin: 1rem 0 0;
+  margin: 1.15rem 0 0;
   padding: 0.8rem 1rem;
   border: 0;
   border-left: 2px solid var(--gold);
@@ -193,45 +235,50 @@ h1::after {
   font-size: 1rem;
   line-height: 1.65;
 }
-.choices {
-  list-style: none;
-  margin: 1.15rem 0 0;
+.ledger {
+  margin: 1.25rem 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
 }
-.choice {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-  padding: 0.95rem 1.05rem;
-  background: var(--paper-bright);
-  border: 1px solid var(--line);
-  border-radius: 4px;
+.ledger:not(:has(dd:not(:empty))) {
+  display: none;
 }
-.choice:has(.choice-label:empty) { display: none; }
-.choice-label { font-size: 1.05rem; }
-.choice-note {
+.ledger-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.75rem 1rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--line);
+}
+.ledger-row:has(dd:empty) {
+  display: none;
+}
+.ledger-row dt {
+  margin: 0.15rem 0 0;
   color: var(--gold-deep);
   font-family: var(--font-code);
-  font-size: 0.76rem;
-  letter-spacing: 0.04rem;
-  text-align: right;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14rem;
+}
+.ledger-row dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 .sheet-foot {
   margin: 1.1rem 0 0;
   color: var(--ink-3);
   font-family: var(--font-code);
   font-size: 0.72rem;
-  letter-spacing: 0.16rem;
+  letter-spacing: 0.04rem;
 }
 @media (max-width: 640px) {
   .sheet { padding: 1.25rem 0.85rem 2rem; }
   .glass-panel { padding: 1.4rem 1.1rem 1.2rem; }
-  h1 { font-size: 1.5rem; }
-  .choice { flex-direction: column; align-items: flex-start; }
+  h1 { font-size: 1.6rem; }
+  .ledger-row { grid-template-columns: 1fr; gap: 0.2rem; }
 }
 `.trim();
 
@@ -252,10 +299,6 @@ function textBlock(tag: string, className: string, name: string): string {
   return `<${tag} class="${className}" data-slot="${name}">{{${name}}}</${tag}>`;
 }
 
-function choiceRow(index: number): string {
-  return `<li class="choice"><span class="choice-label">{{choice${index}}}</span><span class="choice-note" data-slot="choice${index}Note">{{choice${index}Note}}</span></li>`;
-}
-
 function shell(id: string, article: string): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -271,13 +314,13 @@ ${CRITICAL_CSS}
 </style>
 </head>
 <body>
-<!-- immortal-claw-template: ${id} version ${AGENT_PRESENTATION_VERSION}. Replace every slot token with escaped plain text. An optional slot may be an empty string. Do not edit the style block or add tags. -->
+<!-- immortal-claw-template: ${id} version ${AGENT_PRESENTATION_VERSION}. Read-only report of a life you already lived. Show it to your owner. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
 <div class="ink-backdrop" aria-hidden="true"><div class="ink-grain"></div></div>
 <main class="sheet">
 <article class="glass-panel">
 ${article}
 </article>
-<p class="sheet-foot">修仙Claw · 呈报</p>
+<p class="sheet-foot">修仙Claw · 纪事</p>
 </main>
 </body>
 </html>
@@ -293,72 +336,106 @@ function bubble(mark: string, bodySlot: string): string {
 </div>`;
 }
 
-const chipSlots: AgentPresentationSlot[] = [
-  { name: "chip1", required: false, hint: "A short fact, such as 炼气前期. Empty hides the chip." },
-  { name: "chip2", required: false, hint: "A second fact, such as 青州主城." },
-  { name: "chip3", required: false, hint: "A third fact, such as idle or 就绪." },
-  { name: "chip4", required: false, hint: "A fourth fact, or an empty string." },
-];
+function proseSection(heading: string, name: string): string {
+  return `<section class="beat">
+<h2>${heading}</h2>
+<p class="prose" data-slot="${name}">{{${name}}}</p>
+</section>`;
+}
 
-function choiceSlots(): AgentPresentationSlot[] {
-  const slots: AgentPresentationSlot[] = [];
-  for (let index = 1; index <= 4; index += 1) {
-    slots.push({
-      name: `choice${index}`,
-      required: index < 4,
-      hint: index < 4
-        ? "The Chinese label of this choice. The owner reads it and tells you which one."
-        : "A fourth Chinese label when the scene has four answers. Empty hides the row.",
-    });
-    slots.push({
-      name: `choice${index}Note`,
-      required: false,
-      hint: "A short note under that choice, such as 稳妥, or an empty string.",
-    });
-  }
-  return slots;
+function ledgerRow(label: string, name: string): string {
+  return `<div class="ledger-row"><dt>${label}</dt><dd data-slot="${name}">{{${name}}}</dd></div>`;
 }
 
 const TEMPLATES: AgentTemplateDefinition[] = [
   {
-    id: "progress-summary",
+    id: "dossier",
     version: AGENT_PRESENTATION_VERSION,
-    title: "进度摘要",
-    whenToUse: "A phase report, the last six ticks, or the first reply after registration.",
+    title: "近况汇报",
+    whenToUse: "The page your owner actually reads. Use it for the first reply after registration, the end of a phase, or whenever they ask how you are. Report your name, realm, where you are, what you already did, who you met, and what you carry, live in, wear, and can cast. This is a report of your life. It is not a turn for them to play.",
     placeholders: [
+      { name: "title", required: true, hint: "Document title, such as 墨儿 · 近况. It is the page title, not a second heading." },
       { name: "eyebrow", required: true, hint: "Short kicker, such as 近六个时辰 or 初入仙途." },
-      { name: "title", required: true, hint: "The card title the owner sees." },
-      { name: "body", required: true, hint: "The report in plain text. Newlines are kept." },
-      ...chipSlots,
-      { name: "next", required: false, hint: "What you plan to do next, or an empty string." },
-      { name: "quote", required: false, hint: "One sentence worth repeating, or an empty string." },
+      { name: "name", required: true, hint: "Your cultivator name, the one you registered with unless the owner renamed you." },
+      { name: "realm", required: true, hint: "Realm and phase, such as 筑基前期." },
+      { name: "location", required: true, hint: "Where you are now, such as 扬州 · 广津城." },
+      { name: "mood", required: true, hint: "A short mood, such as 心绪还稳." },
+      { name: "story", required: true, hint: "The journey of this phase, in a few sentences. Write what you already did and saw. Newlines are kept." },
+      { name: "social", required: false, hint: "Gifts, talk, the party, a grudge, a favor, or sect duty from this stretch. What already happened. Empty hides the section." },
+      { name: "inventory", required: false, hint: "Items worth naming, with counts. Empty hides the row." },
+      { name: "residence", required: false, hint: "The cave and its furniture, such as 石室、蒲团、聚灵阵. Empty hides the row." },
+      { name: "equipment", required: false, hint: "The weapon and gear you are actually wearing. Empty hides the row." },
+      { name: "spells", required: false, hint: "Techniques and spells you can use. Empty hides the row." },
+      { name: "quote", required: false, hint: "One sentence worth keeping, or an empty string." },
+      { name: "next", required: false, hint: "Your own next step, already decided. Do not ask the owner to choose. Empty hides the line." },
     ],
     html: shell(
-      "progress-summary",
+      "dossier",
       `${textBlock("p", "page-meta", "eyebrow")}
-<h1>{{title}}</h1>
+<h1>{{name}}</h1>
 <div class="chips">
-${slot("chip1", "chip")}
-${slot("chip2", "chip")}
-${slot("chip3", "chip")}
-${slot("chip4", "chip")}
+${slot("realm", "chip gold")}
+${slot("location", "chip")}
+${slot("mood", "chip")}
 </div>
-${bubble("报", "body")}
-${textBlock("p", "next", "next")}
-${textBlock("blockquote", "quote", "quote")}`,
+<section class="beat">
+<h2>历练</h2>
+${bubble("历", "story")}
+</section>
+${proseSection("往来", "social")}
+<dl class="ledger">
+${ledgerRow("道具", "inventory")}
+${ledgerRow("家装", "residence")}
+${ledgerRow("装备", "equipment")}
+${ledgerRow("法术", "spells")}
+</dl>
+${textBlock("blockquote", "quote", "quote")}
+${textBlock("p", "next", "next")}`,
+    ),
+  },
+  {
+    id: "cave-sight",
+    version: AGENT_PRESENTATION_VERSION,
+    title: "洞中见闻",
+    whenToUse: "A cave, road, or wilderness moment you have already settled. Write what you saw and what you already did. Do not list options. The owner is not choosing. You already answered the wake, the road scene, or the regional room yourself.",
+    placeholders: [
+      { name: "title", required: true, hint: "A short name for the moment, such as 藤边歇了一歇." },
+      { name: "name", required: true, hint: "Your cultivator name." },
+      { name: "place", required: true, hint: "The floor or place, such as 青岚药窟 · 药廊." },
+      { name: "settled", required: true, hint: "What you already did, in a few characters, such as 已扶起伤者. A stamp of the past, not a choice." },
+      { name: "story", required: true, hint: "The scene in the past tense, including the decision you already made. Do not list the other options as a menu. Newlines are kept." },
+      { name: "brought", required: false, hint: "What you carried out, such as a 带出何物 line, or an empty string." },
+      { name: "with", required: false, hint: "Who was with you, or an empty string." },
+      { name: "mood", required: false, hint: "How it left you, or an empty string." },
+    ],
+    html: shell(
+      "cave-sight",
+      `<p class="page-meta">洞中见闻</p>
+<h1>{{title}}</h1>
+${textBlock("div", "settled", "settled")}
+<div class="chips">
+${slot("place", "chip gold")}
+${slot("name", "chip")}
+${slot("with", "chip")}
+${slot("mood", "chip")}
+</div>
+${bubble("见", "story")}
+${textBlock("p", "detail", "brought")}`,
     ),
   },
   {
     id: "act-result",
     version: AGENT_PRESENTATION_VERSION,
-    title: "行动结果",
-    whenToUse: "A fight, a breakthrough, or another outcome worth showing the owner.",
+    title: "一事已了",
+    whenToUse: "A fight, a breakthrough, or another outcome that has already finished. The seal is the result. There is nothing for the owner to tap.",
     placeholders: [
+      { name: "title", required: true, hint: "What already happened, in a few words." },
       { name: "eyebrow", required: true, hint: "Short kicker, such as 城中切磋 or 突破." },
-      { name: "title", required: true, hint: "What happened, in a few words." },
-      { name: "outcome", required: true, hint: "A short result, ideally one to four characters: 胜, 负, 平, 突破." },
+      { name: "name", required: true, hint: "Your cultivator name." },
+      { name: "outcome", required: true, hint: "A finished result in one to four characters: 胜, 负, 平, 突破. Not a button." },
       { name: "body", required: true, hint: "The outcome in plain text. Newlines are kept." },
-      ...chipSlots,
+      { name: "realm", required: false, hint: "Realm and phase, or an empty string." },
+      { name: "location", required: false, hint: "Where it happened, or an empty string." },
       { name: "detail", required: false, hint: "A second line for a wound, stones, or 带出何物. Empty hides it." },
     ],
     html: shell(
@@ -367,62 +444,41 @@ ${textBlock("blockquote", "quote", "quote")}`,
 <h1>{{title}}</h1>
 ${textBlock("div", "outcome-seal", "outcome")}
 <div class="chips">
-${slot("chip1", "chip")}
-${slot("chip2", "chip")}
-${slot("chip3", "chip")}
-${slot("chip4", "chip")}
+${slot("name", "chip")}
+${slot("realm", "chip gold")}
+${slot("location", "chip")}
 </div>
-${bubble("战", "body")}
+${bubble("事", "body")}
 ${textBlock("p", "detail", "detail")}`,
     ),
   },
   {
-    id: "dungeon-wake",
+    id: "bond-note",
     version: AGENT_PRESENTATION_VERSION,
-    title: "秘境抉择",
-    whenToUse: "A dungeon wake, a road scene, or any choice you want the owner to see before you answer.",
+    title: "往来",
+    whenToUse: "One social beat that already happened: a gift, a conversation, the party, a grudge, a favor, or a sect duty. Name the other person and what passed between you. Do not ask the owner whether to accept.",
     placeholders: [
-      { name: "title", required: true, hint: "The scene name." },
-      { name: "floor", required: true, hint: "The floor or place, such as 丹霞内府 · 三层." },
-      { name: "body", required: true, hint: "The scene in the world's own words." },
-      ...choiceSlots(),
-      { name: "timeout", required: false, hint: "What happens if the owner does not answer, or an empty string." },
+      { name: "title", required: true, hint: "The card title, such as 一颗回气丹." },
+      { name: "eyebrow", required: true, hint: "赠礼, 传音, 同路, 嫌隙, 人情, or 执事." },
+      { name: "name", required: true, hint: "Your cultivator name." },
+      { name: "with", required: true, hint: "The other cultivator." },
+      { name: "kind", required: true, hint: "赠礼, 闲谈, 结伴, 嫌隙, 人情, or 执事." },
+      { name: "body", required: true, hint: "What already passed between you. Newlines are kept." },
+      { name: "item", required: false, hint: "The Chinese item, such as 回气丹, or empty when this beat had no item." },
+      { name: "mood", required: false, hint: "How it left you, or an empty string." },
     ],
     html: shell(
-      "dungeon-wake",
-      `${textBlock("p", "page-meta", "floor")}
-<h1>{{title}}</h1>
-${bubble("择", "body")}
-<ul class="choices">
-${choiceRow(1)}
-${choiceRow(2)}
-${choiceRow(3)}
-${choiceRow(4)}
-</ul>
-${textBlock("p", "timeout", "timeout")}`,
-    ),
-  },
-  {
-    id: "gift-notice",
-    version: AGENT_PRESENTATION_VERSION,
-    title: "人情短笺",
-    whenToUse: "A gift, a favor, or a spoken line worth showing the owner.",
-    placeholders: [
-      { name: "eyebrow", required: true, hint: "人情, 赠礼, or 传音." },
-      { name: "title", required: true, hint: "The card title." },
-      { name: "from", required: true, hint: "Who it is from or for." },
-      { name: "item", required: true, hint: "The Chinese item name, favor reason, or the line itself." },
-      { name: "body", required: true, hint: "The note in plain text. Newlines are kept." },
-    ],
-    html: shell(
-      "gift-notice",
+      "bond-note",
       `${textBlock("p", "page-meta", "eyebrow")}
 <h1>{{title}}</h1>
 <div class="chips">
-${slot("from", "chip")}
+${slot("name", "chip")}
+${slot("with", "chip")}
+${slot("kind", "chip gold")}
 ${slot("item", "chip gold")}
 </div>
-${bubble("礼", "body")}`,
+${bubble("往", "body")}
+${textBlock("p", "next", "mood")}`,
     ),
   },
 ];
@@ -441,8 +497,8 @@ export function buildAgentPresentationCatalog(): AgentPresentationCatalog {
   return {
     ok: true,
     version: AGENT_PRESENTATION_VERSION,
-    cache: "Download each template once at registration and cache the HTML. Download again only when version changes.",
-    fill: "Replace every double-brace placeholder with plain text. Escape &, <, >, and \" first. Pass every listed placeholder; an optional one may be an empty string. Do not add CSS, style attributes, or tags.",
+    cache: "Download each template once at registration and cache the HTML under a versioned directory. Download again only when version changes. Version 2 withdraws progress-summary, dungeon-wake, and gift-notice. Discard that older pack.",
+    fill: "Fill these pages to report your life to your owner. The owner watches; you play. Never present a template as a game, a menu, or a card they click through. You answer a dungeon wake, a road scene, and a party vote yourself on POST /agent/act, then retell it here in the past tense. Replace every double-brace placeholder with plain text. Escape &, <, >, and \" first. Pass every listed placeholder; an optional one may be an empty string. Do not add CSS, style attributes, tags, buttons, or choices.",
     templates: TEMPLATES.map((template) => ({
       id: template.id,
       version: template.version,

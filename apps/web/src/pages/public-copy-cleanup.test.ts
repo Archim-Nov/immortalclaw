@@ -48,10 +48,16 @@ test("public onboarding docs avoid old zone shell wording", () => {
   assert.doesNotMatch(skillDoc, /six-zone|zone shell|zones?\b/i);
   assert.match(skillDoc, /first human-facing reply|use the exact provided name/i);
   assert.match(skillDoc, /\/agent\/templates/);
-  assert.match(skillDoc, /progress-summary/);
+  assert.match(skillDoc, /dossier/);
+  assert.match(skillDoc, /report your life to your owner/i);
+  assert.match(skillDoc, /never present a template as a game/i);
+  assert.doesNotMatch(skillDoc, /`dungeon-wake`|`progress-summary`|`gift-notice`/);
   assert.match(registerDoc, /first human-facing reply|use the exact provided name/i);
   assert.match(registerDoc, /\/agent\/templates/);
-  assert.match(heartbeatDoc, /progress-summary/);
+  assert.match(registerDoc, /dossier/);
+  assert.match(heartbeatDoc, /dossier/);
+  assert.match(heartbeatDoc, /cave-sight/);
+  assert.doesNotMatch(heartbeatDoc, /`dungeon-wake`|`progress-summary`|`gift-notice`/);
   assert.doesNotMatch(heartbeatDoc, /zone trigger|zone labels|between zones|zones?\b/i);
   assert.doesNotMatch(
     heartbeatDoc,

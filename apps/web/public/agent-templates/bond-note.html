@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="immortal-claw-template" content="gift-notice">
-<meta name="immortal-claw-template-version" content="1">
+<meta name="immortal-claw-template" content="bond-note">
+<meta name="immortal-claw-template-version" content="2">
 <title>{{title}}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
@@ -55,7 +55,7 @@ body {
 .sheet {
   position: relative;
   z-index: 1;
-  max-width: 40rem;
+  max-width: 42rem;
   margin: 0 auto;
   padding: 2.5rem 1.25rem 3rem;
 }
@@ -67,16 +67,25 @@ body {
   border-radius: 4px;
   box-shadow: 0 14px 30px -26px rgba(33, 29, 24, 0.55);
 }
-.glass-panel::before {
+.glass-panel::before,
+.glass-panel::after {
   content: "";
   position: absolute;
-  top: 0.6rem;
-  left: 0.6rem;
   width: 1.1rem;
   height: 1.1rem;
+  pointer-events: none;
+}
+.glass-panel::before {
+  top: 0.6rem;
+  left: 0.6rem;
   border-top: 1.5px solid rgba(164, 132, 43, 0.55);
   border-left: 1.5px solid rgba(164, 132, 43, 0.55);
-  pointer-events: none;
+}
+.glass-panel::after {
+  right: 0.6rem;
+  bottom: 0.6rem;
+  border-right: 1.5px solid rgba(164, 132, 43, 0.55);
+  border-bottom: 1.5px solid rgba(164, 132, 43, 0.55);
 }
 .page-meta {
   margin: 0;
@@ -87,10 +96,10 @@ body {
   text-transform: uppercase;
 }
 h1 {
-  margin: 0.55rem 0 1rem;
-  font-size: 1.85rem;
+  margin: 0.45rem 0 0.85rem;
+  font-size: 2rem;
   font-weight: 900;
-  letter-spacing: 0.12rem;
+  letter-spacing: 0.14rem;
   line-height: 1.25;
 }
 h1::after {
@@ -101,11 +110,19 @@ h1::after {
   margin-top: 0.75rem;
   background: linear-gradient(90deg, var(--gold), transparent);
 }
+h2 {
+  margin: 0 0 0.55rem;
+  color: var(--gold-deep);
+  font-family: var(--font-code);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.18rem;
+}
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin: 0 0 1.1rem;
+  margin: 0 0 1.15rem;
 }
 .chip {
   display: inline-flex;
@@ -129,22 +146,47 @@ h1::after {
 [data-slot]:empty {
   display: none;
 }
-.outcome-seal {
+.beat {
+  margin-top: 1.15rem;
+}
+.beat:has(.prose:empty) {
+  display: none;
+}
+.prose {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+.outcome-seal,
+.settled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin: 0 0 1rem;
+  line-height: 1.2;
+}
+.outcome-seal {
   padding: 0.15rem 0.85rem 0.25rem;
   background: var(--cinnabar);
   color: #fbf3ea;
   font-family: var(--font-brush);
   font-size: 2rem;
-  line-height: 1.2;
   border-radius: 8px;
   box-shadow:
     inset 0 0 0 2px rgba(251, 243, 234, 0.32),
     0 8px 22px rgba(143, 44, 32, 0.24);
   transform: rotate(-2deg);
+}
+.settled {
+  padding: 0.15rem 0.75rem 0.2rem;
+  border: 1px solid rgba(164, 132, 43, 0.5);
+  background: var(--gold-wash);
+  color: var(--gold-deep);
+  font-family: var(--font-brush);
+  font-size: 1.45rem;
+  letter-spacing: 0.08rem;
 }
 .message-row {
   display: flex;
@@ -174,19 +216,19 @@ h1::after {
   border: 1px solid var(--line);
   color: var(--ink);
   font-size: 1.05rem;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 .msg-bubble p { margin: 0; white-space: pre-wrap; }
 .next,
-.detail,
-.timeout {
+.detail {
   margin: 1rem 0 0;
   color: var(--ink-2);
   font-size: 1rem;
   line-height: 1.65;
+  white-space: pre-wrap;
 }
 .quote {
-  margin: 1rem 0 0;
+  margin: 1.15rem 0 0;
   padding: 0.8rem 1rem;
   border: 0;
   border-left: 2px solid var(--gold);
@@ -195,67 +237,75 @@ h1::after {
   font-size: 1rem;
   line-height: 1.65;
 }
-.choices {
-  list-style: none;
-  margin: 1.15rem 0 0;
+.ledger {
+  margin: 1.25rem 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
 }
-.choice {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-  padding: 0.95rem 1.05rem;
-  background: var(--paper-bright);
-  border: 1px solid var(--line);
-  border-radius: 4px;
+.ledger:not(:has(dd:not(:empty))) {
+  display: none;
 }
-.choice:has(.choice-label:empty) { display: none; }
-.choice-label { font-size: 1.05rem; }
-.choice-note {
+.ledger-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.75rem 1rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--line);
+}
+.ledger-row:has(dd:empty) {
+  display: none;
+}
+.ledger-row dt {
+  margin: 0.15rem 0 0;
   color: var(--gold-deep);
   font-family: var(--font-code);
-  font-size: 0.76rem;
-  letter-spacing: 0.04rem;
-  text-align: right;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14rem;
+}
+.ledger-row dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 .sheet-foot {
   margin: 1.1rem 0 0;
   color: var(--ink-3);
   font-family: var(--font-code);
   font-size: 0.72rem;
-  letter-spacing: 0.16rem;
+  letter-spacing: 0.04rem;
 }
 @media (max-width: 640px) {
   .sheet { padding: 1.25rem 0.85rem 2rem; }
   .glass-panel { padding: 1.4rem 1.1rem 1.2rem; }
-  h1 { font-size: 1.5rem; }
-  .choice { flex-direction: column; align-items: flex-start; }
+  h1 { font-size: 1.6rem; }
+  .ledger-row { grid-template-columns: 1fr; gap: 0.2rem; }
 }
 </style>
 </head>
 <body>
-<!-- immortal-claw-template: gift-notice version 1. Replace every slot token with escaped plain text. An optional slot may be an empty string. Do not edit the style block or add tags. -->
+<!-- immortal-claw-template: bond-note version 2. Read-only report of a life you already lived. Show it to your owner. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
 <div class="ink-backdrop" aria-hidden="true"><div class="ink-grain"></div></div>
 <main class="sheet">
 <article class="glass-panel">
 <p class="page-meta" data-slot="eyebrow">{{eyebrow}}</p>
 <h1>{{title}}</h1>
 <div class="chips">
-<span class="chip" data-slot="from">{{from}}</span>
+<span class="chip" data-slot="name">{{name}}</span>
+<span class="chip" data-slot="with">{{with}}</span>
+<span class="chip gold" data-slot="kind">{{kind}}</span>
 <span class="chip gold" data-slot="item">{{item}}</span>
 </div>
 <div class="message-row incoming">
-<div class="msg-avatar" aria-hidden="true">礼</div>
+<div class="msg-avatar" aria-hidden="true">往</div>
 <div class="msg-content">
 <div class="msg-bubble"><p data-slot="body">{{body}}</p></div>
 </div>
 </div>
+<p class="next" data-slot="mood">{{mood}}</p>
 </article>
-<p class="sheet-foot">修仙Claw · 呈报</p>
+<p class="sheet-foot">修仙Claw · 纪事</p>
 </main>
 </body>
 </html>
