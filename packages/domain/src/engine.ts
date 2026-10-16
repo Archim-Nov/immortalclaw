@@ -227,6 +227,7 @@ import {
   updateSectTitles,
   updateSectTitlesIfDue,
 } from "./quest.js";
+import { facingPersonName } from "./facing-names.js";
 import {
   createResidenceForState,
   getActiveResidence,
@@ -7977,7 +7978,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       .filter((c) => c.locationId === cultivator.locationId && c.completedAtTick === null && c.acceptedById === null && c.posterId !== cultivator.id)
       .map((c) => ({
         id: c.id,
-        posterName: world.cultivators[c.posterId]?.name ?? "unknown",
+        posterName: facingPersonName(world.cultivators[c.posterId]?.name ?? "某人"),
         type: c.type,
         targetItemId: c.targetItemId,
         targetCount: c.targetCount,
@@ -8208,6 +8209,12 @@ function residenceGrandeurActions(world: WorldState, cultivator: Cultivator): Av
   }
   return actions;
 }
+
+const SEND_MESSAGE_KIND_ZH = {
+  greet: "问候",
+  "share-info": "分享见闻",
+  "request-help": "求援",
+} as const;
 
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
@@ -8614,7 +8621,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       }
       actions.push({
         actionId: buildAcceptQuestActionId(quest.type, quest.boardIndex) as ActionId,
-        label: `接下：${quest.nameCn}`,
+        label: `接下：${questFacingName(quest)}`,
         description: `${questFacingDescription(quest)}做完能得${quest.reward.spiritStones}灵石。`,
         durationTicks: 0,
         kind: "immediate",
@@ -9009,7 +9016,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           actions.push({
             actionId: sayId,
             label: `说话：${mate.name}`,
-            description: `对同队的${mate.name}说一句。act 的 body 可带 line，最多四十字。不带就代说一句。`,
+            description: `对同队的${mate.name}说一句，最多四十字。不另外写，就代说一句。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -9080,10 +9087,12 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       for (const kind of ["greet", "share-info", "request-help"] as const) {
         actions.push({
           actionId: `send-message:${target.id}:${kind}` as ActionId,
-          label: `发送消息（${kind}）：${target.name}`,
+          label: `发送消息（${SEND_MESSAGE_KIND_ZH[kind]}）：${target.name}`,
           description: kind === "greet"
             ? `向${target.name}问候。问候之后就认识了，可以接着组队。`
-            : `向${target.name}发送${kind === "share-info" ? "情报" : "求助"}。`,
+            : kind === "share-info"
+              ? `向${target.name}分享见闻。`
+              : `向${target.name}求援。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -9124,7 +9133,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         actions.push({
           actionId: sayId,
           label: `说话：${target.name}`,
-          description: `对${target.name}说一句短话。act 的 body 可带 line，最多四十字。不带就代说一句，每次不一样。同一句不能连说。`,
+          description: `对${target.name}说一句短话，最多四十字。不另外写，就代说一句，每次不一样。同一句不能连着说。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -9147,7 +9156,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push({
         actionId: pending.replyActionId as ActionId,
         label: `回话：${pending.fromName}`,
-        description: `${pending.fromName}说：「${pending.line}」回一句。act 的 body 可带 line。来回两句就先停。`,
+        description: `${pending.fromName}说：「${pending.line}」回一句，最多四十字。来回两句就先停。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -9281,7 +9290,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if (owned < commission.targetCount) {
         continue;
       }
-      const posterName = world.cultivators[commission.posterId]?.name ?? "unknown";
+      const posterName = facingPersonName(world.cultivators[commission.posterId]?.name ?? "某人");
       actions.push({
         actionId: `accept-commission:${commission.id}` as ActionId,
         label: `接受委托：${posterName}的${commission.type === "gather" ? "采集" : "运送"}任务`,
@@ -10939,7 +10948,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       };
     }
     // Non-gift message: greet / share-info / request-help
-    const kindLabels: Record<string, string> = { greet: "问候", "share-info": "情报分享", "request-help": "求助" };
+    const kindLabels: Record<string, string> = SEND_MESSAGE_KIND_ZH;
     const messageLevelBefore = getSocialLink(world, cultivator.id, target.id);
     const messagePrevious = messageLevelBefore ? getAffinityLevel(messageLevelBefore.affinity) : null;
     const speechKind: SpeechKind = kind === "share-info" || kind === "request-help" ? kind : "greet";

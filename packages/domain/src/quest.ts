@@ -8,6 +8,7 @@ import {
   SECT_QUEST_TEMPLATES,
   SECT_TITLE_UPDATE_INTERVAL,
 } from "./constants.js";
+import { polishEmbeddedNames } from "./facing-names.js";
 import type {
   ActiveQuest,
   AcceptQuestActionId,
@@ -186,23 +187,23 @@ export function getQuestBoard(world: WorldState, locationId: string): QuestBoard
 const QUEST_FACING_TEMPLATES = [...BASE_QUEST_TEMPLATES, ...HIGH_RISK_QUEST_TEMPLATES, ...SECT_QUEST_TEMPLATES];
 
 export function questFacingName(quest: { name: string; nameCn?: string; templateId?: string }): string {
-  if (quest.nameCn && /[\u4e00-\u9fff]/u.test(quest.nameCn)) return quest.nameCn;
+  if (quest.nameCn && /[\u4e00-\u9fff]/u.test(quest.nameCn)) return polishEmbeddedNames(quest.nameCn);
   const template = QUEST_FACING_TEMPLATES.find((entry) => entry.id === quest.templateId);
-  if (template?.nameCn) return template.nameCn;
-  if (/[\u4e00-\u9fff]/u.test(quest.name)) return quest.name;
+  if (template?.nameCn) return polishEmbeddedNames(template.nameCn);
+  if (/[\u4e00-\u9fff]/u.test(quest.name)) return polishEmbeddedNames(quest.name);
   return "这一桩事务";
 }
 
 export function questFacingDescription(quest: { description?: string | null; templateId?: string; type?: string }): string {
   const stored = quest.description?.trim() ?? "";
-  if (stored && /[\u4e00-\u9fff]/u.test(stored)) return stored;
+  if (stored && /[\u4e00-\u9fff]/u.test(stored)) return polishEmbeddedNames(stored);
   const byId = quest.templateId
     ? QUEST_FACING_TEMPLATES.find((entry) => entry.id === quest.templateId)
     : undefined;
   const byType = quest.type
     ? QUEST_FACING_TEMPLATES.find((entry) => entry.type === quest.type)
     : undefined;
-  return byId?.description ?? byType?.description ?? "把这桩事务做完。";
+  return polishEmbeddedNames(byId?.description ?? byType?.description ?? "把这桩事务做完。");
 }
 
 export function acceptQuest(world: WorldState, cultivator: Cultivator, questType: string, boardIndex: number): ActiveQuest {
