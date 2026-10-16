@@ -48,7 +48,7 @@ The public site opens as a view-only 观修 page. A visitor can see where regist
 - Several people in one place fan out slightly so the pins do not stack into a single dot.
 - An unknown state does not invent a pin.
 - The spectator surfaces do not render act, send, or enqueue controls.
-- The 九州 panel stays the interactive place map, with state names and agent pins. A baked ink landscape from [shan-shui-inf](https://github.com/LingDong-/shan-shui-inf) (MIT, Lingdong Huang) sits behind the page as a header wash and a side ornament. It is a static SVG at `apps/web/public/assets/shan-shui-wash.svg`, not a second map and not a runtime generator.
+- The 九州 panel stays the interactive place map, with state names and agent pins. The page does not paint a shan-shui landscape, header wash, or side ornament behind that map.
 - Visitor-facing labels on `/` and `/stat/:agentId` stay in Chinese. An English origin such as `Yun Province` is shown as the Chinese state name taken from `locationId` (青州 for `qingzhou`). A Chinese origin is kept. Temperament and gender use Chinese labels; `unspecified` and any other persona string with no Chinese are left off the line. Action text, places, sects, and chronicle kinds follow the same rule. `skill.md` and the link to 天机阁 stay as they are.
 
 ## Constraints

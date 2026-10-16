@@ -25,36 +25,6 @@
     linear-gradient(180deg, rgba(247, 242, 232, 0.2) 0%, var(--spectator-paper) 46%, #ebe3d2 100%);
 }
 
-.spectator-ink-wash,
-.spectator-ink-side {
-  position: absolute;
-  display: block;
-  max-width: none;
-  pointer-events: none;
-  mix-blend-mode: multiply;
-  user-select: none;
-}
-
-.spectator-ink-wash {
-  top: -8.5rem;
-  left: 42%;
-  width: min(1360px, 140vw);
-  transform: translateX(-50%);
-  opacity: 0.55;
-  filter: brightness(0.32);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 68%);
-}
-
-.spectator-ink-side {
-  top: 8vh;
-  right: -6vw;
-  width: min(460px, 42vw);
-  opacity: 0.38;
-  filter: brightness(0.28);
-  transform: scaleX(-1);
-  mask-image: linear-gradient(to left, #000 18%, transparent 84%);
-}
-
 .spectator-sheet {
   position: relative;
   z-index: 1;
@@ -452,10 +422,6 @@
 
   .spectator-header h1 {
     font-size: 2.7rem;
-  }
-
-  .spectator-ink-side {
-    display: none;
   }
 }
 

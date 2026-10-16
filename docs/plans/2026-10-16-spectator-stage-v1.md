@@ -35,7 +35,7 @@ The web app keeps the control center on its current routes. `/` and `/watch` ren
 ### Task 4
 
 - On the public stat page and the watch page, replace English province, temperament, and gender chips with Chinese labels, and drop placeholders that have no Chinese.
-- Bake one shan-shui-inf landscape into `apps/web/public/assets/shan-shui-wash.svg` and use it as the watch-page wash.
+- The watch page does not use a shan-shui wash. Owner feedback removed the header wash and side ornament; the drawn 九州 map stays.
 - Replace the circle diagram with the drawn political map at `apps/web/public/assets/jiuzhou-map.svg`. Pins still come from `locationId`.
 - Keep the same view-only pages. Do not add command controls.
 

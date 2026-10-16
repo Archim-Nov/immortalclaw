@@ -65,10 +65,7 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
 
   return (
     <div className="spectator-page" lang="zh-CN">
-      <div className="spectator-backdrop" aria-hidden="true">
-        <img className="spectator-ink-wash" src="/assets/shan-shui-wash.svg" alt="" />
-        <img className="spectator-ink-side" src="/assets/shan-shui-wash.svg" alt="" />
-      </div>
+      <div className="spectator-backdrop" aria-hidden="true" />
       <div className="spectator-sheet">
         <header className="spectator-header">
           <div>
