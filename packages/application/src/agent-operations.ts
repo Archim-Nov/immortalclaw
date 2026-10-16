@@ -10,7 +10,7 @@ import type { AgentProfileRecord, TickRunRecord } from "../../persistence/src/wo
 
 export interface AgentOperationsRepository {
   transactWorld<TResult>(mutator: (world: WorldState) => TResult): Promise<TResult>;
-  performAction(cultivatorId: string, actionId: ActionId, line?: string): Promise<ActionExecutionResult>;
+  performAction(cultivatorId: string, actionId: ActionId, line?: string, itemId?: string): Promise<ActionExecutionResult>;
   advanceWorld(steps: number, trigger?: TickRunRecord["trigger"]): Promise<TickSummary>;
 }
 
@@ -30,9 +30,10 @@ export async function performAuthenticatedAgentAction(options: {
   agent: AgentProfileRecord;
   actionId: ActionId;
   line?: string;
+  itemId?: string;
 }): Promise<ActionExecutionResult> {
-  const { world, agent, actionId, line } = options;
-  return world.performAction(agent.selectedCultivatorId, actionId, line);
+  const { world, agent, actionId, line, itemId } = options;
+  return world.performAction(agent.selectedCultivatorId, actionId, line, itemId);
 }
 
 export async function advanceAuthenticatedAgentWorld(options: {

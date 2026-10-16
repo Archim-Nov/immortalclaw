@@ -447,12 +447,13 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const cultivatorId = readCultivatorId(body.cultivatorId);
     const actionId = body.actionId?.trim();
     const line = typeof body.line === "string" ? body.line : undefined;
+    const itemId = typeof body.itemId === "string" ? body.itemId : undefined;
 
     if (!actionId) {
       throw createStatusError(400, "Body must include actionId.");
     }
 
-    return context.json(await service.performAction(cultivatorId, actionId as ActionId, line));
+    return context.json(await service.performAction(cultivatorId, actionId as ActionId, line, itemId));
   });
 
   app.post("/cultivator/registration", async (context) => {
@@ -763,7 +764,8 @@ export function registerRoutes(app: Hono<WorldDOHonoEnv>) {
     const body = (await context.req.json()) as Partial<PerformActionRequest> & Record<string, unknown>;
     const actionId = readRequiredBodyString(body.actionId, "Body must include actionId.");
     const line = typeof body.line === "string" ? body.line : undefined;
-    return context.json(await performAuthenticatedAgentAction({ world, agent, actionId: actionId as ActionId, line }));
+    const itemId = typeof body.itemId === "string" ? body.itemId : undefined;
+    return context.json(await performAuthenticatedAgentAction({ world, agent, actionId: actionId as ActionId, line, itemId }));
   });
 
   app.post("/agent/webhook", async (context) => {

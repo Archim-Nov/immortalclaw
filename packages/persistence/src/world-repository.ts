@@ -71,7 +71,7 @@ export interface WorldRepository {
   getWorldMetadata(): Promise<{ tick: number; updatedAt: string }>;
   getCultivatorState(cultivatorId: string): Promise<CultivatorStateView>;
   listAvailableActions(cultivatorId: string): Promise<AvailableAction[]>;
-  performAction(cultivatorId: string, actionId: ActionId, line?: string): Promise<ActionExecutionResult>;
+  performAction(cultivatorId: string, actionId: ActionId, line?: string, itemId?: string): Promise<ActionExecutionResult>;
   advanceWorld(steps: number, trigger?: TickRunRecord["trigger"]): Promise<TickSummary>;
   getLatestTickRun(): Promise<TickRunRecord | null>;
   getCultivationRegistration(cultivatorId: string): Promise<CultivationRegistrationRecord | null>;

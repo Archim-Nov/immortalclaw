@@ -1901,9 +1901,21 @@ const parseAcceptParty = (actionId: ActionId | string): string | null =>
   actionId.startsWith("accept-party:") ? actionId.slice("accept-party:".length) : null;
 const parseRejectParty = (actionId: ActionId | string): string | null =>
   actionId.startsWith("reject-party:") ? actionId.slice("reject-party:".length) : null;
-const parseSendMessage = (actionId: ActionId | string): { targetId: string; kind: MessageTemplateKind } | null => {
+const parseSendMessage = (actionId: ActionId | string): { targetId: string; kind: MessageTemplateKind; itemId?: string } | null => {
   if (!actionId.startsWith("send-message:")) return null;
   const rest = actionId.slice("send-message:".length);
+  const giftMarker = ":gift-item";
+  const giftAt = rest.indexOf(giftMarker);
+  if (giftAt > 0) {
+    const targetId = rest.slice(0, giftAt);
+    const after = rest.slice(giftAt + giftMarker.length);
+    if (!targetId) return null;
+    if (after === "") return { targetId, kind: "gift-item" };
+    if (after.startsWith(":") && after.length > 1 && !after.slice(1).includes(":")) {
+      return { targetId, kind: "gift-item", itemId: after.slice(1) };
+    }
+    return null;
+  }
   const lastColon = rest.lastIndexOf(":");
   if (lastColon === -1) return null;
   return { targetId: rest.slice(0, lastColon), kind: rest.slice(lastColon + 1) as MessageTemplateKind };
@@ -3409,6 +3421,16 @@ function defaultResidenceAt(locationId: string, cultivatorId: string) {
   };
 }
 
+const TECHNIQUE_NAME_ZH: Record<string, string> = {
+  "Loose Breathing": "松息吐纳",
+  "Light Body": "轻身术",
+  "Basic Breathing": "基础吐纳",
+};
+
+function techniqueDisplayName(techniqueId: string): string {
+  return TECHNIQUE_NAME_ZH[techniqueId] ?? techniqueId;
+}
+
 function starterProfile() {
   return {
     techniques: ["Loose Breathing", "Light Body"],
@@ -3952,7 +3974,7 @@ function summarizeItemEffects(
     hasContent = true;
   }
   if (technique) {
-    effects.techniques = [technique];
+    effects.techniques = [techniqueDisplayName(technique)];
     hasContent = true;
   }
   return hasContent ? effects : undefined;
@@ -7755,6 +7777,23 @@ function itemDisplayName(itemId: string): string {
   return ITEM_CATALOG[itemId as ItemId]?.name ?? itemId;
 }
 
+function resolveGiftItemId(
+  cultivator: Cultivator,
+  actionItemId: string | undefined,
+  bodyItemId: string | null | undefined,
+): ItemId {
+  const requested = actionItemId ?? bodyItemId?.trim() ?? "";
+  if (requested) {
+    const itemId = requested as ItemId;
+    if (!ITEM_CATALOG[itemId]) throw new Error("没有这件东西。");
+    if ((cultivator.inventory[itemId] ?? 0) <= 0) throw new Error("身上没有这件能送的东西。");
+    return itemId;
+  }
+  const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
+  if (!giftableEntry) throw new Error("身上没有能送的东西。");
+  return giftableEntry[0] as ItemId;
+}
+
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -7905,7 +7944,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   return {
     tick: world.tick,
     cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmPhase: realmPhaseOfLevel(cultivator.realmLevel), realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, locationId: cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
-    cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
+    cultivation: {
+      mainTechnique: techniqueDisplayName(cultivator.techniques[0] ?? "Basic Breathing"),
+      techniques: cultivator.techniques.map(techniqueDisplayName),
+    },
     combatProfile,
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
     ...(buildSectLifeView(world, cultivator) ? { sectLife: buildSectLifeView(world, cultivator)! } : {}),
@@ -9165,7 +9207,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
           const fellow = sameSectBond(cultivator, target);
           actions.push({
-            actionId: `send-message:${target.id}:gift-item` as ActionId,
+            actionId: `send-message:${target.id}:gift-item:${itemId}` as ActionId,
             label: `赠送${itemName}：${target.name}`,
             description: feud === "宿怨"
               ? `${target.name}和你是宿怨，见面剑拔弩张。${itemName}递过去也会被退回，东西还在你手里，好感不会涨。要说话就当面拒礼，或者再战。`
@@ -9700,7 +9742,7 @@ const parseEquipSpellLoadoutId = (actionId: ActionId): SpellLoadoutId | null =>
 const parseUnlockLoadoutItemId = (actionId: ActionId): ItemId | null =>
   actionId.startsWith("unlock-loadout:") ? actionId.slice("unlock-loadout:".length) as ItemId : null;
 
-function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
+function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId, speechLine?: string | null, bodyItemId?: string | null): ActionExecutionResult {
   const sectSummary = performSectImmediate(world, cultivator, actionId);
   if (sectSummary) {
     addDaoLog(world, cultivator.id, "宗门职位", sectSummary, ["sect", "sect-life"]);
@@ -10302,7 +10344,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const invitePlace = world.locations[cultivator.locationId]?.name ?? "这里";
     addMessage(world, target.id, "组队邀请", `${cultivator.name}的邀请`, `${cultivator.name}向你发送了组队邀请。人可以先在${invitePlace}结伴，到地宫门口再一起下。五人满员为止。请及时回复。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "组队邀请", `${cultivator.name}向${target.name}发送了组队邀请。`, ["social", "party"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} invited ${target.name} to form a party.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}向${target.name}发出了组队邀请。` };
   }
 
   // ---- Party: 接受组队 (Accept Party) ----
@@ -10371,7 +10413,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: sameSect ? "同门在身边" : "路上不剩自己一个",
       }));
     }
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} joined ${leaderName}'s party.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}加入了${leaderName}的队伍。` };
   }
 
   // ---- Party: 拒绝组队 (Reject Party) ----
@@ -10383,7 +10425,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     delete world.partyInvitations[rejectPartyInvId];
     const inviterName = world.cultivators[invitation.fromCultivatorId]?.name ?? "unknown";
     addMessage(world, invitation.fromCultivatorId, "组队", "邀请被拒绝", `${cultivator.name}拒绝了你的组队邀请。`);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected party invitation from ${inviterName}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}拒绝了${inviterName}的组队邀请。` };
   }
 
   // ---- Party: 解散队伍 (Disband Party) ----
@@ -10400,7 +10442,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     for (const reserveId of party.reserveIds ?? []) {
       addMessage(world, reserveId, "组队", "队伍解散", `${cultivator.name}解散了队伍，候补也取消了。`);
     }
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} disbanded the party.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}解散了队伍。` };
   }
 
   if (actionId.startsWith("party-kick:")) {
@@ -10922,7 +10964,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     if (cultivator.locationId !== target.locationId) throw new Error("传话要当面。人现在不在一处。");
     if (kind === "gift-item") {
-      // gift-item: deduct 1 of the first available item in inventory, create PendingGift
+      // gift-item: deduct the named item, or the first one in the bag, and open one gift notice
       if ((cultivator.lastGiftTick ?? -1) >= world.tick) throw new Error("这一刻已经送过礼了。下一刻再送。");
       const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
       if (feud === "宿怨") {
@@ -10940,10 +10982,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           summary: `${target.name}和你有宿怨，剑拔弩张，礼没收下。好感没有涨。`,
         };
       }
-      // find an item to gift — use the first item with count > 0
-      const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
-      if (!giftableEntry) throw new Error("身上没有能送的东西。");
-      const [giftItemId] = giftableEntry;
+      const giftItemId = resolveGiftItemId(cultivator, sendMessageParsed.itemId, bodyItemId);
       const giftName = itemDisplayName(giftItemId);
       const giftSpoken = openSpokenLine(world, cultivator.id, target.id, "gift-item", world.tick, speechLine, { giftName });
       cultivator.inventory[giftItemId as ItemId] = (cultivator.inventory[giftItemId as ItemId] ?? 0) - 1;
@@ -10963,7 +11002,6 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         recordLife(cultivator, { tick: world.tick, kind: "relationship", text: tense, names: [target.name] });
         recordLife(target, { tick: world.tick, kind: "relationship", text: tense, names: [cultivator.name] });
       }
-      addMessage(world, target.id, cultivator.name, `${cultivator.name}的赠礼`, giftContent, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: giftSpoken });
       addDaoLog(
         world,
         cultivator.id,
@@ -12981,7 +13019,7 @@ function performResidenceGrandeurAction(
   return done(`${hostText}${cultivator.name}说：「${spoken}」`);
 }
 
-export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId, speechLine?: string | null): ActionExecutionResult {
+export function performAction(world: WorldState, cultivatorId: string, actionId: ActionId, speechLine?: string | null, bodyItemId?: string | null): ActionExecutionResult {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   if (isAbortDungeonExpeditionAction(actionId)) {
@@ -13657,7 +13695,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     }
     return startJob(world, cultivator, actionId as TimedActionId, actionId);
   }
-  return immediateAction(world, cultivator, actionId, speechLine);
+  return immediateAction(world, cultivator, actionId, speechLine, bodyItemId);
 }
 
 function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown): string {
