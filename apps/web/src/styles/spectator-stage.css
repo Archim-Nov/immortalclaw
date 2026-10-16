@@ -25,36 +25,6 @@
     linear-gradient(180deg, rgba(247, 242, 232, 0.2) 0%, var(--spectator-paper) 46%, #ebe3d2 100%);
 }
 
-.spectator-ink-wash,
-.spectator-ink-side {
-  position: absolute;
-  display: block;
-  max-width: none;
-  pointer-events: none;
-  mix-blend-mode: multiply;
-  user-select: none;
-}
-
-.spectator-ink-wash {
-  top: -8.5rem;
-  left: 42%;
-  width: min(1360px, 140vw);
-  transform: translateX(-50%);
-  opacity: 0.55;
-  filter: brightness(0.32);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 68%);
-}
-
-.spectator-ink-side {
-  top: 8vh;
-  right: -6vw;
-  width: min(460px, 42vw);
-  opacity: 0.38;
-  filter: brightness(0.28);
-  transform: scaleX(-1);
-  mask-image: linear-gradient(to left, #000 18%, transparent 84%);
-}
-
 .spectator-sheet {
   position: relative;
   z-index: 1;
@@ -209,8 +179,7 @@
   text-align: left;
 }
 
-.spectator-status-dot,
-.spectator-pin-dot {
+.spectator-status-dot {
   width: 0.55rem;
   height: 0.55rem;
   margin-top: 0.4rem;
@@ -218,18 +187,15 @@
   background: var(--spectator-ink);
 }
 
-.spectator-status-dot.is-busy,
-.spectator-pin.is-busy .spectator-pin-dot {
+.spectator-status-dot.is-busy {
   background: var(--spectator-cinnabar);
 }
 
-.spectator-status-dot.is-injured,
-.spectator-pin.is-injured .spectator-pin-dot {
+.spectator-status-dot.is-injured {
   background: var(--spectator-gold);
 }
 
-.spectator-status-dot.is-idle,
-.spectator-pin.is-idle .spectator-pin-dot {
+.spectator-status-dot.is-idle {
   background: var(--spectator-ink);
 }
 
@@ -268,7 +234,7 @@
   position: relative;
   margin-top: 0.7rem;
   aspect-ratio: 960 / 680;
-  background: #d5e0e2;
+  background: #efe6d4;
   border: 1px solid var(--spectator-line);
   overflow: hidden;
 }
@@ -279,6 +245,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: fill;
 }
 
 .spectator-map-pins {
@@ -301,14 +268,21 @@
 }
 
 .spectator-pin-dot {
-  width: 0.7rem;
-  height: 0.7rem;
+  width: 0.72rem;
+  height: 0.72rem;
   margin: 0;
-  box-shadow: 0 0 0 2px rgba(251, 247, 238, 0.9);
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 38%, #3a332c 0 38%, #1c1814 58%, rgba(28, 24, 20, 0) 76%);
+  box-shadow:
+    0 0 0 0.5px rgba(28, 24, 20, 0.35),
+    0 0 5px 2px rgba(28, 24, 20, 0.32);
 }
 
 .spectator-pin.is-selected .spectator-pin-dot {
-  box-shadow: 0 0 0 2px #fbf7ee, 0 0 0 4px var(--spectator-cinnabar);
+  box-shadow:
+    0 0 0 0.5px rgba(28, 24, 20, 0.55),
+    0 0 6px 3px rgba(28, 24, 20, 0.4),
+    0 0 0 3px rgba(157, 59, 47, 0.72);
 }
 
 .spectator-pin-name {
@@ -452,10 +426,6 @@
 
   .spectator-header h1 {
     font-size: 2.7rem;
-  }
-
-  .spectator-ink-side {
-    display: none;
   }
 }
 

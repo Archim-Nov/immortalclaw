@@ -65,10 +65,7 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
 
   return (
     <div className="spectator-page" lang="zh-CN">
-      <div className="spectator-backdrop" aria-hidden="true">
-        <img className="spectator-ink-wash" src="/assets/shan-shui-wash.svg" alt="" />
-        <img className="spectator-ink-side" src="/assets/shan-shui-wash.svg" alt="" />
-      </div>
+      <div className="spectator-backdrop" aria-hidden="true" />
       <div className="spectator-sheet">
         <header className="spectator-header">
           <div>
@@ -154,7 +151,7 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
               <div className="spectator-map-frame">
                 <img
                   className="spectator-map-base"
-                  src="/assets/jiuzhou-map.svg"
+                  src="/assets/jiuzhou-ink-wash.png"
                   alt="九州图。幽州、青州、凉州、蜀州、中州、扬州、宛州、沧州、雷州。"
                 />
                 <div className="spectator-map-pins">
@@ -190,7 +187,7 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
                   <Link to={`/stat/${encodeURIComponent(selected.agentId)}`}>打开行状</Link>
                 </p>
               ) : (
-                <p className="spectator-map-note">朱点是正在做事的人，墨点是闲着的人。</p>
+                <p className="spectator-map-note">墨点是在册的人。点一下，卷子只留他的近事。</p>
               )}
             </section>
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { anchorForLocation, layoutAgentPins } from "./jiuzhou-map";
+import { JIUZHOU_REGIONS, anchorForLocation, layoutAgentPins } from "./jiuzhou-map";
 
 test("eastern towns sit east of that state's main city", () => {
   const city = anchorForLocation("qingzhou:main-city", "qingzhou");
@@ -36,6 +36,19 @@ test("two agents in one place fan out, and the layout does not drift", () => {
   assert.ok(first[0] && first[1]);
   assert.ok(Math.hypot(first[0].x - first[1].x, first[0].y - first[1].y) > 4);
   assert.ok(Math.hypot(first[0].x - first[1].x, first[0].y - first[1].y) < 48);
+});
+
+test("region anchors follow the ink-wash painting", () => {
+  const at = (id: string) => JIUZHOU_REGIONS.find((region) => region.id === id);
+  const youzhou = at("youzhou");
+  const qingzhou = at("qingzhou");
+  const zhongzhou = at("zhongzhou");
+  const yangzhou = at("yangzhou");
+  const cangzhou = at("cangzhou");
+  assert.ok(youzhou && qingzhou && zhongzhou && yangzhou && cangzhou);
+  assert.ok(qingzhou.x > youzhou.x);
+  assert.ok(yangzhou.y > zhongzhou.y + 80);
+  assert.ok(cangzhou.x > zhongzhou.x + 80);
 });
 
 test("an unknown state does not invent a pin", () => {

@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import type { PublicAgentDirectoryEntry, WorldChronicleEntry } from "../../../../packages/contracts/src/runtime-api.js";
 import { AgentLifePreview } from "./agent-life-preview";
 import { appRoutes } from "../app/router";
+import { MAP_VIEW, layoutAgentPins } from "../lib/jiuzhou-map";
 import { SpectatorStage, SpectatorStageView } from "./spectator-stage";
 
 const agent: PublicAgentDirectoryEntry = {
@@ -80,8 +81,18 @@ test("a populated watch page shows place, action, and dialogue without command c
   assert.match(html, /运功/);
   assert.match(html, /今夜子时，青岚城见。/);
   assert.match(html, /九州/);
-  assert.match(html, /src="\/assets\/shan-shui-wash.svg"/);
-  assert.match(html, /src="\/assets\/jiuzhou-map.svg"/);
+  assert.doesNotMatch(html, /shan-shui/);
+  assert.match(html, /src="\/assets\/jiuzhou-ink-wash.png"/);
+  assert.doesNotMatch(html, /jiuzhou-map\.svg/);
+  const [pin] = layoutAgentPins([{
+    agentId: agent.agentId,
+    locationId: agent.cultivator.locationId,
+    stateId: agent.cultivator.stateId,
+  }]);
+  assert.ok(pin);
+  assert.match(html, new RegExp(`left:${(pin.x / MAP_VIEW.width) * 100}%`));
+  assert.match(html, new RegExp(`top:${(pin.y / MAP_VIEW.height) * 100}%`));
+  assert.match(html, /spectator-pin-dot/);
   assert.match(html, /青州/);
   assert.match(html, /href="\/stat\/agent-qingluo"/);
   assert.doesNotMatch(html, /执行|发送消息|enqueue|\/agent\/act|type="submit"/i);
