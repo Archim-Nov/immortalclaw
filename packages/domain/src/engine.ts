@@ -2513,7 +2513,7 @@ function sceneChoiceActions(world: WorldState, cultivator: Cultivator): Availabl
   return choice.options.map((option) => ({
     actionId: `choose-event:${option.id}` as ActionId,
     label: option.label,
-    description: `${choice.prompt}${option.summary}`,
+    description: choice.prompt,
     durationTicks: 0,
     kind: "immediate" as const,
   }));
@@ -4906,6 +4906,7 @@ function finalizeDungeonExpedition(
     returnPlaceName: world.locations[returnLocationId]?.name,
     primaryMaterial: metadata.materialBand,
     relic: relic ?? undefined,
+    realmProgressCapped: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && progress.realmProgressGain <= 0,
   });
 
   // ---- Loadout source drop (dungeon expedition) ----
@@ -5762,6 +5763,9 @@ function resolveDungeonExpeditionStepIfDue(
     dungeonExpeditionNextResolutionTick: progressedWithWake.nextResolutionTick,
   };
   stampDungeonWake(job, progressedWithWake);
+  if (!wakeNode && companionsHere.length === 0) {
+    maybeQueueDungeonSideChoice(world, cultivator, job);
+  }
 }
 
 function ensureDungeonWakeOnJob(world: WorldState, cultivator: Cultivator): void {
@@ -5784,6 +5788,36 @@ function ensureDungeonWakeOnJob(world: WorldState, cultivator: Cultivator): void
     && stamped.options.every((option, index) => option.optionId === wake.options[index]?.optionId && option.label === wake.options[index]?.label),
   );
   if (!same) stampDungeonWake(job, progress);
+}
+
+const DUNGEON_SIDE_CHOICE_CAP = 2;
+
+function maybeQueueDungeonSideChoice(
+  world: WorldState,
+  cultivator: Cultivator,
+  job: ActionJob,
+): void {
+  if (cultivator.pendingSceneChoiceId || cultivator.pendingMoralityChoiceId) return;
+  const queued = job.meta?.dungeonSideChoicesQueued ?? 0;
+  if (queued >= DUNGEON_SIDE_CHOICE_CAP) return;
+  const stateId = stateIdFromLocationId(cultivator.locationId);
+  const scenes = [
+    ...world.eventPools.globalCommon,
+    ...(world.eventPools.stateSpecific[stateId] ?? []),
+  ].filter((event) => event.sceneChoice);
+  if (scenes.length === 0) return;
+  const pick = scenes[hashString(`${job.id}:${world.tick}:dungeon-side`) % scenes.length];
+  if (!pick) return;
+  const queuedEvents = maybeQueueSceneChoice(world, cultivator, cultivator.locationId, pick);
+  if (!queuedEvents || queuedEvents.length === 0 || !cultivator.pendingSceneChoiceId) return;
+  const choice = world.pendingSceneChoices?.[cultivator.pendingSceneChoiceId];
+  if (choice) {
+    choice.expiresAtTick = world.tick + 6;
+    if (!choice.prompt.startsWith("地宫里岔开一件闲事。")) {
+      choice.prompt = `地宫里岔开一件闲事。${choice.prompt}`;
+    }
+  }
+  job.meta = { ...(job.meta ?? {}), dungeonSideChoicesQueued: queued + 1 };
 }
 
 function stampDungeonWake(job: ActionJob, progress: DungeonExpeditionProgress): void {
@@ -6959,6 +6993,10 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     locationPriorities.unshift(sectHint.priority);
     locationActions.unshift(sectHint.actionId);
   }
+  if (!cultivator.sectId && cultivator.neutralSectId) {
+    const joinedName = world.neutralSects[cultivator.neutralSectId]?.name;
+    if (joinedName) locationPriorities.unshift(`已经入了${joinedName}。`);
+  }
 
   // ── Merge layers: recovery > breakthrough > location ──
   const warnings = [...recoveryWarnings, ...breakthroughWarnings];
@@ -7366,9 +7404,27 @@ function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorSt
   };
 }
 
+function neutralPostName(postId: string | null | undefined): string {
+  if (postId === "outer-chore") return "外门杂役";
+  if (postId === "inner-cultivate") return "内门修炼";
+  if (postId === "steward") return "执事";
+  if (postId === "elder") return "长老";
+  if (postId === "master-seat") return "掌门席";
+  return "外门";
+}
+
 function buildSectStateView(world: WorldState, cultivator: Cultivator): CultivatorStateView["sect"] {
   if (!cultivator.sectId) {
-    return null;
+    const neutral = getCultivatorNeutralSect(world, cultivator);
+    if (!neutral) return null;
+    return {
+      id: neutral.id,
+      name: neutral.name,
+      alignment: "中立",
+      role: neutralPostName(cultivator.sectPost),
+      treasury: 0,
+      memberCount: neutral.memberIds.length,
+    };
   }
 
   const sect = world.sects[cultivator.sectId];
@@ -7384,7 +7440,7 @@ function buildSectStateView(world: WorldState, cultivator: Cultivator): Cultivat
     id: sect.id,
     name: sect.name,
     alignment: sect.alignment,
-    role: cultivator.sectTitle ?? "澶栭棬",
+    role: cultivator.sectTitle ?? "外门",
     treasury: sect.treasury,
     memberCount: sect.memberIds.length,
     level: sectLevel?.level,
@@ -7519,7 +7575,7 @@ function nearbyCultivatorsOf(world: WorldState, cultivator: Cultivator): NonNull
         name: other.name,
         realm: other.realm,
         realmLevel: other.realmLevel,
-        sectName: sectDisplayName(world, other.sectId),
+        sectName: sectDisplayName(world, other.sectId ?? other.neutralSectId),
         idle: !other.activeJobId,
         affinity: link ? link.affinity : null,
         bondLine: link ? describeSocialBond(link) : null,
@@ -8216,6 +8272,12 @@ const SEND_MESSAGE_KIND_ZH = {
   "request-help": "求援",
 } as const;
 
+function enterDungeonStanceLine(posture: "conservative" | "balanced" | "aggressive"): string {
+  if (posture === "conservative") return "这一趟稳妥偏守。真有险处，先保人，再谈往里走。";
+  if (posture === "aggressive") return "这一趟凶猛偏攻。会压着门口往里，也受得住更深的伤。";
+  return "这一趟走均衡。该进的时候进，该收的时候收。";
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -8226,15 +8288,13 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     : null;
   const readinessLevel = computeReadiness(cultivator);
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
-  if (cultivator.activeJobId) {
+    if (cultivator.activeJobId) {
     ensureDungeonWakeOnJob(world, cultivator);
     const sectBusy = listSectSceneActions(world, cultivator);
     const regionalBusy = listRegionalChoiceActions(world, cultivator);
-    if (regionalBusy.length > 0) {
-      return [...sectBusy, ...regionalBusy, ...sceneChoiceActions(world, cultivator)];
-    }
+    const sceneBusy = sceneChoiceActions(world, cultivator);
     if (!activeDungeonExpedition) {
-      return [...sectBusy, ...sceneChoiceActions(world, cultivator)];
+      return [...sectBusy, ...regionalBusy, ...sceneBusy];
     }
     const busyActions: AvailableAction[] = [{
       actionId: "abort-dungeon-expedition",
@@ -8255,7 +8315,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         });
       }
     }
-    return [...sectBusy, ...busyActions, ...sceneChoiceActions(world, cultivator)];
+    return [...sectBusy, ...regionalBusy, ...busyActions, ...sceneBusy];
   }
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
@@ -8757,7 +8817,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           actions.push({
             actionId: enterDungeonActionIdOf(rank, posture),
             label: `进${dungeonView.grade}级地宫第${rank}阶（${stance}）`,
-            description: `从这一层的门口进去。姿态是${stance}。时辰到了还没开口，就按这个姿态里稳的那一边走。${shareSuffix}`,
+            description: `从这一层的门口进去。${enterDungeonStanceLine(posture)}${shareSuffix}`,
             durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
           });
@@ -9626,6 +9686,8 @@ function executeItemImmediateAction(
     accepted: true,
     summary: binding.operation === "study"
       ? `${cultivator.name}研读了${itemDisplayName(binding.itemId)}。`
+      : binding.itemId === "ward-talisman"
+        ? `${cultivator.name}使用了${itemDisplayName(binding.itemId)}。获得护体，持续六刻。`
       : (binding.itemId === "healing-pill" || binding.itemId === "qi-pill")
         ? `${cultivator.name}服用了${itemDisplayName(binding.itemId)}。`
         : `${cultivator.name}使用了${itemDisplayName(binding.itemId)}。`,

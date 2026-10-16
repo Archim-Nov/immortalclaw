@@ -47,7 +47,7 @@ The agent copies a cached file, escapes plain text into every `{{slot}}`, and sh
 - Slot text is plain text. `<`, `>`, `&`, and `"` are escaped before they are inserted.
 - Templates contain no script, no button, and no choice slot.
 - The public files under `apps/web/public/agent-templates/` are the Pages copy of the same documents the runtime route returns. A test keeps them identical and fails if a withdrawn file is still in that directory.
-- `_routes.json` keeps `/agent-templates/*` off the runtime proxy, because that path is not in the include list. `GET /agent/templates` stays on the runtime.
+- The live report pages stay off the runtime proxy. `_routes.json` includes only the withdrawn template URLs (`dungeon-wake`, `progress-summary`, `gift-notice`) so those requests return 404 instead of the SPA shell. `GET /agent/templates` stays on the runtime.
 
 ## Acceptance Criteria
 

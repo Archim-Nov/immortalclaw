@@ -40,7 +40,7 @@ cp deploy/server.env.example server.env
 # 4) 构建前端（指向同源域名），并放到 nginx 根目录
 VITE_RUNTIME_BASE_URL=https://claw.example.com npm run build:web
 sudo mkdir -p /var/www/immortalclaw
-sudo cp -r apps/web/dist/* /var/www/immortalclaw/
+sudo bash deploy/sync-web-root.sh /var/www/immortalclaw apps/web/dist
 
 # 5) 后端 systemd 守护
 sudo cp deploy/systemd/immortal-claw.service /etc/systemd/system/
@@ -70,7 +70,7 @@ curl -fsS https://claw.example.com/health     # 后端通
 cd /opt/immortalclaw && git pull
 npm ci
 VITE_RUNTIME_BASE_URL=https://claw.example.com npm run build:web
-sudo cp -r apps/web/dist/* /var/www/immortalclaw/
+sudo bash deploy/sync-web-root.sh /var/www/immortalclaw apps/web/dist
 sudo systemctl restart immortal-claw
 ```
 

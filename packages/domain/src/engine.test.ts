@@ -758,7 +758,19 @@ test("neutral sect join, duty, and leave obey availability and reward rules", ()
 
   performAction(world, "yun-zhong-he", "join-neutral-sect:cang-mu-gu");
   assert.equal(cultivator.neutralSectId, "cang-mu-gu");
-  assert.equal(getCultivatorState(world, "yun-zhong-he").neutralSect?.id, "cang-mu-gu");
+  const joinedState = getCultivatorState(world, "yun-zhong-he");
+  assert.equal(joinedState.neutralSect?.id, "cang-mu-gu");
+  assert.equal(joinedState.sect?.id, "cang-mu-gu");
+  assert.equal(joinedState.sect?.alignment, "中立");
+  assert.equal(joinedState.sect?.name, joinedState.neutralSect?.name);
+  assert.match(joinedState.agentGuidance.priorities.join("\n"), /已经入了/);
+  assert.equal(
+    joinedState.agentGuidance.suggestedActions.some((actionId) => String(actionId).startsWith("join-neutral-sect:")),
+    false,
+  );
+  cultivator.sectPost = "outer-chore";
+  assert.equal(getCultivatorState(world, "yun-zhong-he").sect?.role, "外门杂役");
+  cultivator.sectPost = null;
   assert.equal(
     (getSectInfo(world, "yun-zhong-he") as { alignment?: string } | null)?.alignment,
     "中立",
@@ -781,6 +793,7 @@ test("neutral sect join, duty, and leave obey availability and reward rules", ()
   performAction(world, "yun-zhong-he", "leave-neutral-sect");
   assert.equal(cultivator.neutralSectId, null);
   assert.equal(cultivator.neutralContribution, 0);
+  assert.equal(getCultivatorState(world, "yun-zhong-he").sect, null);
 });
 
 test("sect duties move to the sect outpost and sect info exposes alignment", () => {
@@ -1520,9 +1533,19 @@ test("catalog-driven immediate item actions preserve consumable behavior", () =>
   assert.equal(cultivator.spiritualPower, 40);
   assert.ok(cultivator.statusEffects.some((effect) => effect.id === "spirit-saturated"));
 
-  performAction(world, "yun-zhong-he", "use-ward-talisman");
+  const wardAction = listAvailableActions(world, "yun-zhong-he").find((action) => action.actionId === "use-ward-talisman");
+  assert.ok(wardAction);
+  assert.match(wardAction.description, /获得护体，持续六刻/);
+  assert.equal(wardAction.description.includes("warded"), false);
+  assert.equal(wardAction.label.includes("warded"), false);
+  const warded = performAction(world, "yun-zhong-he", "use-ward-talisman");
   assert.equal(cultivator.inventory["ward-talisman"], 0);
-  assert.ok(cultivator.statusEffects.some((effect) => effect.id === "warded"));
+  assert.ok(cultivator.statusEffects.some((effect) => effect.id === "warded" && effect.name === "护体"));
+  assert.match(warded.summary, /获得护体，持续六刻/);
+  assert.equal(warded.summary.includes("warded"), false);
+  const shown = getCultivatorState(world, "yun-zhong-he").statusEffects.find((effect) => effect.id === "warded");
+  assert.equal(shown?.name, "护体");
+  assert.equal(shown?.description.includes("warded"), false);
 });
 
 test("managed dungeon expeditions no longer mint removed manual items", () => {

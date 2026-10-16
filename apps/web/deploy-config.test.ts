@@ -43,6 +43,7 @@ test("web app vite config stays buildable for the pages workspace", async () => 
     path.join(sourceRoot, "functions", "agent", "[[route]].js"),
     path.join(sourceRoot, "functions", "cultivator", "[[route]].js"),
     path.join(sourceRoot, "functions", "world", "[[route]].js"),
+    path.join(sourceRoot, "functions", "agent-templates", "[[file]].js"),
   ];
 
   const tsConfigFile = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
@@ -88,7 +89,17 @@ test("web app vite config stays buildable for the pages workspace", async () => 
     "/agent/*",
     "/cultivator/*",
     "/world/*",
+    "/agent-templates/dungeon-wake",
+    "/agent-templates/dungeon-wake.html",
+    "/agent-templates/progress-summary",
+    "/agent-templates/progress-summary.html",
+    "/agent-templates/gift-notice",
+    "/agent-templates/gift-notice.html",
   ]);
+  assert.equal(
+    fs.existsSync(path.join(sourceRoot, "public", "agent-templates", "dungeon-wake.html")),
+    false,
+  );
 
   for (const publicDoc of publicDocs) {
     assert.equal(fs.existsSync(publicDoc), true, `expected public markdown at ${publicDoc}`);
@@ -105,6 +116,19 @@ test("web app vite config stays buildable for the pages workspace", async () => 
   for (const proxyFile of proxyFiles) {
     assert.equal(fs.existsSync(proxyFile), true, `expected proxy file at ${proxyFile}`);
   }
+});
+
+test("withdrawn owner templates stay off the static site", () => {
+  const sourceRoot = path.resolve(import.meta.dirname);
+  const repoRoot = path.resolve(sourceRoot, "../..");
+  const nginx = fs.readFileSync(path.join(repoRoot, "deploy", "nginx", "immortalclaw.conf"), "utf8");
+  const sync = fs.readFileSync(path.join(repoRoot, "deploy", "sync-web-root.sh"), "utf8");
+  for (const name of ["dungeon-wake", "progress-summary", "gift-notice"]) {
+    assert.match(nginx, new RegExp(`location = /agent-templates/${name} \\{ return 404; \\}`));
+    assert.match(nginx, new RegExp(`location = /agent-templates/${name}\\.html \\{ return 404; \\}`));
+    assert.match(sync, new RegExp(`${name}\\.html`));
+  }
+  assert.match(nginx, /location \/agent-templates\/ \{\s*try_files \$uri =404;/);
 });
 
 test("web workspace scripts keep explicit typechecking in both pages and root build paths", () => {

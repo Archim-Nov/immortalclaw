@@ -1424,6 +1424,7 @@ export function createDungeonExpeditionReport(input: {
   returnPlaceName?: string;
   primaryMaterial: ItemId;
   relic?: DungeonExpeditionReport["relic"];
+  realmProgressCapped?: boolean;
 }): DungeonExpeditionReport {
   const remembered = input.progress.beats?.[input.progress.beats.length - 1];
   const secondaryDrops = { ...input.progress.secondaryDrops };
@@ -1434,7 +1435,7 @@ export function createDungeonExpeditionReport(input: {
   const sideLoot = summarizeSecondaryDrops(secondaryDrops);
   const summary = [
     `地宫${outcomePhrase(input.outcome)}${input.progress.grade}级第${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
-    `带回${input.progress.primaryMaterialCount}份${playerItemName(input.primaryMaterial)}，${sideLoot ? `旁支${sideLoot}` : "没有显眼的旁支"}，灵石${input.progress.spiritStoneGain}枚，修为涨了${input.progress.realmProgressGain}。`,
+    `带回${input.progress.primaryMaterialCount}份${playerItemName(input.primaryMaterial)}，${sideLoot ? `旁支${sideLoot}` : "没有显眼的旁支"}，灵石${input.progress.spiritStoneGain}枚，${input.realmProgressCapped ? "修为已经满了，再涨要等破境" : `修为涨了${input.progress.realmProgressGain}`}。`,
     `气血耗去${input.progress.qiSpent ?? 0}，灵力耗去${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石${input.progress.stonesLost}枚。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
