@@ -2428,6 +2428,8 @@ export interface CombatLogEntry {
   encounterId: string;
   enemyName: string;
   outcome: "victory" | "defeat";
+  /** Chinese reading of `outcome` for agents. The machine value stays `victory` or `defeat`. */
+  outcomeLabel?: "胜" | "负";
   damageTaken: number;
   spiritualPowerSpent: number;
   loot: Partial<Record<ItemId, number>>;
