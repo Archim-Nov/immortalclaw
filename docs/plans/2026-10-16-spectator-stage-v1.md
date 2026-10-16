@@ -32,6 +32,12 @@ The web app keeps the control center on its current routes. `/` and `/watch` ren
 
 - Note the public landing in `README.md` and `AGENTS.md`.
 
+### Task 4
+
+- On the public stat page and the watch page, replace English province, temperament, and gender chips with Chinese labels, and drop placeholders that have no Chinese.
+- Bake one shan-shui-inf landscape into `apps/web/public/assets/shan-shui-wash.svg` and use it as the watch-page wash. Leave the 九州 panel as the pin map.
+- Keep the same view-only pages. Do not add command controls.
+
 ## Verification
 
 - `node --import tsx --test` on the touched test files

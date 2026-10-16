@@ -13,7 +13,7 @@ import {
   roadPath,
 } from "../lib/jiuzhou-map";
 import { requestPublicAgentDirectory, requestWorldChronicle } from "../lib/runtime-api";
-import { actionLine, chronicleKindLabel, formatRealmLabel } from "../lib/spectator-copy";
+import { actionLine, chronicleKindLabel, formatRealmLabel, publicChronicleTitle, publicPlaceName, visitorText } from "../lib/spectator-copy";
 
 const POLL_MS = 20_000;
 
@@ -33,6 +33,18 @@ function motionOf(agent: PublicAgentDirectoryEntry): string {
     actionLabel: agent.cultivator.currentActionLabel,
     actionId: agent.cultivator.currentAction,
   });
+}
+
+function placeOf(agent: PublicAgentDirectoryEntry): string {
+  return publicPlaceName({
+    location: agent.cultivator.location,
+    locationId: agent.cultivator.locationId,
+    stateId: agent.cultivator.stateId,
+  });
+}
+
+function sectOf(agent: PublicAgentDirectoryEntry): string {
+  return visitorText(agent.cultivator.sect) ?? (agent.cultivator.sect ? "宗门" : "散修");
 }
 
 export function SpectatorStageView(props: SpectatorStageViewProps) {
@@ -57,7 +69,10 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
 
   return (
     <div className="spectator-page" lang="zh-CN">
-      <div className="spectator-backdrop" aria-hidden="true" />
+      <div className="spectator-backdrop" aria-hidden="true">
+        <img className="spectator-ink-wash" src="/assets/shan-shui-wash.svg" alt="" />
+        <img className="spectator-ink-side" src="/assets/shan-shui-wash.svg" alt="" />
+      </div>
       <div className="spectator-sheet">
         <header className="spectator-header">
           <div>
@@ -120,9 +135,9 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
                           <span className="spectator-person-realm">
                             {formatRealmLabel(agent.cultivator)}
                             {" · "}
-                            {agent.cultivator.sect || "散修"}
+                            {sectOf(agent)}
                           </span>
-                          <span className="spectator-person-place">{agent.cultivator.location}</span>
+                          <span className="spectator-person-place">{placeOf(agent)}</span>
                           <span className="spectator-person-action">此刻：{motionOf(agent)}</span>
                         </button>
                         <Link className="spectator-detail-link" to={`/stat/${encodeURIComponent(agent.agentId)}`}>
@@ -186,7 +201,7 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
                           top: `${(pin.y / MAP_VIEW.height) * 100}%`,
                         }}
                         aria-pressed={agent.agentId === selectedId}
-                        aria-label={`${name}，${agent.cultivator.location}，${motionOf(agent)}`}
+                        aria-label={`${name}，${placeOf(agent)}，${motionOf(agent)}`}
                         onClick={() => setSelectedId(agent.agentId === selectedId ? null : agent.agentId)}
                       >
                         <span className="spectator-pin-dot" />
@@ -198,7 +213,7 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
               </div>
               {selected ? (
                 <p className="spectator-map-note">
-                  {selected.cultivator.name || selected.name}人在{selected.cultivator.location}，此刻{motionOf(selected)}。
+                  {selected.cultivator.name || selected.name}人在{placeOf(selected)}，此刻{motionOf(selected)}。
                   <Link to={`/stat/${encodeURIComponent(selected.agentId)}`}>打开行状</Link>
                 </p>
               ) : (
@@ -226,8 +241,8 @@ export function SpectatorStageView(props: SpectatorStageViewProps) {
                         {entry.actorName ? <span>{entry.actorName}</span> : null}
                         <span>刻 {entry.tick}</span>
                       </div>
-                      <h3>{entry.title}</h3>
-                      <p>{entry.summary}</p>
+                      <h3>{publicChronicleTitle(entry.title, entry.kind)}</h3>
+                      {visitorText(entry.summary) ? <p>{visitorText(entry.summary)}</p> : null}
                     </li>
                   ))}
                 </ol>
@@ -281,7 +296,7 @@ export function SpectatorStage() {
         setDirectoryError(null);
       } else if (!sawAgents) {
         setDirectoryError(directoryResult.reason instanceof Error
-          ? directoryResult.reason.message
+          ? visitorText(directoryResult.reason.message) ?? "名册没有取到。"
           : "名册没有取到。");
       }
 
@@ -292,7 +307,7 @@ export function SpectatorStage() {
         setChronicleError(null);
       } else if (!sawChronicle) {
         setChronicleError(chronicleResult.reason instanceof Error
-          ? chronicleResult.reason.message
+          ? visitorText(chronicleResult.reason.message) ?? "近事没有取到。"
           : "近事没有取到。");
       }
     }
