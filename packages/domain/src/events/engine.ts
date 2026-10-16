@@ -18,15 +18,15 @@ const hashString = (input: string) =>
   Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;
 
 const STATUS_META: Record<StatusEffectId, { name: string; description: string }> = {
-  wounded: { name: "Wounded", description: "Risky actions are restricted." },
-  poisoned: { name: "Poisoned", description: "Loses qi each tick." },
-  "clear-mind": { name: "Clear Mind", description: "Better recovery and cultivation." },
-  "qi-surge": { name: "Qi Surge", description: "Better combat and cultivation." },
-  "fortune-marked": { name: "Fortune Marked", description: "Better ruins outcomes." },
-  warded: { name: "Warded", description: "Lower combat risk." },
-  deviation: { name: "Qi Deviation", description: "Cultivation becomes unstable and risky." },
-  insight: { name: "Insight", description: "Short-term bonus to cultivation and combat." },
-  "spirit-saturated": { name: "Spirit Saturated", description: "Short-term cultivation boost." },
+  wounded: { name: "带伤", description: "冒险的事做不了，得先养伤。" },
+  poisoned: { name: "中毒", description: "每过一刻都在掉气血。" },
+  "clear-mind": { name: "心神清明", description: "调息和修炼都顺一些。" },
+  "qi-surge": { name: "气血上涌", description: "出手和修炼都顺一些。" },
+  "fortune-marked": { name: "气运加身", description: "探宝更容易有收获。" },
+  warded: { name: "护体", description: "打架时没那么容易吃亏。" },
+  deviation: { name: "走火入魔", description: "修炼不稳，再催就容易出事。" },
+  insight: { name: "有所悟", description: "这一阵修炼和出手都亮一点。" },
+  "spirit-saturated": { name: "灵气充盈", description: "这一阵修炼更顶用。" },
 };
 const currentStateIdOf = (cultivator: Cultivator) => cultivator.locationId.split(":")[0] as keyof Cultivator["stateReputation"];
 

@@ -77,6 +77,7 @@ function createState(): CultivatorStateView {
       realmProgress: 0,
       status: "idle",
       location: "Qinghe City",
+      locationId: "qingzhou:main-city",
       spiritStones: 360,
       qi: 100,
       maxQi: 100,

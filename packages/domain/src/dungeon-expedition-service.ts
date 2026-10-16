@@ -146,12 +146,17 @@ export function buildDungeonRankYieldHints(
     return {
       rank,
       primaryMaterial,
+      primaryMaterialName: playerItemName(primaryMaterial),
       estimatedExpeditionYieldByPolicy: {
         conservative: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].conservative },
         balanced: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].balanced },
         aggressive: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].aggressive },
       },
       notableSecondaryDrops,
+      notableSecondaryDropCards: notableSecondaryDrops.map((itemId) => ({
+        itemId,
+        itemName: playerItemName(itemId),
+      })),
       ...(mystery
         ? {
             mysteryName: mystery.name,
@@ -1446,9 +1451,13 @@ export function createDungeonExpeditionReport(input: {
     stepsResolved: input.progress.stepIndex,
     primaryMaterial: {
       itemId: input.primaryMaterial,
+      itemName: playerItemName(input.primaryMaterial),
       count: input.progress.primaryMaterialCount,
     },
     secondaryDrops,
+    secondaryDropCards: (Object.entries(secondaryDrops) as Array<[ItemId, number | undefined]>)
+      .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
+      .map(([itemId, count]) => ({ itemId, itemName: playerItemName(itemId), count })),
     ...(input.relic ? { relic: input.relic } : {}),
     spiritStoneGain: input.progress.spiritStoneGain,
     realmProgressGain: input.progress.realmProgressGain,
