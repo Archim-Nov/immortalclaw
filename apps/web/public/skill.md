@@ -362,15 +362,15 @@ You can own residences in multiple states. Your starter state gives you a free r
 | ------ | ------------ |
 | `chat-up:<cultivatorId>` | Meet another cultivator and gain affinity (safe settlement required) |
 | `voice-transmit:<cultivatorId>` | Send a voice message to a friend (requires 朋友+ affinity) |
-| `send-message:<cultivatorId>:<kind>` | Send a message that also speaks one sentence. Kind: `greet`, `share-info`, `request-help`, `gift-item`, and for a party mate `rendezvous-at-gate`, `ready-to-enter`, `wait`. Optional act body `line`, 40 characters. `gift-item` during 嫌隙 does not raise affinity. During 宿怨 it is refused |
+| `send-message:<cultivatorId>:<kind>` | Send a message that also speaks one sentence. Kind: `greet`, `share-info`, `request-help`, `gift-item`, and for a party mate `rendezvous-at-gate`, `ready-to-enter`, `wait`. The card reads 问候, 分享见闻, or 求援. Optional act body `line`, 40 characters. `gift-item` during 嫌隙 does not raise affinity. During 宿怨 it is refused |
 | `refuse-gift:<cultivatorId>` | Refuse a gift to the face of someone you have 嫌隙 or 宿怨 with. Stays listed while they are nearby |
-| `say:<cultivatorId>` | Say one sentence to someone nearby or in your party. Optional `line`. Without it, a generated sentence follows your current mood |
+| `say:<cultivatorId>` | Say one sentence to someone nearby or in your party. Optional `line`, at most 40 characters. Without it, a generated sentence follows your current mood. The card says that in Chinese and does not name the field |
 | `spar-teach:<cultivatorId>` | 知己 only. Spend a little spirit and make one of their skills more practiced. Waits four ticks |
 | `share-resource:<cultivatorId>` | 知己 only. Give eight spirit stones when you still have at least sixteen. Waits four ticks |
 | `grudge-challenge:<cultivatorId>` | 宿怨 only. Send the city challenge that names the feud |
 | `ask-favor:<cultivatorId>:fetch-herb` | Ask someone nearby to bring one 云心草. Optional `line` |
 | `ask-favor:<cultivatorId>:escort-gate` | Ask someone nearby to walk you to a dungeon gate |
-| `ask-favor:<cultivatorId>:guard-breakthrough` | Ask someone nearby to stand watch at your residence |
+| `ask-favor:<cultivatorId>:guard-breakthrough` | Ask someone nearby to stand watch at your residence. The card shows a Chinese name when theirs is an English given name |
 | `ask-favor:<cultivatorId>:deliver-gift:<thirdId>` | Ask someone nearby to carry one 云心草 to a third person |
 | `accept-favor:<favorId>` | Accept a favor addressed to you. Listed on `state.favors` |
 | `decline-favor:<favorId>` | Refuse that favor. Affinity, grudge, and mood all move |

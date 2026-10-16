@@ -5,6 +5,7 @@
  * cultivator asking another for a concrete errand.
  */
 
+import { facingPersonName } from "./facing-names.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import { grudgeArcOf, shiftCultivatorMood, spreadNearbyGossip, recordLife } from "./inner-life.js";
 import type {
@@ -218,10 +219,14 @@ function openFavors(world: WorldState): PersonalFavor[] {
   return Object.values(world.personalFavors ?? {}).filter((favor) => favor.status === "offered" || favor.status === "accepted");
 }
 
-function favorSummary(world: WorldState, favor: PersonalFavor): string {
-  const asker = personName(world, favor.fromId);
-  const asked = personName(world, favor.toId);
-  const third = personName(world, favor.thirdId);
+function favorSummary(world: WorldState, favor: PersonalFavor, display = false): string {
+  const show = (id: string | undefined) => {
+    const raw = personName(world, id);
+    return display ? facingPersonName(raw) : raw;
+  };
+  const asker = show(favor.fromId);
+  const asked = show(favor.toId);
+  const third = show(favor.thirdId);
   const herb = herbName(world);
   if (favor.status === "accepted") {
     if (favor.kind === "fetch-herb") return `${asked}已经应下${asker}，答应把一株${herb}带回来。`;
@@ -324,30 +329,32 @@ export function listSocialDeepenActions(world: WorldState, cultivator: Cultivato
   const herb = herbName(world);
   const location = world.locations[cultivator.locationId];
   for (const target of othersHere(world, cultivator)) {
+    const targetName = facingPersonName(target.name);
     if (canAsk(world, cultivator, target)) {
       actions.push(
         action(
           `ask-favor:${target.id}:fetch-herb`,
-          `请托：${target.name}去采${herb}`,
-          `请${target.name}去采一株${herb}。对方可以应，也可以拒。办成了会欠一份人情。`,
+          `请托：${targetName}去采${herb}`,
+          `请${targetName}去采一株${herb}。对方可以应，也可以拒。办成了会欠一份人情。`,
         ),
         action(
           `ask-favor:${target.id}:escort-gate`,
-          `请托：${target.name}送到门口`,
-          `请${target.name}把你送到地宫门口。两个人都到了门口，这件事才算办成。`,
+          `请托：${targetName}送到门口`,
+          `请${targetName}把你送到地宫门口。两个人都到了门口，这件事才算办成。`,
         ),
         action(
           `ask-favor:${target.id}:guard-breakthrough`,
-          `请托：${target.name}守关`,
-          `请${target.name}在你闭关时守在洞府外。人守在门外，破境才踏实。`,
+          `请托：${targetName}守关`,
+          `请${targetName}在你闭关时守在洞府外。人守在门外，破境才踏实。`,
         ),
       );
       if ((cultivator.inventory[FAVOR_HERB_ID] ?? 0) > 0) {
         for (const third of deliverCandidates(world, cultivator, target.id)) {
+          const thirdName = facingPersonName(third.name);
           actions.push(action(
             `ask-favor:${target.id}:deliver-gift:${third.id}`,
-            `请托：${target.name}把${herb}送给${third.name}`,
-            `把一株${herb}交给${target.name}，请其送到${third.name}手里。人不必都在眼前。`,
+            `请托：${targetName}把${herb}送给${thirdName}`,
+            `把一株${herb}交给${targetName}，请其送到${thirdName}手里。人不必都在眼前。`,
           ));
         }
       }
@@ -379,16 +386,16 @@ export function listSocialDeepenActions(world: WorldState, cultivator: Cultivato
 
   for (const favor of openFavors(world)) {
     if (favor.toId === cultivator.id && favor.status === "offered") {
-      const asker = personName(world, favor.fromId);
+      const asker = facingPersonName(personName(world, favor.fromId));
       actions.push(
-        action(`accept-favor:${favor.id}`, `应下请托：${asker}`, `${favorSummary(world, favor)}应下以后，再按事情本身去办。`),
+        action(`accept-favor:${favor.id}`, `应下请托：${asker}`, `${favorSummary(world, favor, true)}应下以后，再按事情本身去办。`),
         action(`decline-favor:${favor.id}`, `回绝请托：${asker}`, `回绝${asker}的请托。话说明白了，两边的心情都会受影响。`),
       );
     }
     if (favor.toId === cultivator.id && favor.status === "accepted") {
-      const asker = personName(world, favor.fromId);
+      const asker = facingPersonName(personName(world, favor.fromId));
       actions.push(
-        action(`fulfill-favor:${favor.id}`, `办完请托：${asker}`, `${favorSummary(world, favor)}办成了，对方会欠你一份人情。`),
+        action(`fulfill-favor:${favor.id}`, `办完请托：${asker}`, `${favorSummary(world, favor, true)}办成了，对方会欠你一份人情。`),
         action(`abandon-favor:${favor.id}`, `这件请托黄了：${asker}`, `这件应下的事办不成了。说清楚，免得一直拖着。`),
       );
     }
@@ -399,7 +406,7 @@ export function listSocialDeepenActions(world: WorldState, cultivator: Cultivato
       const fromName = personName(world, note.fromId);
       actions.push(
         action(`read-note:${note.id}`, `看字条：${fromName}`, `${fromName}留了字条：「${note.line}」先看过，也可以回一句。`),
-        action(`reply-note:${note.id}`, `回字条：${fromName}`, `回${fromName}的字条。act 的 body 可带 line，最多四十字。人不在眼前也能回。`),
+        action(`reply-note:${note.id}`, `回字条：${fromName}`, `回${fromName}的字条，最多四十字。人不在眼前也能回。不另外写，就代回一句。`),
       );
     }
     if (note.toId === null && note.locationId === cultivator.locationId && note.fromId !== cultivator.id && !(note.replies ?? []).some((reply) => reply.fromId === cultivator.id)) {
@@ -418,7 +425,7 @@ export function listSocialDeepenActions(world: WorldState, cultivator: Cultivato
       actions.push(action(
         "leave-spot-note",
         "在此地留一张字条",
-        `把一句话留在${placeName(world, cultivator.locationId)}。后来的人看见了可以回一句。act 的 body 可带 line。`,
+        `把一句话留在${placeName(world, cultivator.locationId)}。后来的人看见了可以回一句。不另外写，就代留一句。`,
       ));
     }
   }

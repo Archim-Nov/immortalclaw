@@ -535,3 +535,147 @@ test("wilderness survey and withdraw stay Chinese when the place name is missing
   assert.match(withdraw.description, /不另扣灵石/);
   assert.equal(withdraw.description.includes("Retreat"), false);
 });
+
+test("send-message cards name greet, share, and help in Chinese", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-message-kinds", name: "青萝" });
+  const second = world.cultivators[summary.selectedCultivatorId]!;
+  first.locationId = "qingzhou:main-city";
+  second.locationId = "qingzhou:main-city";
+  first.injuryTicksRemaining = 0;
+  second.injuryTicksRemaining = 0;
+  first.activeJobId = null;
+  second.activeJobId = null;
+
+  const cards = listAvailableActions(world, first.id);
+  const greet = cards.find((action) => action.actionId === `send-message:${second.id}:greet`);
+  const share = cards.find((action) => action.actionId === `send-message:${second.id}:share-info`);
+  const help = cards.find((action) => action.actionId === `send-message:${second.id}:request-help`);
+  assert.ok(greet);
+  assert.ok(share);
+  assert.ok(help);
+  assert.equal(greet.label, "发送消息（问候）：青萝");
+  assert.match(greet.description, /问候/);
+  assert.equal(share.label, "发送消息（分享见闻）：青萝");
+  assert.match(share.description, /分享见闻/);
+  assert.equal(help.label, "发送消息（求援）：青萝");
+  assert.match(help.description, /求援/);
+  for (const card of [greet, share, help]) {
+    assert.equal(card.label.includes("greet"), false);
+    assert.equal(card.label.includes("share-info"), false);
+    assert.equal(card.label.includes("request-help"), false);
+    assert.equal(card.description.includes("greet"), false);
+    assert.equal(card.description.includes("share-info"), false);
+    assert.equal(card.description.includes("request-help"), false);
+  }
+});
+
+test("say and reply-line cards do not name the act body", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-say-copy", name: "青萝" });
+  const second = world.cultivators[summary.selectedCultivatorId]!;
+  first.locationId = "qingzhou:main-city";
+  second.locationId = "qingzhou:main-city";
+  first.injuryTicksRemaining = 0;
+  second.injuryTicksRemaining = 0;
+  first.activeJobId = null;
+  second.activeJobId = null;
+
+  const say = listAvailableActions(world, first.id).find((action) => action.actionId === `say:${second.id}`);
+  assert.ok(say);
+  assert.match(say.description, /四十/);
+  assert.equal(/\bact\b/i.test(say.description), false);
+  assert.equal(/\bline\b/i.test(say.description), false);
+
+  performAction(world, first.id, `say:${second.id}`, "门口风大，你带灯了吗？");
+  const reply = listAvailableActions(world, second.id).find((action) => action.actionId === `reply-line:${first.id}`);
+  assert.ok(reply);
+  assert.match(reply.description, /门口风大/);
+  assert.match(reply.description, /四十/);
+  assert.equal(/\bact\b/i.test(reply.description), false);
+  assert.equal(/\bline\b/i.test(reply.description), false);
+
+  const spot = listAvailableActions(world, first.id).find((action) => action.actionId === "leave-spot-note");
+  assert.ok(spot);
+  assert.match(spot.description, /留/);
+  assert.equal(/\bact\b/i.test(spot.description), false);
+  assert.equal(/\bline\b/i.test(spot.description), false);
+
+  performAction(world, first.id, `leave-note:${second.id}` as never, "人回来先到城门口找我。");
+  const replyNote = listAvailableActions(world, second.id).find((action) => String(action.actionId).startsWith("reply-note:"));
+  assert.ok(replyNote);
+  assert.match(replyNote.description, /四十/);
+  assert.equal(/\bact\b/i.test(replyNote.description), false);
+  assert.equal(/\bline\b/i.test(replyNote.description), false);
+});
+
+test("favor, quest, and bounty cards show a Chinese name for an English given name", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  first.locationId = "qingzhou:main-city";
+  first.injuryTicksRemaining = 0;
+  first.activeJobId = null;
+  const emma = world.cultivators[createCultivator(world, { name: "Emma" }).id]!;
+  const stub = world.cultivators[createCultivator(world, { name: "Lin Yuelan" }).id]!;
+  const qing = world.cultivators[createCultivator(world, { name: "青萝" }).id]!;
+  const noah = world.cultivators[createCultivator(world, { name: "Noah" }).id]!;
+  for (const person of [emma, stub, qing, noah]) {
+    person.locationId = first.locationId;
+    person.injuryTicksRemaining = 0;
+    person.activeJobId = null;
+  }
+
+  const favors = listAvailableActions(world, first.id);
+  const emmaGuard = favors.find((action) => action.actionId === `ask-favor:${emma.id}:guard-breakthrough`);
+  const stubGuard = favors.find((action) => action.actionId === `ask-favor:${stub.id}:guard-breakthrough`);
+  const qingGuard = favors.find((action) => action.actionId === `ask-favor:${qing.id}:guard-breakthrough`);
+  const noahGuard = favors.find((action) => action.actionId === `ask-favor:${noah.id}:guard-breakthrough`);
+  assert.ok(emmaGuard);
+  assert.ok(stubGuard);
+  assert.ok(qingGuard);
+  assert.ok(noahGuard);
+  assert.equal(emmaGuard.label, "请托：艾玛守关");
+  assert.equal(emmaGuard.label.includes("Emma"), false);
+  assert.equal(emmaGuard.description.includes("Emma"), false);
+  assert.match(emmaGuard.description, /守在洞府外/);
+  assert.equal(stubGuard.label, "请托：林月兰守关");
+  assert.equal(stubGuard.label.includes("Lin"), false);
+  assert.equal(qingGuard.label, "请托：青萝守关");
+  assert.equal(/[A-Za-z]/.test(noahGuard.label), false);
+  assert.match(noahGuard.label, /守关/);
+  assert.equal(emma.name, "Emma");
+  assert.equal(stub.name, "Lin Yuelan");
+
+  const board = world.questBoards[first.locationId]!;
+  const bounty = board.quests.find((quest) => quest.type === "bounty-low") ?? board.quests[0]!;
+  bounty.nameCn = "Emma守关";
+  bounty.description = "请Emma守这一关。";
+  const quest = listAvailableActions(world, first.id).find((action) => action.actionId === `quest:accept:${bounty.type}:${bounty.boardIndex}`);
+  assert.ok(quest);
+  assert.equal(quest.label, "接下：艾玛守关");
+  assert.equal(quest.label.includes("Emma"), false);
+  assert.match(quest.description, /艾玛/);
+  assert.equal(quest.description.includes("Emma"), false);
+  assert.equal(bounty.nameCn, "Emma守关");
+
+  first.inventory["beast-core"] = 1;
+  world.commissions["comm-emma"] = {
+    id: "comm-emma",
+    posterId: emma.id,
+    locationId: first.locationId,
+    type: "gather",
+    targetItemId: "beast-core",
+    targetCount: 1,
+    rewardSpiritStones: 40,
+    acceptedById: null,
+    createdAtTick: world.tick,
+    completedAtTick: null,
+  };
+  const commission = listAvailableActions(world, first.id).find((action) => action.actionId === "accept-commission:comm-emma");
+  assert.ok(commission);
+  assert.equal(commission.label, "接受委托：艾玛的采集任务");
+  assert.equal(commission.description.includes("Emma"), false);
+  assert.equal(getCultivatorState(world, first.id).localCommissions.find((row) => row.id === "comm-emma")?.posterName, "艾玛");
+});
