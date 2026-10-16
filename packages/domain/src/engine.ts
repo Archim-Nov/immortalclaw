@@ -100,6 +100,7 @@ import {
   SPAR_TEACH_SPIRIT,
 } from "./inner-life.js";
 import { expireSocialDeepen, listSocialDeepenActions, noteArrivalReunion, performSocialDeepenAction, socialDeepenView } from "./social-deepen.js";
+import { answerSectDutyScene, holdSectDutyScene, listSectSceneActions } from "./sect-duty-scenes.js";
 import {
   beginSectTimed,
   buildSectLifeView,
@@ -8218,12 +8219,13 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
   if (cultivator.activeJobId) {
     ensureDungeonWakeOnJob(world, cultivator);
+    const sectBusy = listSectSceneActions(world, cultivator);
     const regionalBusy = listRegionalChoiceActions(world, cultivator);
     if (regionalBusy.length > 0) {
-      return [...regionalBusy, ...sceneChoiceActions(world, cultivator)];
+      return [...sectBusy, ...regionalBusy, ...sceneChoiceActions(world, cultivator)];
     }
     if (!activeDungeonExpedition) {
-      return sceneChoiceActions(world, cultivator);
+      return [...sectBusy, ...sceneChoiceActions(world, cultivator)];
     }
     const busyActions: AvailableAction[] = [{
       actionId: "abort-dungeon-expedition",
@@ -8244,7 +8246,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         });
       }
     }
-    return [...busyActions, ...sceneChoiceActions(world, cultivator)];
+    return [...sectBusy, ...busyActions, ...sceneChoiceActions(world, cultivator)];
   }
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
@@ -11435,7 +11437,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
 function resolveJob(world: WorldState, job: ActionJob): string {
   const cultivator = getCultivatorOrThrow(world, job.cultivatorId); cultivator.activeJobId = null;
   if (isSectTimedAction(job.actionId)) {
-    const summary = resolveSectTimed(world, cultivator, job.actionId);
+    const summary = resolveSectTimed(world, cultivator, job.actionId, job.meta?.sectSceneLine);
     addDaoLog(world, cultivator.id, "宗门事务", summary, ["sect", "sect-life"]);
     return summary;
   }
@@ -12983,6 +12985,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     if (choice.done) releaseRegionalJob(world, cultivator);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: choice.summary };
   }
+  if (actionId.startsWith("sect-scene:")) {
+    return answerSectDutyScene(world, cultivator, actionId.slice("sect-scene:".length));
+  }
   requireIdle(cultivator);
   requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
@@ -13691,7 +13696,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         for (let a = 0; a < group.length; a++) {
           for (let b = a + 1; b < group.length; b++) {
             const existing = getSocialLink(world, group[a]!, group[b]!);
-            if (existing && existing.affinity > 0) {
+            if (existing && existing.affinity > 0 && !grudgeArcOf(existing.grudge ?? 0)) {
               addMutualAffinity(world, group[a]!, group[b]!, AFFINITY_GAINS.coLocationPassive);
             }
           }
@@ -13794,6 +13799,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
       if (String(job.actionId).startsWith("enter-regional:")) {
         tickRegionalRun(world, job, (person) => battleCombatantFromCultivator(person));
       }
+      holdSectDutyScene(world, job);
 
       if (job.remainingTicks > 0 && !(combatState?.resolved)) {
         continue;

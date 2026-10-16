@@ -1559,6 +1559,7 @@ export type ImmediateActionId =
   | `mention-gossip:${string}:${string}`
   | `wait-for:${string}`
   | `dungeon-wake-decision:${string}`
+  | `sect-scene:${string}`
   | `bahuang-wake-decision:${string}`
   | `regional-choice:${string}`
   | "leave-regional";
@@ -1998,6 +1999,18 @@ export interface ActionJob {
       defaultOptionId: string;
       options: Array<{ optionId: string; label: string }>;
     };
+    /** Set while a sect duty or chain is waiting on a Chinese choice. Cleared when it is answered or times out. */
+    sectScene?: {
+      sceneId: string;
+      context: string;
+      defaultOptionId: string;
+      deadlineTick: number;
+      mateId?: string;
+      foeId?: string;
+      options: Array<{ optionId: string; label: string; description: string; line: string }>;
+    };
+    /** The sentence chosen during the pause, kept so the finished duty can quote it. */
+    sectSceneLine?: string;
     guixuNodeId?: string;
     guixuEventId?: string;
     dualTaskId?: string;

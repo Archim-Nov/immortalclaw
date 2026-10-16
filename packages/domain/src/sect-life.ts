@@ -978,7 +978,8 @@ function resolveRaid(world: WorldState, cultivator: Cultivator, vein: SpiritVein
   return detail;
 }
 
-export function resolveSectTimed(world: WorldState, cultivator: Cultivator, actionId: string): string {
+export function resolveSectTimed(world: WorldState, cultivator: Cultivator, actionId: string, sceneLine?: string): string {
+  const stitch = (detail: string) => (sceneLine && !detail.includes(sceneLine) ? `${detail}${sceneLine}` : detail);
   ensureSpiritVeins(world);
   const member = membership(world, cultivator);
   if (!member) return `${cultivator.name}已经不在宗门里，这件事务作罢。`;
@@ -988,7 +989,7 @@ export function resolveSectTimed(world: WorldState, cultivator: Cultivator, acti
     payWork(world, cultivator, member, post);
     const share = post.id === "outer-chore" ? "药田要自己去收。" : pullShare(world, cultivator, member);
     const tier = tierOfMember(world, member);
-    const detail = `${cultivator.name}做完了${post.name}的本职。贡献和宗门声望都记上了，${member.record.name}现在是${tier.name}。${share}`;
+    const detail = stitch(`${cultivator.name}做完了${post.name}的本职。贡献和宗门声望都记上了，${member.record.name}现在是${tier.name}。${share}`);
     note(world, cultivator, `做完${post.name}`, detail, "今天的活落了地");
     return detail;
   }
@@ -1007,9 +1008,9 @@ export function resolveSectTimed(world: WorldState, cultivator: Cultivator, acti
         putPouch(vein, BAND_ITEMS[vein.band][0]!, veinCap(tierOfMember(world, member).tier));
       }
       payWork(world, cultivator, member, chain);
-      const detail = owned
+      const detail = stitch(owned
         ? `${cultivator.name}守完了${vein.name}。脉还在本宗手里，库里又多了一份。`
-        : `${cultivator.name}护着${vein.name}走了一趟。这条脉还没有主，现在归${member.record.name}。`;
+        : `${cultivator.name}护着${vein.name}走了一趟。这条脉还没有主，现在归${member.record.name}。`);
       note(world, cultivator, "护脉", detail, "脉还在");
       return detail;
     }
@@ -1041,7 +1042,7 @@ export function resolveSectTimed(world: WorldState, cultivator: Cultivator, acti
     }
     payWork(world, cultivator, member, chain);
     const tier = tierOfMember(world, member);
-    const detail = `${cultivator.name}办完了${chain.name}。${member.record.name}的声望动了，眼下是${tier.name}。`;
+    const detail = stitch(`${cultivator.name}办完了${chain.name}。${member.record.name}的声望动了，眼下是${tier.name}。`);
     note(world, cultivator, chain.name, detail, "这件事务算数");
     return detail;
   }

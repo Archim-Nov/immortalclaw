@@ -6,7 +6,7 @@
  */
 
 import { GameplayRejection } from "./gameplay-error.js";
-import { shiftCultivatorMood, spreadNearbyGossip, recordLife } from "./inner-life.js";
+import { grudgeArcOf, shiftCultivatorMood, spreadNearbyGossip, recordLife } from "./inner-life.js";
 import type {
   ActionExecutionResult,
   AvailableAction,
@@ -481,6 +481,21 @@ function lineOr(supplied: string | null | undefined, fallback: string): string {
   return cleanSpokenLine(supplied) ?? fallback;
 }
 
+function relationBeat(world: WorldState, left: Cultivator, right: Cultivator, detail: string, affinity: number): string {
+  const feud = grudgeArcOf(getSocialLink(world, left.id, right.id)?.grudge ?? 0);
+  if (feud) {
+    const tense = `${detail}两个人有${feud}，剑拔弩张，好感没有涨。`;
+    const mood = `${left.name}和${right.name}话没热，剑拔弩张。`;
+    shiftCultivatorMood(world, left, "rejection", mood);
+    shiftCultivatorMood(world, right, "rejection", mood);
+    return tense;
+  }
+  addMutualAffinity(world, left.id, right.id, affinity);
+  shiftCultivatorMood(world, left, "spoken", `${left.name}把${right.name}的话接住了。`);
+  shiftCultivatorMood(world, right, "spoken", `${right.name}把${left.name}的话接住了。`);
+  return `${detail}好感轻轻动了一点。`;
+}
+
 function resolveFavorFailure(
   world: WorldState,
   favor: PersonalFavor,
@@ -658,6 +673,53 @@ export function noteArrivalReunion(world: WorldState, arriver: Cultivator): void
     markCool(meeting.waiter, coolKey, world.tick);
     markCool(meeting.target, coolKey, world.tick);
     markCool(meeting.waiter, `wait-for:${meeting.target.id}`, world.tick);
+  }
+  noteCrossing(world, arriver);
+}
+
+function acceptedFavorBetween(world: WorldState, leftId: string, rightId: string): boolean {
+  return Object.values(world.personalFavors ?? {}).some((favor) => (
+    favor.status === "accepted"
+    && ((favor.fromId === leftId && favor.toId === rightId) || (favor.fromId === rightId && favor.toId === leftId))
+  ));
+}
+
+function noteCrossing(world: WorldState, arriver: Cultivator): void {
+  const others = Object.values(world.cultivators).filter((other) => other.id !== arriver.id && other.locationId === arriver.locationId);
+  let foe: Cultivator | null = null;
+  let arc: "嫌隙" | "宿怨" | null = null;
+  for (const other of others) {
+    const found = grudgeArcOf(getSocialLink(world, arriver.id, other.id)?.grudge ?? 0);
+    if (!found) continue;
+    if (!arc || found === "宿怨") {
+      foe = other;
+      arc = found;
+    }
+  }
+  const place = placeName(world, arriver.locationId);
+  if (foe && arc) {
+    const key = `feud-meet:${[arriver.id, foe.id].sort().join(":")}`;
+    if (!cooling(arriver, key, world.tick, 6) && !cooling(foe, key, world.tick, 6)) {
+      const errand = acceptedFavorBetween(world, arriver.id, foe.id);
+      const detail = `${arriver.name}进了${place}，${foe.name}已经在。两个人有${arc}，见面剑拔弩张。${errand ? "答应的事还没办完。" : ""}`;
+      writePeople(world, [arriver, foe], "再见面了", detail, "剑拔弩张", "reunite");
+      const mood = `${arriver.name}和${foe.name}再见面，剑拔弩张。`;
+      shiftCultivatorMood(world, arriver, "rejection", mood);
+      shiftCultivatorMood(world, foe, "rejection", mood);
+      markCool(arriver, key, world.tick);
+      markCool(foe, key, world.tick);
+      return;
+    }
+  }
+  for (const other of others) {
+    if (!acceptedFavorBetween(world, arriver.id, other.id)) continue;
+    const key = `favor-sight:${[arriver.id, other.id].sort().join(":")}`;
+    if (cooling(arriver, key, world.tick, 6) || cooling(other, key, world.tick, 6)) continue;
+    const detail = `${arriver.name}在${place}看见${other.name}。答应的事还没办完。`;
+    writePeople(world, [arriver, other], "答应的事还挂着", detail, "事情还没办完", "favor");
+    markCool(arriver, key, world.tick);
+    markCool(other, key, world.tick);
+    return;
   }
 }
 
@@ -903,9 +965,11 @@ function readNote(world: WorldState, cultivator: Cultivator, noteId: string): Ac
   const fromName = personName(world, note.fromId);
   if (note.seenTick === undefined) {
     note.seenTick = world.tick;
-    const detail = `${cultivator.name}看到了${fromName}留下的字条：「${note.line}」`;
     const author = world.cultivators[note.fromId];
+    const base = `${cultivator.name}看到了${fromName}留下的字条：「${note.line}」`;
+    const detail = author ? relationBeat(world, cultivator, author, base, 3) : base;
     writePeople(world, author ? [cultivator, author] : [cultivator], "看了字条", detail, "话还在纸上", "note");
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId: `read-note:${note.id}`, accepted: true, summary: detail };
   }
   const detail = `${cultivator.name}看过${fromName}的字条了。`;
   return { tick: world.tick, cultivatorId: cultivator.id, actionId: `read-note:${note.id}`, accepted: true, summary: detail };
@@ -924,11 +988,10 @@ function replyNote(world: WorldState, cultivator: Cultivator, noteId: string, sp
   if (note.seenTick === undefined) note.seenTick = world.tick;
   const line = errandLine(world, cultivator.id, author.id, "note", speechLine, { heard: note.line });
   rememberReply(note, { fromId: cultivator.id, fromName: cultivator.name, line, tick: world.tick });
-  const detail = `${cultivator.name}回了${author.name}的字条：「${line}」`;
+  const detail = relationBeat(world, cultivator, author, `${cultivator.name}回了${author.name}的字条：「${line}」`, 4);
   writePeople(world, [cultivator, author], "字条有了回音", detail, "话接上了", "note", { speakerName: cultivator.name, line });
   recordLife(cultivator, { tick: world.tick, kind: "quote", text: `${cultivator.name}说：「${line}」`, speakerName: cultivator.name, line });
   recordLife(author, { tick: world.tick, kind: "quote", text: `${cultivator.name}说：「${line}」`, speakerName: cultivator.name, line });
-  shiftCultivatorMood(world, author, "spoken");
   postMessage(world, author.id, cultivator.name, "字条有回音", detail, cultivator.id, line);
   return { tick: world.tick, cultivatorId: cultivator.id, actionId: `reply-note:${note.id}`, accepted: true, summary: detail };
 }
@@ -968,11 +1031,10 @@ function replySpotNote(world: WorldState, cultivator: Cultivator, noteId: string
   if (!author) throw new GameplayRejection("留字条的人已经不在了。");
   const line = errandLine(world, cultivator.id, author.id, "note", speechLine, { heard: note.line });
   rememberReply(note, { fromId: cultivator.id, fromName: cultivator.name, line, tick: world.tick });
-  const detail = `${cultivator.name}在${placeName(world, note.locationId)}回了${author.name}的留话：「${line}」`;
+  const detail = relationBeat(world, cultivator, author, `${cultivator.name}在${placeName(world, note.locationId)}回了${author.name}的留话：「${line}」`, 4);
   writePeople(world, [cultivator, author], "留话有了回音", detail, "话接上了", "note", { speakerName: cultivator.name, line });
   recordLife(cultivator, { tick: world.tick, kind: "quote", text: `${cultivator.name}说：「${line}」`, speakerName: cultivator.name, line });
   recordLife(author, { tick: world.tick, kind: "quote", text: `${cultivator.name}说：「${line}」`, speakerName: cultivator.name, line });
-  shiftCultivatorMood(world, author, "spoken");
   postMessage(world, author.id, cultivator.name, "留话有回音", detail, cultivator.id, line);
   return { tick: world.tick, cultivatorId: cultivator.id, actionId: `reply-spot-note:${note.id}`, accepted: true, summary: detail };
 }
@@ -1023,7 +1085,7 @@ function replySectNotice(world: WorldState, cultivator: Cultivator, noticeId: st
   if (!author) throw new GameplayRejection("写告示的人已经不在了。");
   const line = errandLine(world, cultivator.id, author.id, "note", speechLine, { heard: notice.text });
   rememberReply(notice, { fromId: cultivator.id, fromName: cultivator.name, line, tick: world.tick });
-  const detail = `${cultivator.name}回了${author.name}的宗门告示：「${line}」`;
+  const detail = relationBeat(world, cultivator, author, `${cultivator.name}回了${author.name}的宗门告示：「${line}」`, 4);
   writePeople(world, [cultivator, author], "告示有了回音", detail, "同门把话接上了", "sect", { speakerName: cultivator.name, line });
   recordLife(cultivator, { tick: world.tick, kind: "quote", text: `${cultivator.name}说：「${line}」`, speakerName: cultivator.name, line });
   recordLife(author, { tick: world.tick, kind: "quote", text: `${cultivator.name}说：「${line}」`, speakerName: cultivator.name, line });
@@ -1088,7 +1150,19 @@ function mentionGossip(
   const line = lineOr(speechLine, heard.shortLine);
   const spoken = openSpokenLine(world, cultivator.id, target.id, "say", world.tick, line);
   heard.mentioned = true;
-  const detail = `${cultivator.name}把听见的事告诉了${target.name}：「${spoken}」`;
+  const board = (world.gossip ?? []).find((item) => item.id === heard.id);
+  const aimed = Boolean(board?.aboutIds.includes(target.id) || heard.text.includes(target.name) || heard.shortLine.includes(target.name));
+  let detail: string;
+  if (heard.kind === "feud" && aimed) {
+    detail = `${cultivator.name}把嫌隙的闲话当着${target.name}的面说了：「${spoken}」话没热，剑拔弩张，好感没有涨。`;
+    const mood = `${cultivator.name}和${target.name}话没热，剑拔弩张。`;
+    shiftCultivatorMood(world, cultivator, "rejection", mood);
+    shiftCultivatorMood(world, target, "rejection", mood);
+  } else {
+    addMutualAffinity(world, cultivator.id, target.id, heard.kind === "bond" ? 3 : 2);
+    detail = `${cultivator.name}把听见的事告诉了${target.name}：「${spoken}」好感轻轻动了一点。`;
+    shiftCultivatorMood(world, cultivator, "spoken", `${cultivator.name}把听见的事告诉了${target.name}。`);
+  }
   writePeople(world, [cultivator, target], "把闲话告诉了身边的人", detail, "话传出去了", "gossip", { speakerName: cultivator.name, line: spoken });
   postMessage(world, target.id, cultivator.name, "听见一件闲话", detail, cultivator.id, spoken);
   return { tick: world.tick, cultivatorId: cultivator.id, actionId: `mention-gossip:${gossipId}:${target.id}`, accepted: true, summary: detail };

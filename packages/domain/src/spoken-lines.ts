@@ -217,7 +217,23 @@ function situationalLines(
   if (!speaker || !listener) return [];
   const place = shortPlace(world.locations[speaker.locationId]?.name);
   const grudge = getSocialLink(world, speakerId, listenerId)?.grudge ?? 0;
-  if (grudge >= 8 && (kind === "chat-up" || kind === "greet")) {
+  const gift = context?.giftName;
+  if (grudge >= 8 && kind === "gift-item" && gift) {
+    return fit([
+      `这${gift}你看着办。上次那一架还没算完。`,
+      `${gift}放下。我不是来讲和的。`,
+      `礼是这${gift}。话先说硬的。`,
+    ]);
+  }
+  if (grudge >= 8 && (kind === "chat-up" || kind === "greet" || kind === "gift-item")) {
+    return fit([
+      "上次那一架还没算完。",
+      "你再靠近，我就当是来再战的。",
+      "礼你留着。我这边不收。",
+      "话先说硬的。你要打，现在就行。",
+    ]);
+  }
+  if (grudge >= 8 && speaker.mood?.id !== "stung" && (kind === "say" || kind === "share-info" || kind === "request-help")) {
     return fit([
       "上次那一架还没算完。",
       "你再靠近，我就当是来再战的。",
@@ -229,7 +245,6 @@ function situationalLines(
   const atGate = Boolean(world.locations[speaker.locationId]?.nodeType.startsWith("dungeon") || world.locations[speaker.locationId]?.dungeon);
   const favor = context?.favorReason ?? favorReasonBetween(world, speakerId, listenerId);
   const heard = context?.heardLine ?? "";
-  const gift = context?.giftName;
   if (kind === "gift-item" && gift) {
     return fit([
       `这${gift}你拿着，我留着也用不上。`,
