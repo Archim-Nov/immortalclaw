@@ -109,6 +109,11 @@ export interface PerformActionRequest {
   actionId: ActionId;
   /** Optional spoken line, at most 40 characters. Social actions use it when present. */
   line?: string;
+  /**
+   * Selects the gifted item when actionId is send-message:<id>:gift-item.
+   * Ignored when the action id already ends in gift-item:<itemId>.
+   */
+  itemId?: string;
 }
 
 export type PerformActionResponse = ActionExecutionResult;

@@ -223,7 +223,7 @@ test("resolve-morality-event-choice tells the caller to use the dedicated route"
   assert.equal(result.summary.includes("dedicated route"), false);
 });
 
-test("gift-item cards use the Chinese item name and keep the action id", () => {
+test("gift-item cards use the Chinese item name and a unique action id", () => {
   const world = createSeedWorld();
   const first = world.cultivators[CULTIVATOR_ID]!;
   const summary = syncCultivatorFromPersona(world, { agentId: "agent-gift-names", name: "青萝" });
@@ -238,13 +238,14 @@ test("gift-item cards use the Chinese item name and keep the action id", () => {
   first.inventory["healing-pill"] = 1;
   first.inventory["qi-pill"] = 1;
 
-  const gifts = listAvailableActions(world, first.id).filter((action) => action.actionId === `send-message:${second.id}:gift-item`);
+  const gifts = listAvailableActions(world, first.id).filter((action) => action.actionId.startsWith(`send-message:${second.id}:gift-item:`));
   const shown = Object.entries(first.inventory).filter(([, count]) => count > 0).slice(0, 2);
   assert.equal(gifts.length, shown.length);
+  assert.equal(new Set(gifts.map((card) => card.actionId)).size, gifts.length);
   for (const [index, card] of gifts.entries()) {
     const [itemId] = shown[index]!;
     const name = ITEM_CATALOG[itemId as ItemId].name;
-    assert.equal(card.actionId, `send-message:${second.id}:gift-item`);
+    assert.equal(card.actionId, `send-message:${second.id}:gift-item:${itemId}`);
     assert.match(card.label, new RegExp(name));
     assert.match(card.description, new RegExp(name));
     assert.equal(card.label.includes(itemId), false);
@@ -374,6 +375,82 @@ test("a gift receipt names the item in Chinese and shows the affinity delta", ()
   const greeted = performAction(world, first.id, `send-message:${second.id}:greet`);
   assert.equal(greeted.summary, "云中鹤向青萝问了好。好感+3。");
   assert.equal(greeted.summary.includes("sent"), false);
+});
+
+test("a gift action id or a body itemId selects that item, and the inbox gets one notice", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-gift-pick", name: "青萝" });
+  const second = world.cultivators[summary.selectedCultivatorId]!;
+  first.locationId = "yangzhou:main-city";
+  second.locationId = "yangzhou:main-city";
+  for (const itemId of Object.keys(first.inventory) as ItemId[]) {
+    first.inventory[itemId] = 0;
+  }
+  first.inventory["healing-pill"] = 1;
+  first.inventory["ward-talisman"] = 1;
+  first.lastGiftTick = -1;
+
+  const given = performAction(world, first.id, `send-message:${second.id}:gift-item:ward-talisman`);
+  assert.equal(given.summary, "云中鹤送了1个镇煞符给青萝。好感+15。");
+  assert.equal(first.inventory["ward-talisman"], 0);
+  assert.equal(first.inventory["healing-pill"], 1);
+  assert.equal(second.pendingGifts?.[0]?.itemId, "ward-talisman");
+  const notices = (world.messages ?? []).filter((message) => message.toCultivatorId === second.id && message.subject.includes("赠礼"));
+  assert.equal(notices.length, 1);
+
+  first.lastGiftTick = -1;
+  const fromBody = performAction(world, first.id, `send-message:${second.id}:gift-item`, undefined, "healing-pill");
+  assert.equal(fromBody.summary, "云中鹤送了1个疗伤丹给青萝。好感+15。");
+  assert.equal(fromBody.actionId, `send-message:${second.id}:gift-item`);
+  assert.equal(first.inventory["healing-pill"], 0);
+  const later = (world.messages ?? []).filter((message) => message.toCultivatorId === second.id && message.subject.includes("赠礼"));
+  assert.equal(later.length, 2);
+});
+
+test("accepting a party returns a Chinese summary", () => {
+  const world = createSeedWorld();
+  const leaderSummary = syncCultivatorFromPersona(world, { agentId: "agent-party-leader", name: "顾长川" });
+  const joinerSummary = syncCultivatorFromPersona(world, { agentId: "agent-party-joiner", name: "墨儿" });
+  const leader = world.cultivators[leaderSummary.selectedCultivatorId]!;
+  const joiner = world.cultivators[joinerSummary.selectedCultivatorId]!;
+  leader.locationId = "qingzhou:main-city";
+  joiner.locationId = "qingzhou:main-city";
+  performAction(world, leader.id, `chat-up:${joiner.id}`);
+  const invited = performAction(world, leader.id, `party-invite:${joiner.id}`);
+  assert.equal(invited.summary, "顾长川向墨儿发出了组队邀请。");
+  const invId = Object.keys(world.partyInvitations).find((id) => world.partyInvitations[id]?.toCultivatorId === joiner.id);
+  assert.ok(invId);
+  const accepted = performAction(world, joiner.id, `accept-party:${invId}`);
+  assert.equal(accepted.summary, "墨儿加入了顾长川的队伍。");
+  assert.equal(accepted.summary.includes("joined"), false);
+  const disbanded = performAction(world, leader.id, "disband-party");
+  assert.equal(disbanded.summary, "顾长川解散了队伍。");
+  const rejectedWorld = createSeedWorld();
+  const host = syncCultivatorFromPersona(rejectedWorld, { agentId: "agent-party-host", name: "顾长川" });
+  const guest = syncCultivatorFromPersona(rejectedWorld, { agentId: "agent-party-guest", name: "墨儿" });
+  const hostCultivator = rejectedWorld.cultivators[host.selectedCultivatorId]!;
+  const guestCultivator = rejectedWorld.cultivators[guest.selectedCultivatorId]!;
+  hostCultivator.locationId = "qingzhou:main-city";
+  guestCultivator.locationId = "qingzhou:main-city";
+  performAction(rejectedWorld, hostCultivator.id, `chat-up:${guestCultivator.id}`);
+  performAction(rejectedWorld, hostCultivator.id, `party-invite:${guestCultivator.id}`);
+  const rejectId = Object.keys(rejectedWorld.partyInvitations)[0]!;
+  const rejected = performAction(rejectedWorld, guestCultivator.id, `reject-party:${rejectId}`);
+  assert.equal(rejected.summary, "墨儿拒绝了顾长川的组队邀请。");
+});
+
+test("starter techniques keep their stored ids and show Chinese names", () => {
+  const world = createSeedWorld();
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-technique-zh", name: "墨儿" });
+  const cultivator = world.cultivators[summary.selectedCultivatorId]!;
+  assert.deepEqual(cultivator.techniques, ["Loose Breathing", "Light Body"]);
+  const state = getCultivatorState(world, cultivator.id);
+  assert.equal(state.cultivation.mainTechnique, "松息吐纳");
+  assert.deepEqual(state.cultivation.techniques, ["松息吐纳", "轻身术"]);
+  const named = getCultivatorState(world, CULTIVATOR_ID).cultivation;
+  assert.equal(named.mainTechnique, "紫霄吐纳诀");
+  assert.deepEqual(named.techniques, ["紫霄吐纳诀", "清风步"]);
 });
 
 test("acting while busy, or challenging someone busy, is refused in Chinese", () => {

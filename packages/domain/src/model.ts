@@ -1516,6 +1516,7 @@ export type ImmediateActionId =
   | `display-relic:${string}`
   | "clear-displayed-relic"
   | `send-message:${string}:${MessageTemplateKind}`
+  | `send-message:${string}:gift-item:${string}`
   | "read-messages"
   | `say:${string}`
   | `reply-line:${string}`

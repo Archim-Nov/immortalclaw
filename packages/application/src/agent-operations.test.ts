@@ -116,7 +116,7 @@ test("saveAuthenticatedAgentRegistration binds the record to the authenticated c
 });
 
 test("performAuthenticatedAgentAction executes against the bound cultivator", async () => {
-  const calls: { cultivatorId?: string; actionId?: ActionId } = {};
+  const calls: { cultivatorId?: string; actionId?: ActionId; itemId?: string } = {};
   const result: ActionExecutionResult = {
     tick: 4,
     cultivatorId: "cultivator-9",
@@ -127,18 +127,21 @@ test("performAuthenticatedAgentAction executes against the bound cultivator", as
 
   const payload = await performAuthenticatedAgentAction({
     world: {
-      async performAction(cultivatorId, actionId) {
+      async performAction(cultivatorId, actionId, _line, itemId) {
         calls.cultivatorId = cultivatorId;
         calls.actionId = actionId;
+        calls.itemId = itemId;
         return result;
       },
     },
     agent: createAgentProfile(),
-    actionId: "cultivate",
+    actionId: "send-message:cultivator-2:gift-item",
+    itemId: "qi-pill",
   });
 
   assert.equal(calls.cultivatorId, "cultivator-9");
-  assert.equal(calls.actionId, "cultivate");
+  assert.equal(calls.actionId, "send-message:cultivator-2:gift-item");
+  assert.equal(calls.itemId, "qi-pill");
   assert.deepEqual(payload, result);
 });
 

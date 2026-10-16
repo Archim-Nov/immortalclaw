@@ -318,12 +318,12 @@ export class SqliteWorldRepository implements WorldRepository {
     return readAvailableActions(await this.readWorld(), cultivatorId);
   }
 
-  async performAction(cultivatorId: string, actionId: ActionId, line?: string): Promise<ActionExecutionResult> {
+  async performAction(cultivatorId: string, actionId: ActionId, line?: string, itemId?: string): Promise<ActionExecutionResult> {
     const snapshot = this.getSnapshot();
     const draftWorld = structuredClone(snapshot.world);
 
     try {
-      const result = performWorldAction(draftWorld, cultivatorId, actionId, line);
+      const result = performWorldAction(draftWorld, cultivatorId, actionId, line, itemId);
       this.commitWorld(draftWorld, snapshot.revision);
       this.insertWorldAction(result);
       return structuredClone(result);

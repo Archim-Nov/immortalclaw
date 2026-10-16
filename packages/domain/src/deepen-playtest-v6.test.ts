@@ -63,7 +63,7 @@ test("agent cultivators stay visible to each other when NPCs fill the city", () 
     for (const other of others) {
       assert.ok(actions.has(`chat-up:${other.id}`), `${player.name} missing chat-up for ${other.name}`);
       assert.ok(actions.has(`send-message:${other.id}:greet`));
-      assert.ok(actions.has(`send-message:${other.id}:gift-item`));
+      assert.ok([...actions].some((actionId) => actionId.startsWith(`send-message:${other.id}:gift-item:`)));
       assert.ok(actions.has(`challenge-cultivator:${other.id}`));
     }
   }

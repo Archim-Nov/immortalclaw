@@ -32,6 +32,10 @@ interface AgentStateResponse {
   agent: {
     agentId: string;
   };
+  cultivation?: {
+    mainTechnique: string;
+    techniques: string[];
+  };
   digest?: {
     summary?: string;
   };
@@ -175,6 +179,8 @@ test("registration returns a credential and state route accepts it", async () =>
 
   assert.equal(stateResponse.status, 200);
   assert.equal(statePayload.agent.agentId, registerPayload.agentId);
+  assert.equal(statePayload.cultivation?.mainTechnique, "松息吐纳");
+  assert.deepEqual(statePayload.cultivation?.techniques, ["松息吐纳", "轻身术"]);
   assert.match(statePayload.digest?.summary ?? "", /六个时辰/);
 
   const digestResponse = await app.request("https://runtime.test/agent/digest", {
