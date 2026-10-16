@@ -215,7 +215,7 @@ test("bahuang wakes are Chinese, with three or four choices, and a finished run 
     rewards: { spiritStones: 0, items: {}, realmProgress: 0 },
   } satisfies BahuangExpeditionProgress;
   const wakes = previewBahuangWakes(progress);
-  assert.equal(wakes.length, 4);
+  assert.equal(wakes.length, 6);
   for (const wake of wakes) {
     assert.ok(wake.options.length >= 3);
     assert.ok(wake.options.length <= 4);

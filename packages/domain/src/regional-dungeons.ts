@@ -1,5 +1,5 @@
 import { grantCombatPractice } from "./combat-skills.js";
-import { regionalEscort, regionalInterior, type InteriorChoice } from "./dungeon-interior.js";
+import { regionalDeeper, regionalEscort, regionalInterior, type InteriorChoice } from "./dungeon-interior.js";
 import {
   STATUS_BURNING,
   STATUS_ENTANGLE,
@@ -1102,18 +1102,34 @@ function interiorScene(dungeonId: string) {
   return regionalInterior(dungeonId);
 }
 
+function deeperScene(dungeonId: string) {
+  return regionalDeeper(dungeonId);
+}
+
 function interiorSafe(dungeonId: string): InteriorChoice | null {
   const scene = interiorScene(dungeonId);
   if (!scene) return null;
   return scene.options.find((option) => option.safe) ?? scene.options[0] ?? null;
 }
 
-function applyInteriorChoice(world: WorldState, run: RegionalRunState, option: InteriorChoice): void {
-  if (run.interiorResolved) return;
+function deeperSafe(dungeonId: string): InteriorChoice | null {
+  const scene = deeperScene(dungeonId);
+  if (!scene) return null;
+  return scene.options.find((option) => option.safe) ?? scene.options[0] ?? null;
+}
+
+function applyInteriorChoice(
+  world: WorldState,
+  run: RegionalRunState,
+  option: InteriorChoice,
+  slot: "interior" | "deeper" = "interior",
+): void {
+  if (slot === "deeper" ? run.deeperResolved : run.interiorResolved) return;
   const dungeon = dungeonOf(run.dungeonId);
   const leader = world.cultivators[run.leaderId];
   if (!dungeon || !leader) {
-    run.interiorResolved = true;
+    if (slot === "deeper") run.deeperResolved = true;
+    else run.interiorResolved = true;
     return;
   }
   const companions = presentCultivators(world, run).filter((person) => person.id !== leader.id);
@@ -1136,6 +1152,11 @@ function applyInteriorChoice(world: WorldState, run: RegionalRunState, option: I
     { kind: (option.injury ?? 0) > 0 ? "injury" : "find", title: dungeon.name, detail: option.line, mood: "这一段可以回去说" },
     { kind: (option.injury ?? 0) > 0 ? "fight" : "growth", text: option.line },
   );
+  if (slot === "deeper") {
+    run.deeperResolved = true;
+    run.deeperVotes = {};
+    return;
+  }
   run.interiorResolved = true;
   run.interiorVotes = {};
 }
@@ -1149,6 +1170,15 @@ function interiorChoiceOnClose(run: RegionalRunState): InteriorChoice | null {
   return captainChoice ?? interiorSafe(run.dungeonId);
 }
 
+function deeperChoiceOnClose(run: RegionalRunState): InteriorChoice | null {
+  const scene = deeperScene(run.dungeonId);
+  const captainVote = run.deeperVotes?.[run.leaderId];
+  const captainChoice = captainVote
+    ? scene?.options.find((option) => option.id === captainVote) ?? null
+    : null;
+  return captainChoice ?? deeperSafe(run.dungeonId);
+}
+
 function ensureInteriorNoted(world: WorldState, run: RegionalRunState): void {
   if (run.interiorResolved) return;
   const chosen = interiorChoiceOnClose(run);
@@ -1157,6 +1187,16 @@ function ensureInteriorNoted(world: WorldState, run: RegionalRunState): void {
     return;
   }
   applyInteriorChoice(world, run, chosen);
+}
+
+function ensureDeeperNoted(world: WorldState, run: RegionalRunState): void {
+  if (run.deeperResolved) return;
+  const chosen = deeperChoiceOnClose(run);
+  if (!chosen) {
+    run.deeperResolved = true;
+    return;
+  }
+  applyInteriorChoice(world, run, chosen, "deeper");
 }
 
 function realmBand(level: number): Band | null {
@@ -1550,6 +1590,7 @@ function applyOption(
   if (run.phase === "resolved") return;
   const dungeon = mustDungeon(run.dungeonId);
   ensureInteriorNoted(world, run);
+  ensureDeeperNoted(world, run);
   const option = dungeon.options.find((entry) => entry.id === optionId) ?? safeOption(dungeon);
   if (!run.sightingWritten) writeSighting(world, run);
   if (option.kind === "vigil" && !jobEnding) {
@@ -1641,6 +1682,8 @@ export function openRegionalRun(
     report: null,
     interiorResolved: false,
     interiorVotes: {},
+    deeperResolved: false,
+    deeperVotes: {},
   };
   runsOf(world)[cultivator.id] = run;
   notePeople(world, [cultivator, ...companions], {
@@ -1685,6 +1728,32 @@ export function submitRegionalChoice(
     if (!winner) return { summary: `${cultivator.name}先看了看旁边。`, done: false };
     const chosen = scene?.options.find((option) => option.id === winner[0]) ?? interiorOption;
     applyInteriorChoice(world, run, chosen);
+    return { summary: chosen.line, done: false };
+  }
+  const deeper = deeperScene(run.dungeonId);
+  const deeperOption = deeper?.options.find((option) => option.id === optionId) ?? null;
+  if (deeperOption) {
+    if (run.deeperResolved) throw new GameplayRejection("更里面这一处已经看过了。");
+    const present = presentCultivators(world, run);
+    if (!present.some((person) => person.id === cultivator.id)) {
+      throw new GameplayRejection("这一岔路不是在等你开口。");
+    }
+    if (present.length <= 1) {
+      applyInteriorChoice(world, run, deeperOption, "deeper");
+      return { summary: deeperOption.line, done: false };
+    }
+    run.deeperVotes = { ...(run.deeperVotes ?? {}), [cultivator.id]: optionId };
+    const needed = votesNeeded(present.length);
+    const tally = new Map<string, number>();
+    for (const person of present) {
+      const vote = run.deeperVotes[person.id];
+      if (!vote) continue;
+      tally.set(vote, (tally.get(vote) ?? 0) + 1);
+    }
+    const winner = [...tally.entries()].find(([, count]) => count >= needed);
+    if (!winner) return { summary: `${cultivator.name}先看了看更里面。`, done: false };
+    const chosen = deeper?.options.find((option) => option.id === winner[0]) ?? deeperOption;
+    applyInteriorChoice(world, run, chosen, "deeper");
     return { summary: chosen.line, done: false };
   }
   if (!dungeon.options.some((option) => option.id === optionId)) {
@@ -1812,9 +1881,7 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
       phase: run.phase,
       stepLine: run.phase === "vigil"
         ? `${dungeon.name}里还坐着。时辰没到，灰不落。`
-        : run.interiorResolved
-          ? `${dungeon.prompt}人已经在里面。`
-          : `${dungeon.prompt}${interiorScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
+        : `${dungeon.prompt}${run.interiorResolved ? "" : interiorScene(dungeon.id)?.prompt ?? ""}${run.deeperResolved ? "" : deeperScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
       safeOptionId: run.phase === "choice" ? safeOption(dungeon).id : null,
       awaitingNames: run.phase === "choice"
         ? presentCultivators(world, run).filter((person) => !run.votes[person.id]).map((person) => person.name)
@@ -1831,6 +1898,17 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
           prompt: interiorScene(dungeon.id)!.prompt,
           safeOptionId: interiorSafe(dungeon.id)?.id ?? "",
           options: interiorScene(dungeon.id)!.options.map((option) => ({
+            optionId: option.id,
+            label: option.label,
+            description: option.description,
+          })),
+        }
+        : null,
+      deeper: run.phase === "choice" && !run.deeperResolved && deeperScene(dungeon.id)
+        ? {
+          prompt: deeperScene(dungeon.id)!.prompt,
+          safeOptionId: deeperSafe(dungeon.id)?.id ?? "",
+          options: deeperScene(dungeon.id)!.options.map((option) => ({
             optionId: option.id,
             label: option.label,
             description: option.description,
@@ -1879,6 +1957,16 @@ export function listRegionalChoiceActions(world: WorldState, cultivator: Cultiva
         actionId: `regional-choice:${option.id}` as ActionId,
         label: `${dungeon.name}：${option.label}`,
         description: `${scene?.prompt ?? ""}${option.description}`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+    const farther = run.deeperResolved ? null : deeperScene(dungeon.id);
+    for (const option of farther?.options ?? []) {
+      actions.push({
+        actionId: `regional-choice:${option.id}` as ActionId,
+        label: `${dungeon.name}：${option.label}`,
+        description: `${farther?.prompt ?? ""}${option.description}`,
         durationTicks: 0,
         kind: "immediate",
       });
