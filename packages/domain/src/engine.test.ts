@@ -877,7 +877,7 @@ test("injured cultivator cannot residence-meditate but can residence-heal and re
 
   assert.throws(
     () => performAction(world, "yun-zhong-he", "residence-meditate"),
-    /injured and can only do safe actions/i,
+    /有伤/,
   );
 
   const qiBefore = world.cultivators["yun-zhong-he"].qi;

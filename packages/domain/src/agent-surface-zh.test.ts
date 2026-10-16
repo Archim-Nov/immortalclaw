@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { GameplayRejection } from "./gameplay-error.js";
 import {
   advanceWorld,
   createSeedWorld,
@@ -336,4 +337,74 @@ test("travel-to a wilderness starts toward the place name", () => {
   assert.equal(started.summary.includes("扬州荒野"), false);
   assert.equal(started.summary.includes("荒野"), false);
   assert.equal(started.job?.label, "前往听潮浦");
+});
+
+test("a gift receipt names the item in Chinese and shows the affinity delta", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-gift-receipt", name: "青萝" });
+  const second = world.cultivators[summary.selectedCultivatorId]!;
+  const fellow = syncCultivatorFromPersona(world, { agentId: "agent-gift-fellow", name: "青禾" });
+  const third = world.cultivators[fellow.selectedCultivatorId]!;
+  first.locationId = "yangzhou:main-city";
+  second.locationId = "yangzhou:main-city";
+  third.locationId = "yangzhou:main-city";
+  for (const itemId of Object.keys(first.inventory) as ItemId[]) {
+    first.inventory[itemId] = 0;
+  }
+  first.inventory["qi-pill"] = 2;
+  first.lastGiftTick = -1;
+
+  const given = performAction(world, first.id, `send-message:${second.id}:gift-item`);
+  assert.equal(given.summary, "云中鹤送了1个回气丹给青萝。好感+15。");
+  assert.equal(given.summary.includes("gifted"), false);
+  assert.equal(given.summary.includes("Affinity"), false);
+  assert.equal(given.summary.includes("qi-pill"), false);
+
+  first.sectId = "qing-yun-sect";
+  third.sectId = "qing-yun-sect";
+  first.lastGiftTick = -1;
+  const fellowGift = performAction(world, first.id, `send-message:${third.id}:gift-item`);
+  assert.equal(fellowGift.summary, "云中鹤送了1个回气丹给同门青禾。好感+21。");
+
+  const greeted = performAction(world, first.id, `send-message:${second.id}:greet`);
+  assert.equal(greeted.summary, "云中鹤向青萝问了好。好感+3。");
+  assert.equal(greeted.summary.includes("sent"), false);
+});
+
+test("acting while busy, or challenging someone busy, is refused in Chinese", () => {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  first.locationId = "qingzhou:main-city";
+  first.injuryTicksRemaining = 0;
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-busy-target", name: "青萝" });
+  const second = world.cultivators[summary.selectedCultivatorId]!;
+  second.locationId = first.locationId;
+  second.realm = first.realm;
+  second.realmLevel = first.realmLevel;
+  world.jobs["busy-job"] = {
+    id: "busy-job",
+    cultivatorId: second.id,
+    actionId: "meditate",
+    label: "打坐",
+    remainingTicks: 4,
+    totalTicks: 4,
+  };
+  second.activeJobId = "busy-job";
+
+  assert.throws(
+    () => performAction(world, first.id, `challenge-cultivator:${second.id}` as never),
+    (error: unknown) => error instanceof Error
+      && error.message === "青萝正忙着，改日再来。"
+      && !error.message.includes("Target is busy"),
+  );
+
+  performAction(world, first.id, "meditate");
+  assert.throws(
+    () => performAction(world, first.id, "heal"),
+    (error: unknown) => error instanceof GameplayRejection
+      && error.message.includes("你正忙着")
+      && error.message.includes("abort-dungeon-expedition")
+      && !error.message.includes("Cultivator is busy"),
+  );
 });
