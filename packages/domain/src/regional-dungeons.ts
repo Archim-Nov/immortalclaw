@@ -1140,14 +1140,23 @@ function applyInteriorChoice(world: WorldState, run: RegionalRunState, option: I
   run.interiorVotes = {};
 }
 
+function interiorChoiceOnClose(run: RegionalRunState): InteriorChoice | null {
+  const scene = interiorScene(run.dungeonId);
+  const captainVote = run.interiorVotes?.[run.leaderId];
+  const captainChoice = captainVote
+    ? scene?.options.find((option) => option.id === captainVote) ?? null
+    : null;
+  return captainChoice ?? interiorSafe(run.dungeonId);
+}
+
 function ensureInteriorNoted(world: WorldState, run: RegionalRunState): void {
   if (run.interiorResolved) return;
-  const safe = interiorSafe(run.dungeonId);
-  if (!safe) {
+  const chosen = interiorChoiceOnClose(run);
+  if (!chosen) {
     run.interiorResolved = true;
     return;
   }
-  applyInteriorChoice(world, run, safe);
+  applyInteriorChoice(world, run, chosen);
 }
 
 function realmBand(level: number): Band | null {

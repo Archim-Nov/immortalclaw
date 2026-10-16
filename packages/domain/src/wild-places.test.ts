@@ -40,6 +40,11 @@ test("the road to a wilderness names that place before the cultivator leaves", (
   assert.match(qing?.label ?? "", /青岚坡/);
   assert.match(qing?.description ?? "", /缠绕/);
   assert.match(qing?.description ?? "", /露蛛/);
+  const town = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "travel-to:qingzhou:sub-town-east");
+  assert.ok(town);
+  assert.match(town.label, /^前往/);
+  assert.equal(town.label.includes("Travel to"), false);
+  assert.equal(town.description.includes("Travel to"), false);
 
   cultivator.locationId = "leizhou:main-city";
   const lei = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "travel-to:leizhou:wilderness");
@@ -76,6 +81,12 @@ test("a wilderness trip leaves a 见闻 on the road and again inside the place",
   assert.match(`${arrived.digest?.growth.join("\n") ?? ""}`, /青岚坡/);
 
   const stones = cultivator.spiritStones;
+  const layerCard = listAvailableActions(world, CULTIVATOR_ID).find((action) => action.actionId === "enter-wilderness:starter-wilderness-tier-1");
+  assert.ok(layerCard);
+  assert.match(layerCard.label, /走进青岚坡/);
+  assert.match(layerCard.description, /不消耗入场符/);
+  assert.equal(layerCard.description.includes("Consumes"), false);
+  assert.equal(layerCard.description.includes("ticket"), false);
   performAction(world, CULTIVATOR_ID, "enter-wilderness:starter-wilderness-tier-1" as never);
   advanceWorld(world, 4);
   const inside = getCultivatorState(world, CULTIVATOR_ID);

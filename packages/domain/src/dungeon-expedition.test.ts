@@ -7,6 +7,8 @@ import {
   listAvailableActions,
   performAction,
 } from "./index.js";
+import { createDungeonExpeditionReport } from "./dungeon-expedition-service.js";
+import type { DungeonExpeditionProgress } from "./model.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -37,7 +39,15 @@ test("dungeon actions expose managed expeditions and rank yield hints to agents"
 
   const balancedAction = actions.find((action) => action.actionId === expeditionActionId(1, "balanced"));
   assert.ok(balancedAction);
-  assert.match(balancedAction.description, /cloud-heart-grass/i);
+  assert.match(balancedAction.label, /地宫远征/);
+  assert.match(balancedAction.label, /均衡/);
+  assert.match(balancedAction.description, /云心草/);
+  assert.equal(/[a-z]+-[a-z0-9-]+/i.test(`${balancedAction.label} ${balancedAction.description}`), false);
+  const enterAction = actions.find((action) => action.actionId === "enter-dungeon:rank-1:conservative");
+  assert.ok(enterAction);
+  assert.match(enterAction.label, /进丙级地宫第1阶/);
+  assert.match(enterAction.label, /稳妥/);
+  assert.equal(/Enter dungeon|conservative|balanced|aggressive/i.test(`${enterAction.label} ${enterAction.description}`), false);
 
   assert.ok(dungeonState);
   assert.ok(Array.isArray(dungeonState.rankYieldHints));
@@ -89,6 +99,75 @@ test("managed expeditions create one 30-tick job and only expose abort while bus
     true,
   );
   assert.equal(world.cultivators[CULTIVATOR_ID]?.locationId, "qingzhou:main-city");
+  const finished = getCultivatorState(world, CULTIVATOR_ID);
+  const summary = finished.dungeonExpedition?.lastReport?.summary ?? "";
+  const notes = finished.travelogue.notes.map((note) => `${note.title} ${note.detail}`).join("\n");
+  const digestText = [
+    finished.digest?.summary ?? "",
+    ...(finished.digest?.growth ?? []),
+    ...(finished.digest?.fights ?? []),
+  ].join("\n");
+  const returnEvent = finished.recentEvents.find((event) => event.title === "地宫归来");
+  assert.ok(returnEvent);
+  const playerFacing = `${summary}\n${notes}\n${digestText}\n${returnEvent.title} ${returnEvent.content}`;
+  assert.match(summary, /云心草/);
+  assert.match(summary, /青岚城/);
+  assert.match(notes, /地宫归来/);
+  assert.match(notes, /云心草/);
+  assert.match(digestText, /云心草/);
+  assertNoRawIds(playerFacing);
+});
+
+function assertNoRawIds(text: string): void {
+  assert.equal(/[a-z]+-[a-z0-9-]+/i.test(text), false, text);
+  assert.equal(/[a-z]+:[a-z0-9:-]+/i.test(text), false, text);
+  assert.equal(/\([A-Za-z]/.test(text), false, text);
+}
+
+test("an expedition report keeps item ids in state and Chinese names in the summary", () => {
+  const progress = {
+    cultivatorId: CULTIVATOR_ID,
+    jobId: "job-surface",
+    locationId: "yangzhou:dungeon-c",
+    grade: "丙",
+    targetRank: 1,
+    policy: "balanced",
+    strategy: { posture: "balanced", bias: "survival-first", pushPreference: "neutral" },
+    startedAtTick: 0,
+    stepIndex: 4,
+    maxSteps: 10,
+    nextResolutionTick: 12,
+    searchSteps: 3,
+    guardianSteps: 1,
+    primaryMaterialCount: 2,
+    secondaryDrops: { "ruin-fragment": 1 },
+    spiritStoneGain: 40,
+    realmProgressGain: 6,
+    unlockedNextRank: false,
+    lastResolvedAction: "search",
+    flavorEventTitles: [],
+    wakeNodesEncountered: 0,
+    maxWakeNodes: 3,
+    pendingWakeNode: null,
+    pendingWakeNodeDeadlineTick: null,
+    resolvedWakeNodeCount: 0,
+  } satisfies DungeonExpeditionProgress;
+  const report = createDungeonExpeditionReport({
+    progress,
+    outcome: "completed",
+    endedAtTick: 30,
+    returnLocationId: "yangzhou:main-city",
+    returnPlaceName: "广津城",
+    primaryMaterial: "cloud-heart-grass",
+  });
+  assert.equal(report.primaryMaterial.itemId, "cloud-heart-grass");
+  assert.equal(report.secondaryDrops["ruin-fragment"], 1);
+  assert.equal(report.returnLocationId, "yangzhou:main-city");
+  assert.match(report.summary, /2份云心草/);
+  assert.match(report.summary, /1份残碑碎片/);
+  assert.match(report.summary, /人已回到广津城/);
+  assert.match(report.summary, /姿态是均衡/);
+  assertNoRawIds(report.summary);
 });
 
 test("managed expeditions can be aborted while the cultivator is busy", () => {
