@@ -183,6 +183,15 @@ export function getQuestBoard(world: WorldState, locationId: string): QuestBoard
   return world.questBoards[locationId] ?? null;
 }
 
+export function questFacingName(quest: { name: string; nameCn?: string; templateId?: string }): string {
+  if (quest.nameCn && /[\u4e00-\u9fff]/u.test(quest.nameCn)) return quest.nameCn;
+  const template = [...BASE_QUEST_TEMPLATES, ...HIGH_RISK_QUEST_TEMPLATES, ...SECT_QUEST_TEMPLATES]
+    .find((entry) => entry.id === quest.templateId);
+  if (template?.nameCn) return template.nameCn;
+  if (/[\u4e00-\u9fff]/u.test(quest.name)) return quest.name;
+  return "这一桩事务";
+}
+
 export function acceptQuest(world: WorldState, cultivator: Cultivator, questType: string, boardIndex: number): ActiveQuest {
   const board = world.questBoards[cultivator.locationId];
   if (!board) throw new Error("No quest board available at current location.");
@@ -211,6 +220,7 @@ export function acceptQuest(world: WorldState, cultivator: Cultivator, questType
     category: instance.category,
     boardIndex: instance.boardIndex,
     name: instance.name,
+    nameCn: instance.nameCn,
     description: instance.description,
     durationTicks: instance.durationTicks,
     reward: instance.reward,

@@ -1613,7 +1613,7 @@ test("strategy exposes the same policy and keeps safety ahead of onboarding", ()
     "onboarding",
     "free-exploration",
   ]);
-  assert.ok(strategy.decisionPolicy.summary.includes("Safety"));
+  assert.ok(strategy.decisionPolicy.summary.includes("安全"));
 });
 
 test("first travel onboarding step recommends a quest-board action when available", () => {
@@ -1640,7 +1640,7 @@ test("first travel onboarding step recommends a quest-board action when availabl
   const state = getCultivatorState(world, cultivatorId);
 
   assert.equal(state.onboarding.stage, "first-travel");
-  assert.ok(state.onboarding.hint.includes("quest"));
+  assert.ok(state.onboarding.hint.includes("事务"));
   assert.ok(state.onboarding.recommendedActions.some((a: string) => a.startsWith("quest:accept:")));
 });
 

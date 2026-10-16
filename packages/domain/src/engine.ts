@@ -214,6 +214,7 @@ import {
   acceptQuest,
   buildAcceptQuestActionId,
   buildExecuteQuestActionId,
+  questFacingName,
   getActiveQuest,
   getActiveQuestByReadableIndex,
   getQuestBoard,
@@ -1906,6 +1907,16 @@ const parseSendMessage = (actionId: ActionId | string): { targetId: string; kind
 };
 const parseAcceptGift = (actionId: ActionId | string): string | null =>
   actionId.startsWith("accept-gift:") ? actionId.slice("accept-gift:".length) : null;
+const parseGiftBatch = (
+  actionId: ActionId | string,
+  prefix: "accept-gift-batch:" | "reject-gift-batch:",
+): { fromId: string; itemId: ItemId } | null => {
+  if (!actionId.startsWith(prefix)) return null;
+  const rest = actionId.slice(prefix.length);
+  const split = rest.lastIndexOf(":");
+  if (split <= 0 || split >= rest.length - 1) return null;
+  return { fromId: rest.slice(0, split), itemId: rest.slice(split + 1) as ItemId };
+};
 
 type PendingPvpChallengeInvalidReason =
   | "expired"
@@ -2403,7 +2414,7 @@ function maybeQueueMoralityChoice(
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId,
-      title: `[choice] ${choice.title}`,
+      title: eventTitle("choice", choice.title),
       content: choice.prompt,
       severity: "medium",
       tags: ["event-pool", "morality-choice", "pending"],
@@ -2478,7 +2489,7 @@ function maybeQueueSceneChoice(
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId,
-      title: `[choice] ${choice.title}`,
+      title: eventTitle("choice", choice.title),
       content: choice.prompt,
       severity: "medium",
       tags: ["event-pool", "scene-choice", "pending"],
@@ -2538,7 +2549,7 @@ function resolveSceneChoiceAction(
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: `[choice] ${choice.title}`,
+    title: eventTitle("choice", choice.title),
     content: summary,
     severity: "low",
     tags: ["event-pool", "scene-choice", option.id],
@@ -3002,6 +3013,27 @@ function agentEventLabel(template: { name: string; nameCn?: string }): string {
   const label = template.nameCn?.trim();
   return label ? label : template.name;
 }
+function eventBracket(tag: string): string {
+  if (tag === "exploration") return "探索";
+  if (tag === "travel") return "赶路";
+  if (tag === "choice") return "抉择";
+  if (tag.startsWith("search-fortune")) return "探宝";
+  if (tag.startsWith("challenge-guardian")) return "守关";
+  return tag;
+}
+function eventTitle(tag: string, label: string): string {
+  return `[${eventBracket(tag)}] ${label}`;
+}
+function publicEventTitle(title: string): string {
+  return title
+    .replace(/^\[exploration\]/u, "[探索]")
+    .replace(/^\[travel\]/u, "[赶路]")
+    .replace(/^\[choice\]/u, "[抉择]")
+    .replace(/^\[search-fortune(?::rank-\d+)?\]/u, "[探宝]")
+    .replace(/^\[challenge-guardian(?::rank-\d+)?\]/u, "[守关]")
+    .replace(/\bDungeon Expedition\b/u, "地宫远征")
+    .replace(/^Faction War Progress$/u, "宗门战事");
+}
 
 function triggerLocationEvent(
   world: WorldState,
@@ -3038,7 +3070,7 @@ function triggerLocationEvent(
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId,
-      title: `[${source}] ${agentEventLabel(drawn.template)}`,
+      title: eventTitle(source, agentEventLabel(drawn.template)),
       content: drawn.template.description,
       severity: eventSeverityOf(drawn.template),
       tags: ["event-pool", source, drawn.template.semanticType, drawn.template.resultType, `signal-type:${drawn.template.signalType}`],
@@ -3051,7 +3083,7 @@ function triggerLocationEvent(
       addWorldEvent(world, {
         cultivatorId: cultivator.id,
         locationId,
-        title: `[${source}] ${agentEventLabel(drawn.subEvent)}`,
+        title: eventTitle(source, agentEventLabel(drawn.subEvent)),
         content: drawn.subEvent.description,
         severity: eventSeverityOf(drawn.subEvent),
         tags: ["event-pool", source, "sub-event", drawn.subEvent.semanticType, drawn.subEvent.resultType, `signal-type:${drawn.subEvent.signalType}`],
@@ -3080,7 +3112,7 @@ function triggerNodeSpecificEvent(
     addWorldEvent(world, {
       cultivatorId: cultivator.id,
       locationId,
-      title: `[${actionTag}] ${agentEventLabel(drawn.template)}`,
+      title: eventTitle(actionTag, agentEventLabel(drawn.template)),
       content: drawn.template.description,
       severity: eventSeverityOf(drawn.template),
       tags: ["event-pool", "node-specific", actionTag, drawn.template.semanticType, drawn.template.resultType],
@@ -3682,13 +3714,24 @@ export function saveCultivationRegistration(
 
 function hasEffect(cultivator: Cultivator, effectId: StatusEffect["id"]) { return cultivator.statusEffects.some((effect) => effect.id === effectId); }
 function upsertEffect(cultivator: Cultivator, effect: StatusEffect) {
+  const facing = facingStatus(effect.id, effect.name, effect.description);
   const existing = cultivator.statusEffects.find((entry) => entry.id === effect.id);
-  if (existing) { existing.remainingTicks = Math.max(existing.remainingTicks, effect.remainingTicks); existing.intensity = Math.max(existing.intensity, effect.intensity); existing.source = effect.source; return; }
-  cultivator.statusEffects.push(effect);
+  if (existing) {
+    existing.remainingTicks = Math.max(existing.remainingTicks, effect.remainingTicks);
+    existing.intensity = Math.max(existing.intensity, effect.intensity);
+    existing.source = effect.source;
+    existing.name = facing.name;
+    existing.description = facing.description;
+    return;
+  }
+  cultivator.statusEffects.push({ ...effect, name: facing.name, description: facing.description });
 }
 function syncWounded(cultivator: Cultivator) {
   cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "wounded");
-  if (cultivator.injuryTicksRemaining > 0) cultivator.statusEffects.push({ id: "wounded", name: "Wounded", description: "Risky actions are restricted.", source: "injury", remainingTicks: cultivator.injuryTicksRemaining, intensity: 1 });
+  if (cultivator.injuryTicksRemaining > 0) {
+    const facing = facingStatus("wounded", "带伤", "冒险的事做不了，得先养伤。");
+    cultivator.statusEffects.push({ id: "wounded", name: facing.name, description: facing.description, source: "injury", remainingTicks: cultivator.injuryTicksRemaining, intensity: 1 });
+  }
 }
 function raiseInjury(world: WorldState, cultivator: Cultivator, ticks: number): void {
   if (ticks <= cultivator.injuryTicksRemaining) return;
@@ -3775,8 +3818,65 @@ function itemDefinition(world: WorldState, itemId: ItemId) {
   return definition;
 }
 function itemActionLabel(itemId: ItemId, operation: "buy" | "sell" | "use" | "study") {
-  const noun = itemId.replace(/-/g, " ");
-  return `${operation[0].toUpperCase()}${operation.slice(1)} ${noun}`;
+  const name = ITEM_CATALOG[itemId]?.name ?? "这件东西";
+  if (operation === "buy") return `买${name}`;
+  if (operation === "sell") return `卖${name}`;
+  if (operation === "study") return `研读${name}`;
+  if (itemId === "healing-pill" || itemId === "qi-pill") return `服用${name}`;
+  return `使用${name}`;
+}
+const TIMED_ACTION_PHRASES: Record<string, string> = {
+  meditate: "打坐",
+  heal: "疗伤",
+  cultivate: "运功",
+  "residence-meditate": "洞府打坐",
+  "residence-heal": "洞府疗伤",
+  "residence-heal:use-pill": "洞府疗伤",
+  "residence-heal:no-pill": "洞府疗伤",
+  "residence-recover-qi": "洞府回气",
+  "residence-recover-qi:use-pill": "洞府回气",
+  "residence-recover-qi:no-pill": "洞府回气",
+  "residence-produce": "洞府炼制",
+  "residence-socialize": "洞府闲谈",
+  "residence-breakthrough": "洞府破境",
+  "mine-spirit-stones": "采集灵石",
+  "hunt-mine-beast": "猎兽",
+  "take-mortal-task": "城镇差事",
+  "take-neutral-duty": "中立差事",
+  "take-sect-errand": "宗门差事",
+  "survey-wilderness": "再探这一层",
+  "withdraw-from-wilderness": "撤出这一层",
+  "retreat-from-bahuang": "撤出八荒",
+  "abort-dungeon-expedition": "中止地宫远征",
+  "search-fortune": "探宝",
+};
+function timedActionPhrase(actionId: string): string | null {
+  if (TIMED_ACTION_PHRASES[actionId]) return TIMED_ACTION_PHRASES[actionId];
+  if (actionId.startsWith("residence-produce:")) return "洞府炼制";
+  if (actionId.startsWith("search-fortune")) return "探宝";
+  if (actionId.startsWith("challenge-guardian")) return "守关";
+  if (actionId.startsWith("explore-guixu:")) return "探这一处";
+  if (actionId.startsWith("sect-task:")) return "宗门差事";
+  return null;
+}
+function shownJobLabel(actionId: string, label: string): string {
+  const englishShell = /^[A-Za-z]/.test(label);
+  if (!englishShell && /[\u4e00-\u9fff]/u.test(label)) return label;
+  return timedActionPhrase(actionId) ?? (/[\u4e00-\u9fff]/u.test(label) ? label : "手头的事");
+}
+const STATUS_FACING: Record<string, { name: string; description: string }> = {
+  wounded: { name: "带伤", description: "冒险的事做不了，得先养伤。" },
+  poisoned: { name: "中毒", description: "每过一刻都在掉气血。" },
+  "clear-mind": { name: "心神清明", description: "调息和修炼都顺一些。" },
+  "qi-surge": { name: "气血上涌", description: "出手和修炼都顺一些。" },
+  "fortune-marked": { name: "气运加身", description: "探宝更容易有收获。" },
+  warded: { name: "护体", description: "打架时没那么容易吃亏。" },
+  deviation: { name: "走火入魔", description: "修炼不稳，再催就容易出事。" },
+  insight: { name: "有所悟", description: "这一阵修炼和出手都亮一点。" },
+  "spirit-saturated": { name: "灵气充盈", description: "这一阵修炼更顶用。" },
+};
+function facingStatus(id: string, fallbackName: string, fallbackDescription: string) {
+  return STATUS_FACING[id] ?? { name: fallbackName, description: fallbackDescription };
 }
 function resolveItemEffectBundle(
   definition: WorldState["itemDefinitions"][ItemId],
@@ -5635,6 +5735,28 @@ function resolveDungeonExpeditionStepIfDue(
   stampDungeonWake(job, progressedWithWake);
 }
 
+function ensureDungeonWakeOnJob(world: WorldState, cultivator: Cultivator): void {
+  if (!cultivator.activeJobId) return;
+  const progress = getActiveDungeonExpedition(world, cultivator.id);
+  if (!progress || progress.jobId !== cultivator.activeJobId) return;
+  const job = world.jobs[cultivator.activeJobId];
+  if (!job) return;
+  const wake = progress.pendingWakeNode;
+  const stamped = job.meta?.dungeonWake;
+  if (!wake) {
+    if (stamped) stampDungeonWake(job, progress);
+    return;
+  }
+  const same = Boolean(
+    stamped
+    && stamped.context === wake.context
+    && stamped.defaultOptionId === wake.defaultOptionId
+    && stamped.options.length === wake.options.length
+    && stamped.options.every((option, index) => option.optionId === wake.options[index]?.optionId && option.label === wake.options[index]?.label),
+  );
+  if (!same) stampDungeonWake(job, progress);
+}
+
 function stampDungeonWake(job: ActionJob, progress: DungeonExpeditionProgress): void {
   const wake = progress.pendingWakeNode;
   const meta = { ...(job.meta ?? {}) };
@@ -6538,7 +6660,7 @@ function buildItemAction(
     return {
       actionId,
       label: itemActionLabel(binding.itemId, binding.operation),
-      description: `${price} spirit stones.`,
+      description: `花${price}灵石。`,
       durationTicks: 0,
       kind: "immediate",
       itemBinding: binding,
@@ -6554,7 +6676,7 @@ function buildItemAction(
     return {
       actionId,
       label: itemActionLabel(binding.itemId, binding.operation),
-      description: `${income} spirit stones.`,
+      description: `能换${income}灵石。`,
       durationTicks: 0,
       kind: "immediate",
       itemBinding: binding,
@@ -6640,7 +6762,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     if (!isAtResidence(cultivator) && !canHealHere) {
       recoveryWarnings.push("此地无法直接解毒，需先赶往安全地点。");
     }
-    recoveryPriorities.push("中毒急需清除：可使用 heal 或 residence-heal 解毒。");
+    recoveryPriorities.push("中毒得先解：在能疗伤的地方疗伤，或者回洞府疗伤。");
     recoveryActions.unshift(canHealHere ? "heal" : isAtResidence(cultivator) ? "residence-heal" : safeTravelAction);
   }
   if (hasEffect(cultivator, "deviation")) {
@@ -6796,7 +6918,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     for (const recipe of craftable) {
       if (recipe.id.startsWith("recipe-forge-") || recipe.id.startsWith("recipe-synthesize-")) {
         locationActions.push(`residence-produce:${recipe.id}` as ActionId);
-        locationPriorities.push(`居所可炼制：${recipe.outputItemId}，消耗 ${recipe.spiritStoneCost} 灵石。`);
+        locationPriorities.push(`居所可炼制：${ITEM_CATALOG[recipe.outputItemId]?.name ?? "这件东西"}，消耗 ${recipe.spiritStoneCost} 灵石。`);
         break;
       }
     }
@@ -6870,30 +6992,30 @@ function decisionPolicy(): DecisionPolicyView {
     freeExplorationAllowed: true,
     priorityOrder: [...DECISION_POLICY_PRIORITY_ORDER],
     summary:
-      "Owner commands can override onboarding. Safety warnings come before risky ambition. Runtime guidance is advisory, and free exploration is allowed from current valid actions.",
+      "主人的话可以压过新手提示。安全提醒先于冒险。运行时的建议只是建议，眼前合法的行动都可以自己选。",
   };
 }
 
 function onboardingHint(stage: OnboardingStage): string {
   if (stage === "registered") {
-    return "Welcome. Start with a low-risk town action to begin your first loop.";
+    return "先在城里做一件不冒险的事，把第一圈走起来。";
   }
   if (stage === "first-action") {
-    return "Great start. Travel once to your local wilderness to complete the first travel step.";
+    return "去本州的荒野走一趟。";
   }
   if (stage === "first-travel") {
-    return "Accept and complete one base quest from the local board.";
+    return "在本地告示上接一件基础事务，做完它。";
   }
   if (stage === "first-quest") {
-    return "Return to residence and complete residence meditation once.";
+    return "回到洞府，打坐一次。";
   }
   if (stage === "first-residence-cultivation") {
-    return "Reach full progress, gather breakthrough materials, craft the special item at residence, then break through.";
+    return "修为攒满，备好突破灵材，在洞府里做成那件特殊物品，再破境。";
   }
   if (stage === "first-breakthrough" || stage === "completed") {
-    return "Golden path completed. Continue with stable growth through quests, residence cultivation, and faction choices.";
+    return "开头这几步已经走过。接下来靠事务、洞府修炼和宗门选择慢慢往上走。";
   }
-  return "Golden path completed. Continue long-term progression.";
+  return "开头这几步已经走过。接下来慢慢往上走。";
 }
 
 function onboardingRecommendedActions(world: WorldState, stage: OnboardingStage, cultivator: Cultivator): ActionId[] {
@@ -6987,20 +7109,20 @@ export function getStrategySnapshot(world: WorldState, cultivatorId: string): St
         : "low";
   const shortTermGoal =
     plan.priorities[0] ??
-    (cultivator.spiritStones < 120 ? "Restore basic resources." : "Push the current loop safely.");
+    (cultivator.spiritStones < 120 ? "先把身上的灵石补上。" : "把眼前这一圈稳稳做完。");
   const longTermGoal =
     cultivator.sectId
-      ? `Build toward the next realm while growing ${world.sects[cultivator.sectId]?.name ?? "sect"} standing.`
+      ? `一边往下一境走，一边在${world.sects[cultivator.sectId]?.name ?? "宗门"}里把位子站稳。`
       : cultivator.neutralSectId
-        ? `Build toward the next realm while steadily contributing to ${world.neutralSects[cultivator.neutralSectId]?.name ?? "your organization"}.`
-        : "Grow resources and stability until stronger quests, travel, and organization choices feel safe.";
+        ? `一边往下一境走，一边在${world.neutralSects[cultivator.neutralSectId]?.name ?? "门派"}里慢慢出力。`
+        : "先把灵石和伤势稳住，再去接更重的事务、更远的路和宗门。";
   const filtered = filterToAvailable(plan.suggestedActions, availableActionIds);
   const recommendedSequence: ActionId[] =
     filtered.length > 0 ? filtered : ["cultivate"];
   const reason =
     plan.warnings.length > 0
       ? plan.warnings.join(" ")
-      : plan.priorities.join(" ") || "State is stable enough to continue the main progression loop.";
+      : plan.priorities.join(" ") || "眼下还稳，可以接着走主线。";
   return {
     tick: world.tick,
     cultivatorId,
@@ -7551,6 +7673,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
   repairCultivatorRealm(cultivator);
+  ensureDungeonWakeOnJob(world, cultivator);
   const location = world.locations[cultivator.locationId]; const sect = cultivator.sectId ? world.sects[cultivator.sectId] ?? null : null; const neutralSect = getCultivatorNeutralSect(world, cultivator);
   const activeResidence = getActiveResidence(cultivator);
   const recentResidenceAmbientEvents = activeResidence
@@ -7695,7 +7818,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
   };
   return {
     tick: world.tick,
-    cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmPhase: realmPhaseOfLevel(cultivator.realmLevel), realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
+    cultivator: { id: cultivator.id, name: cultivator.name, realm: cultivator.realm, realmLevel: cultivator.realmLevel, realmPhase: realmPhaseOfLevel(cultivator.realmLevel), realmProgress: cultivator.realmProgress, status: statusOf(cultivator), location: location?.name ?? cultivator.locationId, locationId: cultivator.locationId, spiritStones: cultivator.spiritStones, qi: cultivator.qi, maxQi: cultivator.maxQi, spiritualPower: cultivator.spiritualPower, maxSpiritualPower: cultivator.maxSpiritualPower, reputation: currentStateReputation(cultivator), lifespan: cultivator.lifespan, age: Number(cultivator.age.toFixed(2)), genderPresentation: cultivator.genderPresentation, pronouns: cultivator.pronouns, origin: cultivator.origin, temperament: cultivator.temperament, moralityScore: cultivator.moralityScore, moralityAlignment: moralityAlignmentOfCultivator(cultivator) },
     cultivation: { mainTechnique: cultivator.techniques[0] ?? "Basic Breathing", techniques: cultivator.techniques },
     combatProfile,
     neutralSect: neutralSect ? { id: neutralSect.id, name: neutralSect.name, alignment: neutralSect.alignment, stateId: neutralSect.stateId, headquarters: neutralSect.headquarters, role: "member", memberCount: neutralSect.memberIds.length, neutralContribution: cultivator.neutralContribution, rewardMultiplier: neutralSect.rewardMultiplier, competitive: false } : null,
@@ -7723,15 +7846,18 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         };
       }),
     currentJob: cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
-    nearbyOpportunities: [location && canTradeAtLocation(location) ? "Sell or buy supplies." : "Move for a better opportunity.", location?.nodeType === "wilderness" ? "Mine or hunt a beast." : "Stay aware of local events."],
-    statusEffects: cultivator.statusEffects.map((effect) => ({ id: effect.id, name: effect.name, description: effect.description, remainingTicks: effect.remainingTicks, source: effect.source })),
+    nearbyOpportunities: [location && canTradeAtLocation(location) ? "这里能买卖。" : "换个地方，机会会多一些。", location?.nodeType === "wilderness" ? "可以采集，也可以猎兽。" : "留意这一带的事。"],
+    statusEffects: cultivator.statusEffects.map((effect) => {
+      const facing = facingStatus(effect.id, effect.name, effect.description);
+      return { id: effect.id, name: facing.name, description: facing.description, remainingTicks: effect.remainingTicks, source: effect.source };
+    }),
     factionReputation: Object.entries(cultivator.factionReputation).map(([factionId, value]) => ({
       factionId,
       name: factionNameOf(world, factionId),
       value,
       standing: standing(value),
     })),
-    recentEvents: getRecentWorldEvents(world, cultivatorId, 5),
+    recentEvents: getRecentWorldEvents(world, cultivatorId, 5).map((event) => ({ ...event, title: publicEventTitle(event.title) })),
     recentCombats: getCombatLogs(world, cultivatorId, 4),
     travelogue: {
       mood: describeMood(cultivator, Boolean(getActiveDungeonExpedition(world, cultivator.id))),
@@ -7879,8 +8005,8 @@ function ensureSafetyNetActions(
       ...actions,
       {
         actionId: "residence-recover-qi",
-        label: "Residence recover qi",
-        description: "Fallback recovery action that costs no spirit stones.",
+        label: "洞府回气",
+        description: "不花灵石，先把气调回来。",
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-recover-qi"],
         kind: "timed",
       },
@@ -7907,8 +8033,8 @@ function ensureSafetyNetActions(
       ...actions,
       {
         actionId: "take-mortal-task",
-        label: "Take town task",
-        description: "Fallback stable income task.",
+        label: "城镇差事",
+        description: "在城里做一件稳当的差事。",
         durationTicks: DEFAULT_ACTION_DURATIONS["take-mortal-task"],
         kind: "timed",
       },
@@ -8065,6 +8191,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const readinessLevel = computeReadiness(cultivator);
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
   if (cultivator.activeJobId) {
+    ensureDungeonWakeOnJob(world, cultivator);
     const regionalBusy = listRegionalChoiceActions(world, cultivator);
     if (regionalBusy.length > 0) {
       return [...regionalBusy, ...sceneChoiceActions(world, cultivator)];
@@ -8074,8 +8201,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
     const busyActions: AvailableAction[] = [{
       actionId: "abort-dungeon-expedition",
-      label: "Abort dungeon expedition",
-      description: "Stop the managed run, return to the nearest safe location, and settle the report now.",
+      label: "中止地宫远征",
+      description: "停下这一趟，回到能歇脚的地方，并把这一趟的账结了。",
       durationTicks: 0,
       kind: "immediate",
     }];
@@ -8109,24 +8236,28 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const wildernessLayer = getWildernessLayerForLocation(world, cultivator.locationId);
   const residenceActionDescription = (baseDescription: string) =>
     activeResidence ? describeResidenceAction(baseDescription, activeResidence, world.tick) : baseDescription;
-  const recipeActions = getLiveCraftableRecipes(cultivator).map((recipe) => ({
+  const recipeActions = getLiveCraftableRecipes(cultivator).map((recipe) => {
+    const outputName = ITEM_CATALOG[recipe.outputItemId]?.name ?? "这件东西";
+    return {
     actionId: `residence-produce:${recipe.id}` as ActionId,
-    label: `Residence produce (${recipe.outputItemId})`,
-    description: residenceActionDescription(`Craft ${recipe.outputItemId} at residence.`),
+    label: `洞府炼制：${outputName}`,
+    description: residenceActionDescription(`在洞府炼制${outputName}。`),
     durationTicks: recipe.durationTicks,
     kind: "timed" as const,
     costs: {
       spiritStones: recipe.spiritStoneCost,
       itemConsumes: recipe.inputMaterials.map((material) => ({ itemId: material.itemId, count: material.count })),
     },
-  }));
+  };
+  });
   const queueActions: AvailableAction[] = [];
   if (isAtResidence(cultivator) && (cultivator.productionQueue?.length ?? 0) < PRODUCTION_QUEUE_MAX_LENGTH) {
     for (const recipe of getLiveCraftableRecipes(cultivator)) {
+      const queuedName = ITEM_CATALOG[recipe.outputItemId]?.name ?? "这件东西";
       queueActions.push({
         actionId: `queue-production:${recipe.id}` as ActionId,
-        label: `Queue production (${recipe.outputItemId})`,
-        description: `Add ${recipe.outputItemId} to production queue. Materials consumed immediately, product delivered when queue completes.`,
+        label: `排队炼制：${queuedName}`,
+        description: `把${queuedName}排进炉里。材料现在就扣，炼成了再交给你。`,
         durationTicks: 0,
         kind: "immediate",
         costs: {
@@ -8140,8 +8271,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     for (const entry of cultivator.productionQueue) {
       queueActions.push({
         actionId: `cancel-production:${entry.slot}` as ActionId,
-        label: `Cancel production (slot ${entry.slot}: ${entry.recipeId})`,
-        description: `Cancel queued production and return consumed materials.`,
+        label: `取消排队（第${entry.slot + 1}炉）`,
+        description: "取消这一炉，扣掉的材料退回来。",
         durationTicks: 0,
         kind: "immediate",
       });
@@ -8162,8 +8293,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       });
   actions.push({
     actionId: "meditate",
-    label: "Meditate",
-    description: "Recover spiritual power.",
+    label: "打坐",
+    description: "把灵力调回来。",
     durationTicks: DEFAULT_ACTION_DURATIONS.meditate,
     kind: "timed",
     ...(cultivator.injuryTicksRemaining > 0
@@ -8190,8 +8321,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (!tierAllowed(cultivator.realmLevel, wDef.weaponTier ?? 1)) continue;
     actions.push({
       actionId: `equip-weapon:${loadoutId}` as ActionId,
-      label: `Equip ${wDef.name}`,
-      description: `Switch weapon loadout to ${wDef.name} (${WEAPON_TYPE_NAMES_INLINE[wDef.weaponTypeId] ?? wDef.weaponTypeId}, core skill cost: ${wDef.coreSkillSpiritCost}, bonus: +${wDef.attackPowerBonus}).`,
+      label: `换上${wDef.name}`,
+      description: `把兵器换成${wDef.name}（${WEAPON_TYPE_NAMES_INLINE[wDef.weaponTypeId] ?? wDef.weaponTypeId}，这一式耗灵${wDef.coreSkillSpiritCost}，伤害+${wDef.attackPowerBonus}）。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8203,8 +8334,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (!tierAllowed(cultivator.realmLevel, sDef.spellTier ?? 1)) continue;
     actions.push({
       actionId: `equip-spell:${loadoutId}` as ActionId,
-      label: `Equip ${sDef.name}`,
-      description: `Switch spell loadout to ${sDef.name} (${SPELL_BRANCH_NAMES_INLINE[sDef.spellBranchId] ?? sDef.spellBranchId}, core skill cost: ${sDef.coreSkillSpiritCost}, bonus: +${sDef.attackPowerBonus}).`,
+      label: `换上${sDef.name}`,
+      description: `把法术换成${sDef.name}（${SPELL_BRANCH_NAMES_INLINE[sDef.spellBranchId] ?? sDef.spellBranchId}，这一式耗灵${sDef.coreSkillSpiritCost}，伤害+${sDef.attackPowerBonus}）。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8226,8 +8357,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         : itemId;
     actions.push({
       actionId: `unlock-loadout:${itemId}` as ActionId,
-      label: `Unlock ${targetName}`,
-      description: `Use ${def.name} to permanently unlock ${wId ? "weapon" : "spell"} loadout「${targetName}」. Consumes the item. Does NOT auto-equip.`,
+      label: `学会${targetName}`,
+      description: `用${def.name}学会${wId ? "兵器" : "法术"}「${targetName}」。东西会用掉，不会自动换上。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -8240,8 +8371,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     if (activeWilderness) {
       actions.push({
         actionId: "withdraw-from-wilderness",
-        label: "Withdraw from wilderness",
-        description: "Retreat before the expedition becomes fatal.",
+        label: "撤出这一层",
+        description: "先退出这一层，免得再耗下去。",
         durationTicks: 0,
         kind: "immediate",
       });
@@ -8252,15 +8383,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push(
         {
           actionId: "residence-heal",
-          label: "Residence heal",
-          description: residenceActionDescription("Recover injuries at residence."),
+          label: "洞府疗伤",
+          description: residenceActionDescription("在洞府里把伤养一养。"),
           durationTicks: DEFAULT_ACTION_DURATIONS["residence-heal"],
           kind: "timed",
         },
         {
           actionId: "residence-recover-qi",
-          label: "Residence recover qi",
-          description: residenceActionDescription("Quickly recover qi at residence."),
+          label: "洞府回气",
+          description: residenceActionDescription("在洞府里把气调回来。"),
           durationTicks: DEFAULT_ACTION_DURATIONS["residence-recover-qi"],
           kind: "timed",
         },
@@ -8270,7 +8401,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push(...methodActions);
       return ensureSafetyNetActions(world, cultivator, location, actions);
     }
-    if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
+    if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "疗伤", description: "把伤养一养。", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
     actions.push(...listSectLifeActions(world, cultivator));
     return ensureSafetyNetActions(world, cultivator, location, actions);
   }
@@ -8279,23 +8410,23 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       ...(!breakthrough?.readyByProgress
         ? [{
             actionId: "residence-meditate" as const,
-            label: "Residence meditate",
-          description: residenceActionDescription("Closed-door cultivation at residence."),
+            label: "洞府打坐",
+          description: residenceActionDescription("在洞府里闭关打坐。"),
             durationTicks: DEFAULT_ACTION_DURATIONS["residence-meditate"],
             kind: "timed" as const,
           }]
         : []),
       {
         actionId: "residence-heal",
-        label: "Residence heal",
-        description: residenceActionDescription("Recover injuries at residence."),
+        label: "洞府疗伤",
+        description: residenceActionDescription("在洞府里把伤养一养。"),
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-heal"],
         kind: "timed",
       },
       {
         actionId: "residence-recover-qi",
-        label: "Residence recover qi",
-        description: residenceActionDescription("Quickly recover qi at residence."),
+        label: "洞府回气",
+        description: residenceActionDescription("在洞府里把气调回来。"),
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-recover-qi"],
         kind: "timed",
       },
@@ -8303,8 +8434,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       ...queueActions,
       {
         actionId: "residence-socialize",
-        label: "Residence socialize",
-        description: residenceActionDescription("Light social exchange at residence."),
+        label: "洞府闲谈",
+        description: residenceActionDescription("在洞府里坐一会儿。"),
         durationTicks: DEFAULT_ACTION_DURATIONS["residence-socialize"],
         kind: "timed",
       },
@@ -8314,9 +8445,9 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push(...methodActions);
   }
   if (!breakthrough?.readyByProgress) {
-    actions.push({ actionId: "cultivate", label: "Cultivate", description: "Spend spirit stones to gain progress.", durationTicks: DEFAULT_ACTION_DURATIONS.cultivate, kind: "timed" });
+    actions.push({ actionId: "cultivate", label: "运功", description: "花一些灵石，把修为往前推一截。", durationTicks: DEFAULT_ACTION_DURATIONS.cultivate, kind: "timed" });
   }
-  if (location.kind === "safe") actions.push({ actionId: "take-mortal-task", label: "Take town task", description: "Stable income.", durationTicks: DEFAULT_ACTION_DURATIONS["take-mortal-task"], kind: "timed" });
+  if (location.kind === "safe") actions.push({ actionId: "take-mortal-task", label: "城镇差事", description: "在城里做一件稳当的差事。", durationTicks: DEFAULT_ACTION_DURATIONS["take-mortal-task"], kind: "timed" });
   if (canTradeAtLocation(location)) {
     const breakthroughDefinition = breakthroughDefinitionOf(cultivator);
     if (breakthroughDefinition && breakthroughDefinition.marketBuyable) {
@@ -8326,8 +8457,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         const price = buyPrice(cultivator, breakthroughMaterialBasePrice(firstMissing.itemId, cultivator.realmLevel));
         actions.push({
           actionId: "buy-current-breakthrough-material",
-          label: "Buy current breakthrough material",
-          description: `Buy 1 ${firstMissing.itemId} for ${price} spirit stones.`,
+          label: `买${itemDisplayName(firstMissing.itemId)}`,
+          description: `花${price}灵石买一份${itemDisplayName(firstMissing.itemId)}。`,
           durationTicks: 0,
           kind: "immediate",
           costs: { spiritStones: price },
@@ -8356,8 +8487,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       const entry = getResidenceCatalogEntry(currentStateId);
       actions.push({
         actionId: `buy-residence:${currentStateId}` as ActionId,
-        label: `Buy residence: ${entry?.name ?? currentStateId}`,
-        description: `Purchase a residence in ${entry?.stateName ?? currentStateId} for ${price} spirit stones. ${entry?.description ?? ""}`.trim(),
+        label: `买下洞府：${entry?.name ?? "这一处"}`,
+        description: `在${entry?.stateName ?? "这一州"}花${price}灵石买一处洞府。${entry?.description ?? ""}`.trim(),
         durationTicks: 0,
         kind: "immediate",
         costs: { spiritStones: price },
@@ -8398,8 +8529,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
   if (joinedNeutralSect?.headquarters === cultivator.locationId) {
-    actions.push({ actionId: "take-neutral-duty", label: "Take neutral duty", description: "A safe but slower organization duty.", durationTicks: DEFAULT_ACTION_DURATIONS["take-neutral-duty"], kind: "timed" });
-    actions.push({ actionId: "leave-neutral-sect", label: "Leave neutral sect", description: "End neutral sect membership and reset neutral contribution.", durationTicks: 0, kind: "immediate" });
+    actions.push({ actionId: "take-neutral-duty", label: "中立差事", description: "给这家门派做一件稳当、慢一点的差事。", durationTicks: DEFAULT_ACTION_DURATIONS["take-neutral-duty"], kind: "timed" });
+    actions.push({ actionId: "leave-neutral-sect", label: "离开这处中立门派", description: "退出这家中立门派，贡献清掉。", durationTicks: 0, kind: "immediate" });
   }
   if (joinedSect?.headquarters === cultivator.locationId) {
     // ---- Sect task categories (spec Chapter 7) ----
@@ -8453,8 +8584,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       }
       actions.push({
         actionId: buildAcceptQuestActionId(quest.type, quest.boardIndex) as ActionId,
-        label: `Accept quest: ${quest.nameCn}`,
-        description: `${quest.description} (奖励灵石 ${quest.reward.spiritStones})`,
+        label: `接下：${quest.nameCn}`,
+        description: `${quest.description}做完能得${quest.reward.spiritStones}灵石。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -8463,7 +8594,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   for (const [activeIndex, activeQuest] of cultivator.activeQuests.entries()) {
     actions.push({
       actionId: buildExecuteQuestActionId(activeQuest.type, activeIndex) as ActionId,
-      label: `Execute quest: ${activeQuest.name}`,
+      label: `去做：${questFacingName(activeQuest)}`,
       description: activeQuest.description,
       durationTicks: activeQuest.durationTicks,
       kind: "timed",
@@ -8473,7 +8604,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push(
       {
         actionId: "survey-wilderness",
-        label: "Survey wilderness",
+        label: "再探这一层",
         description: (() => {
           const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
           return wild
@@ -8485,7 +8616,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       },
       {
         actionId: "withdraw-from-wilderness",
-        label: "Withdraw from wilderness",
+        label: "撤出这一层",
         description: (() => {
           const wild = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
           return wild ? `${wild.withdraw}不另扣灵石。` : "Retreat before survival pressure forces a worse exit.";
@@ -8497,7 +8628,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   } else if (activeBahuang) {
     actions.push({
       actionId: "retreat-from-bahuang",
-      label: "Retreat from bahuang",
+      label: "撤出八荒",
       description: `${bahuangBandForDepth(activeBahuang.depth).retreat}原来的那笔灵石还是要扣。`,
       durationTicks: 0,
       kind: "immediate",
@@ -8543,8 +8674,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if (isGuixuNodeUnlockedForCultivator(world, cultivator.id, node.nodeId)) {
         actions.push({
           actionId: `explore-guixu:${node.nodeId}` as ActionId,
-          label: `Explore ${node.name}`,
-          description: `Push into ${node.name} and resolve a Guixu event.`,
+          label: `探${node.name}`,
+          description: `走进${node.name}，把这一处的事看完。`,
           durationTicks: node.explorationDurationTicks,
           kind: "timed",
         });
@@ -8555,8 +8686,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if (unlockCheck.allowed) {
         actions.push({
           actionId: `unlock-guixu:${node.nodeId}` as ActionId,
-          label: `Unlock ${node.name}`,
-          description: `Use wilderness attunement to unlock ${node.name}.`,
+          label: `打开${node.name}`,
+          description: `用荒野里积下的感应打开${node.name}。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -8564,15 +8695,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
   }
   if (location.nodeType === "wilderness") {
-    actions.push({ actionId: "mine-spirit-stones", label: "Mine spirit stones", description: "Gather stones and ore.", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" });
+    actions.push({ actionId: "mine-spirit-stones", label: "采集灵石", description: "捡灵石，也挖一点矿。", durationTicks: DEFAULT_ACTION_DURATIONS["mine-spirit-stones"], kind: "timed" });
     if (highRiskAllowed) {
       const hunted = wildPlaceForState(location.stateId);
       actions.push({
         actionId: "hunt-mine-beast",
-        label: hunted ? `猎${hunted.enemy}` : "Hunt mine beast",
+        label: hunted ? `猎${hunted.enemy}` : "猎兽",
         description: hunted
           ? `${hunted.name}上打的是${hunted.enemy}，旁边是${hunted.follower}，身上挂${hunted.statusLabel}。`
-          : "PVE combat for better loot.",
+          : "跟这一带的兽打一场，收获会多一些。",
         durationTicks: DEFAULT_ACTION_DURATIONS["hunt-mine-beast"],
         kind: "timed",
       });
@@ -8609,7 +8740,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   actions.push(...listRegionalEnterActions(world, cultivator));
   actions.push(...listRegionalChoiceActions(world, cultivator));
-  if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "Heal", description: "Recover qi and injuries.", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
+  if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "疗伤", description: "把气血和伤一起养一养。", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
   if (location.kind === "safe") {
     const duelTargets = socialActionTargets(world, cultivator)
       .filter((candidate) => getCityDuelChallengeBlockReason(world, cultivator, candidate) === null);
@@ -9071,12 +9202,28 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         });
       }
     }
-    // accept-gift / reject-gift: for each pending gift
-    for (const gift of (cultivator.pendingGifts ?? [])) {
-      const fromName = world.cultivators[gift.fromCultivatorId]?.name ?? "unknown";
+    const giftGroups = new Map<string, NonNullable<Cultivator["pendingGifts"]>>();
+    for (const gift of cultivator.pendingGifts ?? []) {
+      const key = `${gift.fromCultivatorId}\0${gift.itemId}`;
+      const group = giftGroups.get(key) ?? [];
+      group.push(gift);
+      giftGroups.set(key, group);
+    }
+    for (const group of giftGroups.values()) {
+      const first = group[0]!;
+      const fromName = world.cultivators[first.fromCultivatorId]?.name ?? "某人";
+      const itemName = itemDisplayName(first.itemId);
+      const total = group.reduce((sum, gift) => sum + gift.count, 0);
+      if (group.length === 1) {
+        actions.push(
+          { actionId: `accept-gift:${first.messageId}` as ActionId, label: `收下${fromName}的${itemName}`, description: `收下${fromName}送来的${total}份${itemName}。`, durationTicks: 0, kind: "immediate" },
+          { actionId: `reject-gift:${first.messageId}` as ActionId, label: `退回${fromName}的${itemName}`, description: `把${fromName}的${itemName}退回去。`, durationTicks: 0, kind: "immediate" },
+        );
+        continue;
+      }
       actions.push(
-        { actionId: `accept-gift:${gift.messageId}` as ActionId, label: `接受赠礼：${fromName}的${gift.itemId}`, description: `接受${fromName}赠送的${gift.count}个${gift.itemId}。`, durationTicks: 0, kind: "immediate" },
-        { actionId: `reject-gift:${gift.messageId}` as ActionId, label: `拒绝赠礼：${fromName}的${gift.itemId}`, description: `拒绝并退还${fromName}赠送的${gift.itemId}。`, durationTicks: 0, kind: "immediate" },
+        { actionId: `accept-gift-batch:${first.fromCultivatorId}:${first.itemId}` as ActionId, label: `收下${fromName}的${itemName}（${total}份）`, description: `${fromName}连着送来${group.length}次${itemName}，一共${total}份。这一张卡一次收下。原来的单份接受仍然有效。`, durationTicks: 0, kind: "immediate" },
+        { actionId: `reject-gift-batch:${first.fromCultivatorId}:${first.itemId}` as ActionId, label: `退回${fromName}的${itemName}（${total}份）`, description: `把${fromName}送来的这${total}份${itemName}一起退回去。原来的单份拒绝仍然有效。`, durationTicks: 0, kind: "immediate" },
       );
     }
     // post-commission: at safe locations, post a gather/deliver commission
@@ -9086,8 +9233,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         for (const [itemId] of commItems) {
           actions.push({
             actionId: `post-commission:${commType}:${itemId}` as ActionId,
-            label: `发布委托（${commType === "gather" ? "采集" : "运送"}）：${itemId}`,
-            description: `在告示板发布${commType === "gather" ? "采集" : "运送"}${itemId}的委托。`,
+            label: `发布委托（${commType === "gather" ? "采集" : "运送"}）：${itemDisplayName(itemId)}`,
+            description: `在告示上请人${commType === "gather" ? "采集" : "运送"}${itemDisplayName(itemId)}。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -9107,7 +9254,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push({
         actionId: `accept-commission:${commission.id}` as ActionId,
         label: `接受委托：${posterName}的${commission.type === "gather" ? "采集" : "运送"}任务`,
-        description: `接受${posterName}发布的${commission.targetItemId}${commission.type === "gather" ? "采集" : "运送"}委托，完成后获得${commission.rewardSpiritStones}灵石。`,
+        description: `接受${posterName}发布的${itemDisplayName(commission.targetItemId)}${commission.type === "gather" ? "采集" : "运送"}，做完得${commission.rewardSpiritStones}灵石。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -9264,8 +9411,8 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (actionId === "leave-party-reserve") return;
   if (actionId === "leave-shared-expedition") return;
   if (actionId.startsWith("tend-wound:")) return;
-  if (actionId.startsWith("accept-gift:")) return;
-  if (actionId.startsWith("reject-gift:")) return;
+  if (actionId.startsWith("accept-gift:") || actionId.startsWith("accept-gift-batch:")) return;
+  if (actionId.startsWith("reject-gift:") || actionId.startsWith("reject-gift-batch:")) return;
   if (actionId.startsWith("say:")) return;
   if (actionId.startsWith("reply-line:")) return;
   if (actionId.startsWith("ask-favor:")) return;
@@ -9310,7 +9457,8 @@ function startJob(
   meta?: ActionJob["meta"],
   durationTicks?: number,
 ): ActionExecutionResult {
-  const job = createJob(world, cultivator.id, actionId, label);
+  const shown = shownJobLabel(actionId, label);
+  const job = createJob(world, cultivator.id, actionId, shown);
   if (typeof durationTicks === "number" && Number.isFinite(durationTicks) && durationTicks > 0) {
     job.remainingTicks = durationTicks;
     job.totalTicks = durationTicks;
@@ -9320,13 +9468,16 @@ function startJob(
   }
   cultivator.activeJobId = job.id;
   world.jobs[job.id] = job;
-  return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} started ${label}.`, job };
+  const summary = shown.startsWith("前往")
+    ? `${cultivator.name}动身${shown}。`
+    : `${cultivator.name}开始${shown}。`;
+  return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary, job };
 }
 function marketSell(world: WorldState, cultivator: Cultivator, itemId: ItemId, base: number, actionId: ActionId): ActionExecutionResult {
   const location = world.locations[cultivator.locationId];
   if (!location || !canTradeAtLocation(location)) throw new Error("You must be in a trading safe settlement."); if (cultivator.inventory[itemId] <= 0) throw new Error(`Item not available: ${itemId}`);
   const income = sellPrice(cultivator, base); cultivator.inventory[itemId] -= 1; cultivator.spiritStones += income;
-  return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sold 1 ${itemId} for ${income}.` };
+  return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}卖出一份${itemDisplayName(itemId)}，换了${income}灵石。` };
 }
 function executeItemImmediateAction(
   world: WorldState,
@@ -9363,7 +9514,7 @@ function executeItemImmediateAction(
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} bought 1 ${firstMissing.itemId} for ${price}.`,
+      summary: `${cultivator.name}买了一份${itemDisplayName(firstMissing.itemId)}，花了${price}灵石。`,
     };
   }
 
@@ -9393,7 +9544,7 @@ function executeItemImmediateAction(
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} bought ${binding.itemId} for ${price}.`,
+      summary: `${cultivator.name}买了一份${itemDisplayName(binding.itemId)}，花了${price}灵石。`,
     };
   }
   if (binding.operation === "sell") {
@@ -9434,8 +9585,10 @@ function executeItemImmediateAction(
     actionId,
     accepted: true,
     summary: binding.operation === "study"
-      ? `${cultivator.name} studied ${binding.itemId} and gained new insight.`
-      : `${cultivator.name} used ${binding.itemId}.`,
+      ? `${cultivator.name}研读了${itemDisplayName(binding.itemId)}。`
+      : (binding.itemId === "healing-pill" || binding.itemId === "qi-pill")
+        ? `${cultivator.name}服用了${itemDisplayName(binding.itemId)}。`
+        : `${cultivator.name}使用了${itemDisplayName(binding.itemId)}。`,
   };
 }
 const parseEquipWeaponLoadoutId = (actionId: ActionId): WeaponLoadoutId | null =>
@@ -9513,7 +9666,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} equipped weapon loadout: ${def.name}.`,
+      summary: `${cultivator.name}换上了${def.name}。`,
     };
   }
 
@@ -9532,7 +9685,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} equipped spell loadout: ${def.name}.`,
+      summary: `${cultivator.name}换上了${def.name}。`,
     };
   }
 
@@ -9563,7 +9716,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         cultivatorId: cultivator.id,
         actionId,
         accepted: true,
-        summary: `${cultivator.name} unlocked weapon loadout: ${getWeaponLoadoutDefinition(wLoadoutId)?.name ?? wLoadoutId}. Not auto-equipped.`,
+        summary: `${cultivator.name}学会了${getWeaponLoadoutDefinition(wLoadoutId)?.name ?? "这套兵器"}，还没有换上。`,
       };
     }
     if (sLoadoutId) {
@@ -9578,7 +9731,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         cultivatorId: cultivator.id,
         actionId,
         accepted: true,
-        summary: `${cultivator.name} unlocked spell loadout: ${getSpellLoadoutDefinition(sLoadoutId)?.name ?? sLoadoutId}. Not auto-equipped.`,
+        summary: `${cultivator.name}学会了${getSpellLoadoutDefinition(sLoadoutId)?.name ?? "这套法术"}，还没有换上。`,
       };
     }
     throw new Error(`Item ${unlockItemId} does not grant any loadout.`);
@@ -9588,12 +9741,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const bahuangStrategy = parseEnterBahuangStrategy(actionId);
   if (wildernessLayerId) {
     enterWildernessExpedition(world, cultivator, wildernessLayerId);
+    const placeName = wildPlaceForState(world.locations[cultivator.locationId]?.stateId)?.name
+      ?? getWildernessLayerById(world, wildernessLayerId)?.name
+      ?? "这一层荒野";
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} entered ${getWildernessLayerById(world, wildernessLayerId)?.name ?? wildernessLayerId}.`,
+      summary: `${cultivator.name}走进了${placeName}。`,
     };
   }
   if (bahuangStrategy) {
@@ -9603,7 +9759,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} entered 八荒 with ${bahuangStrategy} posture.`,
+      summary: `${cultivator.name}进了八荒，姿态是${dungeonPostureLabel(bahuangStrategy)}。`,
     };
   }
   const guixuNodeId = parseUnlockGuixuNode(actionId);
@@ -9632,17 +9788,26 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       summary: `${where}这张卡不会入门。先 GET /agent/player-sects/recruitment，再 POST /agent/player-sect-applications 报名。`,
     };
   }
-  if (
-    actionId === "open-player-sect-founding"
-    || actionId === "review-player-sect-applications"
-    || actionId === "resolve-morality-event-choice"
-  ) {
+  if (actionId === "resolve-morality-event-choice") {
+    const pending = getPendingMoralityChoice(world, cultivator.id).choice;
+    const detail = pending
+      ? `「${pending.title}」的 choiceId 是 ${pending.choiceId}。选项：${pending.options.map((option) => `${option.label}（${option.id}）`).join("，")}。`
+      : "眼前没有待选的道心岔路。";
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: false,
-      summary: "This is a generic inbox action. Use the dedicated route instead.",
+      summary: `这张卡不能提交给 /agent/act。${detail}请改走 POST /agent/events/choose。`,
+    };
+  }
+  if (actionId === "open-player-sect-founding" || actionId === "review-player-sect-applications") {
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: false,
+      summary: "这张卡不能提交给 /agent/act。宗门创办和审阅申请走各自的专用接口。",
     };
   }
   const itemResult = executeItemImmediateAction(world, cultivator, actionId, registration);
@@ -9902,7 +10067,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       `${cultivator.name}说：「${spoken}」`,
       "spoken",
     );
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} chatted up ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}和${target.name}搭了话。` };
   }
 
   // ---- Social: 传音 (Voice Transmit) ----
@@ -10338,7 +10503,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (index >= 0) {
       current.splice(index, 1);
       cultivator.preferredSkillIds = current;
-      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} unequipped ${known.name}.` };
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}卸下了${known.name}。` };
     }
     if (current.length >= SKILL_SLOT_LIMIT) {
       throw new GameplayRejection(`随身只能带${SKILL_SLOT_LIMIT}式。先卸下一式，再装这一式。`);
@@ -10350,13 +10515,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} readied ${known.name}. ${loadoutGuidanceFor(cultivator)}`,
+      summary: `${cultivator.name}装上了${known.name}。${loadoutGuidanceFor(cultivator)}`,
     };
   }
 
   if (actionId === "clear-skill-loadout") {
     cultivator.preferredSkillIds = [];
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} cleared the preferred skill loadout.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}把随身招式清空了。` };
   }
 
   if (actionId.startsWith("tend-wound:")) {
@@ -10434,7 +10599,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       }));
     }
     shareMoment(world, [cultivator, target], `${cultivator.name}说了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} said a line to ${target.name}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}对${target.name}说了一句。` };
   }
 
   if (actionId.startsWith("reply-line:")) {
@@ -10461,7 +10626,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       }));
     }
     shareMoment(world, [cultivator, target], `${cultivator.name}回了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} replied to ${target.name}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}回了${target.name}一句。` };
   }
 
   if (actionId.startsWith("spar-teach:")) {
@@ -10813,6 +10978,55 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} read ${myMessages.length} messages.` };
   }
 
+  const acceptedBatch = parseGiftBatch(actionId, "accept-gift-batch:");
+  const rejectedBatch = parseGiftBatch(actionId, "reject-gift-batch:");
+  if (acceptedBatch || rejectedBatch) {
+    const parsed = (acceptedBatch ?? rejectedBatch)!;
+    const matching = (cultivator.pendingGifts ?? []).filter(
+      (gift) => gift.fromCultivatorId === parsed.fromId && gift.itemId === parsed.itemId,
+    );
+    if (matching.length === 0) throw new Error("Gift not found.");
+    const total = matching.reduce((sum, gift) => sum + gift.count, 0);
+    const itemName = itemDisplayName(parsed.itemId);
+    const ids = new Set(matching.map((gift) => gift.messageId));
+    const sender = world.cultivators[parsed.fromId];
+    const fromName = sender?.name ?? "某人";
+    cultivator.pendingGifts = (cultivator.pendingGifts ?? []).filter((gift) => !ids.has(gift.messageId));
+    if (acceptedBatch) {
+      cultivator.inventory[parsed.itemId] = (cultivator.inventory[parsed.itemId] ?? 0) + total;
+      const forgiven = forgiveOneFavor(world, cultivator.id, parsed.fromId);
+      rememberGiftExchange(world, cultivator.id, parsed.fromId, "accepted", itemName);
+      rememberGiftExchange(world, parsed.fromId, cultivator.id, "accepted", itemName);
+      const detail = forgiven
+        ? `${cultivator.name}把${fromName}送来的${total}份${itemName}一起收下了，并勾掉了一份对方欠下的人情。`
+        : `${cultivator.name}把${fromName}送来的${total}份${itemName}一起收下了。`;
+      addMessage(world, parsed.fromId, "赠礼", "赠礼已被接受", `${cultivator.name}收下了你送来的${total}份${itemName}。`, { fromCultivatorId: cultivator.id });
+      addResourceGainLog(world, cultivator.id, "接受赠礼", detail, ["social", "gift"], [{ itemId: parsed.itemId, count: total }]);
+      pushTravelNote(cultivator, travelNote({ tick: world.tick, kind: "person", title: `收下了${fromName}的礼`, detail, locationId: cultivator.locationId, mood: "手里多了一叠东西" }));
+      if (sender) {
+        pushTravelNote(sender, travelNote({ tick: world.tick, kind: "person", title: `${cultivator.name}收下了礼`, detail, locationId: sender.locationId, mood: "东西送到了" }));
+        shiftCultivatorMood(world, sender, "gift", `${cultivator.name}把这几份礼一起收下了。`);
+      }
+      shiftCultivatorMood(world, cultivator, "gift");
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail });
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}收下了${fromName}送来的${total}份${itemName}。` };
+    }
+    if (!sender) throw new Error("Gift not found.");
+    sender.inventory[parsed.itemId] = (sender.inventory[parsed.itemId] ?? 0) + total;
+    rememberGiftExchange(world, cultivator.id, parsed.fromId, "returned", itemName);
+    rememberGiftExchange(world, parsed.fromId, cultivator.id, "returned", itemName);
+    const detail = `${cultivator.name}把${fromName}的${total}份${itemName}一起退了回去。`;
+    addMessage(world, parsed.fromId, "赠礼", "赠礼被退还", `${cultivator.name}退回了你送来的${total}份${itemName}。`, { fromCultivatorId: cultivator.id });
+    addDaoLog(world, cultivator.id, "拒绝赠礼", detail, ["social", "gift"]);
+    pushTravelNote(cultivator, travelNote({ tick: world.tick, kind: "person", title: `退回了${fromName}的礼`, detail, locationId: cultivator.locationId, mood: "东西没有留下" }));
+    pushTravelNote(sender, travelNote({ tick: world.tick, kind: "person", title: `${cultivator.name}退回了礼`, detail, locationId: sender.locationId, mood: "礼被退了回来" }));
+    addMutualGrudge(world, cultivator.id, sender.id, GRUDGE_FROM_REJECTION);
+    shiftCultivatorMood(world, sender, "rejection", `${cultivator.name}把这几份礼一起退了回来。`);
+    shiftCultivatorMood(world, cultivator, "rejection");
+    recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail });
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}把${fromName}的${total}份${itemName}退了回去。` };
+  }
+
   // ---- Social Verbs: accept-gift ----
   const acceptGiftMsgId = parseAcceptGift(actionId);
   if (acceptGiftMsgId) {
@@ -10858,7 +11072,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     shiftCultivatorMood(world, cultivator, "gift");
     recordLife(cultivator, { tick: world.tick, kind: "relationship", text: giftDetail });
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted gift of ${gift.count} ${gift.itemId} from ${fromName}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}收下了${fromName}送来的${gift.count}份${giftName}。` };
   }
 
   // ---- Social Verbs: reject-gift ----
@@ -10898,7 +11112,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addMutualGrudge(world, cultivator.id, sender.id, GRUDGE_FROM_REJECTION);
     shiftCultivatorMood(world, sender, "rejection", `${cultivator.name}把礼退了回来，心里堵着。`);
     shiftCultivatorMood(world, cultivator, "rejection", `把${fromName}的礼退了回去，话说出口，心里也不算松。`);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected gift from ${fromName}. Items returned.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}把${fromName}的${giftName}退了回去。` };
   }
 
   // ---- Social Verbs: post-commission ----
@@ -11228,9 +11442,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       travelDestination,
       `${world.tick}:${cultivator.id}:${job.id}:arrival`,
     );
-    addDaoLog(world, cultivator.id, "Travel", `${cultivator.name} traveled to ${destination.name}.`, ["travel"]);
+    addDaoLog(world, cultivator.id, "赶路", `${cultivator.name}到了${destination.name}。`, ["travel"]);
     rememberSettledMoment(world, cultivator, "travel");
-    return `${cultivator.name} arrived at ${destination.name}.`;
+    return `${cultivator.name}到了${destination.name}。`;
   }
   if (questAction?.phase === "execute" && activeQuestId) {
     const resolved = resolveActiveQuest(world, cultivator, activeQuestId, `${world.tick}:${job.id}:${activeQuestId}`);
@@ -11309,7 +11523,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.maxSpiritualPower,
     );
     rememberSettledMoment(world, cultivator, "meditate");
-    return `${cultivator.name} recovered spiritual power.`;
+    return `${cultivator.name}打坐完了，灵力回来一些。`;
   }
   if (job.actionId === "heal") {
     cultivator.qi = clamp(cultivator.qi + 45 + (registration?.healBonus ?? 0), 0, cultivator.maxQi);
@@ -11318,10 +11532,10 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.injuryTicksRemaining - 4 - Math.floor((registration?.healBonus ?? 0) / 4),
     );
     cultivator.statusEffects = cultivator.statusEffects.filter((effect) => effect.id !== "poisoned");
-    upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "sanctuary", remainingTicks: 4, intensity: 1 });
+    upsertEffect(cultivator, { id: "clear-mind", name: "心神清明", description: "调息和修炼都顺一些。", source: "sanctuary", remainingTicks: 4, intensity: 1 });
     syncWounded(cultivator);
     rememberSettledMoment(world, cultivator, "heal");
-    return `${cultivator.name} recovered from injuries.`;
+    return `${cultivator.name}把伤养了一阵。`;
   }
   if (job.actionId === "cultivate") {
     const aid = consumeCultivationAid(cultivator);
@@ -11340,7 +11554,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     rememberSettledMoment(world, cultivator, "cultivate");
     return aid
       ? `${cultivator.name}闭关时用了一份${aid.name}，修为多涨了一截。`
-      : `${cultivator.name} gained cultivation progress.`;
+      : `${cultivator.name}运功完了，修为涨了一截。`;
   }
   if (job.actionId === "residence-meditate") {
     const residence = getActiveResidence(cultivator);
@@ -11365,8 +11579,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (roll < (fallback ? 5 : 15)) {
       upsertEffect(cultivator, {
         id: "insight",
-        name: "Insight",
-        description: "Short-term bonus to cultivation and combat.",
+        name: "有所悟",
+        description: "这一阵修炼和出手都亮一点。",
         source: "residence-meditate",
         remainingTicks: 3,
         intensity: 1,
@@ -11390,7 +11604,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
     rememberSettledMoment(world, cultivator, "cultivate");
-    return `${cultivator.name} completed residence meditation.`;
+    return `${cultivator.name}在洞府里打坐完了。`;
   }
   if (job.actionId === "residence-heal") {
     const residence = getActiveResidence(cultivator);
@@ -11412,7 +11626,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       ["recovery", "residence"],
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
-    return `${cultivator.name} recovered at residence.`;
+    return `${cultivator.name}在洞府里把伤养了一阵。`;
   }
   if (job.actionId === "residence-recover-qi") {
     const residence = getActiveResidence(cultivator);
@@ -11422,8 +11636,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       cultivator.inventory["qi-pill"] -= 1;
       upsertEffect(cultivator, {
         id: "spirit-saturated",
-        name: "Spirit Saturated",
-        description: "Short-term cultivation boost.",
+        name: "灵气充盈",
+        description: "这一阵修炼更顶用。",
         source: "residence-recover-qi",
         remainingTicks: 4,
         intensity: 1,
@@ -11439,7 +11653,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       ["recovery", "residence"],
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
-    return `${cultivator.name} recovered qi at residence.`;
+    return `${cultivator.name}在洞府里把气调了回来。`;
   }
   if (
     job.actionId === "residence-breakthrough"
@@ -11479,7 +11693,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       [{ itemId: recipe.outputItemId, count: recipe.outputCount }],
     );
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
-    return `${cultivator.name} produced ${recipe.outputItemId} at residence.`;
+    return `${cultivator.name}在洞府里炼出了${ITEM_CATALOG[recipe.outputItemId]?.name ?? "这件东西"}。`;
   }
   if (job.actionId === "residence-socialize") {
     const residence = getActiveResidence(cultivator);
@@ -11494,7 +11708,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}独自整理心法与见闻。`, ["social", "residence"]);
     }
     addResidenceAmbientLog(world, cultivator, job.actionId, job.id);
-    return `${cultivator.name} socialized at residence.`;
+    return `${cultivator.name}在洞府里坐了一会儿。`;
   }
   if (job.actionId === "take-mortal-task") {
     const progressBefore = cultivator.realmProgress;
@@ -11527,8 +11741,8 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       }));
     }
     return fatigue.note
-      ? `${cultivator.name} finished a town task, but the same errand is going stale. Cultivation +${progressGain}.`
-      : `${cultivator.name} finished a town task. Cultivation +${progressGain}.`;
+      ? `${cultivator.name}把城里的差事做完了，不过同样的差事再做就腻了。修为涨了${progressGain}。`
+      : `${cultivator.name}把城里的差事做完了。修为涨了${progressGain}。`;
   }
   if (job.actionId === "take-neutral-duty") {
     const neutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -11540,9 +11754,9 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.neutralContribution += 40;
     grantSectMerit(world, cultivator, 4);
     addFactionReputation(cultivator, neutralSect.id, 8);
-    upsertEffect(cultivator, { id: "clear-mind", name: "Clear Mind", description: "Better recovery and cultivation.", source: "neutral-sect", remainingTicks: 2, intensity: 1 });
-    addDaoLog(world, cultivator.id, "Neutral Duty", `${cultivator.name} completed a duty for ${neutralSect.name}.`, ["neutral-sect", "neutral-duty"]);
-    return `${cultivator.name} finished neutral sect duty.`;
+    upsertEffect(cultivator, { id: "clear-mind", name: "心神清明", description: "调息和修炼都顺一些。", source: "neutral-sect", remainingTicks: 2, intensity: 1 });
+    addDaoLog(world, cultivator.id, "中立差事", `${cultivator.name}给${neutralSect.name}做完了一件差事。`, ["neutral-sect", "neutral-duty"]);
+    return `${cultivator.name}把${neutralSect.name}的差事做完了。`;
   }
   if (job.actionId === "take-sect-errand") {
     const sect = getCultivatorSect(world, cultivator);
@@ -11653,7 +11867,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
       syncWounded(cultivator);
     }
     rememberSettledMoment(world, cultivator, "mine");
-    return `${cultivator.name} mined stones and ore.`;
+    return `${cultivator.name}采到了灵石和矿。`;
   }
   const fallbackSearchFortuneRank = parseSearchFortuneRank(job.actionId);
   if (fallbackSearchFortuneRank !== null) {
@@ -11675,7 +11889,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:search-fortune-material`, fallbackSearchFortuneRank)] += 1;
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, fallbackSearchFortuneRank, `${world.tick}:${job.id}:loadout-source`);
     grantCultivationDrop(world, cultivator, metadata.grade, fallbackSearchFortuneRank);
-    return `${cultivator.name} searched the ruins.`;
+    return `${cultivator.name}在这层探了一遭。`;
   }
   if (job.actionId === "hunt-mine-beast" || parseChallengeGuardianRank(job.actionId) !== null) {
     throw new Error("Combat job should resolve through round runtime.");
@@ -12283,11 +12497,11 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     rememberSettledMoment(world, cultivator, "cultivate");
     if (cultivateRoll % 7 === 0) {
       upsertEffect(cultivator, { id: "insight", name: "Insight", description: "Short-term bonus to cultivation and combat.", source: "cultivation", remainingTicks: 4, intensity: 1 });
-      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Closed-Door Insight", content: "The retreat produced a sudden insight into the path ahead.", severity: "medium", tags: ["event", "retreat", "insight"] });
+      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "闭关有所得", content: `${cultivator.name}这一阵打坐，眼前亮了一下。`, severity: "medium", tags: ["event", "retreat", "insight"] });
     }
     if (cultivateRoll % 19 === 0 && !hasEffect(cultivator, "clear-mind")) {
       upsertEffect(cultivator, { id: "deviation", name: "Qi Deviation", description: "Cultivation becomes unstable and risky.", source: "cultivation", remainingTicks: 4, intensity: 1 });
-      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "Qi Deviation", content: "A forced cycle disturbed the qi flow and left a deviation behind.", severity: "high", tags: ["event", "cultivation", "deviation"] });
+      addWorldEvent(world, { cultivatorId: cultivator.id, locationId: cultivator.locationId, title: "走火入魔", content: `${cultivator.name}这一阵催得太急，气息乱了。`, severity: "high", tags: ["event", "cultivation", "deviation"] });
     }
     const aidNote = aid ? `用了一份${aid.name}。` : "";
     if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && cultivator.realmLevel >= 9) {
@@ -12295,7 +12509,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     }
     return aid
       ? `${cultivator.name}闭关时用了一份${aid.name}，修为多涨了一截。`
-      : `${cultivator.name} gained cultivation progress.`;
+      : `${cultivator.name}运功完了，修为涨了一截。`;
   }
   if (job.actionId === "take-sect-errand") {
     const summary = resolveJob(world, job);
@@ -12368,7 +12582,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       `${world.tick}:${job.id}:${cultivator.locationId}:node-search`,
       { grade: metadata.grade, rank: searchFortuneRank },
     );
-    return `${cultivator.name} searched the rank ${searchFortuneRank} ruins at ${location.name}.`;
+    return `${cultivator.name}在${location.name}探了第${searchFortuneRank}阶。`;
   }
   // ---- Wilderness PVP Combat Resolution ----
   if (combatState && job.actionId === "survey-wilderness") {
@@ -12712,7 +12926,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (leaderJobId && world.jobs[leaderJobId]) stampDungeonWake(world.jobs[leaderJobId], next);
       const title = next.beats?.[next.beats.length - 1]?.title;
       const summary = ready && title
-        ? `${cultivator.name}在地宫里选择了${title}。`
+        ? `${cultivator.name}在地宫里${title}。`
         : `${cultivator.name}把这一岔路的话放了下来。`;
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
     }
@@ -12723,8 +12937,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       stampDungeonWake(world.jobs[cultivator.activeJobId], settlement.progress);
     }
     const summary = settlement.beat
-      ? `${cultivator.name}在地宫里选择了${settlement.beat.title}。`
-      : `${cultivator.name}在地宫岔路做出了选择。`;
+      ? `${cultivator.name}在地宫里${settlement.beat.title}。`
+      : `${cultivator.name}在地宫里把这一岔路走完了。`;
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
   const sceneOptionId = parseChooseEventOption(actionId);
@@ -12790,7 +13004,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} purchased ${newResidence.name} in ${buyResidenceStateId} for ${price} spirit stones.`,
+      summary: `${cultivator.name}在${getResidenceCatalogEntry(buyResidenceStateId)?.stateName ?? "这一州"}买下了${newResidence.name}，花了${price}灵石。`,
     };
   }
   const residenceSink = performResidenceGrandeurAction(world, cultivator, actionId);
@@ -12829,7 +13043,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     };
     cultivator.productionQueue.push(entry);
     addDaoLog(world, cultivator.id, "排队生产", `将${recipe.outputItemId}加入生产队列（位置${entry.slot}）。`, ["production", "queue"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `Queued ${recipe.outputItemId} at slot ${entry.slot}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `把${ITEM_CATALOG[recipe.outputItemId]?.name ?? "这件东西"}排进了第${entry.slot + 1}炉。` };
   }
   // ---- Cancel Production ----
   if (actionId.startsWith("cancel-production:")) {
@@ -12857,7 +13071,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} accepted quest ${acceptedQuest.name}.`,
+      summary: `${cultivator.name}接下了${questFacingName(acceptedQuest)}。`,
     };
   }
   const residenceProduceRecipeId = parseResidenceOption(actionId, "residence-produce:");
@@ -13000,7 +13214,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       const quest = getActiveQuestByReadableIndex(cultivator, questAction.questType, questAction.index);
       if (!quest) throw new Error(`Active quest not found: ${questAction.questType}:${questAction.index}`);
       markQuestInProgress(cultivator, quest.id);
-      return startJob(world, cultivator, actionId as TimedActionId, `Execute quest ${quest.name}`, {
+      return startJob(world, cultivator, actionId as TimedActionId, `去做：${questFacingName(quest)}`, {
         activeQuestId: quest.id,
       });
     }
@@ -13017,7 +13231,8 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         layer,
         `${world.tick}:${cultivator.id}:${world.nextJobSequence}:survey-wilderness`,
       );
-      const surveyResult = startJob(world, cultivator, actionId as TimedActionId, `Survey ${layer.name}`, {
+      const surveyPlace = wildPlaceForState(world.locations[cultivator.locationId]?.stateId)?.name ?? "这一层";
+      const surveyResult = startJob(world, cultivator, actionId as TimedActionId, `再探${surveyPlace}`, {
         wildernessLayerId: layer.layerId,
         wildernessEventId: eventId,
       });
@@ -13109,7 +13324,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         node,
         `${world.tick}:${cultivator.id}:${world.nextJobSequence}:${exploreGuixuNodeId}:guixu`,
       );
-      return startJob(world, cultivator, actionId as TimedActionId, `Explore ${node.name}`, {
+      return startJob(world, cultivator, actionId as TimedActionId, `探${node.name}`, {
         guixuNodeId: node.nodeId,
         guixuEventId: eventId,
       });
@@ -13228,7 +13443,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
           world,
           cultivator,
           actionId as TimedActionId,
-          `Challenge guardian rank ${selectedRank}`,
+          `守第${selectedRank}关`,
           {
             dungeonGrade: metadata.grade,
             dungeonRank: selectedRank,
@@ -13252,7 +13467,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         world,
         cultivator,
         actionId as TimedActionId,
-        `${searchFortuneRank ? "Search ruins" : "Challenge guardian"} rank ${selectedRank}`,
+        `${searchFortuneRank ? "探宝" : "守关"}：第${selectedRank}阶`,
         {
           dungeonGrade: metadata.grade,
           dungeonRank: selectedRank,
@@ -13298,7 +13513,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       if (!meetsTaskTitleRequirement(cultivator.sectTitle, taskTpl.minTitle)) {
         throw new Error(`Sect task requires title ${taskTpl.minTitle}; current title: ${cultivator.sectTitle}.`);
       }
-      return startJob(world, cultivator, actionId as TimedActionId, `sect-task:${taskTpl.nameCn}`, undefined, taskTpl.durationTicks);
+      return startJob(world, cultivator, actionId as TimedActionId, `宗门差事：${taskTpl.nameCn}`, undefined, taskTpl.durationTicks);
     }
     if (actionId === "take-neutral-duty") {
       const neutralSect = getCultivatorNeutralSect(world, cultivator);
@@ -13661,8 +13876,8 @@ export function resolveMoralityChoice(
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    title: `[choice] ${choice.title}`,
-    content: `${cultivator.name} chose ${option.label}. ${option.summary}`,
+    title: eventTitle("choice", choice.title),
+    content: `${cultivator.name}选了${option.label}。${option.summary}`,
     severity: "medium",
     tags: ["event-pool", "morality-choice", option.moralityDelta >= 0 ? "positive" : "negative"],
   });
@@ -13673,7 +13888,7 @@ export function resolveMoralityChoice(
     optionId: option.id,
     moralityScore: morality.moralityScore,
     moralityAlignment: morality.moralityAlignment,
-    summary: `${cultivator.name} resolved ${choice.title} by choosing ${option.label}.`,
+    summary: `${cultivator.name}在「${choice.title}」上选了${option.label}。`,
   };
 }
 

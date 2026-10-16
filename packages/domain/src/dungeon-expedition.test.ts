@@ -27,6 +27,7 @@ test("dungeon actions expose managed expeditions and rank yield hints to agents"
   const dungeonState = (state as { dungeon?: { rankYieldHints?: Array<{
     rank: number;
     primaryMaterial: string;
+    primaryMaterialName?: string;
     estimatedExpeditionYieldByPolicy: Record<string, { min: number; max: number }>;
     notableSecondaryDrops: string[];
   }> } | null }).dungeon;
@@ -53,6 +54,7 @@ test("dungeon actions expose managed expeditions and rank yield hints to agents"
   assert.ok(Array.isArray(dungeonState.rankYieldHints));
   assert.deepEqual(dungeonState.rankYieldHints?.[0]?.rank, 1);
   assert.equal(dungeonState.rankYieldHints?.[0]?.primaryMaterial, "cloud-heart-grass");
+  assert.equal(dungeonState.rankYieldHints?.[0]?.primaryMaterialName, "云心草");
   assert.ok((dungeonState.rankYieldHints?.[0]?.estimatedExpeditionYieldByPolicy?.balanced?.min ?? 0) > 0);
   assert.ok(dungeonState.rankYieldHints?.[0]?.notableSecondaryDrops.includes("ruin-fragment"));
 });
@@ -161,7 +163,9 @@ test("an expedition report keeps item ids in state and Chinese names in the summ
     primaryMaterial: "cloud-heart-grass",
   });
   assert.equal(report.primaryMaterial.itemId, "cloud-heart-grass");
+  assert.equal(report.primaryMaterial.itemName, "云心草");
   assert.equal(report.secondaryDrops["ruin-fragment"], 1);
+  assert.equal(report.secondaryDropCards?.find((card) => card.itemId === "ruin-fragment")?.itemName, "残碑碎片");
   assert.equal(report.returnLocationId, "yangzhou:main-city");
   assert.match(report.summary, /2份云心草/);
   assert.match(report.summary, /1份残碑碎片/);
@@ -420,6 +424,8 @@ test("a conservative rank-1 run still offers a mid-run choice and a named pack",
       assert.ok(choices.includes("dungeon-wake-decision:take-pouch"));
       assert.equal(hint?.defaultOptionId, "aid-wounded");
       assert.match(wake?.context ?? "", /水囊|袋子/);
+      assert.ok((wake?.options.length ?? 0) >= 3);
+      assert.ok(wake?.options.some((option) => option.optionId === "aid-wounded" && option.label.length > 0));
     }
     const rounds = world.dungeonExpeditions[CULTIVATOR_ID]?.combatRounds ?? [];
     if (rounds.some((round) => /石刀客/.test(round.enemyName))) sawPack = true;

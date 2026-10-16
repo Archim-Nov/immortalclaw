@@ -56,8 +56,8 @@ export async function buildAuthenticatedAgentActions(options: {
     if (applications.applications.length > 0) {
       genericActions.push({
         actionId: "review-player-sect-applications",
-        label: "Review player sect applications",
-        description: "Open the sect application queue and process pending applicants.",
+        label: "入门申请待审（不要提交给 /agent/act）",
+        description: "有人在等你审入门申请。这张卡不要提交给 /agent/act，去看宗门申请的专用接口。",
         durationTicks: 0,
         kind: "immediate",
       });
@@ -66,11 +66,13 @@ export async function buildAuthenticatedAgentActions(options: {
     // Non-reviewers simply do not receive the generic review todo.
   }
 
-  if (getPendingMoralityChoice(snapshot, agent.selectedCultivatorId).choice) {
+  const pendingMorality = getPendingMoralityChoice(snapshot, agent.selectedCultivatorId).choice;
+  if (pendingMorality) {
+    const options = pendingMorality.options.map((option) => `${option.label}（${option.id}）`).join("，");
     genericActions.push({
       actionId: "resolve-morality-event-choice",
-      label: "Resolve morality event choice",
-      description: "Open the pending crossroads event and choose how to act.",
+      label: "道心岔路待选（不要提交给 /agent/act）",
+      description: `「${pendingMorality.title}」还停在眼前。choiceId 是 ${pendingMorality.choiceId}。选项：${options}。用 POST /agent/events/choose，带上 choiceId 和 optionId。不要把这张卡提交给 /agent/act。`,
       durationTicks: 0,
       kind: "immediate",
     });

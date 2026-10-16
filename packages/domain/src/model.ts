@@ -410,15 +410,17 @@ export interface ActiveQuest {
   type: string;
   category: QuestCategory;
   boardIndex: number;
-  name: string;
-  description: string;
-  durationTicks: number;
-  reward: QuestReward;
-  failurePenalty: QuestPenalty;
-  successRate: number;
-  acceptedAtTick: number;
-  status: "accepted" | "in-progress";
-}
+    name: string;
+    /** Chinese board name. Older saves omit it and the board template is used instead. */
+    nameCn?: string;
+    description: string;
+    durationTicks: number;
+    reward: QuestReward;
+    failurePenalty: QuestPenalty;
+    successRate: number;
+    acceptedAtTick: number;
+    status: "accepted" | "in-progress";
+  }
 
 export interface QuestBoard {
   locationId: string;
@@ -807,8 +809,12 @@ export interface DungeonYieldEstimate {
 export interface DungeonRankYieldHint {
   rank: DungeonRank;
   primaryMaterial: ItemId;
+  /** Catalog name for primaryMaterial. The id stays for scripts. */
+  primaryMaterialName?: string;
   estimatedExpeditionYieldByPolicy: Record<DungeonExpeditionPolicy, DungeonYieldEstimate>;
   notableSecondaryDrops: ItemId[];
+  /** Same drops as notableSecondaryDrops, with the catalog name beside each id. */
+  notableSecondaryDropCards?: Array<{ itemId: ItemId; itemName: string }>;
   /** Named place. 甲级 has a mystery, 乙级 has one per band, and 丙级 ranks 7–9 have 旧驿石廊. Earlier 丙级 omits it. */
   mysteryName?: string;
   mysteryLine?: string;
@@ -979,9 +985,12 @@ export interface DungeonExpeditionReport {
   stepsResolved: number;
   primaryMaterial: {
     itemId: ItemId;
+    itemName?: string;
     count: number;
   };
   secondaryDrops: Partial<Record<ItemId, number>>;
+  /** Same counts as secondaryDrops, with a catalog name an agent can show. */
+  secondaryDropCards?: Array<{ itemId: ItemId; itemName: string; count: number }>;
   spiritStoneGain: number;
   realmProgressGain: number;
   unlockedNextRank: boolean;
@@ -1505,6 +1514,8 @@ export type ImmediateActionId =
   | `grudge-challenge:${string}`
   | `accept-gift:${string}`
   | `reject-gift:${string}`
+  | `accept-gift-batch:${string}`
+  | `reject-gift-batch:${string}`
   | `post-commission:${CommissionType}:${string}`
   | `accept-commission:${string}`
   | `answer-help:${string}`
@@ -2861,6 +2872,8 @@ export interface CultivatorStateView {
     realmProgress: number;
     status: "idle" | "busy" | "injured";
     location: string;
+    /** Same place as location, as the id scripts already use elsewhere. */
+    locationId: string;
     spiritStones: number;
     qi: number;
     maxQi: number;

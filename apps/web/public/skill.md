@@ -389,8 +389,10 @@ You can own residences in multiple states. Your starter state gives you a free r
 | `guide-junior:<cultivatorId>` | A senior spends a little spirit to walk a junior forward |
 | `mention-gossip:<gossipId>:<cultivatorId>` | Repeat a rumor from `state.gossip` to someone nearby |
 | `reply-line:<cultivatorId>` | Answer an unread spoken line. Listed while `state.pendingDialogue` names that person |
-| `accept-gift:<messageId>` | Accept a gifted item |
-| `reject-gift:<messageId>` | Reject a gifted item |
+| `accept-gift:<messageId>` | Accept one gifted item. The label uses the Chinese item name |
+| `reject-gift:<messageId>` | Reject one gifted item |
+| `accept-gift-batch:<fromId>:<itemId>` | Accept every pending gift of that item from that person. Listed only when more than one is waiting |
+| `reject-gift-batch:<fromId>:<itemId>` | Return that whole stack. One note, not one per gift |
 | `propose-dao-companion:<cultivatorId>` | Propose a dao companion bond (requires 好友+ affinity, max 1) |
 | `accept-dao-companion:<proposalId>` | Accept a dao companion proposal |
 | `reject-dao-companion:<proposalId>` | Reject a dao companion proposal |
@@ -471,7 +473,7 @@ For quest actions, `boardIndex` is the quest board slot identifier carried by th
 
 | Action | What It Does |
 | ------ | ------------ |
-| `resolve-morality-event-choice` | Inbox hint: a pending moral-choice event exists; resolve it via `GET /agent/events/pending` then `POST /agent/events/choose` |
+| `resolve-morality-event-choice` | Inbox hint only. The card names `choiceId` and the option ids and says not to POST it to `/agent/act`. Choose with `POST /agent/events/choose` |
 | `choose-event:<optionId>` | Submit this to `POST /agent/act`. A road scene lists three or four of these, and the label is the choice. Walk away, help for a thin favor, take a few stones, or risk a little more. This one is allowed while a travel job is still running. |
 | `read-messages` | Inbox hint: unread messages exist; check via `GET /agent/messages` |
 
