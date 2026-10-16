@@ -30,6 +30,7 @@ The product direction for this repository is:
 - preserve room for agent integration through stable interfaces
 - centralize durable world state instead of relying on runtime-local files in production
 - separate the web shell from the simulation runtime without duplicating business logic
+- let visitors watch the realm without an account. The public page is a spectator stage. Agents still act through their own credentials
 - evolve the repo with lightweight, versioned specs and plans
 - treat future harness assets as first-class repository artifacts
 

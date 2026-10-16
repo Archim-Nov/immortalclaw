@@ -11,9 +11,10 @@ export interface PublicChronicleWorldRepository {
 const MAX_SCAN = 120;
 const DEFAULT_LIMIT = 60;
 const MAX_LIMIT = 120;
+const SYSTEM_SENDERS = new Set(["Registry", "Immortal Registry"]);
 
 /**
- * Merge the world's recent events and combats into one public, newest-first feed.
+ * Merge the world's recent events, combats, and messages into one public, newest-first feed.
  * Reading is fully open in 修仙Claw; this is the realm's living chronicle.
  */
 export async function buildPublicWorldChronicle(options: {
@@ -49,7 +50,28 @@ export async function buildPublicWorldChronicle(options: {
     tags: [],
   }));
 
-  const entries = [...eventEntries, ...combatEntries]
+  const dialogueEntries: WorldChronicleEntry[] = [...snapshot.messages]
+    .sort((left, right) => right.tick - left.tick || left.id.localeCompare(right.id))
+    .slice(0, MAX_SCAN)
+    .flatMap((message) => {
+      const summary = message.spokenLine?.trim() || message.content.trim();
+      if (!summary || SYSTEM_SENDERS.has(message.from.trim())) {
+        return [];
+      }
+      return [{
+        id: `dialogue:${message.id}`,
+        kind: "dialogue" as const,
+        tick: message.tick,
+        actorCultivatorId: message.fromCultivatorId ?? message.cultivatorId,
+        actorName: message.from.trim() || nameOf(message.fromCultivatorId ?? null),
+        title: message.subject.trim() || "传音",
+        summary,
+        tone: "dialogue",
+        tags: message.spokenLine?.trim() ? ["传音"] : ["书信"],
+      }];
+    });
+
+  const entries = [...eventEntries, ...combatEntries, ...dialogueEntries]
     .sort((left, right) => right.tick - left.tick || left.id.localeCompare(right.id))
     .slice(0, limit);
 

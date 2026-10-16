@@ -8,11 +8,15 @@ const localeButtons: Locale[] = ["en", "zh-CN"];
 export function AppShell() {
   const location = useLocation();
   const { locale, setLocale, t } = useI18n();
-  const isPremiumLanding = location.pathname === "/" || isPremiumControlPath(location.pathname);
+  const isSpectator =
+    location.pathname === "/" ||
+    location.pathname === "/watch" ||
+    location.pathname.startsWith("/stat/");
+  const isPremiumLanding = isPremiumControlPath(location.pathname);
 
   return (
     <div className={`app-shell${isPremiumLanding ? " is-premium-landing" : ""}`}>
-      {!isPremiumLanding && (
+      {!isPremiumLanding && !isSpectator && (
         <div className="app-shell-toolbar">
           <div className="app-shell-locale-switcher" aria-label="Language" role="group">
             <span className="app-shell-locale-label">{t("app.language")}</span>
