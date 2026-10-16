@@ -428,8 +428,8 @@ export function upgradeQuote(residence: Residence): ResidenceUpgradeView {
   const slotCount = fixtureSlotCount(nextGrandeur);
   const endless = nextGrandeur > 5;
   const line = endless
-    ? `洞天还能再拓。下一重是${tierName}，要${price}灵石，没有顶。位子会变成${slotCount}个。用 upgrade-residence。`
-    : `下一阶是${tierName}，要${price}灵石。位子从${fixtureSlotCount(residenceGrandeur(residence))}个变成${slotCount}个。用 upgrade-residence。`;
+    ? `洞天还能再拓。下一重是${tierName}，要${price}灵石，没有顶。位子会变成${slotCount}个。`
+    : `下一阶是${tierName}，要${price}灵石。位子从${fixtureSlotCount(residenceGrandeur(residence))}个变成${slotCount}个。`;
   return {
     actionId: "upgrade-residence",
     nextGrandeur,

@@ -43,8 +43,8 @@ export async function buildAuthenticatedAgentActions(options: {
         actionId: "open-player-sect-recruitment",
         label: "玩家宗门在收人",
         description: joinListed
-          ? "行动里若有 join-sect，那就是眼前这家玩家宗门的直接入门，不是 join-neutral-sect。这张卡本身不要提交给 /agent/act。"
-          : "本州有玩家自建的宗门在收人。这不是中立门派，没有 join-neutral-sect。先 GET /agent/player-sects/recruitment 看名单，再 POST /agent/player-sect-applications 报名。不要把这张卡提交给 /agent/act。",
+          ? "行动里另有一张入门卡，那就是眼前这家玩家宗门的直接入门。这张卡本身交上去不会入门。"
+          : "本州有玩家自建的宗门在收人。到据点或本州主城报名。这张卡交上去不会入门。",
         durationTicks: 0,
         kind: "immediate",
       });
@@ -56,8 +56,8 @@ export async function buildAuthenticatedAgentActions(options: {
     if (applications.applications.length > 0) {
       genericActions.push({
         actionId: "review-player-sect-applications",
-        label: "入门申请待审（不要提交给 /agent/act）",
-        description: "有人在等你审入门申请。这张卡不要提交给 /agent/act，去看宗门申请的专用接口。",
+        label: "入门申请待审",
+        description: "有人在等你审入门申请。这张卡交上去不会审完，到宗门申请那边去看。",
         durationTicks: 0,
         kind: "immediate",
       });

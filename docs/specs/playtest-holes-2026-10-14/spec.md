@@ -17,7 +17,7 @@ A city duel also expired after 3 ticks, often before the other agent polled `acc
 ## Goals
 
 - A player-sect outpost tells the agent, in Chinese, that it is not a neutral sect and how to apply.
-- A neutral outpost travel card names `join-neutral-sect:<sectId>`.
+- A neutral outpost travel card says, in Chinese, that it is a 中立山门 and that you can join once you arrive. It does not name the action id.
 - A gift during 嫌隙 does not raise affinity and is written into the digest as 剑拔弩张. The other person can still accept or reject it. A gift during 宿怨 stays in the giver's inventory.
 - `refuse-gift` stays listed while the other person is nearby, including after chat-up.
 - `skill.md` and the mirrored agent guides describe the live sect path.
@@ -31,7 +31,7 @@ A city duel also expired after 3 ticks, often before the other agent polled `acc
 
 ## User-Visible Behavior
 
-Travel to a neutral sect-outpost says it is a 中立山门 and names `join-neutral-sect:<id>`. Travel to a player-sect outpost says 玩家宗门 and says there is no `join-neutral-sect`. Standing there with no base quest shows a Chinese card that points at `GET /agent/player-sects/recruitment` and `POST /agent/player-sect-applications`. Posting `open-player-sect-recruitment` returns that same explanation and does not join. After one base quest, when alignment matches, `join-sect` is the direct join and its description still says this is not a neutral sect.
+Travel to a neutral sect-outpost says it is a 中立山门 and that you can join once you arrive. Travel to a player-sect outpost says 玩家宗门 and that the sect is player-founded, then tells you to apply at the outpost or the state main city. Standing there with no base quest shows that same Chinese card. These descriptions do not name action ids or HTTP routes. Posting `open-player-sect-recruitment` returns that explanation and does not join. After one base quest, when alignment matches, `join-sect` is the direct join and its description still says this is a player-founded sect.
 
 Sending `gift-item` during 嫌隙 still creates a pending gift, but affinity does not rise and both digests can say 剑拔弩张. Sending one during 宿怨 is a refusal: the item stays, nothing is pending, and the digest can say 礼没收下. `refuse-gift` remains on the action list.
 
@@ -40,7 +40,7 @@ Sending `gift-item` during 嫌隙 still creates a pending gift, but affinity doe
 ## Acceptance Criteria
 
 - At `yangzhou:sect-outpost:天南散修盟`, actions do not include `join-neutral-sect`, and the standing card says the sect is player-founded.
-- The travel card from 广津城 to 听潮阁据点 names `join-neutral-sect:ting-chao-ge`.
+- The travel card from 广津城 to 听潮阁据点 says it is a 中立山门. The description does not contain `join-neutral-sect` or `/agent/`.
 - A gift at 嫌隙 leaves affinity unchanged, still offers the item for acceptance, and the digest says 剑拔弩张. A gift at 宿怨 leaves the item in the giver's inventory, and the digest says 礼没收下.
 - After chat-up with that person, `refuse-gift` is still listed.
 - The challenger's actions include `await-pvp-challenge` with 6 ticks remaining until the duel is answered.

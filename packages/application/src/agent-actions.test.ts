@@ -151,3 +151,77 @@ test("buildAuthenticatedAgentActions does not append generic inbox actions durin
     ["abort-dungeon-expedition"],
   );
 });
+
+test("player-sect recruitment hint stays in Chinese without action ids or routes", async () => {
+  const world = createSeedWorld();
+  const seedCultivatorId = Object.keys(world.cultivators)[0];
+  if (!seedCultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+  world.cultivators["cultivator-9"] = {
+    ...world.cultivators[seedCultivatorId]!,
+    id: "cultivator-9",
+    sectId: null,
+    neutralSectId: null,
+    pendingMoralityChoiceId: null,
+    locationId: "qingzhou:main-city",
+  };
+  world.sects["qing-yun-sect"] = {
+    id: "qing-yun-sect",
+    name: "青云宗",
+    alignment: "正道",
+    stateId: "qingzhou",
+    founderCultivatorId: "cultivator-9",
+    treasury: 0,
+    memberIds: [],
+    spiritVeins: [],
+    headquarters: "qingzhou:sect-outpost:qing-yun-sect",
+    titleSlots: [],
+    titleUpdateInterval: 2880,
+    lastTitleUpdateTick: 0,
+    admissionPolicy: {
+      minimumRealmLevel: 1,
+      allowedMotiveBuckets: ["dao-truth"],
+    },
+    admissionPolicyUpdatedAtTick: 0,
+  };
+
+  const readWorld = async () => world;
+  const plain = await buildAuthenticatedAgentActions({
+    world: {
+      async listAvailableActions() {
+        return [];
+      },
+      readWorld,
+    },
+    agent: createAgentProfile(),
+  });
+  const hinted = plain.actions.find((action) => action.actionId === "open-player-sect-recruitment");
+  assert.ok(hinted);
+  assert.match(hinted.description, /报名/);
+  assert.equal(hinted.description.includes("join-neutral-sect"), false);
+  assert.equal(hinted.description.includes("join-sect"), false);
+  assert.equal(hinted.description.includes("/agent/"), false);
+  assert.equal(hinted.description.includes("open-player-sect-recruitment"), false);
+
+  const withJoin = await buildAuthenticatedAgentActions({
+    world: {
+      async listAvailableActions() {
+        return [{
+          actionId: "join-sect",
+          label: "入门：青云宗（玩家宗门）",
+          description: "可以直接入门。",
+          durationTicks: 0,
+          kind: "immediate",
+        }];
+      },
+      readWorld,
+    },
+    agent: createAgentProfile(),
+  });
+  const direct = withJoin.actions.find((action) => action.actionId === "open-player-sect-recruitment");
+  assert.ok(direct);
+  assert.match(direct.description, /直接入门/);
+  assert.equal(direct.description.includes("join-sect"), false);
+  assert.equal(direct.description.includes("/agent/"), false);
+});

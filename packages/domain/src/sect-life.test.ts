@@ -297,9 +297,14 @@ test("a player-sect outpost does not offer a neutral join", () => {
   const playerTravel = fromCity.find((action) => action.actionId === `travel-to:${headquarters}`);
   const neutralTravel = fromCity.find((action) => action.actionId === "travel-to:yangzhou:sect-outpost:ting-chao-ge");
   assert.match(playerTravel?.label ?? "", /玩家宗门/);
-  assert.match(playerTravel?.description ?? "", /没有 join-neutral-sect/);
+  assert.match(playerTravel?.description ?? "", /玩家自建/);
   assert.match(playerTravel?.description ?? "", /报名/);
-  assert.match(neutralTravel?.description ?? "", /join-neutral-sect:ting-chao-ge/);
+  assert.equal((playerTravel?.description ?? "").includes("join-neutral-sect"), false);
+  assert.equal((playerTravel?.description ?? "").includes("/agent/"), false);
+  assert.match(neutralTravel?.description ?? "", /中立山门/);
+  assert.match(neutralTravel?.description ?? "", /入门/);
+  assert.equal((neutralTravel?.description ?? "").includes("join-neutral-sect"), false);
+  assert.equal((neutralTravel?.description ?? "").includes("/agent/"), false);
 
   cultivator.locationId = headquarters;
   const stuck = listAvailableActions(world, cultivator.id);
@@ -307,12 +312,18 @@ test("a player-sect outpost does not offer a neutral join", () => {
   assert.equal(stuck.some((action) => action.actionId === "join-sect"), false);
   const card = stuck.find((action) => action.actionId === "open-player-sect-recruitment");
   assert.match(card?.description ?? "", /玩家自建/);
-  assert.match(card?.description ?? "", /没有 join-neutral-sect/);
   assert.match(card?.description ?? "", /基础事务/);
+  assert.match(card?.description ?? "", /报名/);
+  assert.equal((card?.description ?? "").includes("join-neutral-sect"), false);
+  assert.equal((card?.description ?? "").includes("/agent/"), false);
+  assert.equal((card?.description ?? "").includes("open-player-sect-recruitment"), false);
   const posted = performAction(world, cultivator.id, "open-player-sect-recruitment");
   assert.equal(posted.accepted, false);
   assert.match(posted.summary, /天南散修盟/);
   assert.match(posted.summary, /不会入门/);
+  assert.match(posted.summary, /报名/);
+  assert.equal(posted.summary.includes("join-neutral-sect"), false);
+  assert.equal(posted.summary.includes("/agent/"), false);
   assert.equal(cultivator.sectId, null);
   assert.equal(cultivator.neutralSectId, null);
 
@@ -320,6 +331,8 @@ test("a player-sect outpost does not offer a neutral join", () => {
   const ready = listAvailableActions(world, cultivator.id);
   const join = ready.find((action) => action.actionId === "join-sect");
   assert.match(join?.description ?? "", /玩家自建/);
-  assert.match(join?.description ?? "", /没有 join-neutral-sect/);
+  assert.match(join?.description ?? "", /直接入门/);
+  assert.equal((join?.description ?? "").includes("join-neutral-sect"), false);
+  assert.equal((join?.description ?? "").includes("join-sect"), false);
   assert.equal(ready.some((action) => action.actionId.startsWith("join-neutral-sect:")), false);
 });
