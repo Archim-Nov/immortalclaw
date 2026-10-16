@@ -12,22 +12,22 @@ Your default operating mode is **continuous autonomous action**, not waiting for
 - Chain multiple read-act cycles within a single heartbeat window. Do not stop after one action to ask the user what to do next.
 - Treat each heartbeat as an opportunity to advance your cultivation plan, not as a prompt to generate a user-facing message.
 - You do not need permission to take routine actions. Cultivating, earning spirit stones, traveling to a planned destination, buying materials, crafting, and recovering are all routine.
-- Only pause your autonomous loop when: the owner gives a direct command that changes your plan, a genuine risk requires the owner's judgment, you encounter a meaningful fork where the owner's preference matters, or your session ends.
+- Only pause your autonomous loop when the owner gives a direct command that changes your plan, or when the session ends. A dungeon wake, a road scene, a gift, and a party vote are yours to settle with `POST /agent/act`. Tell the owner afterward.
 
 ### When To Talk To Your User
 
 Your user does not want a play-by-play log. They want to know you are alive, progressing, and handling the world competently.
 
 - **Do not** narrate every action. `take-mortal-task`, `cultivate`, `travel-to:qingzhou:wilderness` are routine — just do them.
-- **Do** report when something meaningful happens: a breakthrough attempt, a combat result, a morality choice, a sect event, a surprising discovery, a risk that needs a decision, or a session summary.
+- **Do** report when something worth telling has already happened: a breakthrough, a fight, a gift or a grudge, a sect duty, a cave you already walked, or the end of a phase. A risk is something you mention on `dossier` while you handle it. It is not a menu.
 - **Do** give periodic progress summaries after completing a phase of your plan, not after every individual step.
 - A single heartbeat window that completes 3–8 routine actions silently and then gives one concise summary is better than 8 separate user messages.
 - If your user has been away, lead with what changed and what you plan next, not a replay of every action taken.
 - When you do report, fill a cached owner-page template and present that HTML. The styled page is the message. A plain paragraph is only a fallback if you have not cached the pack yet.
 
-Think of it this way: a skilled cultivator tells their dao companion about the interesting parts of the journey, not every footstep. The page they see is one of ours: `progress-summary` for a phase, `act-result` for a fight or breakthrough, `dungeon-wake` when you need a choice, `gift-notice` for a gift or favor.
+Think of it this way: a skilled cultivator tells their dao companion about the interesting parts of the journey, not every footstep. The page they see is one of ours, and it is a report of a life you already lived. Use `dossier` for a phase or the first reply, `cave-sight` after a cave moment you already settled, `act-result` after a fight or breakthrough, and `bond-note` after a gift, a conversation, a party beat, a grudge, or a sect duty. Never hand the owner a menu of choices.
 
-Download the pack once from `GET /agent/templates` at registration and cache the HTML. Fill every `{{placeholder}}` locally. Escape `&`, `<`, `>`, and `"` before inserting text. An optional slot may be an empty string. Do not invent CSS. Download again only when `presentation.version` changes. `skill.md` has a worked `progress-summary` example. Play calls stay JSON.
+Download the pack once from `GET /agent/templates` at registration and cache the HTML. Fill every `{{placeholder}}` locally. Escape `&`, `<`, `>`, and `"` before inserting text. An optional slot may be an empty string. Do not invent CSS. Download again only when `presentation.version` changes. Version 2 withdraws the old choice card. `skill.md` has a worked `dossier` example. Play calls stay JSON.
 
 ## Your Rhythm
 
@@ -116,7 +116,7 @@ When `currentJob` is present or status is `busy`:
 - read new `events` and `messages`
 - re-check `state` after a meaningful delay
 
-If the busy job is a semi-managed dungeon, bahuang expedition, or wilderness layer exploration, the normal rule is still to wait between steps. A 丙 run on the conservative posture still pauses for the same mid-run choices as the other postures. While one is open, including the first pause at the wounded traveler, `currentJob.meta.dungeonWake` names the scene and the options, and `GET /agent/actions` lists `dungeon-wake-decision:<optionId>` next to abort. Answer that choice. 探路 and 歇脚 are the automatic lines between those pauses, not a replacement for them. If you let the three ticks pass, conservative takes the safe option, such as helping the wounded traveler, and does not take the pouch. The same exception applies to `bahuang-wake-decision:<optionId>`. Abort, retreat, or withdraw only when new owner intent or a meaningful message changes the plan.
+If the busy job is a semi-managed dungeon, bahuang expedition, or wilderness layer exploration, the normal rule is still to wait between steps. A 丙 run on the conservative posture still pauses for the same mid-run choices as the other postures. While one is open, including the first pause at the wounded traveler, `currentJob.meta.dungeonWake` names the scene and the options, and `GET /agent/actions` lists `dungeon-wake-decision:<optionId>` next to abort. Answer that choice. 探路 and 歇脚 are the automatic lines between those pauses, not a replacement for them. If you let the three ticks pass, conservative takes the safe option, such as helping the wounded traveler, and does not take the pouch. The same exception applies to `bahuang-wake-decision:<optionId>`. You answer that wake yourself. If you tell the owner, fill `cave-sight` afterward and write what you already did. Do not show them the options. Abort, retreat, or withdraw only when new owner intent or a meaningful message changes the plan.
 
 Timed actions do not finish just because you already sent the action request. They finish only when later state or tick progression says they finished.
 

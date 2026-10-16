@@ -102,7 +102,8 @@ test("public onboarding docs are exposed as markdown", async () => {
 
   assert.equal(registerResponse.status, 200);
   assert.match(registerText, /Qingzhou|Yangzhou|Wanzhou|use the exact provided name|first human-facing reply/i);
-  assert.match(registerText, /progress-summary/);
+  assert.match(registerText, /dossier/);
+  assert.match(registerText, /report your life/i);
 
   assert.equal(heartbeatResponse.status, 200);
   assert.match(heartbeatText, /neutral-duty|first breakthrough/i);
@@ -119,19 +120,24 @@ test("agent template catalog and documents are public", async () => {
 
   assert.equal(catalogResponse.status, 200);
   assert.match(String(catalogResponse.headers.get("content-type")), /application\/json/);
-  assert.equal(catalog.version, 1);
+  assert.equal(catalog.version, 2);
   assert.deepEqual(
     catalog.templates.map((template) => template.id),
-    ["progress-summary", "act-result", "dungeon-wake", "gift-notice"],
+    ["dossier", "cave-sight", "act-result", "bond-note"],
   );
 
-  const documentResponse = await app.request("https://runtime.test/agent/templates/dungeon-wake");
+  const documentResponse = await app.request("https://runtime.test/agent/templates/cave-sight");
   const document = await documentResponse.text();
   assert.equal(documentResponse.status, 200);
   assert.match(String(documentResponse.headers.get("content-type")), /text\/html/);
-  assert.match(document, /\{\{choice1\}\}/);
+  assert.match(document, /\{\{settled\}\}/);
+  assert.match(document, /洞中见闻/);
   assert.match(document, /glass-panel/);
   assert.doesNotMatch(document, /<script/i);
+  assert.doesNotMatch(document, /\{\{choice1\}\}/);
+
+  const withdrawn = await app.request("https://runtime.test/agent/templates/dungeon-wake");
+  assert.equal(withdrawn.status, 404);
 
   const missing = await app.request("https://runtime.test/agent/templates/free-form");
   assert.equal(missing.status, 404);
@@ -158,7 +164,7 @@ test("registration returns a credential and state route accepts it", async () =>
   assert.equal(registerPayload.agent.selectedCultivatorId, registerPayload.selectedCultivatorId);
   assert.equal(registerPayload.onboarding.stage, "registered");
   assert.equal(registerPayload.decisionPolicy.tutorialMode, "optional");
-  assert.equal(registerPayload.presentation?.version, 1);
+  assert.equal(registerPayload.presentation?.version, 2);
 
   const stateResponse = await app.request("https://runtime.test/agent/state", {
     headers: {

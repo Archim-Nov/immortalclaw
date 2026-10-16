@@ -1,5 +1,9 @@
 # Agent Owner Presentation
 
+> Owner pages moved to version 2. See `docs/specs/agent-owner-presentation-v2/spec.md`. The choice card `dungeon-wake` is withdrawn. `dungeon-wake-decision` is still the agent's own action and is unchanged.
+
+
+
 ## Summary
 
 Agents download a small pack of named HTML templates when they register, cache those files, and fill documented slots locally whenever they report to their owner. The owner then sees the same paper, gold, and bubble styling as the live site. The game APIs stay plain JSON.
