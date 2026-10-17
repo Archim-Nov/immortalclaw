@@ -1007,6 +1007,13 @@ function playerItemName(itemId: string): string {
   return "一件东西";
 }
 
+function broughtClause(primaryName: string, primaryCount: number, sideLoot: string | null): string {
+  if (primaryCount > 0 && sideLoot) return `带回${primaryCount}份${primaryName}，旁支${sideLoot}`;
+  if (primaryCount > 0) return `带回${primaryCount}份${primaryName}，没有显眼的旁支`;
+  if (sideLoot) return `带回${sideLoot}`;
+  return "没有带回显眼的灵材";
+}
+
 function summarizeSecondaryDrops(drops: Partial<Record<ItemId, number>>): string | null {
   const topDrops = (Object.entries(drops) as Array<[ItemId, number | undefined]>)
     .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
@@ -1457,9 +1464,10 @@ export function createDungeonExpeditionReport(input: {
   }
   const place = input.returnPlaceName?.trim() || "能歇脚的地方";
   const sideLoot = summarizeSecondaryDrops(secondaryDrops);
+  const brought = broughtClause(playerItemName(input.primaryMaterial), input.progress.primaryMaterialCount, sideLoot);
   const summary = [
     `地宫${outcomePhrase(input.outcome)}${input.progress.grade}级第${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
-    `带回${input.progress.primaryMaterialCount}份${playerItemName(input.primaryMaterial)}，${sideLoot ? `旁支${sideLoot}` : "没有显眼的旁支"}，灵石${input.progress.spiritStoneGain}枚，${input.realmProgressCapped ? "修为已经满了，再涨要等破境" : `修为涨了${input.progress.realmProgressGain}`}。`,
+    `${brought}，灵石${input.progress.spiritStoneGain}枚，${input.realmProgressCapped ? "修为已经满了，再涨要等破境" : `修为涨了${input.progress.realmProgressGain}`}。`,
     `气血耗去${input.progress.qiSpent ?? 0}，灵力耗去${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石${input.progress.stonesLost}枚。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,

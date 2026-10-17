@@ -448,8 +448,10 @@ test("a border raid feuds even when nobody is standing on the camp", () => {
   assert.equal(link?.grudgeArc, "嫌隙");
   assert.match((cultivator.lifeLog ?? []).map((event) => event.text).join(""), /没站在脉上/);
   assert.match((cultivator.lifeLog ?? []).map((event) => event.text).join(""), /木青/);
-  assert.match(life.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "", /边衅/);
-  assert.match(life.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "", /苍木谷/);
+  const feudLine = life.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "";
+  assert.match(feudLine, /边衅已经结下/);
+  assert.match(feudLine, /苍木谷还记着这座边寨/);
+  assert.doesNotMatch(feudLine, /苍木谷边寨/);
   assert.match((rival.lifeLog ?? []).map((event) => event.text).join(""), /嫌隙|山门失守/);
 });
 
@@ -476,7 +478,10 @@ test("an empty defending sect still leaves a border feud and a later probe", () 
   assert.equal(camp.ownerId, "ting-chao-ge");
   const taken = getCultivatorState(world, cultivator.id);
   assert.match((cultivator.lifeLog ?? []).map((event) => event.text).join(""), /没有弟子在场/);
-  assert.match(taken.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "", /边衅/);
+  const emptyFeud = taken.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "";
+  assert.match(emptyFeud, /边衅已经结下/);
+  assert.match(emptyFeud, /这座边寨/);
+  assert.doesNotMatch(emptyFeud, /苍木谷边寨/);
   assert.match(taken.sectLife?.daily ?? "", /边衅/);
   assert.equal(taken.socialLinks.every((link) => link.grudge === 0), true);
 

@@ -1061,6 +1061,11 @@ function rememberBorderGrievance(
   };
 }
 
+function feudPlace(rivalName: string, veinName: string): string {
+  if (veinName.startsWith(rivalName) && veinName.includes("边寨")) return "这座边寨";
+  return veinName;
+}
+
 function borderFeudViews(world: WorldState, member: Membership): SectLifeView["borderFeuds"][number][] {
   return Object.values(world.spiritVeins ?? {}).flatMap((vein) => {
     const grievance = vein.borderGrievance;
@@ -1070,7 +1075,7 @@ function borderFeudViews(world: WorldState, member: Membership): SectLifeView["b
     if (!viewerIsAggrieved && !viewerIsAttacker) return [];
     const owns = vein.ownerKind === member.kind && vein.ownerId === member.record.id;
     const line = viewerIsAttacker && owns
-      ? `${grievance.aggrievedName}还记着${vein.name}。边衅已经结下。过了冷却，他们会来探一次。`
+      ? `${grievance.aggrievedName}还记着${feudPlace(grievance.aggrievedName, vein.name)}。边衅已经结下。过了冷却，他们会来探一次。`
       : viewerIsAttacker
         ? `${grievance.aggrievedName}记下了这次对${vein.name}的突袭。边衅已经结下。`
         : owns

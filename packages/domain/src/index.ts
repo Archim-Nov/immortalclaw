@@ -134,3 +134,4 @@ export {
   hasDaoCompanion,
   getCultivatorsAtLocation,
 } from "./social.js";
+export { actionFailureBody } from "./gameplay-error.js";

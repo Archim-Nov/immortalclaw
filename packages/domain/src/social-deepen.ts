@@ -323,6 +323,19 @@ function action(actionId: AvailableAction["actionId"], label: string, descriptio
   return { actionId, label, description, durationTicks: 0, kind: "immediate" };
 }
 
+function noteDistinguisher(note: PersonalNote, openNotes: readonly PersonalNote[]): string {
+  const peers = openNotes.filter((other) => other.fromId === note.fromId);
+  if (peers.length < 2) return "";
+  const clip = (line: string) => line.replace(/\s+/gu, "").slice(0, 6);
+  const excerpt = clip(note.line);
+  const ordered = [...peers].sort((left, right) => left.tick - right.tick || left.id.localeCompare(right.id));
+  const index = Math.max(1, ordered.findIndex((row) => row.id === note.id) + 1);
+  const shared = excerpt.length > 0 && peers.some((other) => other.id !== note.id && clip(other.line) === excerpt);
+  if (excerpt && !shared) return `·「${excerpt}」`;
+  if (excerpt) return `·第${index}条「${excerpt}」`;
+  return `·第${index}条`;
+}
+
 export function listSocialDeepenActions(world: WorldState, cultivator: Cultivator): AvailableAction[] {
   ensureMaps(world);
   const actions: AvailableAction[] = [];
@@ -401,12 +414,16 @@ export function listSocialDeepenActions(world: WorldState, cultivator: Cultivato
     }
   }
 
+  const openNotes = Object.values(world.personalNotes ?? {}).filter(
+    (note) => note.toId === cultivator.id && (note.replies ?? []).length === 0,
+  );
   for (const note of Object.values(world.personalNotes ?? {})) {
     if (note.toId === cultivator.id && (note.replies ?? []).length === 0) {
       const fromName = personName(world, note.fromId);
+      const mark = noteDistinguisher(note, openNotes);
       actions.push(
-        action(`read-note:${note.id}`, `看字条：${fromName}`, `${fromName}留了字条：「${note.line}」先看过，也可以回一句。`),
-        action(`reply-note:${note.id}`, `回字条：${fromName}`, `回${fromName}的字条，最多四十字。人不在眼前也能回。不另外写，就代回一句。`),
+        action(`read-note:${note.id}`, `看字条：${fromName}${mark}`, `${fromName}留了字条：「${note.line}」先看过，也可以回一句。`),
+        action(`reply-note:${note.id}`, `回字条：${fromName}${mark}`, `回${fromName}的字条，最多四十字。人不在眼前也能回。不另外写，就代回一句。`),
       );
     }
     if (note.toId === null && note.locationId === cultivator.locationId && note.fromId !== cultivator.id && !(note.replies ?? []).some((reply) => reply.fromId === cultivator.id)) {
