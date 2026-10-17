@@ -6,6 +6,7 @@
  * node is empty. The vein then keeps a border grievance either way.
  */
 
+import { aboveSpiritGatherItem } from "./above-spirit.js";
 import { GEOGRAPHY_REGISTRY } from "./geography-registry.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import { GRUDGE_FROM_DUEL, noteWound, recordLife } from "./inner-life.js";
@@ -90,6 +91,27 @@ const ITEM_NAME: Partial<Record<ItemId, string>> = {
   "divine-embryo-dew": "神胎露",
   "divine-transformation-seal": "化神金章",
   "spirit-nourish-dust": "神纹尘",
+  "void-grain-sand": "虚纹砂",
+  "empty-silk": "空丝",
+  "rift-boundary-stone": "裂界石",
+  "void-altar-seal": "炼虚金印",
+  "void-imprint-dew": "虚空印露",
+  "shattered-array-banner": "碎虚阵旗",
+  "void-nourish-mist": "虚纹雾",
+  "twin-soul-ash": "双魂灰",
+  "joined-dao-jade": "合道玉",
+  "heaven-man-thread": "天人丝",
+  "unity-rite-slip": "合道仪札",
+  "twin-lamp-oil": "双魂灯油",
+  "heaven-man-token": "天人合符",
+  "unity-nourish-dew": "合道露",
+  "kalpa-pillar-shard": "劫柱屑",
+  "great-vehicle-ash": "大乘灰",
+  "wind-feather": "渡风羽",
+  "heaven-pillar-core": "天劫柱芯",
+  "kalpa-platform-dust": "劫台尘",
+  "wind-crossing-sail": "乘风帆",
+  "mahayana-nourish-ash": "乘风灰",
 };
 
 const BAND_SENTENCE: Record<SpiritVeinBand, string> = {
@@ -97,7 +119,7 @@ const BAND_SENTENCE: Record<SpiritVeinBand, string> = {
   foundation: "这一脉出筑基用的定基灵珀和御风凝晶，隔一阵也会出九转凝丹砂。",
   core: "这一脉出金丹用的流霞丹英、龙曜灵晶，还有闭关用的丹霞露。",
   nascent: "这一脉出元婴用的婴火莲、元胎玉、魂灯芯、养婴露、固婴砂、九转紫金髓，还有闭关用的养魂砂。",
-  spirit: "这一脉出化神用的神念晶、天魂丝、神纹石、破婴神莲、神胎露、化神金章，还有闭关用的神纹尘。",
+  spirit: "这一脉出化神用的神念晶、天魂丝、神纹石、破婴神莲、神胎露、化神金章，还有闭关用的神纹尘。化神后期以后再来收，会按来人的境界，在这一份之外再分出炼虚、合体或大乘的灵材。",
 };
 
 interface PostDef {
@@ -1258,7 +1280,14 @@ export function resolveSectTimed(world: WorldState, cultivator: Cultivator, acti
     if (!itemId) return `${cultivator.name}在${vein.name}转了一圈，这一趟没收到。脉还是空的。`;
     giveItem(cultivator, itemId);
     const name = ITEM_NAME[itemId] ?? itemId;
-    const detail = `${cultivator.name}从${vein.name}收了一份${name}。`;
+    const extraId = vein.band === "spirit"
+      ? aboveSpiritGatherItem(cultivator.realmLevel, `${world.tick}:${cultivator.id}:${vein.id}`)
+      : null;
+    if (extraId) giveItem(cultivator, extraId);
+    const extraName = extraId ? (ITEM_NAME[extraId] ?? extraId) : "";
+    const detail = extraId
+      ? `${cultivator.name}从${vein.name}收了一份${name}。这一境又分出一份${extraName}。`
+      : `${cultivator.name}从${vein.name}收了一份${name}。`;
     note(world, cultivator, `收下${name}`, detail, "手里多了一份灵材");
     return detail;
   }

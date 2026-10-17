@@ -358,6 +358,15 @@ export const BREAKTHROUGH_GROWTH_TABLE: readonly BreakthroughGrowthEntry[] = [
   { slot: 12, category: "major", mainAttributeTotal: 220, fiveElementTotal: 22, percentageBonus: 10 },
   { slot: 13, category: "minor", mainAttributeTotal: 110, fiveElementTotal: 11, percentageBonus: 4 },
   { slot: 14, category: "minor", mainAttributeTotal: 110, fiveElementTotal: 11, percentageBonus: 4 },
+  { slot: 15, category: "major", mainAttributeTotal: 280, fiveElementTotal: 28, percentageBonus: 12 },
+  { slot: 16, category: "minor", mainAttributeTotal: 140, fiveElementTotal: 14, percentageBonus: 5 },
+  { slot: 17, category: "minor", mainAttributeTotal: 140, fiveElementTotal: 14, percentageBonus: 5 },
+  { slot: 18, category: "major", mainAttributeTotal: 340, fiveElementTotal: 34, percentageBonus: 14 },
+  { slot: 19, category: "minor", mainAttributeTotal: 170, fiveElementTotal: 17, percentageBonus: 6 },
+  { slot: 20, category: "minor", mainAttributeTotal: 170, fiveElementTotal: 17, percentageBonus: 6 },
+  { slot: 21, category: "major", mainAttributeTotal: 420, fiveElementTotal: 42, percentageBonus: 16 },
+  { slot: 22, category: "minor", mainAttributeTotal: 200, fiveElementTotal: 20, percentageBonus: 7 },
+  { slot: 23, category: "minor", mainAttributeTotal: 200, fiveElementTotal: 20, percentageBonus: 7 },
 ];
 
 /**

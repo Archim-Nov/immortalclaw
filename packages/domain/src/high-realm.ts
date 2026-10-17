@@ -1,3 +1,4 @@
+import { aboveSpiritResourceLine } from "./above-spirit.js";
 import type { DungeonGrade, ItemId } from "./model.js";
 
 /**
@@ -100,8 +101,16 @@ export function cultivationDropForRank(grade: DungeonGrade, rank: number): ItemI
   return mysteryForRank(grade, rank)?.cultivationItemId ?? null;
 }
 
+const LATER_AIDS = [
+  { minLevel: 22, itemId: "mahayana-nourish-ash" as const, name: "乘风灰", bonus: 28 },
+  { minLevel: 19, itemId: "unity-nourish-dew" as const, name: "合道露", bonus: 24 },
+  { minLevel: 16, itemId: "void-nourish-mist" as const, name: "虚纹雾", bonus: 22 },
+];
+
 export function cultivationAidForLevel(realmLevel: number): { itemId: ItemId; name: string; bonus: number } | null {
   const level = Math.max(1, Math.floor(realmLevel));
+  const later = LATER_AIDS.find((aid) => level >= aid.minLevel);
+  if (later) return later;
   const band = level >= 13 ? "化神" : level >= 10 ? "元婴" : level >= 7 ? "金丹" : null;
   if (!band) return null;
   const mystery = MYSTERY_REALMS.find((realm) => realm.band === band);
@@ -116,11 +125,8 @@ export function cultivationAidForLevel(realmLevel: number): { itemId: ItemId; na
 export function resourceGoals(realmLevel: number): string[] {
   const level = Math.max(1, Math.floor(realmLevel));
   if (level < 7) return [];
-  if (level >= 15) {
-    return [
-      "化神后期没有更高的境界。甲级七到九层的神纹天隙仍会掉神纹尘，也能掉化神兵器和功法的锻材。这一阶坊市不卖。",
-    ];
-  }
+  const above = aboveSpiritResourceLine(level);
+  if (above) return [above];
   if (level >= 12) {
     return [
       "化神的破境灵材和闭关用的神纹尘，都在甲级七到九层的神纹天隙。得到元婴后期才进得去。手里有神纹尘，闭关会用上一份，修为涨得快一点。没有也能照常闭关。",

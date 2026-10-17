@@ -12,7 +12,7 @@ interface DungeonEventContext {
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const REALM_ORDER: Record<Cultivator["realm"], number> = { 炼气: 0, 筑基: 1, 金丹: 2, 元婴: 3, 化神: 4 };
+const REALM_ORDER: Record<Cultivator["realm"], number> = { 炼气: 0, 筑基: 1, 金丹: 2, 元婴: 3, 化神: 4, 炼虚: 5, 合体: 6, 大乘: 7 };
 
 const hashString = (input: string) =>
   Array.from(input).reduce((acc, ch) => Math.imul(acc ^ ch.charCodeAt(0), 16777619), 2166136261) >>> 0;

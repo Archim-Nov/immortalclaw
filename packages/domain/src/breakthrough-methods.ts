@@ -1,3 +1,4 @@
+import { aboveMethodId, aboveQuietStep, aboveSpiritNarrative } from "./above-spirit.js";
 import type { BreakthroughMethodId } from "./model.js";
 
 /**
@@ -20,6 +21,8 @@ export interface BreakthroughMethodNarrative {
 
 export function breakthroughMethodIdForLevel(realmLevel: number): BreakthroughMethodId | null {
   const level = Math.floor(realmLevel);
+  const above = aboveMethodId(level);
+  if (above) return above;
   if (level < 1 || level > 14) return null;
   if (level <= 6) return "residence";
   if (level <= 8) return "core-rite";
@@ -36,6 +39,8 @@ export function breakthroughMethodNarrative(input: {
   successRate: number | null;
   category: "minor" | "major" | null;
 }): BreakthroughMethodNarrative | null {
+  const above = aboveSpiritNarrative(input.realmLevel, input.successRate);
+  if (above) return above;
   const id = breakthroughMethodIdForLevel(input.realmLevel);
   if (!id) return null;
   const rate = input.successRate ?? (input.realmLevel === 9 ? 40 : input.realmLevel === 12 ? 30 : 0);
@@ -149,10 +154,12 @@ export function breakthroughMethodNarrative(input: {
 
 export function quietMethodStep(realmLevel: number): string | null {
   const level = Math.max(1, Math.floor(realmLevel));
-  if (level < 9) return null;
-  if (level >= 15) {
-    return "化神后期是眼下这条梯子的顶。甲级地宫七层到九层仍是这一档的去处，兵器和功法也停在化神。";
+  if (level >= 24) {
+    return "大乘后期是眼下这条梯子的顶。凉州和雷州的灵脉仍会分出乘风灰。兵器和功法也停在化神。";
   }
+  const above = aboveQuietStep(level);
+  if (above) return above;
+  if (level < 9) return null;
   if (level === 14) {
     return "化神中期要到荒野或甲级地宫门口守神台。化神金章仍在神纹天隙。一个人守会挂一点伤，有人在旁边看着就稳。这一阶会成。";
   }

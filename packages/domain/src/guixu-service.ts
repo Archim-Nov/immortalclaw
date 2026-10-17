@@ -17,6 +17,9 @@ const REALM_ORDER: Record<string, number> = {
   "金丹": 2,
   "元婴": 3,
   "化神": 4,
+  "炼虚": 5,
+  "合体": 6,
+  "大乘": 7,
 };
 
 function hashString(input: string): number {

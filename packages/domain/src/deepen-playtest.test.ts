@@ -158,11 +158,15 @@ test("mid qi condensation gains progress in the city, and repeating the errand p
   assert.match(getCultivatorState(world, CULTIVATOR_ID).travelogue.notes.map((note) => note.detail).join("\n"), /收益开始变淡|跑腿/);
 });
 
-test("realm ladder keeps levels 1-9 and opens 元婴 and 化神 above them", () => {
+test("realm ladder keeps levels 1-9 and opens 元婴 through 大乘 above them", () => {
   assert.equal(realmStageForLevel(2), "炼气");
   assert.equal(realmStageForLevel(9), "金丹");
   assert.equal(realmStageForLevel(10), "元婴");
   assert.equal(realmStageForLevel(13), "化神");
+  assert.equal(realmStageForLevel(16), "炼虚");
+  assert.equal(realmStageForLevel(19), "合体");
+  assert.equal(realmStageForLevel(22), "大乘");
+  assert.equal(realmStageForLevel(24), "大乘");
 
   const world = createSeedWorld();
   const cultivator = world.cultivators[CULTIVATOR_ID]!;
@@ -176,6 +180,14 @@ test("realm ladder keeps levels 1-9 and opens 元婴 and 化神 above them", () 
 
   cultivator.realmLevel = 15;
   cultivator.realm = "化神";
+  const voidStep = getCultivatorState(world, CULTIVATOR_ID).breakthrough;
+  assert.equal(voidStep?.targetLevel, 16);
+  assert.equal(voidStep?.targetRealm, "炼虚");
+  assert.equal(voidStep?.method, "void-altar");
+  assert.equal(voidStep?.methodName, "炼虚台");
+
+  cultivator.realmLevel = 24;
+  cultivator.realm = "大乘";
   assert.equal(getCultivatorState(world, CULTIVATOR_ID).breakthrough, null);
-  assert.equal(getCultivatorState(world, CULTIVATOR_ID).cultivator.realm, "化神");
+  assert.equal(getCultivatorState(world, CULTIVATOR_ID).cultivator.realm, "大乘");
 });

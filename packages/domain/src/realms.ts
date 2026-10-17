@@ -5,10 +5,13 @@ const REALM_FOUNDATION: RealmStage = "筑基";
 const REALM_CORE: RealmStage = "金丹";
 const REALM_NASCENT: RealmStage = "元婴";
 const REALM_SPIRIT: RealmStage = "化神";
+const REALM_VOID: RealmStage = "炼虚";
+const REALM_UNITY: RealmStage = "合体";
+const REALM_MAHAYANA: RealmStage = "大乘";
 const REALM_PHASES: readonly RealmPhase[] = ["前期", "中期", "后期"];
 
-/** Levels 1–9 keep their old stages. 10–15 extend the ladder. */
-export const MAX_REALM_LEVEL = 15;
+/** Levels 1–9 keep their old stages. 10–24 extend the ladder through 大乘. */
+export const MAX_REALM_LEVEL = 24;
 
 export const REALM_STAGE_ORDER: Record<RealmStage, number> = {
   炼气: 0,
@@ -16,6 +19,9 @@ export const REALM_STAGE_ORDER: Record<RealmStage, number> = {
   金丹: 2,
   元婴: 3,
   化神: 4,
+  炼虚: 5,
+  合体: 6,
+  大乘: 7,
 };
 
 function normalizeRealmLevel(level: number): number {
@@ -39,7 +45,16 @@ export function realmStageForLevel(level: number): RealmStage {
   if (normalizedLevel <= 12) {
     return REALM_NASCENT;
   }
-  return REALM_SPIRIT;
+  if (normalizedLevel <= 15) {
+    return REALM_SPIRIT;
+  }
+  if (normalizedLevel <= 18) {
+    return REALM_VOID;
+  }
+  if (normalizedLevel <= 21) {
+    return REALM_UNITY;
+  }
+  return REALM_MAHAYANA;
 }
 
 export function realmPhaseForLevel(level: number): RealmPhase {
