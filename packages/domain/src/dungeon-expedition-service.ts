@@ -899,8 +899,16 @@ export function chooseDungeonExpeditionStepKind(input: {
   stepIndex: number;
   worldTick: number;
   cultivatorId: string;
+  grade?: DungeonGrade;
 }): "search" | "guardian" {
   if (input.highestClearedRank >= input.targetRank || input.targetRank < input.frontierRank) {
+    return "search";
+  }
+
+  // An uncleared 甲 floor wounds on the guardian and the run then leaves.
+  // The first three steps stay on the road so a side choice and the step-3 wake
+  // are already on the table before that fight.
+  if (input.grade === "甲" && input.stepIndex < 3) {
     return "search";
   }
 

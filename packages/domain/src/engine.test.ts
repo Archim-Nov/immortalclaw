@@ -1570,7 +1570,7 @@ test("state.dungeon surfaces shared rank progression and realm-gated dungeon act
   const cultivator = world.cultivators["yun-zhong-he"];
   const hasExpeditionActionForRank = (rank: number) =>
     listAvailableActions(world, "yun-zhong-he").some(
-      (action) => String(action.actionId).startsWith(`start-dungeon-expedition:rank-${rank}:`),
+      (action) => String(action.actionId).startsWith(`enter-dungeon:rank-${rank}:`),
     );
 
   cultivator.locationId = "qingzhou:dungeon-c";
@@ -1599,7 +1599,10 @@ test("state.dungeon surfaces shared rank progression and realm-gated dungeon act
   assert.match(state.dungeon?.lockReason ?? "", /筑基/);
   assert.match(state.dungeon?.lockReason ?? "", /雷泽残阵/);
   assert.equal(
-    listAvailableActions(world, "yun-zhong-he").some((action) => String(action.actionId).startsWith("start-dungeon-expedition:rank-")),
+    listAvailableActions(world, "yun-zhong-he").some((action) => (
+      String(action.actionId).startsWith("enter-dungeon:")
+      || String(action.actionId).startsWith("start-dungeon-expedition:")
+    )),
     false,
   );
 });

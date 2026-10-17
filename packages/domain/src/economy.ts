@@ -71,6 +71,7 @@ export function computeActivityContext(cultivator: Cultivator, world: WorldState
   if (
     job.actionId.startsWith("search-fortune:rank-")
     || job.actionId.startsWith("start-dungeon-expedition:rank-")
+    || job.actionId.startsWith("enter-dungeon:rank-")
   ) {
     return "exploring";
   }
