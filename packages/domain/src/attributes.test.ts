@@ -275,9 +275,9 @@ test("computeEffectiveFiveElementScores — adds growth to baseline", () => {
   assert.strictEqual(result.wood, 50);
 });
 
-test("BREAKTHROUGH_GROWTH_TABLE has 14 entries for slots 1-14", () => {
-  assert.strictEqual(BREAKTHROUGH_GROWTH_TABLE.length, 14);
-  for (let i = 0; i < 14; i++) {
+test("BREAKTHROUGH_GROWTH_TABLE has 23 entries for slots 1-23", () => {
+  assert.strictEqual(BREAKTHROUGH_GROWTH_TABLE.length, 23);
+  for (let i = 0; i < 23; i++) {
     assert.strictEqual(BREAKTHROUGH_GROWTH_TABLE[i]!.slot, i + 1);
   }
 });

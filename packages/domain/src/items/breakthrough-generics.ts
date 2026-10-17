@@ -27,6 +27,15 @@ type BreakthroughGenericId = Extract<
   | "divine-thought-crystal"
   | "heaven-soul-silk"
   | "divine-pattern-stone"
+  | "void-grain-sand"
+  | "empty-silk"
+  | "rift-boundary-stone"
+  | "twin-soul-ash"
+  | "joined-dao-jade"
+  | "heaven-man-thread"
+  | "kalpa-pillar-shard"
+  | "great-vehicle-ash"
+  | "wind-feather"
 >;
 
 function genericMaterial(
@@ -36,7 +45,7 @@ function genericMaterial(
   description: string,
   descriptionEn: string,
   baseValue: number,
-  realmTag: "qi" | "foundation" | "core" | "nascent" | "spirit",
+  realmTag: "qi" | "foundation" | "core" | "nascent" | "spirit" | "void" | "unity" | "mahayana",
 ): ItemDefinition {
   return {
     id,
@@ -205,5 +214,60 @@ export const BREAKTHROUGH_GENERICS: Record<BreakthroughGenericId, ItemDefinition
     "石头上的纹路自己在走。化神之前按不住，破境和化神里的小层都用它把纹压定。",
     "The lines on the stone move on their own. Before spirit transformation they will not hold still. The breakthrough uses the stone to set them.",
     660, "spirit",
+  ),
+
+  "void-grain-sand": genericMaterial(
+    "void-grain-sand", "虚纹砂", "Void Grain Sand",
+    "砂里的纹路是空的。化神后期立炼虚台，以及炼虚里的两层，都用它把那一层空按住。凉州和雷州的灵脉，到了化神后期才会分出来。",
+    "Sand whose lines are empty. Used from the step into void refinement, and found on the spirit veins of Liangzhou and Leizhou once a cultivator has reached late spirit transformation.",
+    860, "void",
+  ),
+  "empty-silk": genericMaterial(
+    "empty-silk", "空丝", "Empty Silk",
+    "丝很轻，绕在识海里却没有着落。炼虚这一段用来把散开的空处收回来。",
+    "A light thread with nowhere to land in the sea of consciousness. Void refinement uses it to draw the empty places back.",
+    880, "void",
+  ),
+  "rift-boundary-stone": genericMaterial(
+    "rift-boundary-stone", "裂界石", "Rift Boundary Stone",
+    "石头裂着，缝里没有光。炼虚的台、印和阵都要它把那道缝压住。",
+    "The stone is split, and the crack holds no light. The altar, the seal, and the array of void refinement all use it to hold that seam.",
+    900, "void",
+  ),
+  "twin-soul-ash": genericMaterial(
+    "twin-soul-ash", "双魂灰", "Twin Soul Ash",
+    "两团灰叠在一起，分不开。炼虚后期走合道仪，以及合体里的两层，都用它把两处神识按到一处。",
+    "Two handfuls of ash that will not come apart. Used from the step into unity, and through the two minor steps inside it.",
+    1100, "unity",
+  ),
+  "joined-dao-jade": genericMaterial(
+    "joined-dao-jade", "合道玉", "Joined Dao Jade",
+    "玉是温的，里面像有两道气在并。合体这一段靠它把那两道气留在同一处。",
+    "Warm jade with two breaths running side by side. Unity uses it to keep those breaths in one place.",
+    1120, "unity",
+  ),
+  "heaven-man-thread": genericMaterial(
+    "heaven-man-thread", "天人丝", "Heaven Man Thread",
+    "丝的一头在人身上，另一头没有着落。合道、点灯、合符都用它把那一头接上。",
+    "One end of the thread stays on the person. The other end has nowhere to land until the rite, the lamp, or the token takes it.",
+    1140, "unity",
+  ),
+  "kalpa-pillar-shard": genericMaterial(
+    "kalpa-pillar-shard", "劫柱屑", "Kalpa Pillar Shard",
+    "柱上掉下来的屑，捏在手里发沉。合体后期扶天劫柱，以及大乘里的两层，都要它把劫按住。",
+    "A heavy flake from the pillar. Used from the step into the great vehicle, and through the two minor steps inside it.",
+    1360, "mahayana",
+  ),
+  "great-vehicle-ash": genericMaterial(
+    "great-vehicle-ash", "大乘灰", "Great Vehicle Ash",
+    "灰是冷的。大乘这一段用来把劫过后的那一点余火按灭。",
+    "Cold ash. The great vehicle uses it to press out the last of the kalpa fire.",
+    1380, "mahayana",
+  ),
+  "wind-feather": genericMaterial(
+    "wind-feather", "渡风羽", "Wind Crossing Feather",
+    "羽很轻，风一大就贴不住。扶柱、守台、乘风都要用它把那一阵风认出来。",
+    "A light feather that will not stay once the wind rises. The pillar, the platform, and the crossing all use it to name that wind.",
+    1400, "mahayana",
   ),
 };

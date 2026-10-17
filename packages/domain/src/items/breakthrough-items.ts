@@ -17,6 +17,15 @@ type BreakthroughSpecialId = Extract<
   | "shatter-nascent-lotus"
   | "divine-embryo-dew"
   | "divine-transformation-seal"
+  | "void-altar-seal"
+  | "void-imprint-dew"
+  | "shattered-array-banner"
+  | "unity-rite-slip"
+  | "twin-lamp-oil"
+  | "heaven-man-token"
+  | "heaven-pillar-core"
+  | "kalpa-platform-dust"
+  | "wind-crossing-sail"
 >;
 
 function specialMaterial(
@@ -26,7 +35,7 @@ function specialMaterial(
   description: string,
   descriptionEn: string,
   baseValue: number,
-  realmTag: "qi" | "foundation" | "core" | "nascent" | "spirit",
+  realmTag: "qi" | "foundation" | "core" | "nascent" | "spirit" | "void" | "unity" | "mahayana",
   categoryTag: "minor" | "major",
 ): ItemDefinition {
   return {
@@ -132,5 +141,59 @@ export const BREAKTHROUGH_ITEMS: Record<BreakthroughSpecialId, ItemDefinition> =
     "化神中期到后期压神识的金章。这一层小突破靠它把神识按住，不让纹路再散开。",
     "A seal that holds divine sense for the mid-to-late spirit-transformation step, so the pattern does not scatter again.",
     740, "spirit", "minor",
+  ),
+  "void-altar-seal": specialMaterial(
+    "void-altar-seal", "炼虚金印", "Void Altar Seal",
+    "化神后期立炼虚台时压在台心的金印。印不在，台立不起来。凉州和雷州的灵脉，到了化神后期才会分出来。坊市不卖。",
+    "The seal pressed into the heart of the void altar. Late spirit transformation needs it, and it is not sold.",
+    980, "void", "major",
+  ),
+  "void-imprint-dew": specialMaterial(
+    "void-imprint-dew", "虚空印露", "Void Imprint Dew",
+    "炼虚前期按实虚空印时用的露。印拓开以后才耗，露不在就按不实。",
+    "Dew used when the void seal is pressed shut. It is spent only on the second step.",
+    920, "void", "minor",
+  ),
+  "shattered-array-banner": specialMaterial(
+    "shattered-array-banner", "碎虚阵旗", "Shattered Array Banner",
+    "炼虚中期走碎虚阵时插在阵眼的旗。旗不在，阵走不完。",
+    "The banner set at the eye of the shattered-void array for the mid-to-late void step.",
+    940, "void", "minor",
+  ),
+  "unity-rite-slip": specialMaterial(
+    "unity-rite-slip", "合道仪札", "Unity Rite Slip",
+    "炼虚后期在宗门驻地走合道仪时展开的札。札不在，两道气并不到一处。",
+    "The slip opened during the unity rite. Without it the two breaths do not meet.",
+    1200, "unity", "major",
+  ),
+  "twin-lamp-oil": specialMaterial(
+    "twin-lamp-oil", "双魂灯油", "Twin Lamp Oil",
+    "合体前期点双魂灯时用的油。灯亮着收口才耗，灯灭了油还在。",
+    "Oil for the twin lamps. It is spent only when the lamps are sealed while still lit.",
+    1160, "unity", "minor",
+  ),
+  "heaven-man-token": specialMaterial(
+    "heaven-man-token", "天人合符", "Heaven Man Token",
+    "合体中期在宗门驻地合上的符。符不在，这一层小突破合不上。",
+    "The token joined at a sect outpost for the mid-to-late unity step.",
+    1180, "unity", "minor",
+  ),
+  "heaven-pillar-core": specialMaterial(
+    "heaven-pillar-core", "天劫柱芯", "Heaven Pillar Core",
+    "合体后期扶天劫柱时按在柱心的芯。芯不在，柱扶不住。坊市不卖。",
+    "The core pressed into the heaven pillar. Late unity needs it, and it is not sold.",
+    1480, "mahayana", "major",
+  ),
+  "kalpa-platform-dust": specialMaterial(
+    "kalpa-platform-dust", "劫台尘", "Kalpa Platform Dust",
+    "大乘前期守劫台时撒在台面上的尘。尘不在，台守不住。这一阶会成。",
+    "Dust spread on the kalpa platform. The step succeeds once the dust is there.",
+    1420, "mahayana", "minor",
+  ),
+  "wind-crossing-sail": specialMaterial(
+    "wind-crossing-sail", "乘风帆", "Wind Crossing Sail",
+    "大乘中期在荒野乘风时挂上的帆。风还在、帆也在，才渡得过去。帆在渡的那一步才耗。",
+    "The sail hung for the wind crossing. It is spent only while the wind is still up.",
+    1440, "mahayana", "minor",
   ),
 };

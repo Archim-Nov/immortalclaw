@@ -766,7 +766,32 @@ export function hydrateWorldState(
     fillResidenceSink(cultivator.residence);
     for (const residence of cultivator.residences ?? []) fillResidenceSink(residence);
 
-    for (const itemId of ["core-nourish-dew", "nascent-nourish-sand", "spirit-nourish-dust"] as const) {
+    for (const itemId of [
+      "core-nourish-dew",
+      "nascent-nourish-sand",
+      "spirit-nourish-dust",
+      "void-nourish-mist",
+      "unity-nourish-dew",
+      "mahayana-nourish-ash",
+      "void-grain-sand",
+      "empty-silk",
+      "rift-boundary-stone",
+      "void-altar-seal",
+      "void-imprint-dew",
+      "shattered-array-banner",
+      "twin-soul-ash",
+      "joined-dao-jade",
+      "heaven-man-thread",
+      "unity-rite-slip",
+      "twin-lamp-oil",
+      "heaven-man-token",
+      "kalpa-pillar-shard",
+      "great-vehicle-ash",
+      "wind-feather",
+      "heaven-pillar-core",
+      "kalpa-platform-dust",
+      "wind-crossing-sail",
+    ] as const) {
       if (cultivator.inventory[itemId] === undefined) cultivator.inventory[itemId] = 0;
     }
     cultivator.activeQuests = (cultivator.activeQuests ?? []).map((quest, index) => ({

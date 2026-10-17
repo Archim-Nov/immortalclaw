@@ -1,5 +1,7 @@
 # 破境方式按境界分开
 
+化神之后的炼虚、合体、大乘见 `docs/specs/realms-above-spirit/spec.md`。这一份仍停在化神。
+
 元婴和化神内部后来又按阶段拆开了。前期炼婴、中期守魂灯、后期渡劫；化神前期铺神纹，中期守神台。见 `docs/specs/realm-phase-rites/spec.md`。下面这份仍说明结丹仪、婴火和材料底子。
 
 ## Summary

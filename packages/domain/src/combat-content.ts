@@ -21,10 +21,10 @@ import type {
   WeaponTypeId,
 } from "./model.js";
 import { deriveSpiritRootKindId, sortedElementEntries } from "./registration-taxonomy.js";
-import { realmStageForLevel } from "./realms.js";
 
 /**
  * Realm bands already used by the ladder: 炼气 1–3, 筑基 4–6, 金丹 7–9, 元婴 10–12, 化神 13–15.
+ * 炼虚, 合体, and 大乘 stay on the 化神 weapon and manual tier.
  * Weapon tiers and spell manuals use the same five steps. The manual words are 入门, 小成, 大成, 大圆满, 化神.
  * Existing loadout titles still say 入门篇 through 秘传篇. The agent-facing rank is this ladder.
  */
@@ -53,8 +53,9 @@ export function bandForTier(tier: number) {
 }
 
 export function bandForLevel(realmLevel: number) {
-  const realm = realmStageForLevel(realmLevel);
-  return CONTENT_BANDS.find((band) => band.realm === realm) ?? CONTENT_BANDS[0]!;
+  const level = Math.max(1, Math.floor(realmLevel));
+  const matched = [...CONTENT_BANDS].reverse().find((band) => level >= band.minLevel);
+  return matched ?? CONTENT_BANDS[0]!;
 }
 
 export function tierAllowed(realmLevel: number, tier: number): boolean {

@@ -1,5 +1,7 @@
 # 金丹之后的境界
 
+化神之后的炼虚、合体、大乘见 `docs/specs/realms-above-spirit/spec.md`。这一份仍停在化神。
+
 破境的地点和顺序后来改了。材料、掉落、涨幅和失败的底子仍以这份说明为准。做法见 `docs/specs/breakthrough-methods/spec.md`。金丹后期不再是回洞府按原来的按钮，而是到宗门驻地或甲级门口走婴火淬体。元婴前期炼婴，中期才点魂灯，后期在荒野或甲级门口渡劫。化神前期铺神纹，中期守神台。见 `docs/specs/realm-phase-rites/spec.md`。
 
 ## Summary

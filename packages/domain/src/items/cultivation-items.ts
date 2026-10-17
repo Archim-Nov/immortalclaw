@@ -3,7 +3,7 @@ import { makeLocalizedText, MATERIAL_USE } from "./shared.js";
 
 type CultivationItemId = Extract<
   LegacyItemId,
-  "core-nourish-dew" | "nascent-nourish-sand" | "spirit-nourish-dust"
+  "core-nourish-dew" | "nascent-nourish-sand" | "spirit-nourish-dust" | "void-nourish-mist" | "unity-nourish-dew" | "mahayana-nourish-ash"
 >;
 
 function cultivationMaterial(
@@ -13,7 +13,7 @@ function cultivationMaterial(
   description: string,
   descriptionEn: string,
   baseValue: number,
-  realmTag: "core" | "nascent" | "spirit",
+  realmTag: "core" | "nascent" | "spirit" | "void" | "unity" | "mahayana",
 ): ItemDefinition {
   return {
     id,
@@ -56,5 +56,32 @@ export const CULTIVATION_ITEMS: Record<CultivationItemId, ItemDefinition> = {
     "Dust that holds a divine pattern still during meditation. It drops in the divine rift, 甲级 ranks 7 to 9, which opens at late nascent soul.",
     520,
     "spirit",
+  ),
+  "void-nourish-mist": cultivationMaterial(
+    "void-nourish-mist",
+    "虚纹雾",
+    "Void Nourish Mist",
+    "炼虚闭关时用来稳住那一层空的雾。凉州和雷州的灵脉，化神后期以后去收才会分出来。手里有一份，闭关就用掉，修为涨得快一点。没有也能照常闭关。",
+    "Mist that holds the empty layer still during meditation. It comes from the spirit veins of Liangzhou and Leizhou once a cultivator has reached late spirit transformation.",
+    680,
+    "void",
+  ),
+  "unity-nourish-dew": cultivationMaterial(
+    "unity-nourish-dew",
+    "合道露",
+    "Unity Nourish Dew",
+    "合体闭关时用来把两道气留在一处的露。人到了炼虚后期，同一条灵脉才会分出来。用上一份，这一次闭关涨得更多。",
+    "Dew that keeps two breaths together during meditation. The same veins yield it once a cultivator has reached late void refinement.",
+    820,
+    "unity",
+  ),
+  "mahayana-nourish-ash": cultivationMaterial(
+    "mahayana-nourish-ash",
+    "乘风灰",
+    "Mahayana Nourish Ash",
+    "大乘闭关时按住余风的灰。人到了合体后期，凉州和雷州的灵脉才会分出来。闭关用上一份，修为会多涨一截。",
+    "Ash that holds the leftover wind during meditation. The veins yield it once a cultivator has reached late unity.",
+    960,
+    "mahayana",
   ),
 };

@@ -73,6 +73,14 @@ import {
 } from "./jia-temperament.js";
 import { realmLabelForLevel, repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import {
+  abovePlaceMatches,
+  aboveRiteForAction,
+  aboveRiteForLevel,
+  aboveSpiritDefinition,
+  aboveTravelNode,
+  type AboveRite,
+} from "./above-spirit.js";
+import {
   breakthroughMethodIdForLevel,
   breakthroughMethodNarrative,
   quietMethodStep,
@@ -524,6 +532,9 @@ const REALM_ORDER = {
   金丹: 2,
   元婴: 3,
   化神: 4,
+  炼虚: 5,
+  合体: 6,
+  大乘: 7,
 } satisfies Record<Cultivator["realm"], number>;
 const LEGACY_DUNGEON_GUARDIAN_TUNING: Record<DungeonNodeType, DungeonTuning> = {
   "dungeon-c": {
@@ -4190,7 +4201,7 @@ function breakthroughDefinitionOf(cultivator: Cultivator): BreakthroughDefinitio
         specialMaterial: { itemId: "divine-transformation-seal", count: 1 },
       };
     default:
-      return null;
+      return aboveSpiritDefinition(cultivator.realmLevel);
   }
 }
 
@@ -6028,7 +6039,20 @@ function preferredMaterialAction(
     if (nearestWild) return travelActionIdOf(nearestWild);
     return preferredDungeonGuardianAction(world, cultivator, "dungeon-b");
   }
+  if (cultivator.realmLevel >= 15) {
+    const veinAction = preferredSpiritVeinAction(world, cultivator);
+    if (veinAction) return veinAction;
+  }
   return preferredDungeonGuardianAction(world, cultivator, "dungeon-a");
+}
+
+function preferredSpiritVeinAction(world: WorldState, cultivator: Cultivator): ActionId | null {
+  ensureSpiritVeins(world);
+  const veins = Object.values(world.spiritVeins ?? {}).filter((vein) => vein.band === "spirit");
+  const vein = veins.find((row) => row.stateId === "liangzhou") ?? veins[0];
+  if (!vein) return null;
+  if (cultivator.locationId === vein.locationId) return `gather-vein:${vein.id}` as ActionId;
+  return travelActionIdOf(vein.locationId) as ActionId;
 }
 
 function materialSourcesOf(
@@ -6086,7 +6110,9 @@ function materialSourcesOf(
       channel: "dungeon",
       locationHint: "dungeon-a",
       actionId: null,
-      note: realmLevel >= 12
+      note: realmLevel >= 15
+        ? "这一阶的灵材坊市不卖，甲级也不另开层。凉州或雷州的灵脉，化神后期以后去收，会在化神那一份之外再分出这一档。"
+        : realmLevel >= 12
         ? "化神的突破灵材不在坊市出售。甲级地宫七层到九层，探宝和守关都会掉。"
         : realmLevel >= 9
           ? "元婴的突破灵材不在坊市出售。甲级地宫四层往上才有，七层也出。探宝和守关都会掉。"
@@ -6165,7 +6191,8 @@ function breakthroughViewOf(
     readyByProgress: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED,
     readyByMaterials: missingItems.length === 0,
     requiresResidence: breakthroughMethodIdForLevel(cultivator.realmLevel) === "residence"
-      || breakthroughMethodIdForLevel(cultivator.realmLevel) === "soul-vigil",
+      || breakthroughMethodIdForLevel(cultivator.realmLevel) === "soul-vigil"
+      || breakthroughMethodIdForLevel(cultivator.realmLevel) === "twin-lamp",
     genericRequirements,
     specialRequirement,
     materialSources: materialSourcesOf(definition),
@@ -6239,7 +6266,7 @@ function breakthroughCompany(world: WorldState, cultivator: Cultivator): { id: s
   return other ? { id: other.id, name: other.name } : null;
 }
 
-function activeBreakthroughRite(cultivator: Cultivator, tick: number, method: "soul-vigil" | "divine-pattern") {
+function activeBreakthroughRite(cultivator: Cultivator, tick: number, method: NonNullable<Cultivator["breakthroughRite"]>["method"]) {
   const rite = cultivator.breakthroughRite;
   if (!rite || rite.method !== method || rite.untilTick < tick) return null;
   return rite;
@@ -6288,11 +6315,69 @@ function breakthroughReadyActionOf(
     if (nodeType === "wilderness" || nodeType === "dungeon-a") return "hold-divine-platform";
     return nearestPlaceAction(world, cultivator.locationId, "wilderness");
   }
+  const above = aboveRiteForLevel(cultivator.realmLevel);
+  if (above) return aboveReadyAction(world, cultivator, above, nodeType);
   if (!definition) return "meditate";
   if (nodeType === "sect-outpost") {
     return activeBreakthroughRite(cultivator, world.tick, "divine-pattern") ? "seal-divine-step" : "begin-divine-step";
   }
   return nearestPlaceAction(world, cultivator.locationId, "sect-outpost");
+}
+
+function aboveReadyAction(world: WorldState, cultivator: Cultivator, rite: AboveRite, nodeType: string): ActionId {
+  const atHome = isAtResidence(cultivator);
+  if (!abovePlaceMatches(rite.place, nodeType, atHome)) {
+    if (rite.place === "residence") return travelActionIdOf(cultivator.residence.locationId) as ActionId;
+    return nearestPlaceAction(world, cultivator.locationId, aboveTravelNode(rite.place));
+  }
+  if (rite.shape === "open-then-seal") {
+    const open = rite.method === "void-seal" || rite.method === "twin-lamp" || rite.method === "wind-crossing"
+      ? activeBreakthroughRite(cultivator, world.tick, rite.method)
+      : null;
+    return (open ? rite.actionId : rite.openActionId ?? rite.actionId) as ActionId;
+  }
+  return rite.actionId as ActionId;
+}
+
+function listAboveRiteActions(
+  world: WorldState,
+  cultivator: Cultivator,
+  definition: BreakthroughDefinition,
+  rite: AboveRite,
+  nodeType: string,
+  company: { id: string; name: string } | null,
+): AvailableAction[] {
+  if (!abovePlaceMatches(rite.place, nodeType, isAtResidence(cultivator))) return [];
+  if (rite.shape === "open-then-seal" && rite.openActionId) {
+    const open = rite.method === "void-seal" || rite.method === "twin-lamp" || rite.method === "wind-crossing"
+      ? activeBreakthroughRite(cultivator, world.tick, rite.method)
+      : null;
+    if (open) {
+      return [breakthroughCostAction(
+        definition,
+        rite.actionId as ActionId,
+        rite.label,
+        rite.description(company?.name ?? null),
+        0,
+        "immediate",
+      )];
+    }
+    return [{
+      actionId: rite.openActionId as ActionId,
+      label: rite.openLabel ?? rite.label,
+      description: rite.openDescription ?? rite.description(null),
+      durationTicks: DEFAULT_ACTION_DURATIONS[rite.openActionId] ?? rite.duration,
+      kind: "timed",
+    }];
+  }
+  return [breakthroughCostAction(
+    definition,
+    rite.actionId as ActionId,
+    rite.label,
+    rite.description(company?.name ?? null),
+    DEFAULT_ACTION_DURATIONS[rite.actionId] ?? rite.duration,
+    "timed",
+  )];
 }
 
 function breakthroughCostAction(definition: BreakthroughDefinition, actionId: ActionId, label: string, description: string, durationTicks: number, kind: "timed" | "immediate"): AvailableAction {
@@ -6410,6 +6495,8 @@ function listBreakthroughMethodActions(world: WorldState, cultivator: Cultivator
       "timed",
     )];
   }
+  const above = aboveRiteForLevel(cultivator.realmLevel);
+  if (above) return listAboveRiteActions(world, cultivator, definition, above, nodeType, company);
   if (method === "divine-pattern" && nodeType === "sect-outpost") {
     if (activeBreakthroughRite(cultivator, world.tick, "divine-pattern")) {
       const help = company
@@ -6485,12 +6572,18 @@ function startBreakthroughJob(
   );
 }
 
-function openBreakthroughRite(world: WorldState, cultivator: Cultivator, method: "soul-vigil" | "divine-pattern"): string {
+function openBreakthroughRite(
+  world: WorldState,
+  cultivator: Cultivator,
+  method: NonNullable<Cultivator["breakthroughRite"]>["method"],
+  copy?: { title: string; sentence: string },
+): string {
   cultivator.breakthroughRite = { method, stage: "open", untilTick: world.tick + 8 };
-  const sentence = method === "soul-vigil"
+  const sentence = copy?.sentence ?? (method === "soul-vigil"
     ? `${cultivator.name}在洞府里点上了魂灯。八个时辰之内收口。灯灭了就要重新点，材料还在身上。`
-    : `${cultivator.name}在宗门驻地把神纹铺开了。八个时辰之内落印。材料还在身上。`;
-  addDaoLog(world, cultivator.id, method === "soul-vigil" ? "点上魂灯" : "铺开神纹", sentence, ["breakthrough", method]);
+    : `${cultivator.name}在宗门驻地把神纹铺开了。八个时辰之内落印。材料还在身上。`);
+  const title = copy?.title ?? (method === "soul-vigil" ? "点上魂灯" : "铺开神纹");
+  addDaoLog(world, cultivator.id, title, sentence, ["breakthrough", method]);
   recordLife(cultivator, { tick: world.tick, kind: "growth", text: sentence });
   return sentence;
 }
@@ -6500,6 +6593,7 @@ function performBreakthroughMethodAction(
   cultivator: Cultivator,
   actionId: ActionId,
 ): ActionExecutionResult | null {
+  const aboveHit = aboveRiteForAction(actionId);
   const timed = actionId === "core-rite:steady"
     || actionId === "core-rite:press"
     || actionId === "infant-fire-temper"
@@ -6507,8 +6601,11 @@ function performBreakthroughMethodAction(
     || actionId === "begin-soul-vigil"
     || actionId === "face-tribulation"
     || actionId === "begin-divine-step"
-    || actionId === "hold-divine-platform";
-  const immediate = actionId === "seal-soul-vigil" || actionId === "seal-divine-step";
+    || actionId === "hold-divine-platform"
+    || Boolean(aboveHit && (aboveHit.openActionId === actionId || (aboveHit.shape === "single" && aboveHit.actionId === actionId)));
+  const immediate = actionId === "seal-soul-vigil"
+    || actionId === "seal-divine-step"
+    || Boolean(aboveHit && aboveHit.shape === "open-then-seal" && aboveHit.actionId === actionId);
   if (!timed && !immediate) return null;
   const definition = breakthroughDefinitionOf(cultivator);
   if (!definition) throw new GameplayRejection("这一阶没有下一道门槛。");
@@ -6522,6 +6619,55 @@ function performBreakthroughMethodAction(
     successRate: definition.baseSuccessRate,
     category: definition.category,
   })?.refusal;
+
+  if (aboveHit) {
+    if (method !== aboveHit.method) throw new GameplayRejection(refusal ?? "这一阶不走这个做法。");
+    if (!abovePlaceMatches(aboveHit.place, nodeType, isAtResidence(cultivator))) {
+      throw new GameplayRejection(aboveHit.wrongPlace);
+    }
+    if (aboveHit.shape === "open-then-seal" && actionId === aboveHit.openActionId) {
+      return startBreakthroughJob(world, cultivator, actionId as TimedActionId, aboveHit.openJobLabel ?? aboveHit.jobLabel, definition, company ? { companionId: company.id } : undefined);
+    }
+    if (aboveHit.shape === "open-then-seal") {
+      const riteMethod = aboveHit.method === "void-seal" || aboveHit.method === "twin-lamp" || aboveHit.method === "wind-crossing"
+        ? aboveHit.method
+        : null;
+      if (!riteMethod || !activeBreakthroughRite(cultivator, world.tick, riteMethod)) {
+        throw new GameplayRejection(cultivator.breakthroughRite ? (aboveHit.riteCold ?? "这一步已经散了。材料还在，重新来一次。") : (aboveHit.riteMissing ?? "这一步还没开始。"));
+      }
+      const named = company?.name ?? null;
+      const result = startJob(world, cultivator, "residence-breakthrough", aboveHit.jobLabel, {
+        breakthroughCategory: definition.category,
+        breakthroughTargetRealm: definition.targetRealm,
+        breakthroughTargetLevel: definition.targetLevel,
+        breakthroughMethod: aboveHit.method,
+      }, 1);
+      if (result.job) {
+        resolveResidenceBreakthrough(world, cultivator, result.job, {
+          tag: aboveHit.actionId,
+          successInjuryTicks: named ? aboveHit.successInjuryShared : aboveHit.successInjuryAlone,
+          successLife: aboveHit.successLife(cultivator.name, named),
+        });
+        cultivator.activeJobId = null;
+        delete world.jobs[result.job.id];
+      }
+      return {
+        tick: world.tick,
+        cultivatorId: cultivator.id,
+        actionId,
+        accepted: true,
+        summary: aboveHit.sealSummary?.(cultivator.name) ?? `${cultivator.name}把这一步收了。`,
+      };
+    }
+    return startBreakthroughJob(
+      world,
+      cultivator,
+      actionId as TimedActionId,
+      aboveHit.jobLabel,
+      definition,
+      company && aboveHit.companionRate > 0 ? { companionId: company.id, rateBonus: aboveHit.companionRate } : company ? { companionId: company.id } : undefined,
+    );
+  }
 
   if (actionId === "core-rite:steady") {
     if (method !== "core-rite") throw new GameplayRejection(refusal ?? "这一阶不走结丹仪。");
@@ -6640,6 +6786,34 @@ function performBreakthroughMethodAction(
 }
 
 function resolveTimedBreakthrough(world: WorldState, cultivator: Cultivator, job: ActionJob): string {
+  const above = aboveRiteForAction(job.actionId);
+  if (above && above.openActionId === job.actionId && above.shape === "open-then-seal") {
+    const definition = breakthroughDefinitionOf(cultivator);
+    if (!definition || cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED || !hasBreakthroughMaterials(cultivator, definition)) {
+      throw new Error("Breakthrough materials are missing.");
+    }
+    const method = above.method === "void-seal" || above.method === "twin-lamp" || above.method === "wind-crossing" ? above.method : "divine-pattern";
+    return openBreakthroughRite(world, cultivator, method, {
+      title: above.openLabel ?? above.label,
+      sentence: above.openSentence?.(cultivator.name) ?? `${cultivator.name}把这一步开了。八个时辰之内收口。材料还在身上。`,
+    });
+  }
+  if (above && above.shape === "single" && above.actionId === job.actionId) {
+    const companion = job.meta?.breakthroughCompanionId ? world.cultivators[job.meta.breakthroughCompanionId] : undefined;
+    const shared = Boolean(companion && companion.locationId === cultivator.locationId);
+    const company = shared ? companion?.name ?? null : null;
+    return resolveResidenceBreakthrough(world, cultivator, job, {
+      tag: above.actionId,
+      injuryTicks: shared ? above.failInjuryShared : above.failInjuryAlone,
+      deviationTicks: above.failDeviation,
+      companionId: shared ? companion?.id ?? null : null,
+      companionInjuryTicks: shared ? above.companionFailInjury : 0,
+      companionLife: companion && above.companionLife ? above.companionLife(companion.name, cultivator.name) : undefined,
+      successInjuryTicks: shared ? above.successInjuryShared : above.successInjuryAlone,
+      successLife: above.successLife(cultivator.name, company),
+      failureLife: above.failureLife(cultivator.name, company),
+    });
+  }
   if (job.actionId === "begin-soul-vigil" || job.actionId === "begin-divine-step") {
     const definition = breakthroughDefinitionOf(cultivator);
     if (!definition || cultivator.realmProgress < BREAKTHROUGH_PROGRESS_REQUIRED || !hasBreakthroughMaterials(cultivator, definition)) {
@@ -6720,6 +6894,7 @@ function resolveResidenceBreakthrough(
     successInjuryTicks?: number;
     companionId?: string | null;
     companionInjuryTicks?: number;
+    companionLife?: string;
   },
 ): string {
   const definition = breakthroughDefinitionOf(cultivator);
@@ -6803,7 +6978,7 @@ function resolveResidenceBreakthrough(
       recordLife(companion, {
         tick: world.tick,
         kind: "growth",
-        text: `${companion.name}在${cultivator.name}的天劫里分了一道雷，挂了一点伤。`,
+        text: flavor?.companionLife ?? `${companion.name}在${cultivator.name}的天劫里分了一道雷，挂了一点伤。`,
       });
     }
     recordLife(cultivator, {
@@ -6823,9 +6998,17 @@ function resolveResidenceBreakthrough(
   cultivator.qi = cultivator.maxQi;
   cultivator.spiritualPower = cultivator.maxSpiritualPower;
   cultivator.lifespan += vitalGain.lifespan;
-  const openedLateRealm = definition.category === "major" && (cultivator.realm === "元婴" || cultivator.realm === "化神");
+  const lateReputation: Partial<Record<Cultivator["realm"], number>> = {
+    元婴: 8,
+    化神: 14,
+    炼虚: 16,
+    合体: 18,
+    大乘: 20,
+  };
+  const lateRep = definition.category === "major" ? lateReputation[cultivator.realm] ?? 0 : 0;
+  const openedLateRealm = lateRep > 0;
   if (openedLateRealm) {
-    addCurrentStateReputation(cultivator, cultivator.realm === "元婴" ? 8 : 14);
+    addCurrentStateReputation(cultivator, lateRep);
   }
 
   // ---- Breakthrough Growth Package ----
@@ -6879,7 +7062,9 @@ function resolveResidenceBreakthrough(
     grantedPercentageBonus: growthEntry?.percentageBonus,
   });
   const successText = flavor?.successLife ?? (openedLateRealm
-    ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`
+    ? (cultivator.realm === "炼虚" || cultivator.realm === "合体" || cultivator.realm === "大乘"
+      ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截。兵器和功法仍停在化神。`
+      : `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`)
     : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`);
   addDaoLog(
     world,
@@ -9762,6 +9947,7 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
     || actionId === "begin-divine-step"
     || actionId === "seal-divine-step"
     || actionId === "hold-divine-platform"
+    || aboveRiteForAction(actionId)
   ) return;
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
@@ -12067,6 +12253,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     || job.actionId === "face-tribulation"
     || job.actionId === "begin-divine-step"
     || job.actionId === "hold-divine-platform"
+    || aboveRiteForAction(job.actionId)
   ) {
     return resolveTimedBreakthrough(world, cultivator, job);
   }

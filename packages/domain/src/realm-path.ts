@@ -1,3 +1,4 @@
+import { aboveSpiritOutcome, aboveSpiritWhere } from "./above-spirit.js";
 import { breakthroughMethodNarrative, quietMethodStep } from "./breakthrough-methods.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { resourceGoals } from "./high-realm.js";
@@ -78,6 +79,12 @@ export function rankBandForRealmLevel(realmLevel: number): { minRank: number; ma
 }
 
 export function vitalGainForBreakthrough(fromLevel: number): { qi: number; spirit: number; lifespan: number } {
+  if (fromLevel >= 22) return { qi: 48, spirit: 42, lifespan: 36 };
+  if (fromLevel === 21) return { qi: 96, spirit: 84, lifespan: 72 };
+  if (fromLevel >= 19) return { qi: 44, spirit: 38, lifespan: 32 };
+  if (fromLevel === 18) return { qi: 88, spirit: 76, lifespan: 64 };
+  if (fromLevel >= 16) return { qi: 40, spirit: 34, lifespan: 28 };
+  if (fromLevel === 15) return { qi: 80, spirit: 68, lifespan: 56 };
   if (fromLevel >= 13) return { qi: 32, spirit: 28, lifespan: 24 };
   if (fromLevel === 12) return { qi: 64, spirit: 56, lifespan: 48 };
   if (fromLevel >= 10) return { qi: 24, spirit: 22, lifespan: 18 };
@@ -86,7 +93,13 @@ export function vitalGainForBreakthrough(fromLevel: number): { qi: number; spiri
 }
 
 export function isRiskyLateMajor(targetRealm: RealmStage, category: "minor" | "major"): boolean {
-  return category === "major" && (targetRealm === "元婴" || targetRealm === "化神");
+  return category === "major" && (
+    targetRealm === "元婴"
+    || targetRealm === "化神"
+    || targetRealm === "炼虚"
+    || targetRealm === "合体"
+    || targetRealm === "大乘"
+  );
 }
 
 export function quietRealmStep(realmLevel: number): string | null {
@@ -94,7 +107,7 @@ export function quietRealmStep(realmLevel: number): string | null {
   if (!method) return null;
   const level = Math.max(1, Math.floor(realmLevel));
   const extra = resourceGoals(level)[0];
-  const warning = level >= 12 ? jiaFightWarning(7) : jiaFightWarning(4);
+  const warning = level >= 15 ? "" : level >= 12 ? jiaFightWarning(7) : jiaFightWarning(4);
   return `${method}${extra ?? ""}${warning}`;
 }
 
@@ -150,16 +163,20 @@ export function realmPathView(input: {
   };
   const resources = resourceGoals(level);
   if (!next) {
+    const mahayana = level >= 22;
+    const line = mahayana
+      ? "大乘后期暂时没有更高的境界。凉州和雷州的灵脉仍会分出乘风灰，兵器和功法也停在化神。"
+      : "化神后期暂时没有更高的境界。神纹天隙还能拿这一档的灵材，兵器和功法也停在化神。";
     return {
       ...base,
-      where: "甲级地宫七层到九层的神纹天隙仍是这一档。",
+      where: mahayana ? "凉州和雷州的灵脉仍会分出乘风灰。" : "甲级地宫七层到九层的神纹天隙仍是这一档。",
       risk: "没有下一道门槛。",
-      outcome: "化神后期是目前这条梯子的顶。",
+      outcome: mahayana ? "大乘后期是目前这条梯子的顶。" : "化神后期是目前这条梯子的顶。",
       catalogTier: "化神",
       method: null,
       methodName: null,
-      sequence: ["化神后期暂时没有更高的境界。神纹天隙还能拿这一档的灵材，兵器和功法也停在化神。"],
-      goals: ["化神后期暂时没有更高的境界。神纹天隙还能拿这一档的灵材，兵器和功法也停在化神。", ...resources],
+      sequence: [line],
+      goals: [line, ...resources],
       resources,
     };
   }
@@ -225,6 +242,14 @@ function lateCopy(level: number, successRate: number | null): {
   outcome: string;
   catalogTier: string;
 } {
+  if (level >= 15) {
+    return {
+      where: aboveSpiritWhere(level),
+      risk: "",
+      outcome: aboveSpiritOutcome(level),
+      catalogTier: "化神",
+    };
+  }
   if (level === 12) {
     return {
       where: `化神的灵材坊市不卖。甲级七到九层的神纹天隙，探宝和守关会掉神念晶、天魂丝、神纹石、破婴神莲，还有闭关用的神纹尘。${jiaFightWarning(7)}`,

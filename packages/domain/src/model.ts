@@ -1,4 +1,4 @@
-export type RealmStage = "炼气" | "筑基" | "金丹" | "元婴" | "化神";
+export type RealmStage = "炼气" | "筑基" | "金丹" | "元婴" | "化神" | "炼虚" | "合体" | "大乘";
 export type RealmPhase = "前期" | "中期" | "后期";
 export type GenderPresentation = "male" | "female" | "nonbinary" | "other" | "unspecified";
 export type FiveElementId = "metal" | "wood" | "water" | "fire" | "earth";
@@ -590,10 +590,25 @@ export type LegacyItemId =
   | "divine-thought-crystal"
   | "heaven-soul-silk"
   | "divine-pattern-stone"
+  // 炼虚 generic materials
+  | "void-grain-sand"
+  | "empty-silk"
+  | "rift-boundary-stone"
+  // 合体 generic materials
+  | "twin-soul-ash"
+  | "joined-dao-jade"
+  | "heaven-man-thread"
+  // 大乘 generic materials
+  | "kalpa-pillar-shard"
+  | "great-vehicle-ash"
+  | "wind-feather"
   // High-realm meditation materials. Not spent on breakthrough.
   | "core-nourish-dew"
   | "nascent-nourish-sand"
   | "spirit-nourish-dust"
+  | "void-nourish-mist"
+  | "unity-nourish-dew"
+  | "mahayana-nourish-ash"
   | "danxia-cinder"
   | "fire-poison-bead"
   | "array-shard"
@@ -621,6 +636,15 @@ export type LegacyItemId =
   | "shatter-nascent-lotus"
   | "divine-embryo-dew"
   | "divine-transformation-seal"
+  | "void-altar-seal"
+  | "void-imprint-dew"
+  | "shattered-array-banner"
+  | "unity-rite-slip"
+  | "twin-lamp-oil"
+  | "heaven-man-token"
+  | "heaven-pillar-core"
+  | "kalpa-platform-dust"
+  | "wind-crossing-sail"
   | "eight-wastes-pass"
   | "bahuang-spirit-essence"
   | "ancient-artifact"
@@ -683,6 +707,15 @@ export type TimedActionId =
   | "face-tribulation"
   | "begin-divine-step"
   | "hold-divine-platform"
+  | "raise-void-altar"
+  | "begin-void-seal"
+  | "break-void-array"
+  | "hold-unity-rite"
+  | "begin-twin-lamp"
+  | "join-heaven-token"
+  | "face-heaven-pillar"
+  | "hold-mahayana-platform"
+  | "begin-wind-crossing"
   | "residence-heal"
   | "residence-recover-qi"
   | "residence-produce"
@@ -1218,7 +1251,7 @@ export interface CultivatorDigest {
   summary: string;
   /** Present while a dungeon wake is waiting for a choice. */
   priorities?: string[];
-  /** Present from 金丹后期 on, including at 化神后期. Omitted earlier. */
+  /** Present from 金丹后期 on, including at 大乘后期. Omitted earlier. */
   nextStep?: string;
 }
 
@@ -1570,6 +1603,9 @@ export type ImmediateActionId =
   | "clear-skill-loadout"
   | "seal-soul-vigil"
   | "seal-divine-step"
+  | "seal-void-seal"
+  | "seal-twin-lamp"
+  | "seal-wind-crossing"
   | "cycle-social-page"
   | `buy-residence:${string}`
   | "upgrade-residence"
@@ -1742,10 +1778,19 @@ export type BreakthroughMethodId =
   | "soul-vigil"
   | "tribulation"
   | "divine-pattern"
-  | "divine-vigil";
+  | "divine-vigil"
+  | "void-altar"
+  | "void-seal"
+  | "void-array"
+  | "unity-rite"
+  | "twin-lamp"
+  | "heaven-token"
+  | "heaven-pillar"
+  | "mahayana-platform"
+  | "wind-crossing";
 
 export interface BreakthroughRiteState {
-  method: "soul-vigil" | "divine-pattern";
+  method: "soul-vigil" | "divine-pattern" | "void-seal" | "twin-lamp" | "wind-crossing";
   stage: "open";
   untilTick: number;
 }
@@ -2732,7 +2777,7 @@ export interface BreakthroughStateView {
   methodName?: string;
   sequence?: string[];
   help?: string;
-  rite?: { method: "soul-vigil" | "divine-pattern"; untilTick: number } | null;
+  rite?: { method: BreakthroughRiteState["method"]; untilTick: number } | null;
   // ---- Growth Preview ----
   previewMainAttributeGrowth: Record<string, number> | null;
   previewFiveElementGrowth: Record<string, number> | null;
