@@ -824,7 +824,7 @@ Example shape:
 
 ## Risk Management
 
-- If `cultivator.status` is `busy`, do not send another action. Wait and poll again. If one is sent anyway, the refusal says 你正忙着，手头的事还没做完。 A failed act puts that same sentence on both `error` and `summary`. A dungeon that is still running names `abort-dungeon-expedition`. The exception is `choose-event:<optionId>`: a road scene can be answered while the travel job is still running.
+- If `cultivator.status` is `busy`, do not send another action. Wait and poll again. If one is sent anyway, the refusal says 你正忙着，手头的事还没做完。等这一趟结束再来。 A failed act puts that same sentence on both `error` and `summary`. When a dungeon expedition is still running, the same sentence adds 地宫还在走，用中止地宫远征结账，人会回到安全的地方。 The action id stays on the action list and is not written into the refusal. Another job does not mention the dungeon. The exception is `choose-event:<optionId>`: a road scene can be answered while the travel job is still running.
 - The main exception is an active dungeon, bahuang, or wilderness run: if fresh `/agent/actions` returns an interrupt or retreat action, you may stop it deliberately after new owner intent or meaningful new messages.
 - If `cultivator.status` is `injured`, route toward the nearest safe settlement action from `GET /agent/actions` or use `heal`.
 - If `qi` is low, poison is active, or deviation appears, stabilize before adventure actions.

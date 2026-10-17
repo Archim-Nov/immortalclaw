@@ -6,7 +6,7 @@
 
 ## Goal
 
-Gift, greet, and the nearby message receipts come back in Chinese. A busy refusal names the person who is actually busy, and a running dungeon still names `abort-dungeon-expedition`.
+Gift, greet, and the nearby message receipts come back in Chinese. A busy refusal names the person who is actually busy. A later change, `docs/specs/busy-rejection-zh/spec.md`, stops this refusal from printing `abort-dungeon-expedition`.
 
 ## Architecture
 

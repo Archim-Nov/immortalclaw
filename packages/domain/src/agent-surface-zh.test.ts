@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createCultivator } from "./engine.js";
-import { GameplayRejection } from "./gameplay-error.js";
+import { actionFailureBody, GameplayRejection } from "./gameplay-error.js";
 import {
   advanceWorld,
   createSeedWorld,
@@ -486,14 +486,59 @@ test("acting while busy, or challenging someone busy, is refused in Chinese", ()
   );
 
   performAction(world, first.id, "meditate");
-  assert.throws(
+  assertBusyRejection(
     () => performAction(world, first.id, "heal"),
-    (error: unknown) => error instanceof GameplayRejection
-      && error.message.includes("你正忙着")
-      && error.message.includes("abort-dungeon-expedition")
-      && !error.message.includes("Cultivator is busy"),
+    "你正忙着，手头的事还没做完。等这一趟结束再来。",
   );
 });
+
+test("a running dungeon names the Chinese abort, and another job does not", () => {
+  const dungeonWorld = createSeedWorld();
+  const runner = dungeonWorld.cultivators[CULTIVATOR_ID]!;
+  runner.locationId = "qingzhou:dungeon-c";
+  runner.dungeonProgress["丙"].highestClearedRank = 1;
+  runner.injuryTicksRemaining = 0;
+  performAction(dungeonWorld, CULTIVATOR_ID, "enter-dungeon:rank-1:balanced" as never);
+  assert.ok(runner.activeJobId);
+  assertBusyRejection(
+    () => performAction(dungeonWorld, CULTIVATOR_ID, "heal"),
+    "你正忙着，手头的事还没做完。等这一趟结束再来。地宫还在走，用中止地宫远征结账，人会回到安全的地方。",
+  );
+
+  const dutyWorld = createSeedWorld();
+  const duty = dutyWorld.cultivators[CULTIVATOR_ID]!;
+  duty.injuryTicksRemaining = 0;
+  dutyWorld.jobs["duty-job"] = {
+    id: "duty-job",
+    cultivatorId: duty.id,
+    actionId: "post-duty",
+    label: "执事",
+    remainingTicks: 4,
+    totalTicks: 4,
+  };
+  duty.activeJobId = "duty-job";
+  assertBusyRejection(
+    () => performAction(dutyWorld, duty.id, "gather-vein:yangzhou:spirit-vein" as never),
+    "你正忙着，手头的事还没做完。等这一趟结束再来。",
+  );
+  assertBusyRejection(
+    () => performAction(dutyWorld, duty.id, "sect-chain:patrol" as never),
+    "你正忙着，手头的事还没做完。等这一趟结束再来。",
+  );
+});
+
+function assertBusyRejection(act: () => unknown, expected: string) {
+  assert.throws(act, (error: unknown) => {
+    assert.ok(error instanceof GameplayRejection);
+    const body = actionFailureBody(error);
+    assert.equal(body.error, expected);
+    assert.equal(body.summary, expected);
+    assert.equal(body.error.includes("abort-dungeon-expedition"), false);
+    assert.equal(/[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+/.test(body.error), false);
+    assert.equal(body.error.includes("Cultivator is busy"), false);
+    return true;
+  });
+}
 
 test("residence breakthrough cards stay in Chinese", () => {
   const world = createSeedWorld();
