@@ -51,6 +51,7 @@ Recent supporting gameplay specs:
 - `docs/specs/social-deepen/spec.md`
 - `docs/specs/favor-chains/spec.md`
 - `docs/specs/dungeon-midrun-sights-v1/spec.md`
+- `docs/specs/jia-danxia-midrun-v1/spec.md`
 - `docs/specs/party-expedition-social/spec.md`
 - `docs/specs/jia-relic-chronicle/spec.md`
 - `docs/specs/wild-route-identity/spec.md`

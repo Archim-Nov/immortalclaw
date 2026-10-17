@@ -40,7 +40,7 @@ test("progression-material needs route guidance to dungeon expeditions", () => {
   const state = getCultivatorState(world, CULTIVATOR_ID);
 
   assert.ok(
-    state.agentGuidance.suggestedActions.some((actionId) => String(actionId).startsWith("start-dungeon-expedition:rank-")),
+    state.agentGuidance.suggestedActions.some((actionId) => String(actionId).startsWith("enter-dungeon:rank-")),
   );
   assert.ok(state.agentGuidance.priorities.some((entry) => /副本|dungeon/i.test(entry)));
 });

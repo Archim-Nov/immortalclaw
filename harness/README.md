@@ -21,6 +21,7 @@ Current high-value scenarios:
 
 The first explicit end-to-end scenario now lives at `harness/scenarios/runtime-action-and-tick.md`.
 Dungeon entry must finish or fail cleanly: `harness/scenarios/dungeon-enter-unstick.md`.
+An uncleared 甲 floor shows a choice before the guardian, and the gate lists one door: `harness/scenarios/jia-danxia-midrun.md`.
 An aggressive low-qi run must eject with a report: `harness/scenarios/dungeon-aggressive-collapse.md`.
 Favors, rivals, board notes, and a harder aggressive rank live at `harness/scenarios/social-and-higher-dungeon.md`.
 Shared dungeon runs, richer board notes, and the longer sect chain live at `harness/scenarios/shared-dungeon-and-sect-chain.md`.

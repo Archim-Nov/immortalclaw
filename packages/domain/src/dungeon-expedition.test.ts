@@ -32,23 +32,17 @@ test("dungeon actions expose managed expeditions and rank yield hints to agents"
     notableSecondaryDrops: string[];
   }> } | null }).dungeon;
 
-  assert.ok(actions.some((action) => action.actionId === expeditionActionId(1, "conservative")));
-  assert.ok(actions.some((action) => action.actionId === expeditionActionId(1, "balanced")));
-  assert.ok(actions.some((action) => action.actionId === expeditionActionId(1, "aggressive")));
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("start-dungeon-expedition:")), false);
   assert.equal(actions.some((action) => String(action.actionId).startsWith("search-fortune:rank-")), false);
   assert.equal(actions.some((action) => String(action.actionId).startsWith("challenge-guardian:rank-")), false);
 
-  const balancedAction = actions.find((action) => action.actionId === expeditionActionId(1, "balanced"));
-  assert.ok(balancedAction);
-  assert.match(balancedAction.label, /地宫远征/);
-  assert.match(balancedAction.label, /均衡/);
-  assert.match(balancedAction.description, /云心草/);
-  assert.equal(/[a-z]+-[a-z0-9-]+/i.test(`${balancedAction.label} ${balancedAction.description}`), false);
   const enterAction = actions.find((action) => action.actionId === "enter-dungeon:rank-1:conservative");
   assert.ok(enterAction);
   assert.match(enterAction.label, /进丙级地宫第1阶/);
   assert.match(enterAction.label, /稳妥/);
   assert.match(enterAction.description, /稳妥偏守/);
+  assert.match(enterAction.description, /云心草/);
+  assert.match(enterAction.description, /三十刻/);
   assert.equal(/Enter dungeon|conservative|balanced|aggressive/i.test(`${enterAction.label} ${enterAction.description}`), false);
   const balancedEnter = actions.find((action) => action.actionId === "enter-dungeon:rank-1:balanced");
   const aggressiveEnter = actions.find((action) => action.actionId === "enter-dungeon:rank-1:aggressive");
@@ -431,7 +425,8 @@ test("start-dungeon-expedition:rank-1:balanced starts an expedition with strateg
   cultivator.dungeonProgress["丙"].highestClearedRank = 1;
 
   const actions = listAvailableActions(world, CULTIVATOR_ID);
-  assert.ok(actions.some((action) => action.actionId === "start-dungeon-expedition:rank-1:balanced"));
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("start-dungeon-expedition:")), false);
+  assert.ok(actions.some((action) => action.actionId === "enter-dungeon:rank-1:balanced"));
 
   const started = performAction(world, CULTIVATOR_ID, "start-dungeon-expedition:rank-1:balanced" as never);
   assert.equal(started.accepted, true);

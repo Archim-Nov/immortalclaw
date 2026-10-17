@@ -405,7 +405,6 @@ import {
   enterDungeonActionIdOf,
   DUNGEON_EXPEDITION_DURATION_TICKS,
   DUNGEON_EXPEDITION_MAX_STEPS,
-  DUNGEON_EXPEDITION_POLICIES,
   DUNGEON_EXPEDITION_STEP_TICKS,
   getActiveDungeonExpedition,
   isAbortDungeonExpeditionAction,
@@ -423,7 +422,6 @@ import {
   expeditionPressureFor,
   shouldRetreatDungeonExpedition,
   strategyFromPolicy,
-  startDungeonExpeditionActionIdOf,
 } from "./dungeon-expedition-service.js";
 import { interiorRoomBeat, resolveInteriorSkirmish } from "./dungeon-interior.js";
 import {
@@ -5340,6 +5338,7 @@ function resolveDungeonExpeditionStepIfDue(
     stepIndex: effectiveProgress.stepIndex,
     worldTick: world.tick,
     cultivatorId: cultivator.id,
+    grade: effectiveProgress.grade,
   });
   const actionId = actionKind === "guardian"
     ? challengeGuardianActionIdOf(effectiveProgress.targetRank)
@@ -6945,7 +6944,7 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
     breakthroughActions.push(
       dungeonView && !dungeonView.lockReason
-        ? startDungeonExpeditionActionIdOf(dungeonView.recommendedRank, "balanced")
+        ? enterDungeonActionIdOf(dungeonView.recommendedRank, "balanced")
         : dungeonTravelAction,
     );
   }
@@ -8370,6 +8369,18 @@ function enterDungeonStanceLine(posture: "conservative" | "balanced" | "aggressi
   return "这一趟走均衡。该进的时候进，该收的时候收。";
 }
 
+function enterDungeonCardDescription(
+  dungeon: DungeonStateView,
+  rank: DungeonRank,
+  posture: "conservative" | "balanced" | "aggressive",
+): string {
+  const yieldLine = describeDungeonExpeditionAction({ dungeon, rank, policy: posture });
+  const road = dungeon.grade === "甲" && rank === dungeon.frontierRank
+    ? "进门以后先走一段，岔路和侧室在守关前面。"
+    : "";
+  return `${yieldLine}${road}${enterDungeonStanceLine(posture)}`;
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -8922,17 +8933,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           actions.push({
             actionId: enterDungeonActionIdOf(rank, posture),
             label: `进${dungeonView.grade}级地宫第${rank}阶（${stance}）`,
-            description: `从这一层的门口进去。${enterDungeonStanceLine(posture)}${shareSuffix}`,
-            durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
-            kind: "timed",
-          });
-        }
-        for (const policy of DUNGEON_EXPEDITION_POLICIES) {
-          const stance = dungeonPostureLabel(policy);
-          actions.push({
-            actionId: startDungeonExpeditionActionIdOf(rank, policy),
-            label: `地宫远征（${stance}，第${rank}阶）`,
-            description: `${describeDungeonExpeditionAction({ dungeon: dungeonView, rank, policy })}${shareSuffix}`,
+            description: `${enterDungeonCardDescription(dungeonView, rank, posture)}${shareSuffix}`,
             durationTicks: DUNGEON_EXPEDITION_DURATION_TICKS,
             kind: "timed",
           });
