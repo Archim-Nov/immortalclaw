@@ -67,6 +67,7 @@ import { realmLabelForLevel, repairCultivatorRealm, realmStageForLevel } from ".
 import {
   breakthroughMethodIdForLevel,
   breakthroughMethodNarrative,
+  quietMethodStep,
 } from "./breakthrough-methods.js";
 import {
   breakthroughDropPool,
@@ -6168,12 +6169,20 @@ function breakthroughReadyActionOf(
     if (nodeType === "sect-outpost" || nodeType === "dungeon-a") return "infant-fire-temper";
     return nearestPlaceAction(world, cultivator.locationId, "sect-outpost");
   }
+  if (method === "nascent-refine") {
+    if (nodeType === "sect-outpost" || nodeType === "dungeon-a") return "refine-nascent";
+    return nearestPlaceAction(world, cultivator.locationId, "sect-outpost");
+  }
   if (method === "soul-vigil") {
     if (!isAtResidence(cultivator)) return travelActionIdOf(cultivator.residence.locationId) as ActionId;
     return activeBreakthroughRite(cultivator, world.tick, "soul-vigil") ? "seal-soul-vigil" : "begin-soul-vigil";
   }
   if (method === "tribulation") {
     if (nodeType === "wilderness" || nodeType === "dungeon-a") return "face-tribulation";
+    return nearestPlaceAction(world, cultivator.locationId, "wilderness");
+  }
+  if (method === "divine-vigil") {
+    if (nodeType === "wilderness" || nodeType === "dungeon-a") return "hold-divine-platform";
     return nearestPlaceAction(world, cultivator.locationId, "wilderness");
   }
   if (!definition) return "meditate";
@@ -6239,6 +6248,19 @@ function listBreakthroughMethodActions(world: WorldState, cultivator: Cultivator
       "timed",
     )];
   }
+  if (method === "nascent-refine" && (nodeType === "sect-outpost" || nodeType === "dungeon-a")) {
+    const help = company
+      ? ` ${company.name}在这一处看着，炼完不挂这点伤。`
+      : " 一个人也能炼。炼完婴身会挣一下，人挂一点伤。有人在同一处看着，伤就不必挂。";
+    return [breakthroughCostAction(
+      definition,
+      "refine-nascent",
+      "炼婴",
+      `在这里把这一层元婴炼稳。材料会在炼成时耗掉。这一阶会成。${help}`,
+      DEFAULT_ACTION_DURATIONS["refine-nascent"] ?? 8,
+      "timed",
+    )];
+  }
   if (method === "soul-vigil" && isAtResidence(cultivator)) {
     if (activeBreakthroughRite(cultivator, world.tick, "soul-vigil")) {
       const named = company ? ` ${company.name}也在这洞府里，收口时会记下这个人。` : "";
@@ -6258,6 +6280,19 @@ function listBreakthroughMethodActions(world: WorldState, cultivator: Cultivator
       durationTicks: DEFAULT_ACTION_DURATIONS["begin-soul-vigil"] ?? 6,
       kind: "timed",
     }];
+  }
+  if (method === "divine-vigil" && (nodeType === "wilderness" || nodeType === "dungeon-a")) {
+    const help = company
+      ? ` ${company.name}在这一处看着，守完不挂这点伤。`
+      : " 一个人也能守。守完神台会压下来，人挂一点伤。有人在同一处看着，伤就不必挂。";
+    return [breakthroughCostAction(
+      definition,
+      "hold-divine-platform",
+      "守神台",
+      `在这里把神台守住。材料会在守成时耗掉。这一阶会成。前期的神纹已经落过。${help}`,
+      DEFAULT_ACTION_DURATIONS["hold-divine-platform"] ?? 8,
+      "timed",
+    )];
   }
   if (method === "tribulation" && (nodeType === "wilderness" || nodeType === "dungeon-a")) {
     const help = company
@@ -6365,9 +6400,11 @@ function performBreakthroughMethodAction(
   const timed = actionId === "core-rite:steady"
     || actionId === "core-rite:press"
     || actionId === "infant-fire-temper"
+    || actionId === "refine-nascent"
     || actionId === "begin-soul-vigil"
     || actionId === "face-tribulation"
-    || actionId === "begin-divine-step";
+    || actionId === "begin-divine-step"
+    || actionId === "hold-divine-platform";
   const immediate = actionId === "seal-soul-vigil" || actionId === "seal-divine-step";
   if (!timed && !immediate) return null;
   const definition = breakthroughDefinitionOf(cultivator);
@@ -6402,6 +6439,13 @@ function performBreakthroughMethodAction(
       throw new GameplayRejection("婴火淬体要在宗门驻地，或甲级地宫门口。洞府里淬不开这颗丹。");
     }
     return startBreakthroughJob(world, cultivator, actionId, "婴火淬体", definition, company ? { companionId: company.id, rateBonus: 10 } : undefined);
+  }
+  if (actionId === "refine-nascent") {
+    if (method !== "nascent-refine") throw new GameplayRejection(refusal ?? "这一阶不炼婴。");
+    if (nodeType !== "sect-outpost" && nodeType !== "dungeon-a") {
+      throw new GameplayRejection("炼婴要在宗门驻地，或甲级地宫门口。洞府里炼不稳这一层。");
+    }
+    return startBreakthroughJob(world, cultivator, actionId, "炼婴", definition, company ? { companionId: company.id } : undefined);
   }
   if (actionId === "begin-soul-vigil") {
     if (method !== "soul-vigil") throw new GameplayRejection(refusal ?? "这一阶不点魂灯。");
@@ -6446,6 +6490,13 @@ function performBreakthroughMethodAction(
       throw new GameplayRejection("天劫要在荒野或甲级地宫门口迎。城里和洞府接不住这一道雷。");
     }
     return startBreakthroughJob(world, cultivator, actionId, "迎天劫", definition, company ? { companionId: company.id, rateBonus: 8 } : undefined);
+  }
+  if (actionId === "hold-divine-platform") {
+    if (method !== "divine-vigil") throw new GameplayRejection(refusal ?? "这一阶不守神台。");
+    if (nodeType !== "wilderness" && nodeType !== "dungeon-a") {
+      throw new GameplayRejection("守神台要在荒野，或甲级地宫门口。驻地里的神纹已经落过了。");
+    }
+    return startBreakthroughJob(world, cultivator, actionId, "守神台", definition, company ? { companionId: company.id } : undefined);
   }
   if (actionId === "begin-divine-step") {
     if (method !== "divine-pattern") throw new GameplayRejection(refusal ?? "这一阶不铺神纹。");
@@ -6509,6 +6560,22 @@ function resolveTimedBreakthrough(world: WorldState, cultivator: Cultivator, job
       deviationTicks: 8,
       failureLife: `${cultivator.name}的婴火反噬了。材料已经耗了，进度退到六成，身上的伤比寻常大境界更重，气息也乱了一阵。`,
       successLife: `${cultivator.name}的金丹在婴火里裂开，元婴成形。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`,
+    });
+  }
+  if (job.actionId === "refine-nascent" || job.actionId === "hold-divine-platform") {
+    const companion = job.meta?.breakthroughCompanionId ? world.cultivators[job.meta.breakthroughCompanionId] : undefined;
+    const shared = Boolean(companion && companion.locationId === cultivator.locationId);
+    const refining = job.actionId === "refine-nascent";
+    return resolveResidenceBreakthrough(world, cultivator, job, {
+      tag: job.actionId,
+      successInjuryTicks: shared ? 0 : 4,
+      successLife: refining
+        ? (shared
+          ? `${cultivator.name}在${companion?.name ?? "同伴"}看着的时候把这一层元婴炼稳了。婴身没有挣开，人没有挂伤。`
+          : `${cultivator.name}一个人把这一层元婴炼完了。婴身挣了一下，人挂了一点伤，这一层还是过去了。`)
+        : (shared
+          ? `${cultivator.name}在${companion?.name ?? "同伴"}看着的时候把神台守住了。台没有压下来，人没有挂伤，化神又往前了一层。`
+          : `${cultivator.name}一个人把神台守住了。台压下来一点，人挂了一点伤，这一层还是过去了。`),
     });
   }
   if (job.actionId === "face-tribulation") {
@@ -9585,11 +9652,13 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
     actionId === "core-rite:steady"
     || actionId === "core-rite:press"
     || actionId === "infant-fire-temper"
+    || actionId === "refine-nascent"
     || actionId === "begin-soul-vigil"
     || actionId === "seal-soul-vigil"
     || actionId === "face-tribulation"
     || actionId === "begin-divine-step"
     || actionId === "seal-divine-step"
+    || actionId === "hold-divine-platform"
   ) return;
   if (actionId.startsWith("travel-to:")) return;
   if (actionId.startsWith("join-neutral-sect:")) return;
@@ -11877,9 +11946,11 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     || job.actionId === "core-rite:steady"
     || job.actionId === "core-rite:press"
     || job.actionId === "infant-fire-temper"
+    || job.actionId === "refine-nascent"
     || job.actionId === "begin-soul-vigil"
     || job.actionId === "face-tribulation"
     || job.actionId === "begin-divine-step"
+    || job.actionId === "hold-divine-platform"
   ) {
     return resolveTimedBreakthrough(world, cultivator, job);
   }
@@ -12722,7 +12793,8 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
     }
     const aidNote = aid ? `用了一份${aid.name}。` : "";
     if (cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && cultivator.realmLevel >= 9) {
-      return `${cultivator.name}的修为顶在门槛上。${aidNote}下一阶要按 realmPath 上写的方法破，灵材到对应的秘境里拿。`;
+      const step = quietMethodStep(cultivator.realmLevel) ?? "下一阶按眼下这一境的做法破，灵材到对应的秘境里拿。";
+      return `${cultivator.name}的修为顶在门槛上。${aidNote}${step}`;
     }
     return aid
       ? `${cultivator.name}闭关时用了一份${aid.name}，修为多涨了一截。`

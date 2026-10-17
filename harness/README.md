@@ -35,7 +35,7 @@ Named aftermath notes, harder rank 3 packs, and a wound a teammate can tend: `ha
 Weapon families and the five root schools each run from 入门 to 化神, with a shop, a sect exchange, and a realm gate: `harness/scenarios/combat-content-deepen-v1.md`.
 金丹后期往后的元婴和化神，材料在甲级高层，破境可能受伤: `harness/scenarios/realm-ladder-past-core.md`.
 甲级三层秘境的守关各有压力，输了会挂伤掉灵石: `harness/scenarios/high-realm-dungeon-pressure.md`.
-炼气仍在洞府破境，金丹走结丹仪，元婴点魂灯或迎天劫，化神在驻地落神纹: `harness/scenarios/breakthrough-methods.md`.
+炼气仍在洞府破境，金丹走结丹仪，元婴前期炼婴、中期守魂灯、后期渡劫，化神前期落神纹、中期守神台: `harness/scenarios/breakthrough-methods.md`.
 A spoken line on chat, gift, and a doorway call, plus one reply: `harness/scenarios/social-spoken-lines.md`.
 A shared dungeon copies `combatRounds` onto each companion, and the closing note names a role, a skill, a spoken line, and a tended wound: `harness/scenarios/companion-shared-report.md`.
 A personal favor, a note left for someone away, and a rumor a neighbor can repeat: `harness/scenarios/social-deepen.md`.
