@@ -1,8 +1,9 @@
 /**
  * Sect posts, merit, map veins, and raids.
  *
- * The grudge ladder is not here. A raid only calls addMutualGrudge when a
- * member of the defending sect is standing on the node.
+ * The grudge ladder is not here. A raid calls addMutualGrudge for defenders
+ * standing on the node, and for one or two sect members anywhere when the
+ * node is empty. The vein then keeps a border grievance either way.
  */
 
 import { GEOGRAPHY_REGISTRY } from "./geography-registry.js";
@@ -601,19 +602,26 @@ function nextRequirement(world: WorldState, member: Membership): string {
   return `${member.record.name}已经是一州之望。守住本州的三条脉，别让人夺了。${levelSentence}`;
 }
 
-function dailyLine(cultivator: Cultivator, member: Membership, tierName: string, raidOpen: boolean): string {
+function dailyLine(
+  cultivator: Cultivator,
+  member: Membership,
+  tierName: string,
+  raidOpen: boolean,
+  feudLine: string | null,
+): string {
   const post = cultivator.sectPost ? postOf(cultivator.sectPost) : null;
-  if (!post) return "今天先在山门领一份外门杂役。杂役做完，宗门声望和你的贡献都会记上一笔。";
-  if (cultivator.realmLevel < 4) {
-    return `你现在是${post.name}。今天把本职做完，再去本宗的药田收一份炼气灵材。筑基以前别去宣战。`;
+  let base: string;
+  if (!post) base = "今天先在山门领一份外门杂役。杂役做完，宗门声望和你的贡献都会记上一笔。";
+  else if (cultivator.realmLevel < 4) {
+    base = `你现在是${post.name}。今天把本职做完，再去本宗的药田收一份炼气灵材。筑基以前别去宣战。`;
+  } else if (raidOpen && (post.id === "steward" || post.id === "elder" || post.id === "master-seat")) {
+    base = `你现在是${post.name}。本州有邻宗占着的边寨，可以宣战夺脉。山门眼下是${tierName}。`;
+  } else if (post.id === "elder" || post.id === "master-seat") {
+    base = `你现在是${post.name}。今天可以上堂议事，也可以看看本州哪条脉能夺。山门眼下是${tierName}。`;
+  } else {
+    base = `你现在是${post.name}。今天做本职，再巡一趟山或者去护脉。山门眼下是${tierName}。`;
   }
-  if (raidOpen && (post.id === "steward" || post.id === "elder" || post.id === "master-seat")) {
-    return `你现在是${post.name}。本州有邻宗占着的边寨，可以宣战夺脉。山门眼下是${tierName}。`;
-  }
-  if (post.id === "elder" || post.id === "master-seat") {
-    return `你现在是${post.name}。今天可以上堂议事，也可以看看本州哪条脉能夺。山门眼下是${tierName}。`;
-  }
-  return `你现在是${post.name}。今天做本职，再巡一趟山或者去护脉。山门眼下是${tierName}。`;
+  return feudLine ? `${base}${feudLine}` : base;
 }
 
 function ensureOneVein(
@@ -704,6 +712,7 @@ export function settleVeinYields(world: WorldState): void {
       }
     }
   }
+  settleBorderPressure(world);
 }
 
 function veinView(world: WorldState, cultivator: Cultivator, vein: SpiritVeinNode, member: Membership) {
@@ -769,6 +778,7 @@ export function buildSectLifeView(world: WorldState, cultivator: Cultivator): Se
       summary: `${vein.name}${place}现在归${ownerName}。夺下来，出产就转到本宗。`,
     }];
   });
+  const borderFeuds = borderFeudViews(world, member);
   return {
     sectId: member.record.id,
     sectName: member.record.name,
@@ -779,10 +789,11 @@ export function buildSectLifeView(world: WorldState, cultivator: Cultivator): Se
     merit: tier.merit,
     veinCount: tier.veinCount,
     nextRequirement: nextRequirement(world, member),
-    daily: dailyLine(cultivator, member, tier.name, raids.length > 0),
+    daily: dailyLine(cultivator, member, tier.name, raids.length > 0, borderFeuds[0]?.line ?? null),
     veins,
     chains,
     raids,
+    borderFeuds,
   };
 }
 
@@ -967,42 +978,176 @@ function raidSucceeds(world: WorldState, cultivator: Cultivator, vein: SpiritVei
   return hashString(`${world.tick}:${cultivator.id}:${vein.id}:raid`) % 100 < chance;
 }
 
+function sectPeople(world: WorldState, member: Membership): Cultivator[] {
+  return member.record.memberIds
+    .map((id) => world.cultivators[id])
+    .filter((person): person is Cultivator => Boolean(
+      person
+      && ((member.kind === "player" && person.sectId === member.record.id)
+        || (member.kind === "neutral" && person.neutralSectId === member.record.id)),
+    ));
+}
+
+function raidFeudTargets(
+  world: WorldState,
+  cultivator: Cultivator,
+  vein: SpiritVeinNode,
+  previous: Membership,
+): { standing: Cultivator[]; named: Cultivator[] } {
+  const people = sectPeople(world, previous).filter((person) => person.id !== cultivator.id);
+  const standing = people.filter((person) => person.locationId === vein.locationId);
+  if (standing.length > 0) return { standing, named: standing };
+  const inState = people.filter((person) => world.locations[person.locationId]?.stateId === vein.stateId);
+  const pool = [...(inState.length > 0 ? inState : people)].sort((left, right) => (
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+  ));
+  if (pool.length === 0) return { standing: [], named: [] };
+  const count = Math.min(2, pool.length);
+  const start = hashString(`${world.tick}:${vein.id}:${cultivator.id}:feud`) % pool.length;
+  const named: Cultivator[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const person = pool[(start + i) % pool.length];
+    if (person) named.push(person);
+  }
+  return { standing: [], named };
+}
+
+function feudSentenceOf(
+  previous: Membership,
+  targets: { standing: Cultivator[]; named: Cultivator[] },
+): string {
+  if (targets.named.length === 0) {
+    return `${previous.record.name}当时没有弟子在场，边衅还是记下了。`;
+  }
+  const names = targets.named.map((person) => person.name).join("、");
+  if (targets.standing.length > 0) return `${names}当时就在脉上，仇记下了。`;
+  return `${previous.record.name}的人没站在脉上。${names}还是把这笔仇记下了。`;
+}
+
+function rememberBorderGrievance(
+  world: WorldState,
+  cultivator: Cultivator,
+  vein: SpiritVeinNode,
+  member: Membership,
+  previous: Membership,
+  success: boolean,
+): void {
+  vein.borderGrievance = {
+    aggrievedKind: previous.kind,
+    aggrievedId: previous.record.id,
+    aggrievedName: previous.record.name,
+    attackerKind: member.kind,
+    attackerId: member.record.id,
+    attackerName: member.record.name,
+    raiderId: cultivator.id,
+    sinceTick: world.tick,
+    counterAtTick: world.tick + RAID_COOLDOWN,
+    countered: !success,
+  };
+}
+
+function borderFeudViews(world: WorldState, member: Membership): SectLifeView["borderFeuds"][number][] {
+  return Object.values(world.spiritVeins ?? {}).flatMap((vein) => {
+    const grievance = vein.borderGrievance;
+    if (!grievance) return [];
+    const viewerIsAggrieved = grievance.aggrievedKind === member.kind && grievance.aggrievedId === member.record.id;
+    const viewerIsAttacker = grievance.attackerKind === member.kind && grievance.attackerId === member.record.id;
+    if (!viewerIsAggrieved && !viewerIsAttacker) return [];
+    const owns = vein.ownerKind === member.kind && vein.ownerId === member.record.id;
+    const line = viewerIsAttacker && owns
+      ? `${grievance.aggrievedName}还记着${vein.name}。边衅已经结下。过了冷却，他们会来探一次。`
+      : viewerIsAttacker
+        ? `${grievance.aggrievedName}记下了这次对${vein.name}的突袭。边衅已经结下。`
+        : owns
+          ? `${grievance.attackerName}来夺${vein.name}，没拿下。边衅已经结下。`
+          : `${vein.name}被${grievance.attackerName}夺走了。边衅还在。冷却过后可以再宣战抢回去。`;
+    return [{
+      veinId: vein.id,
+      veinName: vein.name,
+      rivalName: viewerIsAttacker ? grievance.aggrievedName : grievance.attackerName,
+      line,
+      counterAtTick: grievance.counterAtTick,
+    }];
+  });
+}
+
+function settleBorderPressure(world: WorldState): void {
+  for (const vein of Object.values(world.spiritVeins ?? {})) {
+    const grievance = vein.borderGrievance;
+    if (!grievance || grievance.countered || world.tick < grievance.counterAtTick) continue;
+    grievance.countered = true;
+    if (vein.ownerKind === grievance.aggrievedKind && vein.ownerId === grievance.aggrievedId) continue;
+    const detail = `见闻：${grievance.aggrievedName}的人在${vein.name}外转了一圈，话已经放出来，要抢回去。这一回还没动手，边衅还在。`;
+    const told = new Set<string>();
+    const tell = (person: Cultivator | undefined, text: string) => {
+      if (!person || told.has(person.id)) return;
+      told.add(person.id);
+      note(world, person, "边寨有人来探", text, "仇还没了", "fight");
+    };
+    const owner = ownerMember(world, vein);
+    if (owner) {
+      for (const person of sectPeople(world, owner)) tell(person, detail);
+    }
+    tell(world.cultivators[grievance.raiderId], detail);
+    const aggrieved = grievance.aggrievedKind === "player"
+      ? world.sects[grievance.aggrievedId]
+      : world.neutralSects[grievance.aggrievedId];
+    if (aggrieved) {
+      const rivalLine = `见闻：本宗的人去${vein.name}外看了一圈，话放出去了，这一回还没动手。`;
+      const rival: Membership = { kind: grievance.aggrievedKind, record: aggrieved };
+      for (const person of sectPeople(world, rival)) tell(person, rivalLine);
+    }
+    world.worldEvents.unshift({
+      id: `event-${world.nextEventSequence++}`,
+      tick: world.tick,
+      cultivatorId: grievance.raiderId,
+      locationId: vein.locationId,
+      title: "边寨有人来探",
+      content: detail,
+      severity: "medium",
+      tags: ["sect", "raid", "border-feud"],
+    });
+  }
+}
+
 function resolveRaid(world: WorldState, cultivator: Cultivator, vein: SpiritVeinNode, member: Membership): string {
   const previous = ownerMember(world, vein);
-  const defenders = previous
-    ? previous.record.memberIds
-      .map((id) => world.cultivators[id])
-      .filter((person): person is Cultivator => Boolean(
-        person
-        && person.id !== cultivator.id
-        && person.locationId === vein.locationId
-        && ((previous.kind === "player" && person.sectId === previous.record.id)
-          || (previous.kind === "neutral" && person.neutralSectId === previous.record.id)),
-      ))
-    : [];
-  for (const defender of defenders) {
+  const targets = previous
+    ? raidFeudTargets(world, cultivator, vein, previous)
+    : { standing: [], named: [] };
+  const standingIds = new Set(targets.standing.map((person) => person.id));
+  for (const defender of targets.standing) {
     addMutualGrudge(world, cultivator.id, defender.id, GRUDGE_FROM_DUEL);
     hurt(world, defender, 2);
+  }
+  for (const person of targets.named) {
+    if (standingIds.has(person.id)) continue;
+    addMutualGrudge(world, cultivator.id, person.id, GRUDGE_FROM_DUEL);
   }
   member.record.lastRaidTick = world.tick;
   vein.raidLockUntilTick = world.tick + RAID_COOLDOWN;
   const success = raidSucceeds(world, cultivator, vein, member);
+  const feudSentence = previous ? feudSentenceOf(previous, targets) : "";
+  if (previous) rememberBorderGrievance(world, cultivator, vein, member, previous, success);
   if (!success) {
     hurt(world, cultivator, 2);
     giveContribution(world, cultivator, member, -12);
     addMerit(member.record, -8);
-    const detail = `见闻：${cultivator.name}突袭${vein.name}没能拿下。人受了伤，贡献也掉了一截。`;
+    const detail = `见闻：${cultivator.name}突袭${vein.name}没能拿下。人受了伤，贡献也掉了一截。${feudSentence}`;
     note(world, cultivator, "突袭没拿下", detail, "这一趟亏了", "fight");
+    for (const person of targets.named) {
+      note(world, person, "有人来夺脉", `见闻：${cultivator.name}来夺${vein.name}，没能拿下。${feudSentence}`, "脉还在，人记仇了", "fight");
+    }
     return detail;
   }
   vein.ownerKind = member.kind;
   vein.ownerId = member.record.id;
   addMerit(member.record, 24);
   giveContribution(world, cultivator, member, 20);
-  const detail = `见闻：${cultivator.name}夺下了${vein.name}。这条脉以后归${member.record.name}，出产也跟着转过来。`;
+  const detail = `见闻：${cultivator.name}夺下了${vein.name}。这条脉以后归${member.record.name}，出产也跟着转过来。${feudSentence}`;
   note(world, cultivator, "夺下了脉", detail, "山门大了一圈", "fight");
   if (previous) {
-    const loss = `山门失守。${vein.name}被${member.record.name}夺走了。`;
+    const loss = `山门失守。${vein.name}被${member.record.name}夺走了。${feudSentence}`;
     for (const id of previous.record.memberIds) {
       const person = world.cultivators[id];
       if (!person || person.id === cultivator.id) continue;

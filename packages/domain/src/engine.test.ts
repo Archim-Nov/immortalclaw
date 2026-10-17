@@ -1596,11 +1596,50 @@ test("state.dungeon surfaces shared rank progression and realm-gated dungeon act
 
   cultivator.locationId = "qingzhou:dungeon-b";
   state = getCultivatorState(world, "yun-zhong-he");
-  assert.ok(state.dungeon?.lockReason);
+  assert.match(state.dungeon?.lockReason ?? "", /筑基/);
+  assert.match(state.dungeon?.lockReason ?? "", /雷泽残阵/);
   assert.equal(
     listAvailableActions(world, "yun-zhong-he").some((action) => String(action.actionId).startsWith("start-dungeon-expedition:rank-")),
     false,
   );
+});
+
+test("筑基 at a 甲级 gate reads that 丹霞内府 needs 金丹", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 5;
+  cultivator.locationId = "yangzhou:dungeon-a";
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.activeJobId = null;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  const locked = actions.find((action) => action.actionId === "dungeon-gate-locked");
+  assert.ok(locked);
+  assert.match(locked.label, /丹霞内府/);
+  assert.match(locked.description, /金丹/);
+  assert.match(locked.description, /丹霞露/);
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("enter-dungeon:")), false);
+
+  const state = getCultivatorState(world, cultivator.id);
+  assert.match(state.dungeon?.lockReason ?? "", /丹霞内府/);
+  assert.match(state.dungeon?.lockReason ?? "", /金丹/);
+  assert.match(state.dungeon?.lockReason ?? "", /丹霞露/);
+  assert.match(state.agentGuidance.priorities.join(""), /丹霞内府/);
+  assert.match(state.agentGuidance.priorities.join(""), /丹霞露/);
+
+  const tried = performAction(world, cultivator.id, "dungeon-gate-locked");
+  assert.equal(tried.accepted, false);
+  assert.match(tried.summary, /丹霞内府/);
+  assert.match(tried.summary, /丹霞露/);
+  assert.equal(cultivator.activeJobId, null);
+
+  cultivator.realm = "金丹";
+  cultivator.realmLevel = 7;
+  const open = listAvailableActions(world, cultivator.id);
+  assert.equal(open.some((action) => action.actionId === "dungeon-gate-locked"), false);
+  assert.equal(open.some((action) => String(action.actionId).startsWith("enter-dungeon:")), true);
+  assert.equal(getCultivatorState(world, cultivator.id).dungeon?.lockReason ?? null, null);
 });
 
 test("state marks onboarding as optional and exposes the decision policy", () => {

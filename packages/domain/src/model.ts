@@ -457,6 +457,23 @@ export interface SpiritVeinNode {
   pouch: SpiritVeinYield[];
   lastYieldTick: number;
   raidLockUntilTick: number;
+  /**
+   * Set when a raid is fought. The defending sect keeps this even if nobody
+   * was standing on the node. Absent on veins that have not been raided.
+   */
+  borderGrievance?: {
+    aggrievedKind: "player" | "neutral";
+    aggrievedId: string;
+    aggrievedName: string;
+    attackerKind: "player" | "neutral";
+    attackerId: string;
+    attackerName: string;
+    raiderId: string;
+    sinceTick: number;
+    counterAtTick: number;
+    /** True once the one counter sighting has been written, or the raid failed. */
+    countered: boolean;
+  };
 }
 
 export interface SectLifePostView {
@@ -498,6 +515,14 @@ export interface SectLifeView {
   }[];
   chains: readonly { id: SectChainId; name: string; actionId: string; summary: string }[];
   raids: readonly { veinId: string; name: string; actionId: string; summary: string }[];
+  /** Feuds left by a raid. Empty until this sect raids or is raided. */
+  borderFeuds: readonly {
+    veinId: string;
+    veinName: string;
+    rivalName: string;
+    line: string;
+    counterAtTick: number;
+  }[];
 }
 
 export interface SectTitleSlot {
@@ -1564,6 +1589,7 @@ export type ImmediateActionId =
   | `mention-gossip:${string}:${string}`
   | `wait-for:${string}`
   | `dungeon-wake-decision:${string}`
+  | "dungeon-gate-locked"
   | `sect-scene:${string}`
   | `bahuang-wake-decision:${string}`
   | `regional-choice:${string}`

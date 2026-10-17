@@ -394,3 +394,77 @@ test("本州存在可宣战脉", () => {
   assert.match(dao, /见闻：/);
   assert.match(dao, /夺下了/);
 });
+
+test("a border raid feuds even when nobody is standing on the camp", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.locationId = "yangzhou:sect-outpost:ting-chao-ge";
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.activeJobId = null;
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 5;
+  cultivator.totalContribution = 200;
+  performAction(world, cultivator.id, "join-neutral-sect:ting-chao-ge");
+  performAction(world, cultivator.id, "take-post:elder");
+  world.neutralSects["ting-chao-ge"]!.sectMerit = 40;
+  world.neutralSects["cang-mu-gu"]!.sectMerit = 0;
+
+  const rivalSummary = syncCultivatorFromPersona(world, { agentId: "agent-camp-rival", name: "木青" });
+  const rival = world.cultivators[rivalSummary.selectedCultivatorId]!;
+  rival.neutralSectId = "cang-mu-gu";
+  rival.locationId = "qingzhou:main-city";
+  world.neutralSects["cang-mu-gu"]!.memberIds.push(rival.id);
+
+  const camp = world.spiritVeins?.["yangzhou:border-camp"];
+  assert.ok(camp);
+  assert.notEqual(rival.locationId, camp.locationId);
+  performAction(world, cultivator.id, `declare-raid:${camp.id}`);
+  runUntilIdle(world, cultivator.id);
+
+  assert.equal(camp.ownerId, "ting-chao-ge");
+  assert.ok((getSocialLink(world, cultivator.id, rival.id)?.grudge ?? 0) > 0);
+  const life = getCultivatorState(world, cultivator.id);
+  const link = life.socialLinks.find((row) => row.targetCultivatorId === rival.id);
+  assert.ok((link?.grudge ?? 0) > 0);
+  assert.equal(link?.grudgeArc, "嫌隙");
+  assert.match((cultivator.lifeLog ?? []).map((event) => event.text).join(""), /没站在脉上/);
+  assert.match((cultivator.lifeLog ?? []).map((event) => event.text).join(""), /木青/);
+  assert.match(life.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "", /边衅/);
+  assert.match(life.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "", /苍木谷/);
+  assert.match((rival.lifeLog ?? []).map((event) => event.text).join(""), /嫌隙|山门失守/);
+});
+
+test("an empty defending sect still leaves a border feud and a later probe", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.locationId = "yangzhou:sect-outpost:ting-chao-ge";
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.activeJobId = null;
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 5;
+  cultivator.totalContribution = 200;
+  performAction(world, cultivator.id, "join-neutral-sect:ting-chao-ge");
+  performAction(world, cultivator.id, "take-post:elder");
+  world.neutralSects["ting-chao-ge"]!.sectMerit = 40;
+  world.neutralSects["cang-mu-gu"]!.sectMerit = 0;
+  assert.equal(world.neutralSects["cang-mu-gu"]!.memberIds.length, 0);
+
+  const camp = world.spiritVeins?.["yangzhou:border-camp"];
+  assert.ok(camp);
+  performAction(world, cultivator.id, `declare-raid:${camp.id}`);
+  runUntilIdle(world, cultivator.id);
+
+  assert.equal(camp.ownerId, "ting-chao-ge");
+  const taken = getCultivatorState(world, cultivator.id);
+  assert.match((cultivator.lifeLog ?? []).map((event) => event.text).join(""), /没有弟子在场/);
+  assert.match(taken.sectLife?.borderFeuds.map((feud) => feud.line).join("") ?? "", /边衅/);
+  assert.match(taken.sectLife?.daily ?? "", /边衅/);
+  assert.equal(taken.socialLinks.every((link) => link.grudge === 0), true);
+
+  const due = camp.borderGrievance?.counterAtTick ?? world.tick;
+  advanceWorld(world, Math.max(0, due - world.tick));
+  const probed = (cultivator.lifeLog ?? []).map((event) => event.text).join("");
+  assert.match(probed, /要抢回去/);
+  assert.match(probed, /还没动手/);
+  assert.equal(camp.ownerId, "ting-chao-ge");
+});
