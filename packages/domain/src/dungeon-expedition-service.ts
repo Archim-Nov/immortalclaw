@@ -4,6 +4,7 @@ import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
 import { jiaRelicHint } from "./jia-relics.js";
+import { jiaHaulSummaryClause, jiaTemperamentForRank, jiaTemperamentItemId } from "./jia-temperament.js";
 import { lightMysteryHint } from "./yi-mystery.js";
 import type {
   ActionJob,
@@ -144,6 +145,10 @@ export function buildDungeonRankYieldHints(
     if (mystery && !notableSecondaryDrops.includes(mystery.cultivationItemId)) {
       notableSecondaryDrops.push(mystery.cultivationItemId);
     }
+    if (mystery) {
+      const sideItem = jiaTemperamentItemId(rank);
+      if (!notableSecondaryDrops.includes(sideItem)) notableSecondaryDrops.push(sideItem);
+    }
     const relicLine = jiaRelicHint(grade, rank);
     return {
       rank,
@@ -248,6 +253,7 @@ export function createDungeonExpeditionProgress(input: {
     beatsSeen: 0,
     beatsTold: 0,
     nextSightingGap: sightingGapFor(input.jobId),
+    ...(input.grade === "甲" ? { jiaTemperament: jiaTemperamentForRank(input.targetRank) } : {}),
   };
 }
 
@@ -1474,9 +1480,17 @@ export function createDungeonExpeditionReport(input: {
   const place = input.returnPlaceName?.trim() || "能歇脚的地方";
   const sideLoot = summarizeSecondaryDrops(secondaryDrops);
   const brought = broughtClause(playerItemName(input.primaryMaterial), input.progress.primaryMaterialCount, sideLoot);
+  const haulClause = jiaHaulSummaryClause({
+    grade: input.progress.grade,
+    rank: input.progress.targetRank,
+    outcome: input.outcome,
+    secondaryDrops,
+    haul: input.progress.jiaHaul ?? null,
+  });
   const summary = [
     `地宫${outcomePhrase(input.outcome)}${input.progress.grade}级第${input.progress.targetRank}阶，姿态是${POSTURE_LABEL[input.progress.policy]}。`,
     `${brought}，灵石${input.progress.spiritStoneGain}枚，${input.realmProgressCapped ? "修为已经满了，再涨要等破境" : `修为涨了${input.progress.realmProgressGain}`}。`,
+    haulClause,
     `气血耗去${input.progress.qiSpent ?? 0}，灵力耗去${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石${input.progress.stonesLost}枚。` : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,

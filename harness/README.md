@@ -44,6 +44,7 @@ A favor repaid in words, a digest that names the people, and a reunion after tra
 A dungeon run wakes in Chinese, with three or four mid-run choices, and leaves a 见闻 plus 带出何物 when a fight is won: `harness/scenarios/dungeon-midrun-sights.md`.
 Five cultivators on one dungeon leave a tended wound, a yielded pile, a crack over an unclaimed find, and paired lines on both digests: `harness/scenarios/party-expedition-social.md`.
 A finished 甲 run leaves one 残页, 炉灰, or 纹屑, and a companion can quote the same arc line: `harness/scenarios/jia-relic-chronicle.md`.
+甲级撤出或走完按丹霞、火毒、阵纹带出余砂、凝滴或残片，中途的险、帮、走会改份数: `harness/scenarios/jia-temperament-loot.md`.
 乙级一到三层是雷泽残阵，四到六层是沉雾沼，七到九层是铜棺窟。丙级七到九层是旧驿石廊: `harness/scenarios/yi-mystery-identity.md`.
 九州各有一处只能从这一州进去的秘境，主城和宗门驻地另有三处短洞: `harness/scenarios/regional-dungeons-v1.md`.
 排名层和州府秘境在进门与守关之间还有侧室、探路和有名字的中途敌人: `harness/scenarios/dungeon-interior-v1.md`.
