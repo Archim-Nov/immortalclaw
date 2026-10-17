@@ -5285,8 +5285,10 @@ function resolveDungeonExpeditionStepIfDue(
         });
       } else {
         const chosen = chooseDefaultDungeonWakeOptionId(effectiveProgress);
-        const settlement = settleDungeonWakeNode(effectiveProgress, chosen);
+        const settlement = settleDungeonWakeNode(effectiveProgress, chosen, "timeout");
         applyDungeonWakeSettlement(world, cultivator, settlement);
+        const timeoutLine = settlement.beat?.detail ?? "时辰到了，代选了这一条。";
+        addDaoLog(world, cultivator.id, "地宫岔路", timeoutLine, ["dungeon-wake", "timeout"]);
         effectiveProgress = settlement.progress;
       }
       world.dungeonExpeditions[cultivator.id] = effectiveProgress;
@@ -7052,6 +7054,9 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   // ── Merge layers: recovery > breakthrough > location ──
   const warnings = [...recoveryWarnings, ...breakthroughWarnings];
   const priorities = [...recoveryPriorities, ...breakthroughPriorities, ...locationPriorities];
+  if (world.dungeonExpeditions[cultivator.id]?.pendingWakeNode) {
+    priorities.unshift("地宫岔路待决");
+  }
   const allActions = [...recoveryActions, ...breakthroughActions, ...locationActions];
   const suggestedActions = allActions.length > 0
     ? Array.from(new Set(allActions)).slice(0, 4) as ActionId[]
@@ -13112,15 +13117,16 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         : `${cultivator.name}把这一岔路的话放了下来。`;
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
     }
-    const settlement = settleDungeonWakeNode(progress, dungeonWakeOptionId);
+    const settlement = settleDungeonWakeNode(progress, dungeonWakeOptionId, "chosen");
     applyDungeonWakeSettlement(world, cultivator, settlement);
     world.dungeonExpeditions[cultivator.id] = settlement.progress;
     if (cultivator.activeJobId && world.jobs[cultivator.activeJobId]) {
       stampDungeonWake(world.jobs[cultivator.activeJobId], settlement.progress);
     }
     const summary = settlement.beat
-      ? `${cultivator.name}在地宫里${settlement.beat.title}。`
+      ? `${cultivator.name}在地宫里${settlement.beat.title}。${settlement.beat.detail}`
       : `${cultivator.name}在地宫里把这一岔路走完了。`;
+    addDaoLog(world, cultivator.id, "地宫岔路", summary, ["dungeon-wake", "chosen"]);
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
   }
   const sceneOptionId = parseChooseEventOption(actionId);

@@ -382,6 +382,7 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
     if (quotes.length >= 4) break;
   }
   const nextStep = quietRealmStep(cultivator.realmLevel);
+  const wakePending = Boolean(world.dungeonExpeditions?.[cultivator.id]?.pendingWakeNode);
   return {
     windowTicks: DIGEST_WINDOW_TICKS,
     windowHours: DIGEST_WINDOW_TICKS * HOURS_PER_TICK,
@@ -393,6 +394,7 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
     relationships,
     quotes,
     summary: summarizeDigest(cultivator.name, mood, growth, fights, relationshipEvents, quotes, nextStep),
+    ...(wakePending ? { priorities: ["地宫岔路待决"] } : {}),
     ...(nextStep ? { nextStep } : {}),
   };
 }

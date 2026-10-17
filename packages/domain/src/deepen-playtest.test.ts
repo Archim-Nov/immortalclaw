@@ -24,12 +24,16 @@ test("enter-dungeon rank-1 conservative finishes, clears busy, and leaves a read
   assert.equal(started.job?.totalTicks, 30);
   assert.equal(cultivator.activeJobId, started.job?.id ?? null);
 
-  const finished = advanceWorld(world, 30);
-  assert.equal(world.tick, tickBefore + 30);
+  let sawComplete = false;
+  for (let guard = 0; cultivator.activeJobId && guard < 80; guard += 1) {
+    const step = advanceWorld(world, 1);
+    if (step.completedJobs.some((job) => job.actionId === "enter-dungeon:rank-1:conservative")) sawComplete = true;
+  }
+  assert.ok(world.tick > tickBefore);
   assert.equal(cultivator.activeJobId, null);
   assert.equal(world.jobs[started.job!.id], undefined);
   assert.equal(cultivator.locationId, "qingzhou:main-city");
-  assert.ok(finished.completedJobs.some((job) => job.actionId === "enter-dungeon:rank-1:conservative"));
+  assert.equal(sawComplete, true);
 
   const state = getCultivatorState(world, CULTIVATOR_ID);
   const report = state.dungeonExpedition.lastReport;

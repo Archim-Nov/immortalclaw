@@ -72,7 +72,9 @@ test("a finished rank-1 run keeps person or find beats an agent can retell", () 
   cultivator.locationId = "qingzhou:dungeon-c";
   cultivator.dungeonProgress["丙"].highestClearedRank = 1;
   performAction(world, CULTIVATOR_ID, "enter-dungeon:rank-1:conservative");
-  advanceWorld(world, 30);
+  for (let guard = 0; cultivator.activeJobId && guard < 80; guard += 1) {
+    advanceWorld(world, 1);
+  }
   const report = getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.lastReport;
   assert.equal(report?.outcome, "completed");
   const kinds = new Set((report?.beats ?? []).map((beat) => beat.kind));

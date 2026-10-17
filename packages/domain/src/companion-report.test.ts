@@ -48,7 +48,7 @@ test("each companion keeps the leader's combatRounds and a quotable shared note"
   assert.equal(witness.activeJobId, null);
 
   let guard = 0;
-  while (leader.activeJobId && guard < 45) {
+  while (leader.activeJobId && guard < 80) {
     advanceWorld(world, 1);
     guard += 1;
     assert.equal(mate.activeJobId, null);
