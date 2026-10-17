@@ -59,7 +59,8 @@ test("a recipient can reply once or twice, then the exchange pauses", () => {
   const state = getCultivatorState(world, mate.id);
   assert.equal(state.pendingDialogue?.[0]?.line, "门口风大，你带灯了吗？");
   assert.ok(listAvailableActions(world, mate.id).some((action) => action.actionId === `reply-line:${leader.id}`));
-  performAction(world, mate.id, `reply-line:${leader.id}`, "灯在我袖子里。");
+  const replied = performAction(world, mate.id, `reply-line:${leader.id}`, "灯在我袖子里。");
+  assert.equal(replied.summary, "阿宁回了云中鹤一句：「灯在我袖子里。」。");
   assert.ok((leader.travelNotes ?? []).some((note) => note.detail.includes("「灯在我袖子里。」")));
   assert.equal(getCultivatorState(world, mate.id).pendingDialogue?.some((row) => row.fromId === leader.id) ?? false, false);
 
@@ -109,9 +110,10 @@ test("a reply stays with the person who spoke, and a line for someone else is re
     () => performAction(world, qingluo.id, `reply-line:${axu.id}`, "顾兄保重"),
     (error: unknown) => error instanceof GameplayRejection && /说给阿絮/.test((error as Error).message),
   );
-  performAction(world, qingluo.id, `reply-line:${axu.id}`);
+  const replied = performAction(world, qingluo.id, `reply-line:${axu.id}`);
   const reply = (world.messages ?? []).find((message) => message.toCultivatorId === axu.id && message.subject.includes("回话"))?.spokenLine;
   assert.ok(reply);
+  assert.equal(replied.summary, `青萝回了阿絮一句：「${reply}」。`);
   assert.doesNotMatch(reply, /顾/);
   assert.match(reply, /。$/);
   const still = getCultivatorState(world, qingluo.id).pendingDialogue ?? [];
@@ -164,13 +166,17 @@ test("a voice-transmit receipt is Chinese and names the affinity", () => {
   writeSocialLink(world, speaker.id, { ...outgoing, affinity: 849 });
   writeSocialLink(world, listener.id, { ...incoming, affinity: 849 });
 
-  const result = performAction(world, speaker.id, `voice-transmit:${listener.id}`);
+  const line = "听潮浦左边有坑，你别一个人踩下去。";
+  const result = performAction(world, speaker.id, `voice-transmit:${listener.id}`, line);
   const link = getSocialLink(world, speaker.id, listener.id);
   assert.ok(link);
-  assert.equal(result.summary, `顾长川向墨儿传了一音。好感至${link.affinity}（${getAffinityLevel(link.affinity)}）。`);
+  assert.equal(result.summary, `顾长川向墨儿传了一音：「${line}」。好感至${link.affinity}（${getAffinityLevel(link.affinity)}）。`);
   assert.equal(result.summary.includes("sent"), false);
   assert.equal(result.summary.includes("Affinity"), false);
   assert.equal(/[A-Za-z]/.test(result.summary), false);
+  const heard = (world.messages ?? []).find((message) => message.toCultivatorId === listener.id && message.subject.includes("传音"));
+  assert.equal(heard?.spokenLine, line);
+  assert.match(heard?.content ?? "", /「听潮浦左边有坑，你别一个人踩下去。」/);
 });
 
 test("chat-up and the three send-message kinds echo the spoken line", () => {

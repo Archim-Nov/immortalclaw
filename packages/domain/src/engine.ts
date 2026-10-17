@@ -93,7 +93,7 @@ import {
   vitalGainForBreakthrough,
 } from "./realm-path.js";
 import { GameplayRejection } from "./gameplay-error.js";
-import { openSpokenLine, type SpeechKind } from "./spoken-lines.js";
+import { cleanSpokenLine, openSpokenLine, type SpeechKind } from "./spoken-lines.js";
 import { describeMood, noteSpam, pushTravelNote, settledMoment, spamRewardMultiplier, travelNote } from "./travelogue.js";
 import {
   bondArcOf,
@@ -10718,9 +10718,26 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     }
     const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.voiceTransmit);
     const level = getAffinityLevel(linkAB.affinity);
+    const spoken = cleanSpokenLine(speechLine);
     addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传音交流，好感度${linkAB.affinity}（${level}）。`, ["social", "voice-transmit"]);
-    addMessage(world, target.id, "传音", `来自${cultivator.name}的传音`, `${cultivator.name}向你传音问候。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}向${target.name}传了一音。好感至${linkAB.affinity}（${level}）。` };
+    addMessage(
+      world,
+      target.id,
+      "传音",
+      `来自${cultivator.name}的传音`,
+      spoken ? `${cultivator.name}向你传了一音：「${spoken}」` : `${cultivator.name}向你传音问候。`,
+      { fromCultivatorId: cultivator.id, toCultivatorId: target.id, ...(spoken ? { spokenLine: spoken } : {}) },
+    );
+    const affinityTail = `。好感至${linkAB.affinity}（${level}）。`;
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: spoken
+        ? summaryWithSpokenLine(`${cultivator.name}向${target.name}传了一音`, spoken, affinityTail)
+        : `${cultivator.name}向${target.name}传了一音${affinityTail}`,
+    };
   }
 
   // ---- Social: 申请道侣 (Propose Dao Companion) ----
@@ -11263,7 +11280,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       }));
     }
     shareMoment(world, [cultivator, target], `${cultivator.name}回了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}回了${target.name}一句。` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: summaryWithSpokenLine(`${cultivator.name}回了${target.name}一句`, spoken, "。") };
   }
 
   if (actionId.startsWith("spar-teach:")) {
@@ -12063,7 +12080,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   if (travelDestination) {
     const destination = world.locations[travelDestination];
     if (!destination) {
-      throw new Error(`Invalid travel destination: ${travelDestination}`);
+      throw new GameplayRejection("去不了那里。");
     }
     if (destination.nodeType === "wilderness" && job.meta?.wildSighting !== true) {
       const arrived = wildPlaceForState(destination.stateId);
@@ -13891,9 +13908,9 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   if (travelDestination || questAction?.phase === "execute" || exploreGuixuNodeId || startDungeonExpedition || enterDungeon || searchFortuneRank || challengeGuardianRank || parseSectTaskId(actionId) || isSectTimedAction(actionId) || TIMED_ACTION_IDS.has(actionId)) {
     if (travelDestination) {
       const destination = world.locations[travelDestination];
-      if (!destination) throw new Error(`Travel destination not found: ${travelDestination}`);
+      if (!destination) throw new GameplayRejection("去不了那里。");
       const directNeighbor = getNeighborLocations(world, cultivator.locationId).some((neighbor) => neighbor.locationId === travelDestination);
-      if (!directNeighbor) throw new Error("Travel destination is not directly reachable from current location.");
+      if (!directNeighbor) throw new GameplayRejection("从这里去不了那里，得先换条路。");
       const placeName = destination.nodeType === "wilderness"
         ? (wildPlaceForState(destination.stateId)?.name ?? destination.name)
         : destination.name;
