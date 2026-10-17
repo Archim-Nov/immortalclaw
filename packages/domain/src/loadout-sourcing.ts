@@ -16,6 +16,9 @@ const WEAPON_FORGE_COSTS: Record<WeaponTier, number> = {
   3: 160,
   4: 260,
   5: 400,
+  6: 560,
+  7: 780,
+  8: 1040,
 };
 
 const SPELL_SYNTH_COSTS: Record<SpellTier, number> = {
@@ -24,6 +27,9 @@ const SPELL_SYNTH_COSTS: Record<SpellTier, number> = {
   3: 130,
   4: 220,
   5: 340,
+  6: 480,
+  7: 660,
+  8: 880,
 };
 
 const TIER_DURATION: Record<WeaponTier, number> = {
@@ -32,6 +38,9 @@ const TIER_DURATION: Record<WeaponTier, number> = {
   3: 3,
   4: 4,
   5: 5,
+  6: 6,
+  7: 7,
+  8: 8,
 };
 
 // ---- Hash Utility ----
@@ -91,26 +100,28 @@ export const LOADOUT_SOURCE_RECIPES: readonly ProductionRecipe[] = Object.freeze
 
 // ---- Tier-Indexed Source Pools ----
 
+type SourceTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
 function buildTierPool<T extends { id: string }>(
   defs: Record<string, T>,
   getTier: (d: T) => number,
   prefix: string,
-): Record<1 | 2 | 3 | 4 | 5, ItemId[]> {
-  const pool: Record<1 | 2 | 3 | 4 | 5, ItemId[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+): Record<SourceTier, ItemId[]> {
+  const pool: Record<SourceTier, ItemId[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [] };
   for (const d of Object.values(defs)) {
-    const t = getTier(d) as 1 | 2 | 3 | 4 | 5;
+    const t = getTier(d) as SourceTier;
     pool[t].push(`${prefix}${d.id}` as ItemId);
   }
   return pool;
 }
 
-export const WEAPON_SOURCE_ITEMS_BY_TIER: Record<1 | 2 | 3 | 4 | 5, ItemId[]> = buildTierPool(
+export const WEAPON_SOURCE_ITEMS_BY_TIER: Record<SourceTier, ItemId[]> = buildTierPool(
   WEAPON_LOADOUT_DEFINITIONS,
   (w) => w.weaponTier ?? 1,
   "weapon-material-",
 );
 
-export const SPELL_SOURCE_ITEMS_BY_TIER: Record<1 | 2 | 3 | 4 | 5, ItemId[]> = buildTierPool(
+export const SPELL_SOURCE_ITEMS_BY_TIER: Record<SourceTier, ItemId[]> = buildTierPool(
   SPELL_LOADOUT_DEFINITIONS,
   (s) => s.spellTier ?? 1,
   "spell-fragment-",
@@ -118,7 +129,7 @@ export const SPELL_SOURCE_ITEMS_BY_TIER: Record<1 | 2 | 3 | 4 | 5, ItemId[]> = b
 
 // ---- Source Drop Picker ----
 
-export function pickLoadoutSourceDrop(tier: 1 | 2 | 3 | 4 | 5, seed: string): ItemId {
+export function pickLoadoutSourceDrop(tier: SourceTier, seed: string): ItemId {
   const weaponMaterials = WEAPON_SOURCE_ITEMS_BY_TIER[tier];
   const spellFragments = SPELL_SOURCE_ITEMS_BY_TIER[tier];
   const hash = hashValue(seed);

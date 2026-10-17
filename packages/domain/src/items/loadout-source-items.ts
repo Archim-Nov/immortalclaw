@@ -78,7 +78,7 @@ const weaponItems: ItemDefinition[] = [];
 for (const wl of Object.values(WEAPON_LOADOUT_DEFINITIONS)) {
   const tier: WeaponTier = wl.weaponTier ?? 1;
   const wlId = wl.id;
-  const coreName = WEAPON_LOADOUT_NAME_BY_ID[wlId];
+  const coreName = WEAPON_LOADOUT_NAME_BY_ID[wlId] ?? makeLocalizedText(wl.name, wl.name);
   const texts = deriveWeaponSourceTexts(coreName);
 
   // Weapon Material
@@ -132,7 +132,7 @@ const spellItems: ItemDefinition[] = [];
 for (const sl of Object.values(SPELL_LOADOUT_DEFINITIONS)) {
   const tier: SpellTier = sl.spellTier ?? 1;
   const slId = sl.id;
-  const coreName = SPELL_LOADOUT_NAME_BY_ID[slId];
+  const coreName = SPELL_LOADOUT_NAME_BY_ID[slId] ?? makeLocalizedText(sl.name, sl.name);
   const texts = deriveSpellSourceTexts(coreName);
 
   // Spell Fragment

@@ -58,7 +58,7 @@ test("every status has required fields", () => {
     assert.ok(def.name, `${id} missing name`);
     assert.ok(def.effectKind, `${id} missing effectKind`);
     assert.ok(typeof def.durationRounds === "number", `${id} missing durationRounds`);
-    assert.equal(def.tierValues.length, 5, `${id} tierValues should have 5 entries`);
+    assert.equal(def.tierValues.length, 8, `${id} tierValues should have 8 entries`);
     assert.ok(def.expiryMode, `${id} missing expiryMode`);
     assert.ok(def.triggerWindow, `${id} missing triggerWindow`);
   }
@@ -89,9 +89,9 @@ test("every spell branch has basic and core hooks", () => {
 
 // ---- B. Weapon Completeness (100 loadouts) ----
 
-test("100 weapon loadouts exist (20 types x 5 tiers)", () => {
+test("160 weapon loadouts exist (20 types x 8 tiers)", () => {
   const all = getAllWeaponLoadouts();
-  assert.equal(all.length, 100);
+  assert.equal(all.length, 160);
 });
 
 test("5 weapon families are registered", () => {
@@ -120,7 +120,7 @@ test("every weapon loadout has required V2 fields", () => {
   }
 });
 
-test("each weapon type has exactly 5 tiers", () => {
+test("each weapon type has exactly 8 tiers", () => {
   const tiersByType = new Map<string, number[]>();
   for (const loadout of getAllWeaponLoadouts()) {
     const tiers = tiersByType.get(loadout.weaponTypeId) ?? [];
@@ -128,16 +128,16 @@ test("each weapon type has exactly 5 tiers", () => {
     tiersByType.set(loadout.weaponTypeId, tiers);
   }
   for (const [typeId, tiers] of tiersByType) {
-    assert.equal(tiers.length, 5, `${typeId} should have 5 tiers, got ${tiers.length}`);
-    assert.deepEqual(tiers.sort(), [1, 2, 3, 4, 5], `${typeId} tiers should be 1-5`);
+    assert.equal(tiers.length, 8, `${typeId} should have 8 tiers, got ${tiers.length}`);
+    assert.deepEqual(tiers.sort(), [1, 2, 3, 4, 5, 6, 7, 8], `${typeId} tiers should be 1-8`);
   }
 });
 
 // ---- C. Spell Completeness (75 loadouts) ----
 
-test("75 spell loadouts exist (15 branches x 5 tiers)", () => {
+test("120 spell loadouts exist (15 branches x 8 tiers)", () => {
   const all = getAllSpellLoadouts();
-  assert.equal(all.length, 75);
+  assert.equal(all.length, 120);
 });
 
 test("every spell loadout has V2 fields including statuses and hooks", () => {
@@ -153,7 +153,7 @@ test("every spell loadout has V2 fields including statuses and hooks", () => {
   }
 });
 
-test("each spell branch has exactly 5 tiers", () => {
+test("each spell branch has exactly 8 tiers", () => {
   const tiersByBranch = new Map<string, number[]>();
   for (const loadout of getAllSpellLoadouts()) {
     const tiers = tiersByBranch.get(loadout.spellBranchId) ?? [];
@@ -161,8 +161,8 @@ test("each spell branch has exactly 5 tiers", () => {
     tiersByBranch.set(loadout.spellBranchId, tiers);
   }
   for (const [branchId, tiers] of tiersByBranch) {
-    assert.equal(tiers.length, 5, `${branchId} should have 5 tiers, got ${tiers.length}`);
-    assert.deepEqual(tiers.sort(), [1, 2, 3, 4, 5], `${branchId} tiers should be 1-5`);
+    assert.equal(tiers.length, 8, `${branchId} should have 8 tiers, got ${tiers.length}`);
+    assert.deepEqual(tiers.sort(), [1, 2, 3, 4, 5, 6, 7, 8], `${branchId} tiers should be 1-8`);
   }
 });
 
@@ -533,7 +533,7 @@ test("weapon hooks are empty for now", () => {
 
 test("resolveStatusTierValue returns correct values per tier", () => {
   const def = COMBAT_STATUS_DEFINITIONS[STATUS_ARMOR_BREAK];
-  for (let t = 1; t <= 5; t++) {
+  for (let t = 1; t <= 8; t++) {
     const { magnitude } = resolveStatusTierValue(def, t as SpellTier);
     assert.equal(magnitude, def.tierValues[t - 1]);
   }

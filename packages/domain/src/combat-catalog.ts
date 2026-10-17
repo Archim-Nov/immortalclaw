@@ -1,9 +1,10 @@
 import type { FiveElementId, PartyRoleId, WeaponFamilyId, WeaponTypeId } from "./model.js";
+import { LATER_CONTENT_SKILLS } from "./combat-catalog-later.js";
 
 /**
  * Reviewable combat catalog.
  *
- * Realms: 炼气 入门, 筑基 小成, 金丹 大成, 元婴 大圆满, 化神.
+ * Realms: 炼气 入门, 筑基 小成, 金丹 大成, 元婴 大圆满, 化神, then 炼虚, 合体, 大乘.
  * Weapon families already in the world: 轻快（剑、双剑、短刃、拳套）、沉重（刀、巨刀、斧、锤）、
  * 长兵（枪、戟、棍、钩镰）、柔兵（鞭、链刃、流星锤、绫）、远术（弓、弩、扇、伞）.
  * 矛 is the same arm as 枪. 杖 is the same arm as 棍. 爪 is the same arm as 拳套.
@@ -16,8 +17,8 @@ import type { FiveElementId, PartyRoleId, WeaponFamilyId, WeaponTypeId } from ".
  * with the older shared techniques.
  */
 
-export type CatalogRank = "入门" | "小成" | "大成" | "大圆满" | "化神";
-export type CatalogTier = 1 | 2 | 3 | 4 | 5;
+export type CatalogRank = "入门" | "小成" | "大成" | "大圆满" | "化神" | "炼虚" | "合体" | "大乘";
+export type CatalogTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 const GATE: Record<CatalogRank, { level: number; tier: CatalogTier; prof: number }> = {
   入门: { level: 1, tier: 1, prof: 2 },
@@ -25,6 +26,9 @@ const GATE: Record<CatalogRank, { level: number; tier: CatalogTier; prof: number
   大成: { level: 7, tier: 3, prof: 12 },
   大圆满: { level: 10, tier: 4, prof: 18 },
   化神: { level: 13, tier: 5, prof: 22 },
+  炼虚: { level: 16, tier: 6, prof: 22 },
+  合体: { level: 19, tier: 7, prof: 22 },
+  大乘: { level: 22, tier: 8, prof: 22 },
 };
 
 export interface ContentSkill {
@@ -308,6 +312,7 @@ export const CONTENT_SKILLS: readonly ContentSkill[] = [
   ...WATER,
   ...FIRE,
   ...EARTH,
+  ...LATER_CONTENT_SKILLS,
 ];
 
 export const CATALOG_FAMILIES: readonly WeaponFamilyId[] = ["quick", "heavy", "polearm", "flexible", "ranged-mystic"];

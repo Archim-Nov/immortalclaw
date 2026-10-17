@@ -100,8 +100,11 @@ test("炼虚、合体、大乘接在化神后面，仍分前中后期", () => {
   assert.equal(realmPhaseForLevel(22), "前期");
   assert.equal(realmStageForLevel(24), "大乘");
   assert.equal(realmPhaseForLevel(24), "后期");
-  assert.equal(bandForLevel(16).tier, 5);
-  assert.equal(bandForLevel(24).manualRank, "化神");
+  assert.equal(bandForLevel(15).manualRank, "化神");
+  assert.equal(bandForLevel(16).tier, 6);
+  assert.equal(bandForLevel(16).manualRank, "炼虚");
+  assert.equal(bandForLevel(19).manualRank, "合体");
+  assert.equal(bandForLevel(24).manualRank, "大乘");
 });
 
 test("化神后期立炼虚台，不守神台", () => {

@@ -23,10 +23,11 @@ import type {
 import { deriveSpiritRootKindId, sortedElementEntries } from "./registration-taxonomy.js";
 
 /**
- * Realm bands already used by the ladder: 炼气 1–3, 筑基 4–6, 金丹 7–9, 元婴 10–12, 化神 13–15.
- * 炼虚, 合体, and 大乘 stay on the 化神 weapon and manual tier.
- * Weapon tiers and spell manuals use the same five steps. The manual words are 入门, 小成, 大成, 大圆满, 化神.
- * Existing loadout titles still say 入门篇 through 秘传篇. The agent-facing rank is this ladder.
+ * Realm bands: 炼气 1–3, 筑基 4–6, 金丹 7–9, 元婴 10–12, 化神 13–15,
+ * 炼虚 16–18, 合体 19–21, 大乘 22–24.
+ * Weapon tiers and spell manuals use the same eight steps.
+ * The manual words are 入门, 小成, 大成, 大圆满, 化神, 炼虚, 合体, 大乘.
+ * Existing loadout titles still say 入门篇 through 秘传篇. Later chapters say 炼虚篇, 合体篇, 大乘篇.
  */
 export const CONTENT_BANDS = [
   { realm: "炼气", minLevel: 1, tier: 1 as const, manualRank: "入门" },
@@ -34,9 +35,12 @@ export const CONTENT_BANDS = [
   { realm: "金丹", minLevel: 7, tier: 3 as const, manualRank: "大成" },
   { realm: "元婴", minLevel: 10, tier: 4 as const, manualRank: "大圆满" },
   { realm: "化神", minLevel: 13, tier: 5 as const, manualRank: "化神" },
+  { realm: "炼虚", minLevel: 16, tier: 6 as const, manualRank: "炼虚" },
+  { realm: "合体", minLevel: 19, tier: 7 as const, manualRank: "合体" },
+  { realm: "大乘", minLevel: 22, tier: 8 as const, manualRank: "大乘" },
 ] as const;
 
-export type ContentTier = 1 | 2 | 3 | 4 | 5;
+export type ContentTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type ManualRankName = (typeof CONTENT_BANDS)[number]["manualRank"];
 
 export {
@@ -72,11 +76,11 @@ export function primaryRootElements(cultivator: Cultivator): FiveElementId[] {
   return kind === "single-root" ? [first] : [first, second];
 }
 
-const SHOP_WEAPON: Record<ContentTier, number> = { 1: 120, 2: 270, 3: 480, 4: 780, 5: 1200 };
-const SHOP_SPELL: Record<ContentTier, number> = { 1: 90, 2: 210, 3: 390, 4: 660, 5: 1020 };
-const SECT_WEAPON: Record<ContentTier, number> = { 1: 80, 2: 180, 3: 320, 4: 520, 5: 800 };
-const SECT_SPELL: Record<ContentTier, number> = { 1: 60, 2: 140, 3: 260, 4: 440, 5: 680 };
-const CONTRIBUTION_GATE: Record<ContentTier, number> = { 1: 0, 2: 40, 3: 80, 4: 140, 5: 220 };
+const SHOP_WEAPON: Record<ContentTier, number> = { 1: 120, 2: 270, 3: 480, 4: 780, 5: 1200, 6: 2100, 7: 3200, 8: 4600 };
+const SHOP_SPELL: Record<ContentTier, number> = { 1: 90, 2: 210, 3: 390, 4: 660, 5: 1020, 6: 1700, 7: 2600, 8: 3800 };
+const SECT_WEAPON: Record<ContentTier, number> = { 1: 80, 2: 180, 3: 320, 4: 520, 5: 800, 6: 1200, 7: 1800, 8: 2600 };
+const SECT_SPELL: Record<ContentTier, number> = { 1: 60, 2: 140, 3: 260, 4: 440, 5: 680, 6: 980, 7: 1460, 8: 2100 };
+const CONTRIBUTION_GATE: Record<ContentTier, number> = { 1: 0, 2: 40, 3: 80, 4: 140, 5: 220, 6: 320, 7: 440, 8: 580 };
 
 const ELEMENT_BRANCH: Record<FiveElementId, SpellBranchId> = {
   metal: "metal-edge",
@@ -91,6 +95,11 @@ export function seekLine(channel: "weapon" | "spell", tier: number): string {
   const thing = channel === "weapon" ? "兵器" : "功法";
   const errand = channel === "weapon" ? "band-errand:weapon" : "band-errand:manual";
   const exchange = channel === "weapon" ? "exchange-sect-weapon" : "exchange-sect-manual";
+  if (tier >= 6) {
+    const band = bandForTier(tier);
+    const gate = CONTRIBUTION_GATE[tier as ContentTier];
+    return `${band.realm}这一阶${thing}，坊市不卖。得到${band.realm}才装备得上。先把这一系更低的阶补齐。凉州或雷州的灵脉，入了当地山门、把灵脉护下来再收，会在破境灵材之外再分出一份锻材或残页。人已经到了这一档，甲级七层到九层的神纹天隙探宝也会掉。带回洞府按配方做成，用掉才会学会。宗门贡献到${gate}，在驻地可以直接换，贡献不扣，也可以跑一趟差事把锻材带回来。大境界破过去，会留下一页这一阶的功法残页。`;
+  }
   if (tier >= 5) {
     return `化神这一阶${thing}，坊市不卖。先得自己破进化神，再去甲级七层到九层的神纹天隙拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑 ${errand}。贡献到 220 可以用 ${exchange} 直接换，贡献不扣。破境时会留下一页功法残页。`;
   }
@@ -126,6 +135,43 @@ function gearPaths(kind: "weapon" | "spell", id: string, tier: ContentTier): Gea
     : tier <= 2
       ? "丙级地宫六层往上会掉这一阶的锻材和残页。"
       : "乙级地宫五层往上会掉这一阶的锻材和残页。";
+  if (tier >= 6) {
+    const band = bandForTier(tier);
+    return [
+      {
+        kind: "秘境",
+        actionId: null,
+        line: `人到了${band.realm}，甲级七层到九层的神纹天隙会掉这一阶的锻材或残页。还在化神的人，那里仍掉化神那一档。`,
+      },
+      {
+        kind: "灵脉",
+        actionId: null,
+        line: `凉州或雷州的灵脉，入了当地山门、把脉护下来再收，会在破境灵材之外再分出一份这一阶的锻材或残页。坊市不卖。`,
+      },
+      {
+        kind: "配方",
+        actionId: recipe,
+        line: `锻材或残页带回洞府，按这一阶的配方做成能学的${thing}。用掉才会学会，不会自动换上。`,
+      },
+      {
+        kind: "宗门",
+        actionId: exchange,
+        line: `宗门贡献到${CONTRIBUTION_GATE[tier]}以后，在驻地直接换这一阶。贡献不扣，只要门槛。`,
+      },
+      {
+        kind: "任务",
+        actionId: errand,
+        line: `在自己宗门的驻地跑一趟差事，带回一份${material}。同一趟要隔六个时辰。`,
+      },
+      {
+        kind: "破境",
+        actionId: null,
+        line: kind === "spell"
+          ? "大境界破过去的时候，会留下一页这一阶的功法残页。残页拿回洞府合成。"
+          : "大境界破过去会把入门招再顺一顺。兵器本身不跟着破境到手，还是要去灵脉或神纹天隙拿锻材。",
+      },
+    ];
+  }
   const paths: GearPath[] = [
     { kind: "秘境", actionId: null, line: place },
     {
@@ -302,6 +348,42 @@ export function dungeonSourceTier(grade: "丙" | "乙" | "甲", rank: number): C
   if (step >= 7) return 5;
   if (step >= 4) return 4;
   return 3;
+}
+
+export function pendingPastSpiritTier(cultivator: Cultivator): ContentTier | null {
+  const reached = bandForLevel(cultivator.realmLevel).tier;
+  if (reached < 6) return null;
+  const pending = (["weapon", "spell"] as const)
+    .map((kind) => gearOffer(cultivator, kind)?.tier)
+    .filter((tier): tier is ContentTier => tier !== undefined && tier >= 6 && tier <= reached);
+  if (pending.length === 0) return null;
+  return Math.min(...pending) as ContentTier;
+}
+
+export function loadoutDropTier(cultivator: Cultivator, grade: "丙" | "乙" | "甲", rank: number): ContentTier {
+  const floor = dungeonSourceTier(grade, rank);
+  const pending = pendingPastSpiritTier(cultivator);
+  if (floor >= 5 && pending !== null && pending > floor) return pending;
+  return floor;
+}
+
+function forgeMaterialId(offer: GearOffer): ItemId {
+  return (offer.kind === "weapon" ? `weapon-material-${offer.id}` : `spell-fragment-${offer.id}`) as ItemId;
+}
+
+export function laterForgeDrop(cultivator: Cultivator, seed: string): { itemId: ItemId; name: string } | null {
+  const tier = pendingPastSpiritTier(cultivator);
+  if (tier === null) return null;
+  const options = (["weapon", "spell"] as const)
+    .map((kind) => gearOffer(cultivator, kind))
+    .filter((offer): offer is GearOffer => offer !== null && offer.tier === tier)
+    .sort((left, right) => hashValue(`${seed}:${left.id}`) - hashValue(`${seed}:${right.id}`));
+  const missing = options.find((offer) => counts(cultivator, forgeMaterialId(offer)) <= 0);
+  if (!missing) return null;
+  return {
+    itemId: forgeMaterialId(missing),
+    name: missing.kind === "weapon" ? `${missing.name}锻材` : `${missing.name}残本`,
+  };
 }
 
 function fragmentOf(branch: SpellBranchId, tier: ContentTier): ItemId | null {

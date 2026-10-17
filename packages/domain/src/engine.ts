@@ -183,6 +183,7 @@ import {
 import {
   bandForTier,
   dungeonSourceTier,
+  loadoutDropTier,
   gearOffer,
   nextGearViews,
   preferredHighTierDrop,
@@ -5002,7 +5003,7 @@ function grantLoadoutSourceDrop(
   rank: number,
   seed: string,
 ): void {
-  const tier = dungeonSourceTier(grade, rank);
+  const tier = loadoutDropTier(cultivator, grade, rank);
   const drop = preferredHighTierDrop(cultivator, tier, seed) ?? pickLoadoutSourceDrop(tier, seed);
   cultivator.inventory[drop] = (cultivator.inventory[drop] ?? 0) + 1;
   addResourceGainLog(
@@ -7063,7 +7064,7 @@ function resolveResidenceBreakthrough(
   });
   const successText = flavor?.successLife ?? (openedLateRealm
     ? (cultivator.realm === "炼虚" || cultivator.realm === "合体" || cultivator.realm === "大乘"
-      ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截。兵器和功法仍停在化神。`
+      ? `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，${cultivator.realm}的兵器和功法这才装备得上。`
       : `${cultivator.name}破境进了${cultivator.realm}。气血和灵力都涨了一截，这一阶的兵器和功法这才装备得上。`)
     : `${cultivator.name}破境到了第${cultivator.realmLevel}层。境界松动之后，整个人都轻了一点。`);
   addDaoLog(
