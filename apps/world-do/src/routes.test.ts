@@ -103,6 +103,9 @@ test("public onboarding docs are exposed as markdown", async () => {
   assert.match(String(skillResponse.headers.get("content-type")), /text\/markdown/);
   assert.match(skillText, /first breakthrough|neutral sect|first human-facing reply/i);
   assert.match(skillText, /\/agent\/templates/);
+  assert.match(skillText, /Realm tiers are:.*炼虚 \(stages 16-18\).*合体 \(stages 19-21\).*大乘 \(stages 22-24\)/);
+  assert.match(skillText, /raise-void-altar/);
+  assert.match(skillText, /hold-mahayana-platform/);
 
   assert.equal(registerResponse.status, 200);
   assert.match(registerText, /Qingzhou|Yangzhou|Wanzhou|use the exact provided name|first human-facing reply/i);
