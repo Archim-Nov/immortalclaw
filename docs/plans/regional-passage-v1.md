@@ -29,6 +29,12 @@ The sentences live in `packages/domain/src/dungeon-interior.ts` as `regionalPass
 - Point the skill, heartbeat, runtime guide, `AGENTS.md`, and the README at `active.passage`.
 - Expected check: the same names an agent is told to read are the names the passage returns.
 
+## Follow-up: deadline must not skip an open step
+
+The closing timeout used to call the safe signature option whenever `phase` was still `choice`. After the two passage steps landed, that fired about two ticks in, before the foe or the favor.
+
+The close now runs only when `currentPassage` is empty. While a step is open, the deadline does not answer it and does not grant the signature item, and the job stays alive so the next tick cannot finish the run in its place. Finishing a step arms one new window of the existing `choiceTicks` and gives the job at least that many ticks. The catalog numbers stay at two and three. Lengthening those numbers as well would be a second clock: a longer static deadline would still skip the step if the close were allowed to run, and the run would end on a different tick from the choice window.
+
 ## Verification
 
 - `node --import tsx --test packages/domain/src/regional-dungeons.test.ts packages/domain/src/dungeon-interior.test.ts`

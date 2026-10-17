@@ -1217,6 +1217,22 @@ function currentPassage(run: RegionalRunState): PassageStep | null {
   return steps[run.passageIndex ?? 0] ?? null;
 }
 
+function passageStillOpen(run: RegionalRunState): boolean {
+  return currentPassage(run) !== null;
+}
+
+// Each finished step gets one fresh choice window. The live job follows that
+// window. The catalog's choiceTicks and durationTicks stay as they are, so a
+// second static timer cannot close the run on a different tick.
+function armChoiceWindow(world: WorldState, run: RegionalRunState): void {
+  const dungeon = mustDungeon(run.dungeonId);
+  run.deadlineTick = world.tick + dungeon.choiceTicks;
+  const job = world.jobs[run.jobId];
+  if (job && job.remainingTicks < dungeon.choiceTicks) {
+    job.remainingTicks = dungeon.choiceTicks;
+  }
+}
+
 function passageViewOf(world: WorldState, run: RegionalRunState): RegionalPassageView | null {
   const steps = regionalPassage(run.dungeonId);
   const step = currentPassage(run);
@@ -1252,6 +1268,7 @@ function applyPassageChoice(
   if (!leader) {
     run.passageIndex = (run.passageIndex ?? 0) + 1;
     run.passageVotes = {};
+    armChoiceWindow(world, run);
     return option.line;
   }
   const companions = presentCultivators(world, run).filter((person) => person.id !== leader.id);
@@ -1308,6 +1325,7 @@ function applyPassageChoice(
   run.passageIndex = (run.passageIndex ?? 0) + 1;
   run.passageVotes = {};
   run.summary = line;
+  armChoiceWindow(world, run);
   return line;
 }
 
@@ -1951,6 +1969,12 @@ export function tickRegionalRun(
     return;
   }
   if (!run.sightingWritten && world.tick > run.startedAtTick) writeSighting(world, run);
+  if (run.phase === "choice" && passageStillOpen(run)) {
+    // The scout, foe, or favor is still unanswered. Ending the job here would
+    // fall through to the signature close and skip that step.
+    if (job.remainingTicks < 1) job.remainingTicks = 1;
+    return;
+  }
   if (run.phase === "choice" && world.tick >= run.deadlineTick) {
     const dungeon = mustDungeon(run.dungeonId);
     applyOption(world, run, safeOption(dungeon).id, combatantOf, false);
@@ -1966,6 +1990,9 @@ export function completeRegionalJob(
 ): string {
   const run = runsOf(world)[cultivator.id];
   if (!run || run.jobId !== job.id) return `${cultivator.name}从秘境里出来了。`;
+  if (run.phase === "choice" && passageStillOpen(run)) {
+    return run.summary;
+  }
   if (run.phase === "choice") {
     const dungeon = mustDungeon(run.dungeonId);
     applyOption(world, run, safeOption(dungeon).id, combatantOf, true);

@@ -29,7 +29,7 @@
 
 一个人进丙级或乙级，第一步的游记里有探路。后面若是搜寻，战报里能看见这一层自己的名字，比如雷泽残阵的雷枪客和断法修，中途精英是残阵主。第六步或第八步若抽到新场面，做法仍是中文，三到四个。同队的人仍只在原来的三处投票。
 
-进青岚药窟时，`state.regionalDungeons.active.options` 仍是等露、割藤、拔根。`active.passage` 是探路和露虫，见 `docs/specs/regional-passage-v1/spec.md`。`active.interior` 是旁边的石窝，四个做法。`regional-choice:room-qinglan-look` 只记下那一句，露芯还在等后面的选择。签名选择超时仍走等露。侧室若队长已经开口、同伴没有投出多数，就留下队长那一句；谁都没答，才带上侧室里稳的那一句。
+进青岚药窟时，`state.regionalDungeons.active.options` 仍是等露、割藤、拔根。`active.passage` 是探路和露虫，见 `docs/specs/regional-passage-v1/spec.md`。`active.interior` 是旁边的石窝，四个做法。`regional-choice:room-qinglan-look` 只记下那一句，露芯还在等后面的选择。探路或露虫还开着时，超时不跳到等露，露芯不进袋子。这两步走完以后，签名选择超时仍走等露。侧室若队长已经开口、同伴没有投出多数，就留下队长那一句；谁都没答，才带上侧室里稳的那一句。
 
 荒野和八荒的见闻还在。中间多出来的句子标题是路上的一处。
 
