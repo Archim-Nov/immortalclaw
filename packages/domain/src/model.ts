@@ -889,7 +889,7 @@ export interface DungeonRankYieldHint {
 }
 
 export interface GearPath {
-  kind: "秘境" | "配方" | "宗门" | "任务" | "破境" | "坊市";
+  kind: "秘境" | "灵脉" | "配方" | "宗门" | "任务" | "破境" | "坊市";
   line: string;
   actionId: string | null;
 }
