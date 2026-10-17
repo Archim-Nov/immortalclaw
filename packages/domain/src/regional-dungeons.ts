@@ -1,5 +1,14 @@
 import { grantCombatPractice } from "./combat-skills.js";
-import { regionalDeeper, regionalEscort, regionalInterior, type InteriorChoice } from "./dungeon-interior.js";
+import {
+  passageEnemy,
+  regionalDeeper,
+  regionalEscort,
+  regionalInterior,
+  regionalPassage,
+  type InteriorChoice,
+  type PassageChoice,
+  type PassageStep,
+} from "./dungeon-interior.js";
 import {
   STATUS_BURNING,
   STATUS_ENTANGLE,
@@ -19,6 +28,7 @@ import type {
   ItemId,
   RegionalDungeonReport,
   RegionalDungeonsView,
+  RegionalPassageView,
   RegionalPlaceView,
   RegionalRunState,
   SpellLoadoutId,
@@ -26,7 +36,7 @@ import type {
 } from "./model.js";
 import type { StateId } from "./constants.js";
 import { runPartyBattle, type BattleCombatant, type EnemyPattern } from "./party-battle.js";
-import { getPartyOf } from "./social.js";
+import { addMutualGrudge, getPartyOf, grantOwedFavor } from "./social.js";
 import { pushTravelNote, travelNote } from "./travelogue.js";
 
 /**
@@ -34,7 +44,9 @@ import { pushTravelNote, travelNote } from "./travelogue.js";
  *
  * 丙级、乙级、甲级 stay on their own floors. These runs are entered from the
  * state itself, or from a main city or sect outpost when they are not tied
- * to one state. A run is a short job with one Chinese choice.
+ * to one state. A state dungeon walks a scout step and then a named foe or a
+ * favor before the closing choice. The three shorter caves stay one choice.
+ * The closing choice can still end the run on its own.
  */
 
 type Band = "炼气" | "筑基" | "金丹" | "元婴" | "化神";
@@ -125,8 +137,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "藤还活着，露挂在上面。",
-    mechanic: "等露不打就能接住露芯。割藤要打活藤。拔根更险，缠绕会缠上来，赢了才有露芯。",
-    advice: "青州的青岚药窟不在丙级地宫里，也不是州外的青岚坡。得到筑基，从这一州就能进。藤还活着。等露、割藤、拔根，三条路不一样。带出来的是青岚露芯，筑基闭关时按在舌下。",
+    mechanic: "进门先顺着露探路，再碰一窝露虫。然后才是等露、割藤或拔根。等露不打就能接住露芯。割藤要打活藤。拔根更险，缠绕会缠上来，赢了才有露芯。",
+    advice: "青州的青岚药窟不在丙级地宫里，也不是州外的青岚坡。得到筑基，从这一州就能进。藤还活着。进去以后先探路，再碰露虫，然后才是等露、割藤、拔根。带出来的是青岚露芯，筑基闭关时按在舌下。",
     signatureItemId: "qinglan-dew-core",
     signatureName: "青岚露芯",
     signatureUse: "筑基闭关时用一份，修为多涨一点。不是丹霞露。",
@@ -202,8 +214,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: true,
     prompt: "钟在水面下，潮还没退干净。",
-    mechanic: "潮开的八刻才进得去，二十四刻一潮。绕开钟不打。敲钟或潜入要跟沉钟打，钟鸣会抽灵力，并挂霜寒。",
-    advice: "扬州的听潮钟窟跟着潮，不是州外的听潮浦。潮开时从这一州进得去，潮退了门就关。得到筑基中期。绕钟、敲钟、潜入，三条路。带出来的是潮钟碎片，闭关时能把灵力拉回一点。",
+    mechanic: "进门先沿水线探路，再碰潮蛭。潮开的八刻才进得去，二十四刻一潮。绕开钟不打。敲钟或潜入要跟沉钟打，钟鸣会抽灵力，并挂霜寒。",
+    advice: "扬州的听潮钟窟跟着潮，不是州外的听潮浦。潮开时从这一州进得去，潮退了门就关。得到筑基中期。进去以后先探路，再碰潮蛭，然后才是绕钟、敲钟、潜入。带出来的是潮钟碎片，闭关时能把灵力拉回一点。",
     signatureItemId: "tide-bell-shard",
     signatureName: "潮钟碎片",
     signatureUse: "筑基闭关时握着，灵力回一点，修为也多涨一点。",
@@ -282,8 +294,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "索还连着，藤已经在咬。",
-    mechanic: "慢走，索还够，要打一架才有纤维。快跑索更细，架更难。砍藤不打，纤维也没了，只剩几枚灵石。",
-    advice: "蜀州的栈云断索不在州外的栈云径上。得到筑基，从这一州进。索只有这一根。慢走、快跑、砍藤，三条路。带出来的是云栈纤维，洞府炼制时用一份，这一炉灵石少两成。",
+    mechanic: "进门先试索，再碰藤雀。慢走，索还够，要打一架才有纤维。快跑索更细，架更难。砍藤不打，纤维也没了，只剩几枚灵石。",
+    advice: "蜀州的栈云断索不在州外的栈云径上。得到筑基，从这一州进。索只有这一根。进去以后先试索，再碰藤雀，然后才是慢走、快跑、砍藤。带出来的是云栈纤维，洞府炼制时用一份，这一炉灵石少两成。",
     signatureItemId: "cloud-plank-fiber",
     signatureName: "云栈纤维",
     signatureUse: "洞府炼制时用一份，这一炉少两成灵石。用过就没了。",
@@ -357,8 +369,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "席还温着，茶渍干在桥板上。",
-    mechanic: "入席不打，揭一张旧茶纹。掀席要跟桥影打，定根会拖住步子。离席什么都不带。",
-    advice: "宛州的茶桥旧席不在州外的茶桥野。得到金丹前期，从这一州进。入席、掀席、离席，三条路。带出来的是旧茶纹。金丹闭关时若没有丹霞露，用这一份，涨得少一些。",
+    mechanic: "进门先看茶渍，再处理半盏冷茶。同来的人可以让、分，或自己喝。入席不打，揭一张旧茶纹。掀席要跟桥影打，定根会拖住步子。离席什么都不带。",
+    advice: "宛州的茶桥旧席不在州外的茶桥野。得到金丹前期，从这一州进。进去以后先看茶渍，再分半盏冷茶，然后才是入席、掀席、离席。带出来的是旧茶纹。金丹闭关时若没有丹霞露，用这一份，涨得少一些。",
     signatureItemId: "old-tea-pattern",
     signatureName: "旧茶纹",
     signatureUse: "金丹闭关时若没有丹霞露，用一份，修为少涨一点。",
@@ -426,8 +438,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "碑还正着，两边的秤已经有人动过。",
-    mechanic: "居中不打，衡石碎片从碑座掉下来。偏左或偏右都要打，定根会压先手。偏右更重。",
-    advice: "中州的衡碑试衡不在州外的衡野驿，也不是地宫里的旧驿石廊。得到金丹中期，从这一州进。居中、偏左、偏右，三条路。带出来的是衡石碎片。金丹闭关时若没有丹霞露，用一份，这一州的名声也会动一动。",
+    mechanic: "进门先看秤星，再碰衡卒。居中不打，衡石碎片从碑座掉下来。偏左或偏右都要打，定根会压先手。偏右更重。",
+    advice: "中州的衡碑试衡不在州外的衡野驿，也不是地宫里的旧驿石廊。得到金丹中期，从这一州进。进去以后先看秤星，再碰衡卒，然后才是居中、偏左、偏右。带出来的是衡石碎片。金丹闭关时若没有丹霞露，用一份，这一州的名声也会动一动。",
     signatureItemId: "balance-stone-chip",
     signatureName: "衡石碎片",
     signatureUse: "金丹闭关时若没有丹霞露，用一份。修为少涨一点，这一州的名声也加一点。",
@@ -504,8 +516,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "爪印比靴子深，霜还没化。",
-    mechanic: "掩味要先花气血，然后打一场寻常的。引兽不花那口气血，进场就少一截血，霜寒更重。退回林线什么都不带。",
-    advice: "幽州的猎霜夜巡不在州外的猎霜原上。得到金丹后期，从这一州进。掩味、引兽、退回林线，三条路。带出来的是霜猎骨。金丹闭关时若没有丹霞露就用它，身上有伤还能压下去两刻。",
+    mechanic: "进门先看爪印，再分火堆边的兽肉。掩味要先花气血，然后打一场寻常的。引兽不花那口气血，进场就少一截血，霜寒更重。退回林线什么都不带。",
+    advice: "幽州的猎霜夜巡不在州外的猎霜原上。得到金丹后期，从这一州进。进去以后先看爪印，再分兽肉，然后才是掩味、引兽、退回林线。带出来的是霜猎骨。金丹闭关时若没有丹霞露就用它，身上有伤还能压下去两刻。",
     signatureItemId: "frost-hunt-bone",
     signatureName: "霜猎骨",
     signatureUse: "金丹闭关时若没有丹霞露，用一份。有伤的话，这一坐再把伤压下去两刻。",
@@ -580,8 +592,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "坛上的灰还是热的。这不是雷泽残阵，也不是焦林野。",
-    mechanic: "避到焦木后面，雷祭还是要打，但轻一些。站在坛上硬接，焚灼先贴手，赢了东西多。退出祭坛什么都不带。",
-    advice: "雷州的焦雷祭坛不在地宫的雷泽残阵里，也不是州外的焦林野。得到元婴，从这一州进。避到焦木后，或站在坛上。带出来的是焦雷芯。它不是婴火莲，不能拿去破境。元婴闭关时若没有养魂砂，用一份，涨得少一些。",
+    mechanic: "进门先看焦痕，再碰焦雷虫。这仍不是雷泽残阵，也不是焦林野。避到焦木后面，雷祭还是要打，但轻一些。站在坛上硬接，焚灼先贴手，赢了东西多。退出祭坛什么都不带。",
+    advice: "雷州的焦雷祭坛不在地宫的雷泽残阵里，也不是州外的焦林野。得到元婴，从这一州进。进去以后先看焦痕，再碰焦雷虫，然后才是避到焦木后或站在坛上。带出来的是焦雷芯。它不是婴火莲，不能拿去破境。元婴闭关时若没有养魂砂，用一份，涨得少一些。",
     signatureItemId: "scorched-thunder-core",
     signatureName: "焦雷芯",
     signatureUse: "元婴闭关时若没有养魂砂，用一份。不是婴火莲，不能拿去破境。",
@@ -657,8 +669,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "船舱只开得了一处。",
-    mechanic: "只开一舱。盐舱是盐纹晶。石箱是灵石，没有晶。暗舱是空的，潮灌进来，挂伤，灵石也少。",
-    advice: "沧州的盐风沉舶不在州外的盐风礁上。得到元婴后期，从这一州进。三舱只开一处：盐舱、石箱、暗舱。带出来的是盐纹晶。元婴闭关时若没有养魂砂，用一份，涨得少一些。它不是破境灵材。",
+    mechanic: "进门先看盐壳，再碰盐蟹。舱还是只开一个。盐舱是盐纹晶。石箱是灵石，没有晶。暗舱是空的，潮灌进来，挂伤，灵石也少。",
+    advice: "沧州的盐风沉舶不在州外的盐风礁上。得到元婴后期，从这一州进。进去以后先看盐壳，再碰盐蟹，然后三舱只开一处：盐舱、石箱、暗舱。带出来的是盐纹晶。元婴闭关时若没有养魂砂，用一份，涨得少一些。它不是破境灵材。",
     signatureItemId: "salt-pattern-crystal",
     signatureName: "盐纹晶",
     signatureUse: "元婴闭关时若没有养魂砂，用一份。不是破境灵材。",
@@ -722,8 +734,8 @@ const DUNGEONS: readonly RegionalDungeonDef[] = [
     choiceTicks: 2,
     tide: false,
     prompt: "关里的法诀先乱。兵器还拿得住。",
-    mechanic: "进门以后法术被封，兵器还能用。持兵进关是寻常的一架。硬用法术会先吃一层反噬，架更难。断法挂在镇沙将身上。",
-    advice: "凉州的砂门闭关不在州外的砂门碛上。得到化神，从这一州进。法术进门会被封住，兵器还能用。持兵，或硬用法术。带出来的是镇沙符页。它不是神纹尘，不能拿去破境。化神闭关时若没有神纹尘，用这一页稳住一手。",
+    mechanic: "进门先看符，再决定谁挡这一阵沙。法术仍会被封，兵器还能用。持兵进关是寻常的一架。硬用法术会先吃一层反噬，架更难。断法挂在镇沙将身上。",
+    advice: "凉州的砂门闭关不在州外的砂门碛上。得到化神，从这一州进。进去以后先看符，再决定谁挡沙，然后才是持兵或硬用法术。法术进门会被封住，兵器还能用。带出来的是镇沙符页。它不是神纹尘，不能拿去破境。化神闭关时若没有神纹尘，用这一页稳住一手。",
     signatureItemId: "sand-seal-page",
     signatureName: "镇沙符页",
     signatureUse: "化神闭关时若没有神纹尘，用一页。不是神纹尘，不能拿去破境。",
@@ -1199,6 +1211,106 @@ function ensureDeeperNoted(world: WorldState, run: RegionalRunState): void {
   applyInteriorChoice(world, run, chosen, "deeper");
 }
 
+function currentPassage(run: RegionalRunState): PassageStep | null {
+  const steps = regionalPassage(run.dungeonId);
+  if (!steps || steps.length === 0) return null;
+  return steps[run.passageIndex ?? 0] ?? null;
+}
+
+function passageViewOf(world: WorldState, run: RegionalRunState): RegionalPassageView | null {
+  const steps = regionalPassage(run.dungeonId);
+  const step = currentPassage(run);
+  if (!steps || !step || run.phase !== "choice") return null;
+  const safe = step.options.find((option) => option.safe) ?? step.options[0];
+  if (!safe) return null;
+  const votes = run.passageVotes ?? {};
+  return {
+    step: (run.passageIndex ?? 0) + 1,
+    total: steps.length,
+    kind: step.kind,
+    prompt: step.prompt,
+    enemyName: step.enemyName ?? null,
+    safeOptionId: safe.id,
+    awaitingNames: presentCultivators(world, run).filter((person) => !votes[person.id]).map((person) => person.name),
+    options: step.options.map((option) => ({
+      optionId: option.id,
+      label: option.label,
+      description: option.description,
+    })),
+  };
+}
+
+function applyPassageChoice(
+  world: WorldState,
+  run: RegionalRunState,
+  step: PassageStep,
+  option: PassageChoice,
+  combatantOf: RegionalCombatantOf,
+): string {
+  const dungeon = mustDungeon(run.dungeonId);
+  const leader = world.cultivators[run.leaderId];
+  if (!leader) {
+    run.passageIndex = (run.passageIndex ?? 0) + 1;
+    run.passageVotes = {};
+    return option.line;
+  }
+  const companions = presentCultivators(world, run).filter((person) => person.id !== leader.id);
+  const withCompany = companions.length > 0;
+  let line = withCompany && option.partyLine ? option.partyLine : option.line;
+  let won: boolean | null = null;
+  if (option.fight && step.enemyName) {
+    const people = presentCultivators(world, run);
+    const allies = people.map((person) => combatantOf(person));
+    const battle = runPartyBattle({
+      allies,
+      enemies: [passageEnemy(step.enemyName, step.pattern ?? "pressure", allies[0])],
+      policy: "balanced",
+      seed: `${world.tick}:${run.leaderId}:${dungeon.id}:${option.id}`,
+      maxRounds: 6,
+      leaderId: leader.id,
+    });
+    won = battle.outcome === "win";
+    line = won ? option.line : (option.failLine ?? "这一下没站住。");
+    if (won) {
+      for (const entry of battle.practice) {
+        const cultivator = world.cultivators[entry.id];
+        if (cultivator) grantCombatPractice(cultivator, entry.skillIds, 1);
+      }
+    } else {
+      spendQi(leader, 4);
+    }
+    for (const person of people) {
+      pushCombatLog(world, person, dungeon, battle.summary, line, won, step.enemyName);
+    }
+  }
+  if (won !== false && (option.stones ?? 0) > 0) splitStones(leader, companions, option.stones ?? 0);
+  if (won !== false && (option.qi ?? 0) > 0) spendQi(leader, option.qi ?? 0);
+  if (withCompany && option.favorReason) {
+    for (const companion of companions) {
+      grantOwedFavor(world, companion.id, leader.id, option.favorReason, "regional-passage");
+    }
+  }
+  if (withCompany && (option.grudge ?? 0) > 0) {
+    for (const companion of companions) addMutualGrudge(world, leader.id, companion.id, option.grudge ?? 0);
+  }
+  if (step.kind === "scout") line = `${dungeon.name}的见闻：${line}`;
+  notePeople(
+    world,
+    presentCultivators(world, run),
+    {
+      kind: step.kind === "fight" ? "find" : "insight",
+      title: step.kind === "scout" ? `${dungeon.name}的见闻` : dungeon.name,
+      detail: line,
+      mood: "这一段可以回去说",
+    },
+    { kind: step.kind === "fight" ? "fight" : "growth", text: line },
+  );
+  run.passageIndex = (run.passageIndex ?? 0) + 1;
+  run.passageVotes = {};
+  run.summary = line;
+  return line;
+}
+
 function realmBand(level: number): Band | null {
   if (level >= 13) return "化神";
   if (level >= 10) return "元婴";
@@ -1414,6 +1526,7 @@ function pushCombatLog(
   summary: DungeonCombatSummary,
   line: string,
   won: boolean,
+  enemyName = dungeon.bossName,
 ): void {
   if (!Array.isArray(world.combatLogs)) return;
   if (typeof world.nextCombatSequence !== "number") world.nextCombatSequence = world.combatLogs.length + 1;
@@ -1422,8 +1535,8 @@ function pushCombatLog(
     tick: world.tick,
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
-    encounterId: `regional:${dungeon.id}`,
-    enemyName: dungeon.bossName,
+    encounterId: enemyName === dungeon.bossName ? `regional:${dungeon.id}` : `regional:${dungeon.id}:passage`,
+    enemyName,
     outcome: won ? "victory" : "defeat",
     damageTaken: 0,
     spiritualPowerSpent: 0,
@@ -1684,6 +1797,8 @@ export function openRegionalRun(
     interiorVotes: {},
     deeperResolved: false,
     deeperVotes: {},
+    passageIndex: 0,
+    passageVotes: {},
   };
   runsOf(world)[cultivator.id] = run;
   notePeople(world, [cultivator, ...companions], {
@@ -1704,6 +1819,31 @@ export function submitRegionalChoice(
   const run = findRun(world, cultivator.id);
   if (!run || run.phase !== "choice") throw new GameplayRejection("这一处没有在等你开口。");
   const dungeon = mustDungeon(run.dungeonId);
+  const step = currentPassage(run);
+  const stepOption = step?.options.find((option) => option.id === optionId) ?? null;
+  if (step && stepOption) {
+    const present = presentCultivators(world, run);
+    if (!present.some((person) => person.id === cultivator.id)) {
+      throw new GameplayRejection("这一岔路不是在等你开口。");
+    }
+    if (present.length <= 1) {
+      const line = applyPassageChoice(world, run, step, stepOption, combatantOf);
+      return { summary: line, done: false };
+    }
+    run.passageVotes = { ...(run.passageVotes ?? {}), [cultivator.id]: optionId };
+    const needed = votesNeeded(present.length);
+    const tally = new Map<string, number>();
+    for (const person of present) {
+      const vote = run.passageVotes?.[person.id];
+      if (!vote) continue;
+      tally.set(vote, (tally.get(vote) ?? 0) + 1);
+    }
+    const winner = [...tally.entries()].find(([, count]) => count >= needed);
+    if (!winner) return { summary: `${cultivator.name}先把这一步的话放了下来。`, done: false };
+    const chosen = step.options.find((option) => option.id === winner[0]) ?? stepOption;
+    const line = applyPassageChoice(world, run, step, chosen, combatantOf);
+    return { summary: line, done: false };
+  }
   const scene = interiorScene(run.dungeonId);
   const interiorOption = scene?.options.find((option) => option.id === optionId) ?? null;
   if (interiorOption) {
@@ -1881,7 +2021,7 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
       phase: run.phase,
       stepLine: run.phase === "vigil"
         ? `${dungeon.name}里还坐着。时辰没到，灰不落。`
-        : `${dungeon.prompt}${run.interiorResolved ? "" : interiorScene(dungeon.id)?.prompt ?? ""}${run.deeperResolved ? "" : deeperScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
+        : `${currentPassage(run)?.prompt ?? ""}${dungeon.prompt}${run.interiorResolved ? "" : interiorScene(dungeon.id)?.prompt ?? ""}${run.deeperResolved ? "" : deeperScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
       safeOptionId: run.phase === "choice" ? safeOption(dungeon).id : null,
       awaitingNames: run.phase === "choice"
         ? presentCultivators(world, run).filter((person) => !run.votes[person.id]).map((person) => person.name)
@@ -1915,6 +2055,7 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
           })),
         }
         : null,
+      passage: passageViewOf(world, run),
     }
     : null;
   const names = places.map((place) => place.name);
@@ -1951,6 +2092,16 @@ export function listRegionalChoiceActions(world: WorldState, cultivator: Cultiva
   if (!dungeon) return [];
   const actions: AvailableAction[] = [];
   if (run.phase === "choice" && presentCultivators(world, run).some((person) => person.id === cultivator.id)) {
+    const step = currentPassage(run);
+    for (const option of step?.options ?? []) {
+      actions.push({
+        actionId: `regional-choice:${option.id}` as ActionId,
+        label: `${dungeon.name}：${option.label}`,
+        description: `${step?.prompt ?? ""}${option.description}`,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
     const scene = run.interiorResolved ? null : interiorScene(dungeon.id);
     for (const option of scene?.options ?? []) {
       actions.push({

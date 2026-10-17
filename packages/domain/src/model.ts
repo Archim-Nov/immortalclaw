@@ -1087,6 +1087,22 @@ export interface RegionalRunState {
   deeperResolved?: boolean;
   /** Votes on the farther room, separate from the side room and the signature choice. */
   deeperVotes?: Record<string, string>;
+  /** Passage steps already answered. Absent means the scout step is still open. */
+  passageIndex?: number;
+  /** Votes on the passage step that is open now, separate from the rooms and the signature choice. */
+  passageVotes?: Record<string, string>;
+}
+
+/** The scout, foe, or favor step still open inside a state dungeon. */
+export interface RegionalPassageView {
+  step: number;
+  total: number;
+  kind: "scout" | "fight" | "favor";
+  prompt: string;
+  enemyName: string | null;
+  safeOptionId: string;
+  awaitingNames: string[];
+  options: Array<{ optionId: string; label: string; description: string }>;
 }
 
 export interface RegionalPlaceView {
@@ -1134,6 +1150,8 @@ export interface RegionalDungeonsView {
       safeOptionId: string;
       options: Array<{ optionId: string; label: string; description: string }>;
     } | null;
+    /** Scout, foe, or favor step still open on a state dungeon. Null once those steps are done, and null in the three shorter caves. */
+    passage: RegionalPassageView | null;
   } | null;
   lastReport: RegionalDungeonReport | null;
 }

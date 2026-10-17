@@ -21,7 +21,9 @@ import type { DungeonBeat, DungeonExpeditionPolicy, DungeonGrade } from "./model
  * Ranked floors still wake at most three times. These rooms, packs, and
  * side choices sit in the steps that used to be silent. State dungeons keep
  * their signature choice; the side room is answered with the same
- * `regional-choice` id and does not replace the door.
+ * `regional-choice` id and does not replace the door. Each of the nine
+ * state dungeons also walks a scout step, then a foe or a favor, before
+ * that closing choice. Those steps use the same action and do not end the run.
  */
 
 export interface NamedFoe {
@@ -46,6 +48,31 @@ export interface InteriorChoice {
 export interface InteriorScene {
   prompt: string;
   options: readonly InteriorChoice[];
+}
+
+export interface PassageChoice {
+  id: string;
+  label: string;
+  description: string;
+  safe?: boolean;
+  line: string;
+  partyLine?: string;
+  failLine?: string;
+  fight?: boolean;
+  stones?: number;
+  qi?: number;
+  favorReason?: string;
+  grudge?: number;
+}
+
+export interface PassageStep {
+  id: string;
+  kind: "scout" | "fight" | "favor";
+  prompt: string;
+  enemyName?: string;
+  enemyMove?: string;
+  pattern?: EnemyPattern;
+  options: readonly PassageChoice[];
 }
 
 export interface WakeEffect {
@@ -386,6 +413,241 @@ export function regionalDeeper(dungeonId: string): InteriorScene | null {
 
 export function regionalDeeperIds(): string[] {
   return Object.keys(REGIONAL_DEEPER);
+}
+
+const STATE_PASSAGES: Record<string, readonly PassageStep[]> = {
+  "qinglan-herb-cave": [
+    {
+      id: "qinglan-scout",
+      kind: "scout",
+      prompt: "露还挂在藤上。进到收束以前，先把这一段路看清楚。",
+      options: [
+        { id: "pass-qinglan-follow", label: "顺着露走", description: "露还没干，顺着它往里走，不碰藤。", safe: true, line: "你顺着还没干的露往里走。藤没拦，瓶子先凉了。" },
+        { id: "pass-qinglan-part", label: "把藤拨开", description: "挡眼的藤拨开，路看得清，鞋底可能被缠一下。", line: "你把挡眼的藤拨开。露在更里面，鞋底被缠了一下。" },
+        { id: "pass-qinglan-sit", label: "在石上坐一会儿", description: "滴水的石头上坐一坐，先把路认出来。", line: "你在滴水的石头上坐了一会儿。绿的那一滴还没落，路已经认出来了。" },
+      ],
+    },
+    {
+      id: "qinglan-foe",
+      kind: "fight",
+      prompt: "藤根里钻出一窝露虫，正往瓶子上爬。",
+      enemyName: "露虫",
+      enemyMove: "往瓶子上爬",
+      pattern: "drain",
+      options: [
+        { id: "pass-qinglan-drive", label: "把露虫赶开", description: "把爬向瓶子的露虫赶开。虫子会还手。", fight: true, stones: 4, line: "你把露虫从瓶子上赶开。虫子往藤根里钻，瓶子还是空的。", failLine: "露虫钻进袖口，没被赶开。" },
+        { id: "pass-qinglan-around", label: "绕开虫窝", description: "不跟露虫打，从藤根旁边绕过去。", safe: true, line: "你绕开那窝露虫。虫子还在藤根里，人先过去了。" },
+        { id: "pass-qinglan-lure", label: "把虫子引到藤上", description: "让藤自己去动那窝露虫。引的时候虫子会扑过来。", fight: true, stones: 6, line: "你把露虫引到藤上。藤自己动了一下，虫子散了，瓶子还是空的。", failLine: "虫子没跟上藤，反而爬到手上。" },
+      ],
+    },
+  ],
+  "tide-bell-cave": [
+    {
+      id: "tide-scout",
+      kind: "scout",
+      prompt: "潮还没退尽。钟在前面，先沿着水线把路看清。",
+      options: [
+        { id: "pass-tide-line", label: "沿水线走", description: "贴着水线往里走，先不碰钟。", safe: true, line: "你沿着水线走。鞋先凉了，钟还没到跟前。" },
+        { id: "pass-tide-listen", label: "先听钟停一停", description: "停下来听钟响完，再看哪边是干的。", line: "你停下来听钟。钟只响了一下，水线以上是干的。" },
+        { id: "pass-tide-dry", label: "在干处等一等", description: "站在水线上面等一等，潮还在，路先认出来。", line: "你站在水线上面等了一等。潮还在，路是认得出的。" },
+      ],
+    },
+    {
+      id: "tide-foe",
+      kind: "fight",
+      prompt: "钟座旁边爬着潮蛭，锈从壳上往下掉。",
+      enemyName: "潮蛭",
+      enemyMove: "壳上的锈往下掉",
+      pattern: "drain",
+      options: [
+        { id: "pass-tide-drive", label: "把潮蛭赶开", description: "把爬在钟座上的潮蛭赶开。蛭会还手。", fight: true, stones: 4, line: "你把潮蛭从钟座上赶开。锈还在滴，碎片还没到手。", failLine: "潮蛭没被赶开，锈沾到了手上。" },
+        { id: "pass-tide-around", label: "贴着干处绕开", description: "不跟潮蛭打，从干的那一圈绕过去。", safe: true, line: "你贴着干处绕开潮蛭。蛭还趴在钟座上，人先过去了。" },
+        { id: "pass-tide-net", label: "用袖口把蛭捞开", description: "袖口去捞。捞得动，蛭也会夹一下。", fight: true, stones: 6, line: "你用袖口把潮蛭捞开。袖子湿了，钟还没敲。", failLine: "袖口没捞住，潮蛭还在钟座上。" },
+      ],
+    },
+  ],
+  "cloud-plank-break": [
+    {
+      id: "plank-scout",
+      kind: "scout",
+      prompt: "索还绷着。先看这一截能不能踩，再往收束走。",
+      options: [
+        { id: "pass-plank-step", label: "先踩一脚试索", description: "在这一截上踩一脚，看索还弹不弹。", safe: true, line: "你在这一截索上踩了一脚。索还弹，人没有往下出溜。" },
+        { id: "pass-plank-vine", label: "抓住旁边的藤", description: "先抓住藤，再看脚下的索。", line: "你抓住旁边的藤。藤上已经起毛，索还在脚下响。" },
+        { id: "pass-plank-old", label: "看垂着的旧索", description: "石缝里还有一截旧索，先看它断在哪里。", line: "石缝里垂着一截旧索。你看清它断在半腰，新的那根还绷着。" },
+      ],
+    },
+    {
+      id: "plank-foe",
+      kind: "fight",
+      prompt: "索上落着一只藤雀，见人就扑。",
+      enemyName: "藤雀",
+      enemyMove: "见人就往脸上扑",
+      pattern: "swift",
+      options: [
+        { id: "pass-plank-shoo", label: "把藤雀赶开", description: "把落在索上的藤雀赶开。雀会扑过来。", fight: true, stones: 4, line: "你把藤雀从索上赶开。雀飞到崖壁那边，纤维还没拆下来。", failLine: "藤雀没被赶开，还在索上扑。" },
+        { id: "pass-plank-duck", label: "低下头绕过去", description: "不跟藤雀打，低下头从索上绕过去。", safe: true, line: "你低下头从索上绕过去。藤雀还在上面叫，人先过去了。" },
+        { id: "pass-plank-chase", label: "追着雀往前走", description: "跟着藤雀往索上走。雀会回头扑。", fight: true, stones: 6, line: "你追着藤雀走了几步。雀飞开了，这一截索还连着。", failLine: "藤雀回头扑到脸上，这一截没过去。" },
+      ],
+    },
+  ],
+  "old-tea-seat": [
+    {
+      id: "tea-scout",
+      kind: "scout",
+      prompt: "席还温着。先把茶渍和空杯看清楚，再决定入不入席。",
+      options: [
+        { id: "pass-tea-stain", label: "先看茶渍", description: "看桥板上的茶渍干到哪一笔，人先不坐下。", safe: true, line: "桥板上的茶渍还在。你看清它干到哪一笔，人还没坐下。" },
+        { id: "pass-tea-back", label: "绕到席后面", description: "绕到席后面看那只扣着的空杯。", line: "你绕到席后面。空杯扣着，纹还在杯底，没有揭。" },
+        { id: "pass-tea-bridge", label: "在桥上站一会儿", description: "先在桥上站一会儿，看水响不响。", line: "你在桥上站了一会儿。水不响，影先动了一下。" },
+      ],
+    },
+    {
+      id: "tea-favor",
+      kind: "favor",
+      prompt: "席边还剩半盏冷茶。同来的人若在，这一盏要先说清楚归谁。",
+      options: [
+        { id: "pass-tea-yield", label: "把茶让出去", description: "半盏冷茶让给同来的人。没有别人，就留给后来的人。", safe: true, favorReason: "把席上的茶让给我", line: "席上没有别人。你把半盏冷茶放下，留给后来的人。", partyLine: "你把半盏冷茶让给同来的人。这份人情记下了。" },
+        { id: "pass-tea-split", label: "这一盏分成两口", description: "不独占。同来的人在，各人手里都有一点。", stones: 6, line: "席上没有别人，这一口换成几枚灵石，进了自己袋子。", partyLine: "这一盏分成两口。各人手里都有一点，没有谁独占。" },
+        { id: "pass-tea-drink", label: "自己喝完", description: "半盏冷茶自己喝。同来的人若在，会记下这件事。", grudge: 3, line: "你把半盏冷茶喝了。席上没有别人，也就没有人计较。", partyLine: "茶是你喝的。同来的人还站在席边，这件事记下了。" },
+      ],
+    },
+  ],
+  "balance-stele": [
+    {
+      id: "stele-scout",
+      kind: "scout",
+      prompt: "碑还立着。先看秤星偏没偏，再决定怎么收。",
+      options: [
+        { id: "pass-stele-mark", label: "先看秤星", description: "看秤星停在哪一格，人先不推。", safe: true, line: "你看了看秤星。星还在中间，碑没有先动。" },
+        { id: "pass-stele-shadow", label: "站在碑影里", description: "先站到碑影里，看影子偏不偏。", line: "你站在碑影里。影子比人长一截，星还没偏。" },
+        { id: "pass-stele-bag", label: "把袋子放在地上", description: "袋子先放在碑座旁边，免得动手的时候晃。", line: "你把袋子放在碑座旁边。秤没有因为这一下放而动。" },
+      ],
+    },
+    {
+      id: "stele-foe",
+      kind: "fight",
+      prompt: "碑座下站着一个衡卒，手里按着秤星。",
+      enemyName: "衡卒",
+      enemyMove: "手里按着秤星",
+      pattern: "pressure",
+      options: [
+        { id: "pass-stele-drive", label: "把衡卒请开", description: "请开按着秤星的衡卒。卒会还手。", fight: true, stones: 4, line: "你把衡卒从碑座下请开。秤星还在原处，碎片还没掉。", failLine: "衡卒没让开，手还按在秤星上。" },
+        { id: "pass-stele-around", label: "从碑影里绕开", description: "不跟衡卒打，从碑影里绕过去。", safe: true, line: "你从碑影里绕开衡卒。卒还站在碑座下，人先过去了。" },
+        { id: "pass-stele-push", label: "把秤星推回去", description: "手按上去把星推正。衡卒会拦。", fight: true, stones: 6, line: "你把秤星推回中间。衡卒退了半步，碎片还在碑座里。", failLine: "秤星没推回去，衡卒把你的手挡开了。" },
+      ],
+    },
+  ],
+  "frost-night-hunt": [
+    {
+      id: "frost-scout",
+      kind: "scout",
+      prompt: "爪印比靴子深。先把这一段霜看清，再决定掩不掩味。",
+      options: [
+        { id: "pass-frost-track", label: "顺着爪印走", description: "顺着新的爪印往前，先不引兽。", safe: true, line: "你顺着爪印走了一段。印比靴子深，兽还没到跟前。" },
+        { id: "pass-frost-scent", label: "先把气味压住", description: "在林线上把气味压一压，再往前看。", line: "你在林线上把气味压了压。呼出来的气还是白的，爪印更清楚了。" },
+        { id: "pass-frost-lee", label: "在背风处停一停", description: "背风的地方停一停，看火堆还剩什么。", line: "你在背风处停了一停。炭还在，干粮不在，只有一截结霜的东西。" },
+      ],
+    },
+    {
+      id: "frost-favor",
+      kind: "favor",
+      prompt: "火堆边剩一截结霜的兽肉。同来的人若在，这一截要先分。",
+      options: [
+        { id: "pass-frost-yield", label: "把兽肉让出去", description: "这一截让给同来的人。没有别人，就留在炭上。", safe: true, favorReason: "把霜上的兽肉让给我", line: "火堆边没有别人。你把那截兽肉留在炭上，没有带走。", partyLine: "你把那截结霜的兽肉让给同来的人。这份人情记下了。" },
+        { id: "pass-frost-split", label: "这一截分成两份", description: "不独占。同来的人在，各人手里都有一点。", stones: 6, line: "林子里没有别人。这一截换成几枚灵石，进了自己袋子。", partyLine: "这一截分成两份。各人手里都有一点。" },
+        { id: "pass-frost-keep", label: "自己先收着", description: "兽肉自己收。同来的人若在，会记下这件事。", grudge: 3, line: "你把兽肉收进袋子。旁边没有人，也就没有人争。", partyLine: "兽肉进了你的袋子。同来的人还站在火堆边，这件事记下了。" },
+      ],
+    },
+  ],
+  "scorched-altar": [
+    {
+      id: "altar-scout",
+      kind: "scout",
+      prompt: "坛上还有焦痕。这不是雷泽残阵，也不是焦林野。先把雷的间隔看清。",
+      options: [
+        { id: "pass-altar-mark", label: "先看焦痕", description: "看坛上的焦痕新旧，人先不站上去。", safe: true, line: "你看了看坛上的焦痕。痕是新的，雷还没落到头上。" },
+        { id: "pass-altar-wood", label: "贴着焦木走", description: "贴着坛边的焦木走，先不站到坛心。", line: "你贴着焦木走。木是黑的，坛心的灰还烫。" },
+        { id: "pass-altar-count", label: "数一数雷的间隔", description: "数清两声雷之间有多长，再决定站哪里。", line: "你数了数雷的间隔。两声之间够人换一个位置。" },
+      ],
+    },
+    {
+      id: "altar-foe",
+      kind: "fight",
+      prompt: "坛沿上爬着焦雷虫，壳还是热的。",
+      enemyName: "焦雷虫",
+      enemyMove: "壳上的热往手上烫",
+      pattern: "burst",
+      options: [
+        { id: "pass-altar-drive", label: "把焦雷虫拂开", description: "把爬在坛沿上的焦雷虫拂开。虫会还手。", fight: true, stones: 4, line: "你把焦雷虫从坛沿上拂开。壳还烫，芯还没到手。", failLine: "焦雷虫没被拂开，热还贴在手上。" },
+        { id: "pass-altar-around", label: "从焦木后面绕开", description: "不跟焦雷虫打，从焦木后面绕过去。", safe: true, line: "你从焦木后面绕开焦雷虫。虫子还在坛沿上，人先过去了。" },
+        { id: "pass-altar-edge", label: "在虫窝边上赶", description: "站在窝边上赶。赶得开，热也会溅一下。", fight: true, stones: 6, line: "你在虫窝边上把焦雷虫赶开。灰溅到鞋上，人还站着。", failLine: "窝边上的热先溅过来，焦雷虫还在。" },
+      ],
+    },
+  ],
+  "salt-wreck": [
+    {
+      id: "salt-scout",
+      kind: "scout",
+      prompt: "船还沉着。先在甲板上把盐壳看清，舱留到后面再开。",
+      options: [
+        { id: "pass-salt-crust", label: "先看盐壳", description: "看甲板上的盐壳裂到哪，先不开舱。", safe: true, line: "你看了看甲板上的盐壳。壳裂了一道，舱口还关着。" },
+        { id: "pass-salt-rail", label: "沿着船帮走", description: "沿着船帮走一圈，看哪一舱还闭着。", line: "你沿着船帮走了一圈。三处舱都还闭着，盐在栏杆上结成粒。" },
+        { id: "pass-salt-deck", label: "在甲板上站一站", description: "在甲板上站一站，听船底响不响。", line: "你在甲板上站了一站。船底响了一声，人还没下去。" },
+      ],
+    },
+    {
+      id: "salt-foe",
+      kind: "fight",
+      prompt: "舱口爬出一只盐蟹，钳上结着盐。",
+      enemyName: "盐蟹",
+      enemyMove: "钳往脚踝上夹",
+      pattern: "pressure",
+      options: [
+        { id: "pass-salt-drive", label: "把盐蟹赶进舱", description: "把爬出来的盐蟹赶回去。蟹会夹人。", fight: true, stones: 4, line: "你把盐蟹赶进舱口。钳上的盐掉了两粒，舱还没开。", failLine: "盐蟹没被赶回去，钳还张着。" },
+        { id: "pass-salt-around", label: "从甲板另一边绕开", description: "不跟盐蟹打，从甲板另一边绕过去。", safe: true, line: "你从甲板另一边绕开盐蟹。蟹还守在舱口，人先过去了。" },
+        { id: "pass-salt-pin", label: "用靴把蟹按住", description: "靴面按住盐蟹。按得住，钳也会夹靴。", fight: true, stones: 6, line: "你用靴把盐蟹按住，推回舱里。靴上结了一层盐，舱还没开。", failLine: "靴没按住，盐蟹还在舱口。" },
+      ],
+    },
+  ],
+  "sand-gate-seal": [
+    {
+      id: "sand-scout",
+      kind: "scout",
+      prompt: "关里的法诀先乱。先看门上的符，兵器还拿得住。",
+      options: [
+        { id: "pass-sand-charm", label: "先看门上的符", description: "看门上的符还剩几笔，人先不进关。", safe: true, line: "你看了看门上的符。字还在，有一笔已经糊了。" },
+        { id: "pass-sand-grip", label: "把兵器握紧", description: "法诀乱了，先把兵器握紧，再看门。", line: "你把兵器握紧。兵刃上的沙少，法诀还是乱的。" },
+        { id: "pass-sand-breath", label: "在门外把气顺一顺", description: "在门外把气顺一顺，沙先别灌进袖口。", line: "你在门外把气顺了一顺。沙还往门槛里灌，人还没进去。" },
+      ],
+    },
+    {
+      id: "sand-favor",
+      kind: "favor",
+      prompt: "沙往袖口里灌。同来的人若在，这一阵要先说谁来挡。",
+      options: [
+        { id: "pass-sand-cover", label: "替同来的人挡沙", description: "这一阵沙自己挡。同来的人在，这份人情记下。", safe: true, favorReason: "替我在砂门挡了一阵", line: "门外没有别人。你自己把这一阵沙挡了，符还在门上。", partyLine: "你替同来的人挡了这一阵沙。这份人情记下了。" },
+        { id: "pass-sand-share", label: "一起把沙撑过去", description: "不独占这一口护。同来的人在，就一起撑。", stones: 4, line: "没有人跟你一起撑。你自己站了一站，袖口里进了沙，也进了几枚灵石。", partyLine: "这一阵沙是一起撑过去的。各人手里都有一点。" },
+        { id: "pass-sand-self", label: "自己先用这一口护", description: "这一口护先用在自己身上。同来的人若在，会记下。", grudge: 3, line: "你先把这一口护用在自己身上。旁边没有人。", partyLine: "这一口护你自己用了。同来的人还站在沙里，这件事记下了。" },
+      ],
+    },
+  ],
+};
+
+export function regionalPassage(dungeonId: string): readonly PassageStep[] | null {
+  return STATE_PASSAGES[dungeonId] ?? null;
+}
+
+export function regionalPassageIds(): string[] {
+  return Object.keys(STATE_PASSAGES);
+}
+
+export function passageEnemy(
+  enemyName: string,
+  pattern: EnemyPattern,
+  leader: BattleCombatant | undefined,
+): BattleCombatant {
+  return foeBody({ name: enemyName, flavor: "兵器", pattern }, leader, 0.28, undefined);
 }
 
 export function interiorPlaceName(grade: DungeonGrade, rank: number): string {
