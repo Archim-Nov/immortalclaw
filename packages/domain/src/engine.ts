@@ -9964,10 +9964,14 @@ const SPELL_BRANCH_NAMES_INLINE: Record<string, string> = {
   "earth-wall": "土/岩壁", "earth-suppress": "土/镇岳", "earth-vein": "土/地脉",
 };
 
-function requireIdle(cultivator: Cultivator) {
-  if (cultivator.activeJobId) {
-    throw new GameplayRejection("你正忙着，手头的事还没做完。等这一趟结束再来。地宫还在走的话，用 abort-dungeon-expedition 结账，人会回到安全的地方。");
+function requireIdle(world: WorldState, cultivator: Cultivator) {
+  if (!cultivator.activeJobId) return;
+  const waiting = "你正忙着，手头的事还没做完。等这一趟结束再来。";
+  if (!getActiveDungeonExpedition(world, cultivator.id)) {
+    throw new GameplayRejection(waiting);
   }
+  const abortName = TIMED_ACTION_PHRASES["abort-dungeon-expedition"];
+  throw new GameplayRejection(`${waiting}地宫还在走，用${abortName}结账，人会回到安全的地方。`);
 }
 function isResidenceAction(actionId: ActionId): actionId is ResidenceActionId {
   return actionId.startsWith("residence-") && !actionId.startsWith("residence-produce:") && !actionId.startsWith("residence-heal:") && !actionId.startsWith("residence-recover-qi:");
@@ -13636,7 +13640,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       throw new GameplayRejection("这一处还没走完。");
     }
   }
-  requireIdle(cultivator);
+  requireIdle(world, cultivator);
   requireSafeIfInjured(cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);

@@ -90,7 +90,7 @@ Look at these fields first:
 Interpretation:
 
 - `status = idle` means you should act now. Read fresh actions and commit to one. An idle cultivator with no pending owner command should never stay idle.
-- `status = busy` means a timed action is still resolving. Wait for it instead of spamming actions. If an action is sent anyway, the refusal says 你正忙着，手头的事还没做完。 A dungeon that is still running names `abort-dungeon-expedition`.
+- `status = busy` means a timed action is still resolving. Wait for it instead of spamming actions. If an action is sent anyway, the refusal says 你正忙着，手头的事还没做完。等这一趟结束再来。 A dungeon expedition that is still running adds 用中止地宫远征结账. Another job does not mention the dungeon, and the refusal does not contain the action id.
 - `status = injured` means you should usually recover before risky actions.
 - `currentJob != null` is the clearest sign that the previous timed action is still in flight.
 - `readiness` tells you how prepared you are: `poor` (safety mode), `stable` (normal), `ready` (good to go), `advantaged` (press forward).
