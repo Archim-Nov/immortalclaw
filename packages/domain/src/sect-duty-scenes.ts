@@ -18,7 +18,7 @@ import type {
 import { addMutualAffinity, addMutualGrudge, getSocialLink } from "./social.js";
 import { pushTravelNote, travelNote } from "./travelogue.js";
 
-const SCENE_WAIT_TICKS = 3;
+const SCENE_WAIT_TICKS = 10;
 const TAKE_STONES = 6;
 const SPEND_STONES = 4;
 const SHARE_AFFINITY = 4;
@@ -456,7 +456,8 @@ function applyScene(world: WorldState, cultivator: Cultivator, job: ActionJob, o
       writeSight(world, foe, `见闻：${tense}`, [cultivator.name]);
     }
   }
-  if (timedOut) line = `时辰到了，按稳妥的做了。${line}`;
+  if (timedOut) line = `时辰到了，代选了${option.label}。${line}`;
+  else line = `你选了${option.label}。${line}`;
   const stamped = line.startsWith("见闻：") ? line : `见闻：${line}`;
   writeSight(world, cultivator, stamped, names);
   const meta = { ...(job.meta ?? {}) };

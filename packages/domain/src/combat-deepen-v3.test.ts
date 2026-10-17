@@ -180,7 +180,7 @@ test("a wound blocks the next dungeon until rest, a pill, or a teammate tends it
   const mate = spawnAgent(world, "agent-v3-heal", "青萝");
   leader.locationId = "qingzhou:dungeon-c";
   leader.injuryTicksRemaining = 6;
-  assert.throws(() => performAction(world, leader.id, "enter-dungeon:rank-1:balanced"), /injured/);
+  assert.throws(() => performAction(world, leader.id, "enter-dungeon:rank-1:balanced"), /身上有伤/);
 
   leader.locationId = "qingzhou:main-city";
   mate.locationId = "qingzhou:main-city";
@@ -215,7 +215,7 @@ test("a wound blocks the next dungeon until rest, a pill, or a teammate tends it
   advanceWorld(world, 1);
   assert.equal(leader.injuryTicksRemaining, 1);
   leader.locationId = "qingzhou:dungeon-c";
-  assert.throws(() => performAction(world, leader.id, "enter-dungeon:rank-1:balanced"), /injured/);
+  assert.throws(() => performAction(world, leader.id, "enter-dungeon:rank-1:balanced"), /身上有伤/);
 });
 
 test("five-man mixed is not an automatic win at rank 3, and solo 炼气 stays hard", () => {

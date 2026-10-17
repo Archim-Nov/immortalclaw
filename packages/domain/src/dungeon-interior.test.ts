@@ -178,7 +178,7 @@ test("the first step of a ranked run leaves a scout line, and a search step can 
   assert.equal(progress.beats?.some((beat) => beat.title === "探路" && beat.detail.includes("雷泽残阵")), true);
 
   let sawPack = false;
-  for (let tick = 0; tick < 40 && cultivator.activeJobId; tick += 1) {
+  for (let tick = 0; tick < 80 && cultivator.activeJobId; tick += 1) {
     advanceWorld(world, 1);
     const rounds = world.dungeonExpeditions[cultivator.id]?.combatRounds
       ?? getCultivatorState(world, cultivator.id).dungeonExpedition.lastReport?.combatRounds

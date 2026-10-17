@@ -435,7 +435,7 @@ export type SectPostId = "outer-chore" | "inner-cultivate" | "steward" | "elder"
 
 export type SectChainId = "transmit" | "patrol" | "guard-vein" | "recruit-chore" | "escort" | "council";
 
-export type SpiritVeinKind = "herb-field" | "mine" | "spirit-vein";
+export type SpiritVeinKind = "herb-field" | "mine" | "spirit-vein" | "border-camp";
 
 export type SpiritVeinBand = "qi" | "foundation" | "core" | "nascent" | "spirit";
 
@@ -444,7 +444,7 @@ export interface SpiritVeinYield {
   count: number;
 }
 
-/** A herb field, mine, or spirit vein anchored to a location that already exists. */
+/** A herb field, mine, spirit vein, or neighbor-held border camp anchored to a location that already exists. */
 export interface SpiritVeinNode {
   id: string;
   stateId: string;
@@ -1157,6 +1157,8 @@ export interface CultivatorDigest {
   relationships: string[];
   quotes: readonly { speakerName: string; line: string; tick: number }[];
   summary: string;
+  /** Present while a dungeon wake is waiting for a choice. */
+  priorities?: string[];
   /** Present from 金丹后期 on, including at 化神后期. Omitted earlier. */
   nextStep?: string;
 }
@@ -1315,6 +1317,8 @@ export interface DungeonExpeditionStateView {
     context: string;
     defaultOptionId: string;
     timeoutTicks: number;
+    /** Set while the fork is still waiting. */
+    decisionLine: string;
     options: WakeNodeOption[];
     /** Present when the pending wake is a party social choice. */
     partyKind?: PartyWakeKind;

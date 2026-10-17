@@ -9,6 +9,7 @@ import {
   performAction,
   syncCultivatorFromPersona,
 } from "./index.js";
+import { GEOGRAPHY_REGISTRY } from "./geography-registry.js";
 import { getSocialLink, writeSocialLink } from "./social.js";
 import { buildFullTopology } from "./topology.js";
 
@@ -335,4 +336,61 @@ test("a player-sect outpost does not offer a neutral join", () => {
   assert.equal((join?.description ?? "").includes("join-neutral-sect"), false);
   assert.equal((join?.description ?? "").includes("join-sect"), false);
   assert.equal(ready.some((action) => action.actionId.startsWith("join-neutral-sect:")), false);
+});
+
+test("本州存在可宣战脉", () => {
+  const world = createSeedWorld();
+  getCultivatorState(world, "yun-zhong-he");
+  for (const stateId of Object.keys(GEOGRAPHY_REGISTRY)) {
+    const camp = world.spiritVeins?.[`${stateId}:border-camp`];
+    assert.ok(camp, stateId);
+    assert.equal(camp.stateId, stateId);
+    assert.equal(camp.kind, "border-camp");
+    assert.equal(camp.band, "foundation");
+    assert.equal(camp.ownerKind, "neutral");
+    assert.notEqual(camp.ownerId, GEOGRAPHY_REGISTRY[stateId as keyof typeof GEOGRAPHY_REGISTRY].neutralSect.id);
+    assert.equal(world.spiritVeins?.[`${stateId}:mine`]?.ownerKind, "none");
+  }
+
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.locationId = "yangzhou:sect-outpost:ting-chao-ge";
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.activeJobId = null;
+  cultivator.realm = "筑基";
+  cultivator.realmLevel = 5;
+  cultivator.totalContribution = 200;
+  performAction(world, cultivator.id, "join-neutral-sect:ting-chao-ge");
+  performAction(world, cultivator.id, "take-post:steward");
+
+  const camp = world.spiritVeins?.["yangzhou:border-camp"];
+  assert.ok(camp);
+  assert.equal(camp.ownerId, "cang-mu-gu");
+  assert.equal(camp.name, "苍木谷边寨");
+  const life = getCultivatorState(world, cultivator.id).sectLife;
+  assert.ok(life?.raids.some((raid) => raid.veinId === camp.id));
+  assert.match(life?.daily ?? "", /宣战夺脉/);
+  const raid = listAvailableActions(world, cultivator.id).find((action) => action.actionId === `declare-raid:${camp.id}`);
+  assert.match(raid?.label ?? "", /^宣战夺脉：/);
+  assert.match(raid?.label ?? "", /苍木谷边寨/);
+
+  cultivator.locationId = camp.locationId;
+  assert.equal(actionIds(world, cultivator.id).has("sect-chain:guard-vein"), false);
+  assert.equal(actionIds(world, cultivator.id).has(`declare-raid:${camp.id}`), true);
+
+  cultivator.locationId = "yangzhou:sect-outpost:ting-chao-ge";
+  performAction(world, cultivator.id, "resign-post");
+  performAction(world, cultivator.id, "take-post:elder");
+  world.neutralSects["ting-chao-ge"]!.sectMerit = 40;
+  world.neutralSects["cang-mu-gu"]!.sectMerit = 0;
+  const fought = performAction(world, cultivator.id, `declare-raid:${camp.id}`);
+  assert.equal(fought.accepted, true);
+  runUntilIdle(world, cultivator.id);
+
+  assert.equal(camp.ownerId, "ting-chao-ge");
+  const written = (cultivator.lifeLog ?? []).map((event) => event.text).join("");
+  assert.match(written, /见闻：/);
+  assert.match(written, /夺下了苍木谷边寨/);
+  const dao = world.daoLogs.filter((entry) => entry.cultivatorId === cultivator.id).map((entry) => entry.content).join("");
+  assert.match(dao, /见闻：/);
+  assert.match(dao, /夺下了/);
 });

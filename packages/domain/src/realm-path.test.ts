@@ -76,6 +76,25 @@ test("甲级掉落按层分开，炼气池不跟着层数变", () => {
   assert.deepEqual(rankBandForRealmLevel(12), { minRank: 7, maxRank: 9 });
 });
 
+test("筑基中后期能看见结金丹要去甲级", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.realm = "筑基";
+  for (const level of [5, 6]) {
+    cultivator.realmLevel = level;
+    const path = getCultivatorState(world, cultivator.id).realmPath;
+    const text = `${path.where}${path.goals.join("")}`;
+    assert.match(text, /金丹/);
+    assert.match(text, /坊市不卖/);
+    assert.match(text, /甲级/);
+    assert.match(text, /丹霞内府/);
+    assert.match(text, /坊市买/);
+  }
+  cultivator.realmLevel = 4;
+  const early = getCultivatorState(world, cultivator.id).realmPath;
+  assert.equal(`${early.where}${early.goals.join("")}`.includes("丹霞内府"), false);
+});
+
 test("炼气仍走坊市，金丹后期才把下一境写成元婴", () => {
   const world = createSeedWorld();
   const early = getCultivatorState(world, "yun-zhong-he");

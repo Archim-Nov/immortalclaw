@@ -324,7 +324,7 @@ test("an uncleared dungeon expedition reports concrete guardian beats", () => {
   const started = performAction(world, cultivator.id, "enter-dungeon:rank-1:aggressive");
   assert.equal(started.accepted, true);
   let guard = 0;
-  while (cultivator.activeJobId && guard < 40) {
+  while (cultivator.activeJobId && guard < 80) {
     advanceWorld(world, 1);
     guard += 1;
   }
@@ -363,7 +363,7 @@ test("a gate companion is named in the fight and still has no second job", () =>
   assert.equal(started.accepted, true);
   assert.equal(mate.activeJobId, null);
   let guard = 0;
-  while (leader.activeJobId && guard < 40) {
+  while (leader.activeJobId && guard < 80) {
     advanceWorld(world, 1);
     guard += 1;
     assert.equal(mate.activeJobId, null);

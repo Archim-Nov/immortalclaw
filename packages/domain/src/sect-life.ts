@@ -299,6 +299,19 @@ function neutralSectId(stateId: string): string | null {
   return GEOGRAPHY_REGISTRY[stateId as keyof typeof GEOGRAPHY_REGISTRY]?.neutralSect.id ?? null;
 }
 
+function borderRival(stateId: string): { id: string; name: string } | null {
+  const definition = GEOGRAPHY_REGISTRY[stateId as keyof typeof GEOGRAPHY_REGISTRY];
+  if (!definition) return null;
+  const localId = definition.neutralSect?.id ?? null;
+  for (const edge of definition.crossStateConnections) {
+    const neighbor = GEOGRAPHY_REGISTRY[edge.to as keyof typeof GEOGRAPHY_REGISTRY];
+    const sect = neighbor?.neutralSect;
+    if (!sect || sect.id === localId) continue;
+    return { id: sect.id, name: sect.name };
+  }
+  return null;
+}
+
 function bandsFor(risk: string): { herb: SpiritVeinBand; mine: SpiritVeinBand; spirit: SpiritVeinBand } {
   if (risk === "high") return { herb: "core", mine: "nascent", spirit: "spirit" };
   if (risk === "medium") return { herb: "foundation", mine: "core", spirit: "nascent" };
@@ -378,7 +391,7 @@ export function sectTierOf(merit: number, veinCount: number): { tier: number; na
 
 function tierOfMember(world: WorldState, member: Membership): { tier: number; name: string; merit: number; veinCount: number } {
   const merit = meritOf(member.record);
-  const veinCount = ownedVeins(world, member).length;
+  const veinCount = ownedVeins(world, member).filter((vein) => vein.stateId === member.record.stateId).length;
   return { ...sectTierOf(merit, veinCount), merit, veinCount };
 }
 
@@ -588,11 +601,14 @@ function nextRequirement(world: WorldState, member: Membership): string {
   return `${member.record.name}已经是一州之望。守住本州的三条脉，别让人夺了。${levelSentence}`;
 }
 
-function dailyLine(cultivator: Cultivator, member: Membership, tierName: string): string {
+function dailyLine(cultivator: Cultivator, member: Membership, tierName: string, raidOpen: boolean): string {
   const post = cultivator.sectPost ? postOf(cultivator.sectPost) : null;
   if (!post) return "今天先在山门领一份外门杂役。杂役做完，宗门声望和你的贡献都会记上一笔。";
   if (cultivator.realmLevel < 4) {
     return `你现在是${post.name}。今天把本职做完，再去本宗的药田收一份炼气灵材。筑基以前别去宣战。`;
+  }
+  if (raidOpen && (post.id === "steward" || post.id === "elder" || post.id === "master-seat")) {
+    return `你现在是${post.name}。本州有邻宗占着的边寨，可以宣战夺脉。山门眼下是${tierName}。`;
   }
   if (post.id === "elder" || post.id === "master-seat") {
     return `你现在是${post.name}。今天可以上堂议事，也可以看看本州哪条脉能夺。山门眼下是${tierName}。`;
@@ -648,6 +664,21 @@ export function ensureSpiritVeins(world: WorldState): void {
     ensureOneVein(world, `${stateId}:herb-field`, stateId, south, "herb-field", bands.herb, `${name}药田`, ownHerb, herbOwner);
     ensureOneVein(world, `${stateId}:mine`, stateId, wild, "mine", bands.mine, `${name}矿脉`, "none", null);
     ensureOneVein(world, `${stateId}:spirit-vein`, stateId, hall, "spirit-vein", bands.spirit, `${name}灵脉`, ownSpirit, spiritOwner);
+    const rival = borderRival(stateId);
+    const east = `${stateId}:sub-town-east`;
+    if (rival && world.neutralSects[rival.id] && world.locations[east]) {
+      ensureOneVein(
+        world,
+        `${stateId}:border-camp`,
+        stateId,
+        east,
+        "border-camp",
+        "foundation",
+        `${rival.name}边寨`,
+        "neutral",
+        rival.id,
+      );
+    }
   }
 }
 
@@ -689,7 +720,7 @@ function veinView(world: WorldState, cultivator: Cultivator, vein: SpiritVeinNod
     ownerName: owner?.record.name ?? "还没有主",
     yours,
     stock: veinStock(vein),
-    materials: `${BAND_SENTENCE[vein.band]}人要到${world.locations[vein.locationId]?.name ?? "那一处"}才能收。`,
+    materials: `${BAND_SENTENCE[vein.band]}${vein.kind === "border-camp" ? "这是邻宗占在本州的边寨，护脉收不下来，要夺就宣战。" : ""}人要到${world.locations[vein.locationId]?.name ?? "那一处"}才能收。`,
     gatherActionId: gatherOk ? `gather-vein:${vein.id}` : null,
   };
 }
@@ -729,11 +760,13 @@ export function buildSectLifeView(world: WorldState, cultivator: Cultivator): Se
   const raids = Object.values(world.spiritVeins ?? {}).flatMap((vein) => {
     const block = raidBlock(world, cultivator, vein, member);
     if (block) return [];
+    const ownerName = ownerMember(world, vein)?.record.name ?? "别人";
+    const place = vein.kind === "border-camp" ? "在本州，" : "";
     return [{
       veinId: vein.id,
       name: vein.name,
       actionId: `declare-raid:${vein.id}`,
-      summary: `${vein.name}现在归${ownerMember(world, vein)?.record.name ?? "别人"}。夺下来，出产就转到本宗。`,
+      summary: `${vein.name}${place}现在归${ownerName}。夺下来，出产就转到本宗。`,
     }];
   });
   return {
@@ -746,7 +779,7 @@ export function buildSectLifeView(world: WorldState, cultivator: Cultivator): Se
     merit: tier.merit,
     veinCount: tier.veinCount,
     nextRequirement: nextRequirement(world, member),
-    daily: dailyLine(cultivator, member, tier.name),
+    daily: dailyLine(cultivator, member, tier.name, raids.length > 0),
     veins,
     chains,
     raids,
@@ -824,10 +857,11 @@ export function listSectLifeActions(world: WorldState, cultivator: Cultivator): 
     }
     if (raidBlock(world, cultivator, vein, member) !== null) continue;
     const ownerName = ownerMember(world, vein)?.record.name ?? "别人";
+    const place = vein.kind === "border-camp" ? "这条边寨就在本州。" : "";
     actions.push({
       actionId: `declare-raid:${vein.id}`,
       label: `宣战夺脉：${vein.name}`,
-      description: `向${ownerName}动手，抢${vein.name}。拿下以后出产归本宗。打输会挂伤，贡献也会掉。`,
+      description: `向${ownerName}动手，抢${vein.name}。${place}拿下以后出产归本宗。打输会挂伤，贡献也会掉。`,
       durationTicks: 2,
       kind: "timed",
     });
@@ -957,7 +991,7 @@ function resolveRaid(world: WorldState, cultivator: Cultivator, vein: SpiritVein
     hurt(world, cultivator, 2);
     giveContribution(world, cultivator, member, -12);
     addMerit(member.record, -8);
-    const detail = `${cultivator.name}突袭${vein.name}没能拿下。人受了伤，贡献也掉了一截。`;
+    const detail = `见闻：${cultivator.name}突袭${vein.name}没能拿下。人受了伤，贡献也掉了一截。`;
     note(world, cultivator, "突袭没拿下", detail, "这一趟亏了", "fight");
     return detail;
   }
@@ -965,7 +999,7 @@ function resolveRaid(world: WorldState, cultivator: Cultivator, vein: SpiritVein
   vein.ownerId = member.record.id;
   addMerit(member.record, 24);
   giveContribution(world, cultivator, member, 20);
-  const detail = `${cultivator.name}夺下了${vein.name}。这条脉以后归${member.record.name}，出产也跟着转过来。`;
+  const detail = `见闻：${cultivator.name}夺下了${vein.name}。这条脉以后归${member.record.name}，出产也跟着转过来。`;
   note(world, cultivator, "夺下了脉", detail, "山门大了一圈", "fight");
   if (previous) {
     const loss = `山门失守。${vein.name}被${member.record.name}夺走了。`;

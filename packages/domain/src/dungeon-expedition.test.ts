@@ -84,12 +84,14 @@ test("managed expeditions create one 30-tick job and only expose abort while bus
   const busyActions = listAvailableActions(world, CULTIVATOR_ID);
   assert.deepEqual(busyActions.map((action) => action.actionId), ["abort-dungeon-expedition"]);
 
-  for (let step = 0; step < 29; step += 1) {
+  let completion: ReturnType<typeof advanceWorld> | null = null;
+  for (let step = 0; step < 80 && cultivator.activeJobId; step += 1) {
     const summary = advanceWorld(world, 1);
-    assert.equal(summary.completedJobs.length, 0);
+    if (summary.completedJobs.length === 0) continue;
+    assert.equal(completion, null);
+    completion = summary;
   }
-
-  const completion = advanceWorld(world, 1);
+  assert.ok(completion);
   assert.equal(completion.completedJobs.length, 1);
   assert.equal(completion.completedJobs[0]?.actionId, expeditionActionId(1, "balanced"));
 
@@ -374,10 +376,44 @@ test("pending dungeon wake nodes auto-resolve after timeout ticks", () => {
   const pendingState = getCultivatorState(world, CULTIVATOR_ID);
   assert.ok(pendingState.dungeonExpedition.wakeNodeHint);
 
-  const timeoutTicks = pendingState.dungeonExpedition.wakeNodeHint?.timeoutTicks ?? 3;
+  const timeoutTicks = pendingState.dungeonExpedition.wakeNodeHint?.timeoutTicks ?? 0;
+  assert.ok(timeoutTicks >= 8 && timeoutTicks <= 12);
+  assert.equal(pendingState.dungeonExpedition.wakeNodeHint?.decisionLine, "地宫岔路待决");
+  assert.ok(pendingState.digest?.priorities?.includes("地宫岔路待决"));
+  const listed = listAvailableActions(world, CULTIVATOR_ID).map((action) => String(action.actionId));
+  assert.ok(listed.some((actionId) => actionId.startsWith("dungeon-wake-decision:")));
   advanceWorld(world, timeoutTicks);
   const resolvedState = getCultivatorState(world, CULTIVATOR_ID);
   assert.equal(resolvedState.dungeonExpedition.wakeNodeHint ?? null, null);
+  const written = (cultivator.lifeLog ?? []).map((event) => event.text).join("");
+  assert.match(written, /时辰到了，代选了/);
+  const dao = world.daoLogs.filter((entry) => entry.cultivatorId === CULTIVATOR_ID).map((entry) => entry.content).join("");
+  assert.match(dao, /时辰到了，代选了/);
+});
+
+test("a manual dungeon wake choice is written into the beat and the dao log", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.dungeonProgress["丙"].highestClearedRank = 1;
+  performAction(world, CULTIVATOR_ID, expeditionActionId(1, "balanced") as never);
+  let attempts = 0;
+  while (!getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.wakeNodeHint && cultivator.activeJobId && attempts < 40) {
+    advanceWorld(world, 1);
+    attempts += 1;
+  }
+  const hint = getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.wakeNodeHint;
+  assert.ok(hint);
+  const choice = listAvailableActions(world, CULTIVATOR_ID).find((action) => String(action.actionId).startsWith("dungeon-wake-decision:"));
+  assert.ok(choice);
+  const acted = performAction(world, CULTIVATOR_ID, choice.actionId);
+  assert.equal(acted.accepted, true);
+  assert.match(acted.summary, /你选了/);
+  const beat = world.dungeonExpeditions[CULTIVATOR_ID]?.beats?.at(-1);
+  assert.match(beat?.detail ?? "", /你选了/);
+  const dao = world.daoLogs.filter((entry) => entry.cultivatorId === CULTIVATOR_ID).map((entry) => entry.content).join("");
+  assert.match(dao, /你选了/);
+  assert.equal(getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.wakeNodeHint ?? null, null);
 });
 
 test("wakeNodeHint remains null when no wake node is pending", () => {
@@ -619,7 +655,7 @@ test("筑基走完乙级第一层后，报告见闻里没有丙级地宫", () =>
   cultivator.injuryTicksRemaining = 0;
   performAction(world, CULTIVATOR_ID, "enter-dungeon:rank-1:conservative" as never);
 
-  for (let tick = 0; tick < 40 && cultivator.activeJobId; tick += 1) {
+  for (let tick = 0; tick < 80 && cultivator.activeJobId; tick += 1) {
     advanceWorld(world, 1);
   }
 

@@ -28,7 +28,8 @@ export const DUNGEON_EXPEDITION_MAX_STEPS = DUNGEON_EXPEDITION_DURATION_TICKS / 
 export const DUNGEON_EXPEDITION_POLICIES = ["conservative", "balanced", "aggressive"] as const satisfies readonly DungeonExpeditionPolicy[];
 const MAX_DUNGEON_FLAVOR_EVENTS = 3;
 const MAX_DUNGEON_WAKE_NODES = 3;
-const DUNGEON_WAKE_TIMEOUT_TICKS = 3;
+const DUNGEON_WAKE_TIMEOUT_TICKS = 10;
+const DUNGEON_WAKE_DECISION_LINE = "地宫岔路待决";
 const DUNGEON_ROUTE_SPLIT_STEPS = new Set([3, 6, 8]);
 const DUNGEON_STRATEGY_POSTURES = ["conservative", "balanced", "aggressive"] as const satisfies readonly RunStrategy["posture"][];
 
@@ -323,6 +324,7 @@ export function buildDungeonExpeditionStateView(
           context: pendingWakeNode.context,
           defaultOptionId: pendingWakeNode.defaultOptionId,
           timeoutTicks: pendingWakeNode.timeoutTicks,
+          decisionLine: DUNGEON_WAKE_DECISION_LINE,
           options: pendingWakeNode.options.map((option) => ({
             optionId: option.optionId,
             label: option.label,
@@ -643,6 +645,7 @@ export function chooseDefaultDungeonWakeOptionId(progress: DungeonExpeditionProg
 export function settleDungeonWakeNode(
   progress: DungeonExpeditionProgress,
   chosenOptionId: string,
+  source: "chosen" | "timeout" = "chosen",
 ): DungeonWakeSettlement {
   if (!progress.pendingWakeNode) {
     return {
@@ -674,9 +677,14 @@ export function settleDungeonWakeNode(
           mood: "心里定一点",
         };
   const place = extra ? interiorPlaceName(progress.grade, progress.targetRank) : "";
-  const beat: DungeonBeat | null = rawBeat && place && !rawBeat.detail.startsWith(place)
+  const placed: DungeonBeat | null = rawBeat && place && !rawBeat.detail.startsWith(place)
     ? { ...rawBeat, detail: `${place}里。${rawBeat.detail}` }
     : rawBeat;
+  const label = progress.pendingWakeNode.options.find((option) => option.optionId === chosenOptionId)?.label ?? "这一条";
+  const lead = source === "timeout" ? `时辰到了，代选了${label}。` : `你选了${label}。`;
+  const beat: DungeonBeat | null = placed && !placed.detail.startsWith(lead)
+    ? { ...placed, detail: `${lead}${placed.detail}` }
+    : placed;
   const stoneDelta = known ? known.stoneDelta : 0;
   const reportStone = known ? known.stoneDelta : (risky ? 18 : 0);
   const reportRealm = known?.realmDelta ?? (known ? 0 : (risky ? 2 : 0));
@@ -704,7 +712,7 @@ export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgr
   if (!progress.pendingWakeNode) {
     return progress;
   }
-  return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress)).progress;
+  return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress), "timeout").progress;
 }
 
 type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank" | "trap" | "shrine" | "chamber" | "nest" | "sealed" | "well" | "span" | "lantern" | "voice" | "ford";
