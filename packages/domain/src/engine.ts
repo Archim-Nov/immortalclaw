@@ -413,6 +413,13 @@ import {
 } from "./wilderness-service.js";
 import { getWildernessEventDefinition } from "./wilderness-events.js";
 import {
+  resolveWildBeat,
+  syncWildBeat,
+  WILD_DECISION_LINE,
+  wildBeatById,
+  wildBeatView,
+} from "./wild-beats.js";
+import {
   buildDungeonExpeditionStateView,
   buildDungeonRankYieldHints,
   chooseDungeonExpeditionStepKind,
@@ -7428,6 +7435,16 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   if (world.dungeonExpeditions[cultivator.id]?.pendingWakeNode) {
     priorities.unshift("地宫岔路待决");
   }
+  const wildProgress = getActiveWildernessProgress(world, cultivator.id);
+  if (wildProgress) {
+    const wildPlace = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+    if (syncWildBeat(wildProgress, wildPlace, Boolean(cultivator.activeJobId))) {
+      priorities.unshift(WILD_DECISION_LINE);
+      const pending = wildBeatById(wildProgress.pendingBeatId);
+      const first = pending?.options[0];
+      if (first) locationActions.unshift(`wild-choice:${first.id}` as ActionId);
+    }
+  }
   const allActions = [...recoveryActions, ...breakthroughActions, ...locationActions];
   const suggestedActions = allActions.length > 0
     ? Array.from(new Set(allActions)).slice(0, 4) as ActionId[]
@@ -7643,6 +7660,8 @@ function buildWildernessView(world: WorldState, cultivator: Cultivator): Cultiva
 
   const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
   const route = place ? wildRouteFromPlace(place) : null;
+  syncWildBeat(progress, place, Boolean(cultivator.activeJobId));
+  const beat = wildBeatView(progress);
   return {
     layerId: layer.layerId,
     layerName: route?.placeName ?? layer.name,
@@ -7659,7 +7678,34 @@ function buildWildernessView(world: WorldState, cultivator: Cultivator): Cultiva
           followerLabel: route.followerLabel,
         }
       : {}),
+    ...(beat ? { beat } : {}),
   };
+}
+
+function wildBeatGateActions(world: WorldState, cultivator: Cultivator): AvailableAction[] | null {
+  const progress = getActiveWildernessProgress(world, cultivator.id);
+  if (!progress) return null;
+  const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+  if (!syncWildBeat(progress, place, Boolean(cultivator.activeJobId))) return null;
+  const beat = wildBeatById(progress.pendingBeatId);
+  if (!beat) return null;
+  const choices: AvailableAction[] = beat.options.map((option) => ({
+    actionId: `wild-choice:${option.id}` as ActionId,
+    label: `荒野抉择：${option.label}`,
+    description: `${beat.prompt}${option.detail}`,
+    durationTicks: 0,
+    kind: "immediate" as const,
+  }));
+  choices.push({
+    actionId: "withdraw-from-wilderness",
+    label: "撤出这一层",
+    description: place
+      ? `${place.withdraw}不另扣灵石。这一步的东西不进袋子。`
+      : "先从这一层退出来。不另扣灵石。这一步的东西不进袋子。",
+    durationTicks: 0,
+    kind: "immediate",
+  });
+  return choices;
 }
 
 function buildWildRouteView(world: WorldState, cultivator: Cultivator): CultivatorStateView["wildRoute"] {
@@ -8776,6 +8822,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
     return [...sectBusy, ...regionalBusy, ...busyActions, ...sceneBusy];
   }
+  const wildGate = wildBeatGateActions(world, cultivator);
+  if (wildGate) return wildGate;
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
   const registration = registrationModifiersOf(cultivator);
@@ -13566,6 +13614,27 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   }
   if (actionId.startsWith("sect-scene:")) {
     return answerSectDutyScene(world, cultivator, actionId.slice("sect-scene:".length));
+  }
+  if (actionId.startsWith("wild-choice:")) {
+    const progress = getActiveWildernessProgress(world, cultivator.id);
+    const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+    if (!progress || !place) throw new GameplayRejection("这片荒野没有待决的岔路。");
+    syncWildBeat(progress, place, false);
+    const summary = resolveWildBeat(world, cultivator, progress, place, actionId.slice("wild-choice:".length));
+    if (cultivator.injuryTicksRemaining > 0) syncWounded(cultivator);
+    addDaoLog(world, cultivator.id, "荒野岔路", summary, ["wilderness", "wild-beat"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
+  }
+  {
+    const progress = getActiveWildernessProgress(world, cultivator.id);
+    const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
+    if (
+      progress
+      && syncWildBeat(progress, place, Boolean(cultivator.activeJobId))
+      && actionId !== "withdraw-from-wilderness"
+    ) {
+      throw new GameplayRejection("这一处还没走完。");
+    }
   }
   requireIdle(cultivator);
   requireSafeIfInjured(cultivator, actionId);
