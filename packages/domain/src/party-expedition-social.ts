@@ -2,15 +2,17 @@
  * Party wakes inside a shared dungeon run.
  *
  * A solo run still uses the older route wakes. When companions came through the
- * gate, the run pauses three times: someone is hurt, the loot can be yielded
- * or taken down a shortcut, and an unclaimed find can be split. Each person
- * still at the gate votes. If the votes never lock, the timeout keeps the
- * safe side even when the posture is aggressive. The paired 上回你… lines are
- * written when the run ends, so they still sit inside the six-tick digest.
+ * gate, the run pauses three times. On 丙 and 甲 those are a wound, the loot,
+ * and an unclaimed find. On 乙 the middle pause is that floor's own favor.
+ * The choice stays open for ten ticks, the same window as a solo dungeon wake.
+ * If the votes never lock, the timeout keeps the safe side even when the
+ * posture is aggressive. The paired 上回你… lines are written when the run
+ * ends, so they still sit inside the six-tick digest.
  */
 
 import { partyRoleForCultivator } from "./combat-skills.js";
 import { recordLife, shiftCultivatorMood } from "./inner-life.js";
+import { yiPlaceForRank } from "./yi-midrun.js";
 import type {
   Cultivator,
   DungeonBeat,
@@ -24,13 +26,13 @@ import type {
 import { addMutualAffinity, addMutualGrudge, getSocialLink, grantOwedFavor } from "./social.js";
 import { pushTravelNote, travelNote } from "./travelogue.js";
 
-const PARTY_WAKE_TIMEOUT_TICKS = 3;
+const PARTY_WAKE_TIMEOUT_TICKS = 10;
 const SHORTCUT_STONES = 12;
 const SEIZE_STONES = 10;
 const CRACK_GRUDGE = 3;
 const LEAVE_GRUDGE = 2;
 
-const HARMFUL_PARTY_OPTIONS = new Set(["leave-wound", "take-shortcut", "seize-treasure"]);
+const HARMFUL_PARTY_OPTIONS = new Set(["leave-wound", "take-shortcut", "seize-treasure", "take-opening"]);
 
 export function isHarmfulPartyOption(optionId: string): boolean {
   return HARMFUL_PARTY_OPTIONS.has(optionId);
@@ -178,6 +180,36 @@ export function createPartyExpeditionWake(input: {
         ],
         defaultOptionId: "tend-companion",
         safeOptionId: "tend-companion",
+        timeoutTicks: PARTY_WAKE_TIMEOUT_TICKS,
+        votes: [],
+      },
+    };
+  }
+  if (step === 6 && progress.grade === "乙" && !done.has("floor-bond")) {
+    const place = yiPlaceForRank(progress.targetRank);
+    const copy = floorBondCopy(place);
+    const subject = pressedCompanion(companions);
+    return {
+      kind: "floor-bond",
+      node: {
+        nodeId: `${nodeId}-bond`,
+        partyKind: "floor-bond",
+        subjectId: subject.id,
+        context: copy.context(subject.name),
+        options: [
+          {
+            optionId: "cover-mate",
+            label: copy.coverLabel,
+            description: copy.coverDescription,
+          },
+          {
+            optionId: "take-opening",
+            label: copy.takeLabel,
+            description: copy.takeDescription,
+          },
+        ],
+        defaultOptionId: "cover-mate",
+        safeOptionId: "cover-mate",
         timeoutTicks: PARTY_WAKE_TIMEOUT_TICKS,
         votes: [],
       },
@@ -653,6 +685,202 @@ function resolveTreasure(
   return finishWake(next, { kind: "find", title: "当面分开", detail, mood: "谁也没多拿" });
 }
 
+const FLOOR_TAKE_STONES = 8;
+const FLOOR_BOND_AFFINITY = 2;
+
+interface FloorBondCopy {
+  reason: string;
+  context: (name: string) => string;
+  coverLabel: string;
+  coverDescription: string;
+  takeLabel: string;
+  takeDescription: string;
+  actorLine: string;
+  pairedLine: string;
+  crackActor: string;
+  crackPaired: string;
+  witnessCover: (actor: string, subject: string) => string;
+  witnessCrack: (actor: string, subject: string) => string;
+  coverDetail: (actor: string, subject: string, paid: "pill" | "spirit") => string;
+  crackDetail: (actor: string, others: string) => string;
+}
+
+const FLOOR_BOND: Record<string, FloorBondCopy> = {
+  雷泽残阵: {
+    reason: "断法的时候把丹递给我",
+    context: (name) => `${name}的法门被残阵压住了，这一手出不来。可以把回气丹递过去，也可以趁这个空档先去捡阵脚上的灵石。`,
+    coverLabel: "把丹递过去",
+    coverDescription: "耗一枚回气丹，或者一点灵力。法门松一松，这一手记成断法时递过丹。",
+    takeLabel: "趁断法先捡",
+    takeDescription: "自己多拿几枚灵石。旁边的人会记得这一手。",
+    actorLine: "上回断法的时候我把丹递给你。",
+    pairedLine: "上回断法的时候你把丹递给我。",
+    crackActor: "上回我趁你断法，先捡了阵脚上的灵石。",
+    crackPaired: "上回你趁我断法，先捡了阵脚上的灵石。",
+    witnessCover: (actor, subject) => `${actor}在断法的时候把丹递给了${subject}。同队的人都看见了。`,
+    witnessCrack: (actor, subject) => `${actor}趁${subject}断法，先捡了阵脚上的灵石。同队的人都看见了。`,
+    coverDetail: (actor, subject, paid) => paid === "pill"
+      ? `${actor}把一枚回气丹递到${subject}手上。断掉的法门松了一点。${subject}欠这一手。`
+      : `${actor}耗了一点灵力，把${subject}被压住的法门顶开一点。${subject}欠这一手。`,
+    crackDetail: (actor, others) => `${actor}趁断法的空档，先捡了阵脚上的灵石。${others || "旁边的人"}还站在原地。`,
+  },
+  沉雾沼: {
+    reason: "雾里把我拉上来",
+    context: (name) => `${name}的脚踝被雾丝缠住了，人还陷在湿处。可以停下来拉上一把，也可以自己先踩上干处。`,
+    coverLabel: "拉上干处",
+    coverDescription: "停一步，把人从雾丝里拉上来。这一手记成雾里拉过。",
+    takeLabel: "自己先踩过去",
+    takeDescription: "干处归自己。被缠住的人还在雾里。",
+    actorLine: "上回雾里我把你拉上来。",
+    pairedLine: "上回雾里你把我拉上来。",
+    crackActor: "上回我自己先踩过干处，你还缠在雾里。",
+    crackPaired: "上回你自己先踩过干处，我还缠在雾里。",
+    witnessCover: (actor, subject) => `${actor}在雾里把${subject}拉上了干处。同队的人都看见了。`,
+    witnessCrack: (actor, subject) => `${actor}自己先踩过干处，${subject}还缠在雾里。同队的人都看见了。`,
+    coverDetail: (actor, subject, paid) => paid === "pill"
+      ? `${actor}把${subject}拉上干处，又递了一枚回气丹。${subject}欠这一手。`
+      : `${actor}耗了一点灵力，把${subject}从雾丝里拉上干处。${subject}欠这一手。`,
+    crackDetail: (actor, others) => `${actor}自己先踩上干处。${others || "旁边的人"}还缠在雾里。`,
+  },
+  铜棺窟: {
+    reason: "霜寒里把袖口分给我",
+    context: (name) => `${name}的手被霜寒贴住了，指节还僵着。可以把袖口分过去暖一暖，也可以先去摸棺沿上那点东西。`,
+    coverLabel: "把袖口分过去",
+    coverDescription: "把袖口让过去。寒退一点，这一手记成霜寒里分过袖。",
+    takeLabel: "先摸棺沿",
+    takeDescription: "自己先摸到棺沿上的东西。旁边的手还是冷的。",
+    actorLine: "上回霜寒里我把袖口分给你。",
+    pairedLine: "上回霜寒里你把袖口分给我。",
+    crackActor: "上回我先摸了棺沿，你的手还是冷的。",
+    crackPaired: "上回你先摸了棺沿，我的手还是冷的。",
+    witnessCover: (actor, subject) => `${actor}在霜寒里把袖口分给了${subject}。同队的人都看见了。`,
+    witnessCrack: (actor, subject) => `${actor}先摸了棺沿，${subject}的手还是冷的。同队的人都看见了。`,
+    coverDetail: (actor, subject, paid) => paid === "pill"
+      ? `${actor}把袖口分给${subject}，又递了一枚回气丹。手上的霜退了一点。${subject}欠这一手。`
+      : `${actor}耗了一点灵力，把袖口分给${subject}。霜寒从手上退了一点。${subject}欠这一手。`,
+    crackDetail: (actor, others) => `${actor}先摸了棺沿上的东西。${others || "旁边的人"}的手还是冷的。`,
+  },
+};
+
+function floorBondCopy(place: string): FloorBondCopy {
+  return FLOOR_BOND[place] ?? FLOOR_BOND["雷泽残阵"]!;
+}
+
+function pressedCompanion(companions: readonly Cultivator[]): Cultivator {
+  const wounded = [...companions].sort((left, right) => right.injuryTicksRemaining - left.injuryTicksRemaining);
+  if ((wounded[0]?.injuryTicksRemaining ?? 0) > 0) return wounded[0]!;
+  return [...companions].sort((left, right) => left.spiritualPower - right.spiritualPower)[0]!;
+}
+
+function canPayCover(person: Cultivator): boolean {
+  if ((person.inventory["qi-pill"] ?? 0) > 0) return true;
+  return person.spiritualPower >= Math.max(4, Math.round(person.maxSpiritualPower * 0.08));
+}
+
+function payCover(person: Cultivator): "pill" | "spirit" | null {
+  if ((person.inventory["qi-pill"] ?? 0) > 0) {
+    person.inventory["qi-pill"] -= 1;
+    return "pill";
+  }
+  const cost = Math.max(4, Math.round(person.maxSpiritualPower * 0.08));
+  if (person.spiritualPower < cost) return null;
+  person.spiritualPower -= cost;
+  return "spirit";
+}
+
+function resolveFloorBond(
+  world: WorldState,
+  progress: DungeonExpeditionProgress,
+  optionId: string,
+  awaitingIds: readonly string[],
+  timedOut: boolean,
+): DungeonExpeditionProgress {
+  const node = progress.pendingWakeNode!;
+  const copy = floorBondCopy(yiPlaceForRank(progress.targetRank));
+  const present = people(world, awaitingIds);
+  const subject = node.subjectId ? world.cultivators[node.subjectId] : undefined;
+  const fellBack = timedOut && optionId === (node.safeOptionId ?? "cover-mate");
+  const tail = timeoutClause(timedOut, progress.policy, fellBack);
+  if (!subject) {
+    return finishWake(progress, {
+      kind: "mood",
+      title: "人已经不在了",
+      detail: `要护的人已经不在这一趟里。${tail}`,
+      mood: "这一手没处落",
+    });
+  }
+  if (optionId === "take-opening") {
+    const taker = people(world, votersFor(node, awaitingIds, "take-opening"))[0] ?? present.find((person) => person.id !== subject.id) ?? present[0];
+    if (!taker) {
+      return finishWake(progress, { kind: "mood", title: "空档没人捡", detail: `这一层的空档空着。${tail}`, mood: "人已经散了" });
+    }
+    taker.spiritStones += FLOOR_TAKE_STONES;
+    shiftMorality(taker, -1);
+    const others = present.filter((person) => person.id !== taker.id);
+    for (const other of others) addMutualGrudge(world, taker.id, other.id, CRACK_GRUDGE);
+    const otherNames = others.map((person) => person.name).join("、");
+    const detail = `${copy.crackDetail(taker.name, otherNames)}${tail}`;
+    sceneNote(world, present, copy.takeLabel, detail, "这一手会记得");
+    const other = others.find((person) => person.id === subject.id) ?? others[0];
+    let next = progress;
+    if (other) {
+      shiftCultivatorMood(world, other, "rejection", `${taker.name}先顾了自己这一手。`);
+      next = remember(progress, {
+        kind: "crack",
+        actorId: taker.id,
+        otherId: other.id,
+        actorLine: copy.crackActor,
+        pairedLine: copy.crackPaired,
+        witnessLine: copy.witnessCrack(taker.name, other.name),
+        witnessIds: awaitingIds.filter((id) => id !== taker.id && id !== other.id),
+      });
+    }
+    return finishWake(next, { kind: "close-call", title: copy.takeLabel, detail, mood: "旁边的人看见了" });
+  }
+
+  const voters = votersFor(node, awaitingIds, "cover-mate");
+  const pool = people(world, voters.length > 0 ? voters : awaitingIds).filter((person) => person.id !== subject.id);
+  const helper = pool.find((person) => canPayCover(person)) ?? null;
+  if (!helper) {
+    const detail = `${subject.name}还陷在这一层里。旁边的人想伸手，灵力不够，身上也没有回气丹。${tail}`;
+    sceneNote(world, present, "手没伸上", detail, "人还在原地");
+    const actor = pool[0] ?? subject;
+    const next = remember(progress, {
+      kind: "memory",
+      actorId: actor.id,
+      otherId: subject.id,
+      actorLine: `上回我想拉你一把，手里没有够用的东西。`,
+      pairedLine: `上回你想拉我一把，手里没有够用的东西。`,
+      witnessLine: detail,
+      witnessIds: awaitingIds.filter((id) => id !== subject.id && id !== actor.id),
+    });
+    return finishWake(next, { kind: "person", title: "手没伸上", detail, mood: "人还在原地" });
+  }
+  const paid = payCover(helper);
+  if (!paid) {
+    return finishWake(progress, { kind: "mood", title: "手没伸上", detail: `${subject.name}还在原地。${tail}`, mood: "这一手没落下来" });
+  }
+  if (!alreadyOwes(world, helper.id, subject.id, copy.reason)) {
+    grantOwedFavor(world, helper.id, subject.id, copy.reason, "party-wake");
+  }
+  addMutualAffinity(world, helper.id, subject.id, FLOOR_BOND_AFFINITY);
+  shiftMorality(helper, 1);
+  const detail = `${copy.coverDetail(helper.name, subject.name, paid)}${tail}`;
+  sceneNote(world, present, copy.coverLabel, detail, "这一手还热着");
+  shiftCultivatorMood(world, subject, "gift", `${helper.name}这一手还热着。`);
+  const next = remember(progress, {
+    kind: "favor",
+    actorId: helper.id,
+    otherId: subject.id,
+    reason: copy.reason,
+    actorLine: copy.actorLine,
+    pairedLine: copy.pairedLine,
+    witnessLine: copy.witnessCover(helper.name, subject.name),
+    witnessIds: awaitingIds.filter((id) => id !== helper.id && id !== subject.id),
+  });
+  return finishWake(next, { kind: "person", title: copy.coverLabel, detail, mood: "这一手还热着" });
+}
+
 export function resolvePartyExpeditionWake(input: {
   world: WorldState;
   progress: DungeonExpeditionProgress;
@@ -665,6 +893,7 @@ export function resolvePartyExpeditionWake(input: {
   if (!progress.pendingWakeNode || !kind) return progress;
   if (kind === "tend-wound") return resolveTend(world, progress, optionId, awaitingIds, timedOut);
   if (kind === "loot-contention") return resolveLoot(world, progress, optionId, awaitingIds, timedOut);
+  if (kind === "floor-bond") return resolveFloorBond(world, progress, optionId, awaitingIds, timedOut);
   return resolveTreasure(world, progress, optionId, awaitingIds, timedOut);
 }
 

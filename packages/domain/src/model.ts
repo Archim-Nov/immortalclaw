@@ -96,7 +96,7 @@ export interface WakeNodeOption {
   description: string;
 }
 
-export type PartyWakeKind = "tend-wound" | "loot-contention" | "treasure-split";
+export type PartyWakeKind = "tend-wound" | "loot-contention" | "treasure-split" | "floor-bond";
 
 export interface PartyWakeVote {
   cultivatorId: string;

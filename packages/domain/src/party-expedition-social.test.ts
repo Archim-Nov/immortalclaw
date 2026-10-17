@@ -14,6 +14,8 @@ import {
   createPartyExpeditionWake,
   partyWakeIsReady,
   partyWakeResolvedOption,
+  publishPartyExpeditionMemories,
+  resolvePartyExpeditionWake,
 } from "./party-expedition-social.js";
 import { getSocialLink } from "./social.js";
 
@@ -30,7 +32,7 @@ function lootNode(votes: WakeNode["votes"]): WakeNode {
     ],
     defaultOptionId: "yield-loot",
     safeOptionId: "yield-loot",
-    timeoutTicks: 3,
+    timeoutTicks: 10,
     votes,
   };
 }
@@ -99,6 +101,7 @@ test("a shared run schedules tend, loot, then the unclaimed find", () => {
   const tend = createPartyExpeditionWake({ progress: at(3), leader, companions: [companion] });
   assert.equal(tend?.kind, "tend-wound");
   assert.equal(tend?.node.safeOptionId, "tend-companion");
+  assert.equal(tend?.node.timeoutTicks, 10);
   assert.equal(tend?.bruise?.ticks, 2);
   const loot = createPartyExpeditionWake({
     progress: at(6, ["tend-wound"]),
@@ -106,14 +109,58 @@ test("a shared run schedules tend, loot, then the unclaimed find", () => {
     companions: [companion],
   });
   assert.equal(loot?.kind, "loot-contention");
+  assert.equal(loot?.node.timeoutTicks, 10);
   const treasure = createPartyExpeditionWake({
     progress: at(8, ["tend-wound", "loot-contention"]),
     leader,
     companions: [companion],
   });
   assert.equal(treasure?.kind, "treasure-split");
+  assert.equal(treasure?.node.timeoutTicks, 10);
   assert.equal(createPartyExpeditionWake({ progress: at(4, ["tend-wound"]), leader, companions: [companion] }), null);
   assert.equal(createPartyExpeditionWake({ progress: at(3), leader, companions: [] }), null);
+});
+
+test("乙级组队第六步换成这一层的人情，窗口是十刻", () => {
+  const world = createSeedWorld();
+  const leader = world.cultivators[CULTIVATOR_ID]!;
+  const base = createDungeonExpeditionProgress({
+    cultivatorId: leader.id,
+    jobId: "job-yi-bond",
+    locationId: leader.locationId,
+    grade: "乙",
+    targetRank: 1,
+    policy: "aggressive",
+    startedAtTick: 0,
+  });
+  const at = (step: number, rank: 1 | 5 | 8): DungeonExpeditionProgress => ({
+    ...base,
+    stepIndex: step,
+    targetRank: rank,
+    partyWakeKinds: step === 6 ? ["tend-wound"] : [],
+    wakeNodesEncountered: step === 6 ? 1 : 0,
+  });
+  const bond = createPartyExpeditionWake({ progress: at(6, 1), leader, companions: [leader] });
+  assert.equal(bond?.kind, "floor-bond");
+  assert.equal(bond?.node.timeoutTicks, 10);
+  assert.equal(bond?.node.safeOptionId, "cover-mate");
+  assert.match(bond?.node.context ?? "", /残阵/);
+  assert.equal(/[A-Za-z]/.test(bond?.node.context ?? ""), false);
+  for (const option of bond?.node.options ?? []) {
+    assert.equal(/[A-Za-z]/.test(option.label), false);
+    assert.equal(/[A-Za-z]/.test(option.description), false);
+  }
+  assert.equal(partyWakeResolvedOption(bond!.node, [leader.id, "other"], "aggressive"), "cover-mate");
+  const fog = createPartyExpeditionWake({ progress: at(6, 5), leader, companions: [leader] });
+  assert.match(fog?.node.context ?? "", /雾/);
+  const frost = createPartyExpeditionWake({ progress: at(6, 8), leader, companions: [leader] });
+  assert.match(frost?.node.context ?? "", /霜|棺/);
+  const later = createPartyExpeditionWake({
+    progress: { ...at(8, 1), partyWakeKinds: ["tend-wound", "floor-bond"], wakeNodesEncountered: 2 },
+    leader,
+    companions: [leader],
+  });
+  assert.equal(later?.kind, "treasure-split");
 });
 
 function spawn(name: string, index: number) {
@@ -270,4 +317,135 @@ test("an escort to the gate and a rendezvous are quoted when the run ends", () =
   assert.match(`${leaderBlob}\n${mateBlob}`, /上回我把你送到地宫门口/);
   assert.match(`${leaderBlob}\n${mateBlob}`, /上回你约我在门口见/);
   assert.match(`${leaderBlob}\n${mateBlob}`, /上回我约你在门口见/);
+});
+
+test("乙级组队护住对方会欠人情，趁空拿走会结仇", () => {
+  const { world, leader, person } = spawn("青萝", 21);
+  leader.locationId = "qingzhou:dungeon-b";
+  person.locationId = "qingzhou:dungeon-b";
+  freshen(leader);
+  freshen(person);
+  leader.inventory["qi-pill"] = 1;
+  person.maxSpiritualPower = 40;
+  person.spiritualPower = 40;
+  const progress = createDungeonExpeditionProgress({
+    cultivatorId: leader.id,
+    jobId: "bond-resolve",
+    locationId: leader.locationId,
+    grade: "乙",
+    targetRank: 1,
+    policy: "aggressive",
+    startedAtTick: 0,
+  });
+  progress.stepIndex = 6;
+  progress.partyWakeKinds = ["tend-wound"];
+  progress.wakeNodesEncountered = 1;
+  const draft = createPartyExpeditionWake({ progress, leader, companions: [person] });
+  assert.equal(draft?.kind, "floor-bond");
+  const awaiting = [leader.id, person.id];
+  const before = getSocialLink(world, leader.id, person.id)?.affinity ?? 0;
+  const covered = resolvePartyExpeditionWake({
+    world,
+    progress: {
+      ...progress,
+      pendingWakeNode: {
+        ...draft!.node,
+        votes: [{ cultivatorId: leader.id, optionId: "cover-mate" }],
+      },
+    },
+    optionId: "cover-mate",
+    awaitingIds: awaiting,
+    timedOut: false,
+  });
+  const owed = getSocialLink(world, leader.id, person.id)?.owedFavors ?? [];
+  assert.ok(owed.some((row) => row.reason === "断法的时候把丹递给我"));
+  assert.ok((getSocialLink(world, leader.id, person.id)?.affinity ?? 0) >= before + 2);
+  assert.equal(leader.inventory["qi-pill"] ?? 0, 0);
+  const during = [...(leader.travelNotes ?? []), ...(person.travelNotes ?? [])].map((note) => note.detail).join("\n");
+  assert.match(during, /回气丹/);
+  publishPartyExpeditionMemories(world, covered);
+  const remembered = [...(leader.travelNotes ?? []), ...(person.travelNotes ?? [])].map((note) => note.detail).join("\n");
+  assert.match(remembered, /上回断法的时候/);
+
+  const again = createDungeonExpeditionProgress({
+    cultivatorId: leader.id,
+    jobId: "bond-take",
+    locationId: leader.locationId,
+    grade: "乙",
+    targetRank: 5,
+    policy: "aggressive",
+    startedAtTick: 0,
+  });
+  again.stepIndex = 6;
+  const takeDraft = createPartyExpeditionWake({ progress: again, leader, companions: [person] });
+  const stones = leader.spiritStones;
+  const grudgeBefore = getSocialLink(world, person.id, leader.id)?.grudge ?? 0;
+  resolvePartyExpeditionWake({
+    world,
+    progress: {
+      ...again,
+      pendingWakeNode: {
+        ...takeDraft!.node,
+        votes: [
+          { cultivatorId: leader.id, optionId: "take-opening" },
+          { cultivatorId: person.id, optionId: "take-opening" },
+        ],
+      },
+    },
+    optionId: "take-opening",
+    awaitingIds: awaiting,
+    timedOut: false,
+  });
+  assert.equal(leader.spiritStones, stones + 8);
+  const grudge = getSocialLink(world, person.id, leader.id)?.grudge ?? 0;
+  assert.ok(grudge >= grudgeBefore + 3);
+  assert.ok(grudge < 8);
+  const taken = [...(leader.travelNotes ?? []), ...(person.travelNotes ?? [])].map((note) => note.detail).join("\n");
+  assert.match(taken, /干处/);
+});
+
+test("两个人走进乙级，第六步能把丹递出去", () => {
+  const { world, leader, person } = spawn("阿宁", 22);
+  for (const one of [leader, person]) {
+    one.locationId = "qingzhou:main-city";
+    one.realm = "筑基";
+    one.realmLevel = 4;
+    one.dungeonProgress["乙"].highestClearedRank = 1;
+    freshen(one);
+  }
+  leader.inventory["qi-pill"] = 1;
+  formParty(world, leader.id, person.id);
+  for (const one of [leader, person]) one.locationId = "qingzhou:dungeon-b";
+  performAction(world, leader.id, "enter-dungeon:rank-1:balanced");
+  assert.equal(person.activeJobId, null);
+
+  let guard = 0;
+  let sawBond = false;
+  while (leader.activeJobId && guard < 90) {
+    guard += 1;
+    const hint = getCultivatorState(world, leader.id).dungeonExpedition.wakeNodeHint;
+    if (hint?.partyKind === "tend-wound") {
+      performAction(world, leader.id, "dungeon-wake-decision:tend-companion");
+      performAction(world, person.id, "dungeon-wake-decision:tend-companion");
+      continue;
+    }
+    if (hint?.partyKind === "floor-bond") {
+      sawBond = true;
+      assert.equal(hint.timeoutTicks, 10);
+      assert.match(hint.context, /残阵|丹/);
+      assert.equal(/[A-Za-z]/.test(hint.context), false);
+      assert.equal(hint.safeOptionId, "cover-mate");
+      const before = getSocialLink(world, leader.id, person.id)?.affinity ?? 0;
+      performAction(world, leader.id, "dungeon-wake-decision:cover-mate");
+      performAction(world, person.id, "dungeon-wake-decision:cover-mate");
+      const owed = [leader, person].flatMap((one) => getCultivatorState(world, one.id).owedFavors ?? []);
+      assert.ok(owed.some((row) => row.reason === "断法的时候把丹递给我"));
+      assert.ok((getSocialLink(world, leader.id, person.id)?.affinity ?? 0) >= before);
+      const notes = [...(leader.travelNotes ?? []), ...(person.travelNotes ?? [])].map((note) => note.detail).join("\n");
+      assert.match(notes, /丹/);
+      break;
+    }
+    advanceWorld(world, 1);
+  }
+  assert.equal(sawBond, true);
 });

@@ -130,7 +130,7 @@ test("late wakes can be a trap, shrine, chamber, nest, or sealed door, and the o
     cultivatorId: cultivator.id,
     jobId: "interior-wake",
     locationId: cultivator.locationId,
-    grade: "乙",
+    grade: "丙",
     targetRank: 1,
     policy: "balanced",
     startedAtTick: 0,
@@ -151,6 +151,77 @@ test("late wakes can be a trap, shrine, chamber, nest, or sealed door, and the o
   assert.ok(settlement.beat);
   assertChinese(settlement.beat.detail);
   assert.equal(settlement.progress.pendingWakeNode, null);
+});
+
+test("a solo 乙 run spends step 6 on a chance and step 8 on a quarrel", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[LEADER_ID]!;
+  const make = (grade: "乙" | "甲", rank: 1 | 5 | 8, step: number) => {
+    const progress = createDungeonExpeditionProgress({
+      cultivatorId: cultivator.id,
+      jobId: `yi-wake-${grade}-${rank}-${step}`,
+      locationId: cultivator.locationId,
+      grade,
+      targetRank: rank,
+      policy: "balanced",
+      startedAtTick: 0,
+    });
+    progress.stepIndex = step;
+    progress.usedWakeScenes = ["moral", "fork", "relic", "fellow", "loot"];
+    return maybeCreateDungeonWakeNode({
+      progress,
+      cultivator,
+      actionKind: "search",
+      worldTick: step,
+      sectName: null,
+    });
+  };
+
+  const chance = make("乙", 1, 6);
+  assert.equal(chance?.sceneKind, "yi-chance");
+  assert.match(chance?.context ?? "", /雷泽残阵/);
+  assert.equal(chance?.options.length, 4);
+  assertChinese(chance?.context ?? "");
+  for (const option of chance?.options ?? []) {
+    assertChinese(option.label);
+    assertChinese(option.description);
+  }
+  const fog = make("乙", 5, 6);
+  assert.match(fog?.context ?? "", /沉雾沼/);
+  const coffin = make("乙", 8, 8);
+  assert.equal(coffin?.sceneKind, "yi-quarrel");
+  assert.match(coffin?.context ?? "", /铜棺窟/);
+  assert.equal(coffin?.options.length, 4);
+
+  const progress = createDungeonExpeditionProgress({
+    cultivatorId: cultivator.id,
+    jobId: "yi-chance-settle",
+    locationId: cultivator.locationId,
+    grade: "乙",
+    targetRank: 1,
+    policy: "aggressive",
+    startedAtTick: 0,
+  });
+  progress.stepIndex = 6;
+  const aggressive = maybeCreateDungeonWakeNode({
+    progress,
+    cultivator,
+    actionKind: "search",
+    worldTick: 1,
+    sectName: null,
+  });
+  assert.equal(aggressive?.defaultOptionId, "pry-spark");
+  progress.pendingWakeNode = aggressive;
+  const settlement = settleDungeonWakeNode(progress, "pry-spark");
+  assert.match(settlement.beat?.detail ?? "", /你选了伸手摘下来/);
+  assert.match(settlement.beat?.detail ?? "", /雷泽残阵/);
+  assert.equal(settlement.stoneDelta, 8);
+  assert.equal(/[A-Za-z]/.test(settlement.beat?.detail ?? ""), false);
+
+  const jia = make("甲", 1, 6);
+  assert.notEqual(jia?.sceneKind, "yi-chance");
+  assert.notEqual(jia?.sceneKind, "yi-quarrel");
+  assert.equal((jia?.context ?? "").includes("残雷"), false);
 });
 
 test("the first step of a ranked run leaves a scout line, and a search step can name a mid-pack", () => {
@@ -253,36 +324,42 @@ test("a regional run can answer the farther room without granting the signature 
   assert.equal(cultivator.inventory["qinglan-dew-core"], 1);
 });
 
-test("a later search step names the second pack for that floor", () => {
-  const battle = resolveInteriorSkirmish({
-    grade: "乙",
-    rank: 1,
-    stepIndex: 2,
+const TRIAL_ALLY = {
+  id: "leader",
+  name: "试阵",
+  side: "party" as const,
+  role: "dps" as const,
+  hp: 80,
+  maxHp: 80,
+  weaponAttack: 12,
+  spellAttack: 8,
+  defense: 6,
+  speed: 10,
+  hit: 80,
+  dodge: 4,
+  crit: 4,
+  critDamage: 130,
+  guardHeart: 0,
+  spirit: 20,
+  maxSpirit: 20,
+  skills: [],
+};
+
+function trialSkirmish(grade: "丙" | "乙" | "甲", rank: 1 | 5 | 8, stepIndex: number, seed: string) {
+  return resolveInteriorSkirmish({
+    grade,
+    rank,
+    stepIndex,
     actionKind: "search",
-    seed: "later-pack",
-    allies: [{
-      id: "leader",
-      name: "试阵",
-      side: "party",
-      role: "dps",
-      hp: 80,
-      maxHp: 80,
-      weaponAttack: 12,
-      spellAttack: 8,
-      defense: 6,
-      speed: 10,
-      hit: 80,
-      dodge: 4,
-      crit: 4,
-      critDamage: 130,
-      guardHeart: 0,
-      spirit: 20,
-      maxSpirit: 20,
-      skills: [],
-    }],
+    seed,
+    allies: [TRIAL_ALLY],
     leaderId: "leader",
     policy: "balanced",
   });
+}
+
+test("a later search step names the second pack for that floor", () => {
+  const battle = trialSkirmish("乙", 1, 2, "later-pack");
   assert.ok(battle);
   assert.match(battle.summary.enemyName, /雷鞭客/);
   assert.match(battle.summary.enemyName, /跳符修/);
@@ -317,6 +394,21 @@ test("a later search step names the second pack for that floor", () => {
     policy: "balanced",
   });
   assert.match(elite?.summary.enemyName ?? "", /阵眼客/);
+
+  const third = trialSkirmish("乙", 1, 6, "yi-third");
+  assert.ok(third);
+  assert.match(third.summary.enemyName, /雷索客/);
+  assert.match(third.summary.enemyName, /麻符修/);
+  assert.equal(third.summary.enemyName.includes("残阵主"), false);
+  assert.equal(third.summary.enemyName.includes("阵脚"), false);
+  const fog = trialSkirmish("乙", 5, 6, "yi-fog");
+  assert.match(fog?.summary.enemyName ?? "", /沼钩客/);
+  assert.match(fog?.summary.enemyName ?? "", /湿咒修/);
+  const frost = trialSkirmish("乙", 8, 6, "yi-frost");
+  assert.match(frost?.summary.enemyName ?? "", /霜戟客/);
+  assert.match(frost?.summary.enemyName ?? "", /铜灯修/);
+  assert.equal(trialSkirmish("丙", 1, 6, "bing-quiet"), null);
+  assert.equal(trialSkirmish("甲", 1, 6, "jia-quiet"), null);
 });
 
 test("wilderness and bahuang room lines name the place", () => {

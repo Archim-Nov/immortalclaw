@@ -11,6 +11,7 @@ import {
 import { mysteryForRank } from "./high-realm.js";
 import { jiaPackShape, type GuardianThreat } from "./high-realm-dungeon.js";
 import { lightPackFlavor } from "./yi-mystery.js";
+import { yiMidrunEffect, yiThirdPack } from "./yi-midrun.js";
 import { runPartyBattle, type BattleCombatant, type EnemyPattern, type PartyBattleResult } from "./party-battle.js";
 import type { DungeonBeat, DungeonExpeditionPolicy, DungeonGrade } from "./model.js";
 
@@ -610,7 +611,7 @@ function effect(
 }
 
 export function interiorWakeEffect(optionId: string): WakeEffect | null {
-  return WAKE_EFFECTS[optionId] ?? EXTRA_WAKE_EFFECTS[optionId] ?? null;
+  return WAKE_EFFECTS[optionId] ?? EXTRA_WAKE_EFFECTS[optionId] ?? yiMidrunEffect(optionId);
 }
 
 function foeBody(
@@ -658,14 +659,17 @@ export function resolveInteriorSkirmish(input: {
   policy: DungeonExpeditionPolicy;
 }): PartyBattleResult | null {
   if (input.actionKind !== "search") return null;
-  const later = input.stepIndex === 2 || input.stepIndex === 5;
-  const kind = input.stepIndex === 1 || input.stepIndex === 2
+  const yiThird = input.grade === "乙" && input.stepIndex === 6;
+  const later = !yiThird && (input.stepIndex === 2 || input.stepIndex === 5);
+  const kind = yiThird || input.stepIndex === 1 || input.stepIndex === 2
     ? "skirmish"
     : input.stepIndex === 4 || input.stepIndex === 5
       ? "midboss"
       : null;
   if (!kind) return null;
-  const named = floorPack(input.grade, input.rank, kind === "midboss", later ? "later" : "gate");
+  const named = yiThird
+    ? [...yiThirdPack(input.rank)]
+    : floorPack(input.grade, input.rank, kind === "midboss", later ? "later" : "gate");
   const leader = input.allies[0];
   const threat = bandThreat(input.grade, input.rank);
   const factors = kind === "midboss" ? [0.46, 0.4, 0.58] : [0.36, 0.3];

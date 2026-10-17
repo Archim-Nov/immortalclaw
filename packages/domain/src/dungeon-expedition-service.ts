@@ -1,4 +1,5 @@
 import { interiorPlaceName, interiorWakeDraft, interiorWakeEffect, pickLateWakeKind } from "./dungeon-interior.js";
+import { yiMidrunDraft } from "./yi-midrun.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { mysteryForRank } from "./high-realm.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
@@ -715,7 +716,7 @@ export function resolveDungeonWakeNodeByDefault(progress: DungeonExpeditionProgr
   return settleDungeonWakeNode(progress, chooseDefaultDungeonWakeOptionId(progress), "timeout").progress;
 }
 
-type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank" | "trap" | "shrine" | "chamber" | "nest" | "sealed" | "well" | "span" | "lantern" | "voice" | "ford";
+type DungeonWakeSceneKind = "moral" | "fork" | "relic" | "fellow" | "loot" | "elite" | "bank" | "trap" | "shrine" | "chamber" | "nest" | "sealed" | "well" | "span" | "lantern" | "voice" | "ford" | "yi-chance" | "yi-quarrel";
 
 function finishWake(input: {
   nodeId: string;
@@ -859,6 +860,14 @@ export function maybeCreateDungeonWakeNode(input: {
   }
   if (!DUNGEON_ROUTE_SPLIT_STEPS.has(progress.stepIndex)) {
     return null;
+  }
+
+  if (progress.grade === "乙" && (progress.stepIndex === 6 || progress.stepIndex === 8)) {
+    const yiKind = progress.stepIndex === 6 ? "yi-chance" : "yi-quarrel";
+    if (!used.has(yiKind)) {
+      const draft = yiMidrunDraft(yiKind, interiorPlaceName(progress.grade, progress.targetRank), posture);
+      if (draft) return finishWake({ nodeId, ...draft });
+    }
   }
 
   const qiRatio = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
