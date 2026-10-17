@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### 元婴和化神按阶段换做法 / A different rite for each phase
+
+元婴前期到宗门驻地或甲级门口炼婴，中期才回洞府守魂灯，后期仍去渡劫。化神前期在驻地铺神纹，中期到荒野或甲级门口守神台。材料还是原来的甲级层。材料不齐或拿错这一阶的东西，破境不做，袋子里的东西不动。一个人炼婴或守神台会挂一点伤，有人看着就不挂。化神前期和中期的六个时辰摘要不再把人送去迎天劫。见闻和生平是同一句中文，不写行动标识。
+
+元婴前期 refines the infant at a sect outpost or a 甲级 gate. 元婴中期 still keeps the soul lamp at home, and 元婴后期 still faces tribulation. 化神前期 still lays the pattern at a sect outpost. 化神中期 holds the platform in the wilderness or at a 甲级 gate. The materials stay on the same floors. The wrong material is refused and left in the bag.
+
 ### 洞府继续烧灵石，夺下的边寨改口 / A deeper cave sink, and a captured camp speaks as ours
 
 洞府升阶的安全州价格是 8000、36000、160000、720000，洞天以后每一重乘三。家具大多到绝品，茶案到仙品，屏风和观景台仍停在宝光。一档的底价是 3600、18000、88000、360000、1600000，再乘每件自己的倍数。把位子补满并升到十二个位子，安全州要两千万灵石以上。

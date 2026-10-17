@@ -35,10 +35,22 @@ function breakRealm(world: ReturnType<typeof createSeedWorld>, cultivator: Culti
     finish(world, cultivator.id);
     return;
   }
-  if (level <= 11) {
+  if (level === 10) {
+    cultivator.locationId = "qingzhou:dungeon-a";
+    performAction(world, cultivator.id, "refine-nascent");
+    finish(world, cultivator.id);
+    return;
+  }
+  if (level === 11) {
     performAction(world, cultivator.id, "begin-soul-vigil");
     finish(world, cultivator.id);
     performAction(world, cultivator.id, "seal-soul-vigil");
+    return;
+  }
+  if (level === 14) {
+    cultivator.locationId = "qingzhou:wilderness";
+    performAction(world, cultivator.id, "hold-divine-platform");
+    finish(world, cultivator.id);
     return;
   }
   cultivator.locationId = "qingzhou:wilderness";

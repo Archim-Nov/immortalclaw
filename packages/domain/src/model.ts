@@ -675,9 +675,11 @@ export type TimedActionId =
   | "core-rite:steady"
   | "core-rite:press"
   | "infant-fire-temper"
+  | "refine-nascent"
   | "begin-soul-vigil"
   | "face-tribulation"
   | "begin-divine-step"
+  | "hold-divine-platform"
   | "residence-heal"
   | "residence-recover-qi"
   | "residence-produce"
@@ -1706,9 +1708,11 @@ export type BreakthroughMethodId =
   | "residence"
   | "core-rite"
   | "infant-fire"
+  | "nascent-refine"
   | "soul-vigil"
   | "tribulation"
-  | "divine-pattern";
+  | "divine-pattern"
+  | "divine-vigil";
 
 export interface BreakthroughRiteState {
   method: "soul-vigil" | "divine-pattern";
