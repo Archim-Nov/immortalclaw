@@ -4197,14 +4197,23 @@ function hasBreakthroughMaterials(cultivator: Cultivator, definition: Breakthrou
   );
 }
 
-function dungeonLockReasonOf(cultivator: Cultivator, location: WorldState["locations"][string]): string | null {
+function dungeonGateLockLine(
+  cultivator: Cultivator,
+  location: WorldState["locations"][string] | undefined,
+): string | null {
   const metadata = dungeonMetadataOf(location);
-  if (!metadata) {
-    return null;
+  if (!metadata || meetsRealmRequirement(cultivator, metadata.minRealm)) return null;
+  if (metadata.grade === "甲") {
+    return "丹霞内府要得到金丹才进得去。甲级一到三层，探宝和守关会掉丹霞露。";
   }
-  return meetsRealmRequirement(cultivator, metadata.minRealm)
-    ? null
-    : `Requires ${metadata.minRealm} realm access.`;
+  if (metadata.grade === "乙") {
+    return "乙级地宫要得到筑基才进得去。一到三层是雷泽残阵。";
+  }
+  return "丙级地宫要得到炼气才进得去。";
+}
+
+function dungeonLockReasonOf(cultivator: Cultivator, location: WorldState["locations"][string]): string | null {
+  return dungeonGateLockLine(cultivator, location);
 }
 
 function dungeonViewForLocation(
@@ -6960,7 +6969,13 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     } else if (location.nodeType === "wilderness") {
       locationPriorities.push("身处荒野，适合采集灵石和狩猎矿兽。");
     } else if (dungeonMetadataOf(location)) {
-      locationPriorities.push("身处秘境入口，可挑战副本获取进阶材料。");
+      const lockLine = dungeonGateLockLine(cultivator, location);
+      if (lockLine) {
+        locationPriorities.push(lockLine);
+        locationActions.push("dungeon-gate-locked");
+      } else {
+        locationPriorities.push("身处秘境入口，可挑战副本获取进阶材料。");
+      }
     } else if (EIGHT_WASTES_CONTENT.entryLocationIds.includes(location.id as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
       locationPriorities.push("身处八荒入口，可发起远征探索稀有资源。");
     }
@@ -8882,7 +8897,20 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       });
     }
   }
-  if (isDungeonNode(location.nodeType) && highRiskAllowed) {
+  if (isDungeonNode(location.nodeType) && !activeDungeonExpedition) {
+    const lockLine = dungeonGateLockLine(cultivator, location);
+    if (lockLine) {
+      const grade = dungeonMetadataOf(location)?.grade;
+      actions.push({
+        actionId: "dungeon-gate-locked",
+        label: grade === "甲" ? "丹霞内府还进不去" : grade === "乙" ? "乙级地宫还进不去" : "丙级地宫还进不去",
+        description: lockLine,
+        durationTicks: 0,
+        kind: "immediate",
+      });
+    }
+  }
+  if (isDungeonNode(location.nodeType) && highRiskAllowed && !dungeonGateLockLine(cultivator, location)) {
     const dungeonView = dungeonViewForLocation(world, cultivator, location);
     const partyShare = partyShareOf(world, cultivator);
     const shareSuffix = partyShare?.dungeonShareReady ? ` ${partyShare.shareNote}` : "";
@@ -12735,7 +12763,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       throw new Error("Search fortune requires dungeon metadata.");
     }
     if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
-      throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+      throw new GameplayRejection(dungeonGateLockLine(cultivator, location) ?? "这一处地宫现在进不去。");
     }
     const tuning = searchTuningForDungeon(metadata.grade, searchFortuneRank);
     const roll = hashString(`${cultivator.id}:${job.id}:${world.tick}:fortune-enhanced`);
@@ -13133,6 +13161,16 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   if (sceneOptionId) {
     return resolveSceneChoiceAction(world, cultivator, actionId, sceneOptionId);
   }
+  if (actionId === "dungeon-gate-locked") {
+    const line = dungeonGateLockLine(cultivator, world.locations[cultivator.locationId]);
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: false,
+      summary: line ?? "这一处地宫现在进得去。",
+    };
+  }
   if (actionId === "leave-regional") {
     const summary = leaveRegionalRun(world, cultivator);
     releaseRegionalJob(world, cultivator);
@@ -13529,7 +13567,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         throw new Error("Action only available in dungeons.");
       }
       if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
-        throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+        throw new GameplayRejection(dungeonGateLockLine(cultivator, location) ?? "这一处地宫现在进不去。");
       }
       const parsedExpedition = startDungeonExpedition
         ? {
@@ -13622,7 +13660,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
         throw new Error("Action only available in dungeons.");
       }
       if (!meetsRealmRequirement(cultivator, metadata.minRealm)) {
-        throw new Error(`Dungeon tier requires ${metadata.minRealm} realm access.`);
+        throw new GameplayRejection(dungeonGateLockLine(cultivator, location) ?? "这一处地宫现在进不去。");
       }
       const selectedRank = (searchFortuneRank ?? challengeGuardianRank)!;
       const highestUnlockedRank = highestUnlockedRankOf(cultivator, metadata.grade);

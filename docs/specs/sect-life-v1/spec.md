@@ -14,7 +14,7 @@ Sect membership currently records contribution, a title, and a task board. The s
 - Completed duties and sect chains add sect merit. Merit, together with owned nodes, raises a named sect tier from 初立山门 to 一州之望. Player-sect merit also counts toward the existing contribution level.
 - Each state has three map nodes: a herb field, a mine, and a spirit vein. They produce the breakthrough and meditation materials of a realm band. 炼气 and 筑基 nodes stay in safe and low states. 金丹, 元婴, and 化神 nodes appear from medium and high states. Gathering is limited by the cultivator's realm.
 - An elder, a sect master, or a 筑基 steward can raid an enemy node in the same state. Success transfers ownership and therefore production. Failure costs contribution, leaves an injury, and can be written up. The losing sect hears 山门失守.
-- A city duel, a wilderness fight against another cultivator, or a raid against someone standing on the node uses the existing 嫌隙 and 宿怨 ladder. The next meeting offers a hard spoken line, 拒礼, and a rematch. The digest can say 剑拔弩张.
+- A city duel, a wilderness fight against another cultivator, or a raid against someone standing on the node uses the existing 嫌隙 and 宿怨 ladder. A raid also grudges one or two defending members when nobody is standing on the node, and records a 边衅. See `docs/specs/raid-feud-and-jia-gate/spec.md`. The next meeting offers a hard spoken line, 拒礼, and a rematch. The digest can say 剑拔弩张.
 
 ## Non-Goals
 
