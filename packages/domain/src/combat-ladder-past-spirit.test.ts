@@ -17,12 +17,14 @@ function finish(world: WorldState, id: string) {
   }
 }
 
-function unlockWeapon(ids: string[], tiers: number[]) {
-  for (const tier of tiers) ids.push(`sword-tier-${tier}` as WeaponLoadoutId);
+function unlockWeapon(ids: readonly WeaponLoadoutId[], tiers: number[]) {
+  const list = ids as WeaponLoadoutId[];
+  for (const tier of tiers) list.push(`sword-tier-${tier}` as WeaponLoadoutId);
 }
 
-function unlockSpell(ids: string[], branch: string, tiers: number[]) {
-  for (const tier of tiers) ids.push(`${branch}-tier-${tier}` as SpellLoadoutId);
+function unlockSpell(ids: readonly SpellLoadoutId[], branch: string, tiers: number[]) {
+  const list = ids as SpellLoadoutId[];
+  for (const tier of tiers) list.push(`${branch}-tier-${tier}` as SpellLoadoutId);
 }
 
 function assertNoActionLeak(text: string, label: string) {
