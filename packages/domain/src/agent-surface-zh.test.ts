@@ -375,8 +375,11 @@ test("a gift receipt names the item in Chinese and shows the affinity delta", ()
   assert.equal(fellowGift.summary, "云中鹤送了1个回气丹给同门青禾。好感+21。");
 
   const greeted = performAction(world, first.id, `send-message:${second.id}:greet`);
-  assert.equal(greeted.summary, "云中鹤向青萝问了好。好感+3。");
+  const greetedLine = (world.messages ?? []).find((message) => message.toCultivatorId === second.id && message.subject === "问候")?.spokenLine;
+  assert.ok(greetedLine);
+  assert.equal(greeted.summary, `云中鹤向青萝问了好：「${greetedLine}」。好感+3。`);
   assert.equal(greeted.summary.includes("sent"), false);
+  assert.equal(greeted.summary.includes("Affinity"), false);
 });
 
 test("a gift action id or a body itemId selects that item, and the inbox gets one notice", () => {

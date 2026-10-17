@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { advanceWorld, createSeedWorld, getCultivatorState, listAvailableActions, performAction, syncCultivatorFromPersona } from "./index.js";
 import { GameplayRejection } from "./gameplay-error.js";
+import { getAffinityLevel, getOrCreateSocialLink, getSocialLink, writeSocialLink } from "./social.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -152,4 +153,58 @@ test("generated lines vary, stay short, and skip the stiff stock phrases", () =>
   }
   assert.ok(new Set(spoken).size >= 3);
   assert.match(gift, /疗伤丹|凝气丹|丹/);
+});
+
+test("a voice-transmit receipt is Chinese and names the affinity", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-voice-gu", "顾长川");
+  const listener = spawn(world, "agent-voice-moer", "墨儿");
+  const outgoing = getOrCreateSocialLink(world, speaker.id, listener.id);
+  const incoming = getOrCreateSocialLink(world, listener.id, speaker.id);
+  writeSocialLink(world, speaker.id, { ...outgoing, affinity: 849 });
+  writeSocialLink(world, listener.id, { ...incoming, affinity: 849 });
+
+  const result = performAction(world, speaker.id, `voice-transmit:${listener.id}`);
+  const link = getSocialLink(world, speaker.id, listener.id);
+  assert.ok(link);
+  assert.equal(result.summary, `顾长川向墨儿传了一音。好感至${link.affinity}（${getAffinityLevel(link.affinity)}）。`);
+  assert.equal(result.summary.includes("sent"), false);
+  assert.equal(result.summary.includes("Affinity"), false);
+  assert.equal(/[A-Za-z]/.test(result.summary), false);
+});
+
+test("chat-up and the three send-message kinds echo the spoken line", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-echo-gu", "顾长川");
+  const axu = spawn(world, "agent-echo-axu", "阿絮");
+  const qingluo = spawn(world, "agent-echo-qing", "青萝");
+  const chatLine = "阿絮，你靴边这点潮泥，是刚从听潮浦回来？";
+  const chat = performAction(world, speaker.id, `chat-up:${axu.id}`, chatLine);
+  assert.equal(chat.summary, `顾长川和阿絮搭了话：「${chatLine}」。`);
+
+  const greetLine = "青萝，听潮的风还沾在你袖口上。";
+  const greet = performAction(world, speaker.id, `send-message:${qingluo.id}:greet`, greetLine);
+  assert.equal(greet.summary, `顾长川向青萝问了好：「${greetLine}」。好感+3。`);
+
+  const sightLine = "听潮浦左边有坑，你别一个人踩下去。";
+  const sight = performAction(world, speaker.id, `send-message:${qingluo.id}:share-info`, sightLine);
+  assert.equal(sight.summary, `顾长川把见闻说给了青萝：「${sightLine}」。好感+3。`);
+
+  const helpLine = "这趟我一个人搬不动，你要是空就搭把手。";
+  const help = performAction(world, speaker.id, `send-message:${qingluo.id}:request-help`, helpLine);
+  assert.equal(help.summary, `顾长川向青萝求了一手：「${helpLine}」。好感+3。`);
+});
+
+test("a long spoken receipt keeps a piece of the quote inside eighty characters", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-long-speaker", "顾长川甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌");
+  const listener = spawn(world, "agent-long-listener", "阿絮甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥");
+  const line = `${"甲".repeat(39)}。`;
+  assert.equal(Array.from(line).length, 40);
+  const result = performAction(world, speaker.id, `chat-up:${listener.id}`, line);
+  assert.ok(result.summary.startsWith("顾长川甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌和阿絮甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥搭了话：「"));
+  const quote = result.summary.slice(result.summary.indexOf("：「") + 2);
+  assert.ok(quote.startsWith("甲"));
+  assert.ok(quote.endsWith("…」。"));
+  assert.equal(Array.from(result.summary).length <= 80, true);
 });
