@@ -13,6 +13,7 @@ import {
 } from "./index.js";
 import type { ActionId, Cultivator, WorldState } from "./model.js";
 import type { ResolvedCombatSkill } from "./combat-skills.js";
+import { regionalPassage } from "./dungeon-interior.js";
 import {
   prepareRegionalFighter,
   regionalCatalog,
@@ -512,4 +513,153 @@ test("a farther-room timeout keeps the captain's choice when the party abstains"
   assert.match(captainTold, /墙上的字还能认/);
   assert.equal(captainTold.includes("抠下一块"), false);
   assert.match(captainTold, /没有翻/);
+});
+
+function assertNoActionLeak(text: string): void {
+  assertChinese(text);
+  assert.equal(/regional-choice|enter-regional|leave-regional|[A-Za-z]/.test(text), false, text);
+}
+
+test("each state dungeon has a scout step and then a foe or a favor", () => {
+  const ids = [
+    "qinglan-herb-cave",
+    "tide-bell-cave",
+    "cloud-plank-break",
+    "old-tea-seat",
+    "balance-stele",
+    "frost-night-hunt",
+    "scorched-altar",
+    "salt-wreck",
+    "sand-gate-seal",
+  ];
+  const foes: string[] = [];
+  let favors = 0;
+  for (const id of ids) {
+    const steps = regionalPassage(id);
+    assert.ok(steps);
+    assert.equal(steps.length, 2);
+    assert.equal(steps[0]?.kind, "scout");
+    assert.ok(steps[1]?.kind === "fight" || steps[1]?.kind === "favor");
+    if (steps[1]?.kind === "fight") foes.push(steps[1]?.enemyName ?? "");
+    if (steps[1]?.kind === "favor") favors += 1;
+    for (const step of steps) {
+      assert.ok(step.options.length >= 3 && step.options.length <= 4);
+      assert.equal(step.options.filter((option) => option.safe).length, 1);
+      assertNoActionLeak(step.prompt);
+      for (const option of step.options) {
+        assertNoActionLeak(`${option.label}${option.description}${option.line}${option.partyLine ?? ""}${option.failLine ?? ""}${option.favorReason ?? ""}`);
+      }
+    }
+  }
+  assert.deepEqual(foes, ["露虫", "潮蛭", "藤雀", "衡卒", "焦雷虫", "盐蟹"]);
+  assert.equal(favors, 3);
+  assert.equal(regionalPassage("wanderer-cave"), null);
+  assert.equal(regionalPassage("merchant-hold"), null);
+  assert.equal(regionalPassage("ancient-vigil"), null);
+});
+
+test("青岚药窟 walks a sighting and a named foe before the dew, and leaving reads differently", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  ready(cultivator, 4, "qingzhou:main-city");
+  performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
+  const opened = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(opened?.passage?.step, 1);
+  assert.equal(opened?.passage?.total, 2);
+  assert.equal(opened?.passage?.kind, "scout");
+  assert.deepEqual(opened?.options.map((option) => option.label), ["等露", "割藤", "拔根"]);
+  assert.equal(actionIds(world, cultivator.id).includes("regional-choice:pass-qinglan-drive"), false);
+  const scouted = performAction(world, cultivator.id, "regional-choice:pass-qinglan-follow");
+  assertNoActionLeak(scouted.summary);
+  assert.match(scouted.summary, /见闻/);
+  assert.equal(cultivator.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.ok(cultivator.activeJobId);
+  const midway = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(midway?.passage?.kind, "fight");
+  assert.equal(midway?.passage?.enemyName, "露虫");
+  assert.equal(midway?.passage?.step, 2);
+
+  const fought = performAction(world, cultivator.id, "regional-choice:pass-qinglan-drive");
+  assertNoActionLeak(fought.summary);
+  assert.match(fought.summary, /露虫/);
+  assert.equal(cultivator.inventory["qinglan-dew-core"] ?? 0, 0);
+  const foughtLog = getCultivatorState(world, cultivator.id).recentCombats[0];
+  assert.equal(foughtLog?.enemyName, "露虫");
+  assert.equal(foughtLog?.combatRounds?.[0]?.outcome, "win");
+  assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage, null);
+  performAction(world, cultivator.id, "regional-choice:qinglan-wait");
+  assert.equal(cultivator.inventory["qinglan-dew-core"], 1);
+  assert.equal(cultivator.regionalReport?.outcome, "cleared");
+  assert.equal(cultivator.regionalReport?.signatureName, "青岚露芯");
+  assertNoActionLeak(cultivator.regionalReport?.line ?? "");
+  assert.match(cultivator.regionalReport?.line ?? "", /青岚露芯/);
+  const clearNotes = told(cultivator);
+  assert.match(clearNotes, /见闻/);
+  assert.match(clearNotes, /露虫/);
+  assertNoActionLeak(clearNotes);
+
+  const gone = createSeedWorld();
+  const leaving = leader(gone);
+  ready(leaving, 4, "qingzhou:main-city");
+  const stones = leaving.spiritStones;
+  performAction(gone, leaving.id, "enter-regional:qinglan-herb-cave");
+  performAction(gone, leaving.id, "regional-choice:pass-qinglan-follow");
+  assert.equal(leaving.spiritStones, stones);
+  performAction(gone, leaving.id, "leave-regional");
+  assert.equal(leaving.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.equal(leaving.spiritStones, stones - 6);
+  assert.equal(leaving.regionalReport?.outcome, "withdrew");
+  assert.equal(leaving.regionalReport?.signatureName, null);
+  assert.match(leaving.regionalReport?.line ?? "", /瓶子是空的/);
+  assert.notEqual(leaving.regionalReport?.line, cultivator.regionalReport?.line);
+  assertNoActionLeak(leaving.regionalReport?.line ?? "");
+  assert.match(told(leaving), /见闻/);
+});
+
+test("茶桥旧席 can yield the cold tea as a favor before the pattern enters the bag", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  ready(cultivator, 7, "wanzhou:main-city");
+  const summary = syncCultivatorFromPersona(world, { agentId: "agent-tea-mate", name: "苏晚" });
+  const mate = world.cultivators[summary.selectedCultivatorId]!;
+  mate.locationId = "wanzhou:main-city";
+  mate.injuryTicksRemaining = 0;
+  mate.activeJobId = null;
+  performAction(world, cultivator.id, `chat-up:${mate.id}`);
+  performAction(world, cultivator.id, `party-invite:${mate.id}`);
+  const inviteId = Object.keys(world.partyInvitations ?? {})[0];
+  assert.ok(inviteId);
+  performAction(world, mate.id, `accept-party:${inviteId}`);
+
+  performAction(world, cultivator.id, "enter-regional:old-tea-seat");
+  assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage?.kind, "scout");
+  const one = performAction(world, mate.id, "regional-choice:pass-tea-stain");
+  assert.match(one.summary, /放了下来/);
+  assert.equal(cultivator.inventory["old-tea-pattern"] ?? 0, 0);
+  performAction(world, cultivator.id, "regional-choice:pass-tea-stain");
+  const favorStep = getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage;
+  assert.equal(favorStep?.kind, "favor");
+  assert.equal(favorStep?.enemyName, null);
+  assert.equal(favorStep?.step, 2);
+  const half = performAction(world, cultivator.id, "regional-choice:pass-tea-yield");
+  assert.match(half.summary, /放了下来/);
+  performAction(world, mate.id, "regional-choice:pass-tea-yield");
+  assert.match(told(cultivator), /人情/);
+  assert.equal(cultivator.inventory["old-tea-pattern"] ?? 0, 0);
+  const owed = getCultivatorState(world, mate.id).owedFavors ?? [];
+  assert.equal(owed.some((row) => row.direction === "they-owe" && row.reason === "把席上的茶让给我"), true);
+  assert.equal(
+    (getCultivatorState(world, cultivator.id).owedFavors ?? []).some((row) => row.direction === "you-owe" && row.reason === "把席上的茶让给我"),
+    true,
+  );
+  assertNoActionLeak(told(cultivator));
+
+  performAction(world, cultivator.id, "regional-choice:tea-sit");
+  performAction(world, mate.id, "regional-choice:tea-sit");
+  assert.equal(cultivator.inventory["old-tea-pattern"], 1);
+  assert.equal(mate.inventory["old-tea-pattern"] ?? 0, 0);
+  assert.equal(cultivator.regionalReport?.outcome, "cleared");
+  assert.equal(cultivator.regionalReport?.signatureName, "旧茶纹");
+  assertNoActionLeak(cultivator.regionalReport?.line ?? "");
+  assert.match(mate.regionalReport?.line ?? "", /袋子里/);
 });
