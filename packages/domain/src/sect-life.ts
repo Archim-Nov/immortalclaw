@@ -7,6 +7,7 @@
  */
 
 import { aboveSpiritGatherItem } from "./above-spirit.js";
+import { laterForgeDrop } from "./combat-content.js";
 import { GEOGRAPHY_REGISTRY } from "./geography-registry.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import { GRUDGE_FROM_DUEL, noteWound, recordLife } from "./inner-life.js";
@@ -1285,9 +1286,14 @@ export function resolveSectTimed(world: WorldState, cultivator: Cultivator, acti
       : null;
     if (extraId) giveItem(cultivator, extraId);
     const extraName = extraId ? (ITEM_NAME[extraId] ?? extraId) : "";
+    const forge = vein.band === "spirit"
+      ? laterForgeDrop(cultivator, `${world.tick}:${cultivator.id}:${vein.id}:forge`)
+      : null;
+    if (forge) giveItem(cultivator, forge.itemId);
+    const forgeLine = forge ? `另有一份${forge.name}。` : "";
     const detail = extraId
-      ? `${cultivator.name}从${vein.name}收了一份${name}。这一境又分出一份${extraName}。`
-      : `${cultivator.name}从${vein.name}收了一份${name}。`;
+      ? `${cultivator.name}从${vein.name}收了一份${name}。这一境又分出一份${extraName}。${forgeLine}`
+      : `${cultivator.name}从${vein.name}收了一份${name}。${forgeLine}`;
     note(world, cultivator, `收下${name}`, detail, "手里多了一份灵材");
     return detail;
   }

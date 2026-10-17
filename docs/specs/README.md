@@ -42,6 +42,7 @@ Recent supporting gameplay specs:
 - `docs/specs/combat-deepen-v3/spec.md`
 - `docs/specs/combat-weapon-root-aptitude/spec.md`
 - `docs/specs/combat-content-deepen-v1/spec.md`
+- `docs/specs/combat-ladder-past-spirit/spec.md`
 - `docs/specs/realm-ladder-past-core/spec.md`
 - `docs/specs/realms-above-spirit/spec.md`
 - `docs/specs/realm-phase-rites/spec.md`

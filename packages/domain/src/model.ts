@@ -2265,8 +2265,8 @@ export type SpellLoadoutId = string & { readonly __brand: "SpellLoadoutId" };
 export type StatusHookId = string;
 export type CombatStatusId = string & { readonly __brand: "CombatStatusId" };
 
-export type WeaponTier = 1 | 2 | 3 | 4 | 5;
-export type SpellTier = 1 | 2 | 3 | 4 | 5;
+export type WeaponTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type SpellTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export interface WeaponLoadoutDefinition {
   id: WeaponLoadoutId;
@@ -2304,8 +2304,8 @@ export interface WeaponFamilyDefinition {
 }
 
 export interface WeaponBonusProfile {
-  stat1: { stat: string; values: readonly [number, number, number, number, number] };
-  stat2: { stat: string; values: readonly [number, number, number, number, number] };
+  stat1: { stat: string; values: readonly number[] };
+  stat2: { stat: string; values: readonly number[] };
 }
 
 export interface WeaponTypeDefinition {
@@ -2355,12 +2355,12 @@ export interface CombatStatusDefinition {
   durationRounds: number;
   stacking: "refresh";
   effectKind: StatusEffectKind;
-  tierValues: readonly [number, number, number, number, number];
+  tierValues: readonly number[];
   expiryMode: StatusExpiryMode;
   triggerWindow: StatusTriggerWindow;
   secondaryEffects?: {
     effectKind: StatusEffectKind;
-    tierValues: readonly [number, number, number, number, number];
+    tierValues: readonly number[];
   };
 }
 

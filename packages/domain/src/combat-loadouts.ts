@@ -99,8 +99,8 @@ export const WEAPON_FAMILY_DEFINITIONS: Record<WeaponFamilyId, WeaponFamilyDefin
     name: "轻快家族",
     memberWeaponTypes: ["sword", "dual-swords", "dagger", "gauntlets"],
     bonusProfile: {
-      stat1: { stat: "speed", values: [4, 5, 6, 7, 8] },
-      stat2: { stat: "dodge", values: [3, 4, 5, 6, 7] },
+      stat1: { stat: "speed", values: [4, 5, 6, 7, 8, 9, 10, 11] },
+      stat2: { stat: "dodge", values: [3, 4, 5, 6, 7, 8, 9, 10] },
     },
   },
   heavy: {
@@ -108,8 +108,8 @@ export const WEAPON_FAMILY_DEFINITIONS: Record<WeaponFamilyId, WeaponFamilyDefin
     name: "沉重家族",
     memberWeaponTypes: ["saber", "greatsaber", "axe", "hammer"],
     bonusProfile: {
-      stat1: { stat: "tenacity", values: [5, 7, 9, 11, 13] },
-      stat2: { stat: "critDamage", values: [5, 7, 9, 11, 13] },
+      stat1: { stat: "tenacity", values: [5, 7, 9, 11, 13, 15, 17, 19] },
+      stat2: { stat: "critDamage", values: [5, 7, 9, 11, 13, 15, 17, 19] },
     },
   },
   polearm: {
@@ -117,8 +117,8 @@ export const WEAPON_FAMILY_DEFINITIONS: Record<WeaponFamilyId, WeaponFamilyDefin
     name: "长兵家族",
     memberWeaponTypes: ["spear", "halberd", "staff", "hook-sickle"],
     bonusProfile: {
-      stat1: { stat: "hit", values: [4, 5, 6, 7, 8] },
-      stat2: { stat: "speed", values: [1, 2, 3, 4, 5] },
+      stat1: { stat: "hit", values: [4, 5, 6, 7, 8, 9, 10, 11] },
+      stat2: { stat: "speed", values: [1, 2, 3, 4, 5, 6, 7, 8] },
     },
   },
   flexible: {
@@ -126,8 +126,8 @@ export const WEAPON_FAMILY_DEFINITIONS: Record<WeaponFamilyId, WeaponFamilyDefin
     name: "柔变家族",
     memberWeaponTypes: ["whip", "chain-blade", "meteor-hammer", "silk-ribbon"],
     bonusProfile: {
-      stat1: { stat: "dodge", values: [3, 4, 5, 6, 7] },
-      stat2: { stat: "crit", values: [1, 2, 3, 4, 5] },
+      stat1: { stat: "dodge", values: [3, 4, 5, 6, 7, 8, 9, 10] },
+      stat2: { stat: "crit", values: [1, 2, 3, 4, 5, 6, 7, 8] },
     },
   },
   "ranged-mystic": {
@@ -135,37 +135,37 @@ export const WEAPON_FAMILY_DEFINITIONS: Record<WeaponFamilyId, WeaponFamilyDefin
     name: "远术家族",
     memberWeaponTypes: ["bow", "crossbow", "fan", "umbrella"],
     bonusProfile: {
-      stat1: { stat: "hit", values: [3, 4, 5, 6, 7] },
-      stat2: { stat: "guardHeart", values: [3, 4, 5, 6, 7] },
+      stat1: { stat: "hit", values: [3, 4, 5, 6, 7, 8, 9, 10] },
+      stat2: { stat: "guardHeart", values: [3, 4, 5, 6, 7, 8, 9, 10] },
     },
   },
 };
 
 // ---- Weapon Type Metadata ----
 export const WEAPON_TYPE_DEFINITIONS: Record<WeaponTypeId, WeaponTypeDefinition> = {
-  sword: { id: "sword", name: "剑", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "hit", values: [2, 3, 4, 5, 6] } },
-  "dual-swords": { id: "dual-swords", name: "双剑", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5] } },
-  dagger: { id: "dagger", name: "匕首", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "critDamage", values: [6, 8, 10, 12, 14] } },
-  gauntlets: { id: "gauntlets", name: "拳套", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "tenacity", values: [3, 4, 5, 6, 7] } },
-  saber: { id: "saber", name: "刀", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5] } },
-  greatsaber: { id: "greatsaber", name: "巨刀", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "critDamage", values: [8, 10, 12, 14, 16] } },
-  axe: { id: "axe", name: "斧", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "hit", values: [2, 3, 4, 5, 6] } },
-  hammer: { id: "hammer", name: "锤", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "guardHeart", values: [4, 5, 6, 7, 8] } },
-  spear: { id: "spear", name: "枪", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "speed", values: [2, 3, 4, 5, 6] } },
-  halberd: { id: "halberd", name: "戟", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "critDamage", values: [5, 7, 9, 11, 13] } },
-  staff: { id: "staff", name: "棍", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "dodge", values: [2, 3, 4, 5, 6] } },
-  "hook-sickle": { id: "hook-sickle", name: "钩镰", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5] } },
-  whip: { id: "whip", name: "鞭", weaponFamilyId: "flexible", coreSkillCategory: "finesse", typeBonusProfile: { stat: "speed", values: [2, 3, 4, 5, 6] } },
-  "chain-blade": { id: "chain-blade", name: "链刃", weaponFamilyId: "flexible", coreSkillCategory: "finesse", typeBonusProfile: { stat: "hit", values: [2, 3, 4, 5, 6] } },
-  "meteor-hammer": { id: "meteor-hammer", name: "流星锤", weaponFamilyId: "flexible", coreSkillCategory: "brute", typeBonusProfile: { stat: "critDamage", values: [6, 8, 10, 12, 14] } },
-  "silk-ribbon": { id: "silk-ribbon", name: "绫", weaponFamilyId: "flexible", coreSkillCategory: "tactic", typeBonusProfile: { stat: "guardHeart", values: [3, 4, 5, 6, 7] } },
-  bow: { id: "bow", name: "弓", weaponFamilyId: "ranged-mystic", coreSkillCategory: "tactic", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5] } },
-  crossbow: { id: "crossbow", name: "弩", weaponFamilyId: "ranged-mystic", coreSkillCategory: "tactic", typeBonusProfile: { stat: "critDamage", values: [5, 7, 9, 11, 13] } },
-  fan: { id: "fan", name: "扇", weaponFamilyId: "ranged-mystic", coreSkillCategory: "finesse", typeBonusProfile: { stat: "speed", values: [1, 2, 3, 4, 5] } },
-  umbrella: { id: "umbrella", name: "伞", weaponFamilyId: "ranged-mystic", coreSkillCategory: "tactic", typeBonusProfile: { stat: "guardHeart", values: [4, 5, 6, 7, 8] } },
+  sword: { id: "sword", name: "剑", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "hit", values: [2, 3, 4, 5, 6, 7, 8, 9] } },
+  "dual-swords": { id: "dual-swords", name: "双剑", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5, 6, 7, 8] } },
+  dagger: { id: "dagger", name: "匕首", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "critDamage", values: [6, 8, 10, 12, 14, 16, 18, 20] } },
+  gauntlets: { id: "gauntlets", name: "拳套", weaponFamilyId: "quick", coreSkillCategory: "finesse", typeBonusProfile: { stat: "tenacity", values: [3, 4, 5, 6, 7, 8, 9, 10] } },
+  saber: { id: "saber", name: "刀", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5, 6, 7, 8] } },
+  greatsaber: { id: "greatsaber", name: "巨刀", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "critDamage", values: [8, 10, 12, 14, 16, 18, 20, 22] } },
+  axe: { id: "axe", name: "斧", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "hit", values: [2, 3, 4, 5, 6, 7, 8, 9] } },
+  hammer: { id: "hammer", name: "锤", weaponFamilyId: "heavy", coreSkillCategory: "brute", typeBonusProfile: { stat: "guardHeart", values: [4, 5, 6, 7, 8, 9, 10, 11] } },
+  spear: { id: "spear", name: "枪", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "speed", values: [2, 3, 4, 5, 6, 7, 8, 9] } },
+  halberd: { id: "halberd", name: "戟", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "critDamage", values: [5, 7, 9, 11, 13, 15, 17, 19] } },
+  staff: { id: "staff", name: "棍", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "dodge", values: [2, 3, 4, 5, 6, 7, 8, 9] } },
+  "hook-sickle": { id: "hook-sickle", name: "钩镰", weaponFamilyId: "polearm", coreSkillCategory: "tactic", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5, 6, 7, 8] } },
+  whip: { id: "whip", name: "鞭", weaponFamilyId: "flexible", coreSkillCategory: "finesse", typeBonusProfile: { stat: "speed", values: [2, 3, 4, 5, 6, 7, 8, 9] } },
+  "chain-blade": { id: "chain-blade", name: "链刃", weaponFamilyId: "flexible", coreSkillCategory: "finesse", typeBonusProfile: { stat: "hit", values: [2, 3, 4, 5, 6, 7, 8, 9] } },
+  "meteor-hammer": { id: "meteor-hammer", name: "流星锤", weaponFamilyId: "flexible", coreSkillCategory: "brute", typeBonusProfile: { stat: "critDamage", values: [6, 8, 10, 12, 14, 16, 18, 20] } },
+  "silk-ribbon": { id: "silk-ribbon", name: "绫", weaponFamilyId: "flexible", coreSkillCategory: "tactic", typeBonusProfile: { stat: "guardHeart", values: [3, 4, 5, 6, 7, 8, 9, 10] } },
+  bow: { id: "bow", name: "弓", weaponFamilyId: "ranged-mystic", coreSkillCategory: "tactic", typeBonusProfile: { stat: "crit", values: [1, 2, 3, 4, 5, 6, 7, 8] } },
+  crossbow: { id: "crossbow", name: "弩", weaponFamilyId: "ranged-mystic", coreSkillCategory: "tactic", typeBonusProfile: { stat: "critDamage", values: [5, 7, 9, 11, 13, 15, 17, 19] } },
+  fan: { id: "fan", name: "扇", weaponFamilyId: "ranged-mystic", coreSkillCategory: "finesse", typeBonusProfile: { stat: "speed", values: [1, 2, 3, 4, 5, 6, 7, 8] } },
+  umbrella: { id: "umbrella", name: "伞", weaponFamilyId: "ranged-mystic", coreSkillCategory: "tactic", typeBonusProfile: { stat: "guardHeart", values: [4, 5, 6, 7, 8, 9, 10, 11] } },
 };
 
-// ---- Weapon Loadouts (20 types × 5 tiers = 100) ----
+// ---- Weapon Loadouts (20 types × 8 tiers = 160) ----
 type WLD = WeaponLoadoutDefinition;
 function wl(id: string, name: string, typeId: WeaponTypeId, tier: WeaponTier, apb: number, cost: number): WLD {
   const typeDef = WEAPON_TYPE_DEFINITIONS[typeId];
@@ -315,9 +315,53 @@ const WEAPON_LOADOUT_DEFS: Record<any, WeaponLoadoutDefinition> = {
   "umbrella-tier-5":      wl("umbrella-tier-5",      "天幕伞",   "umbrella", 5,  6, 38),
 };
 
+const LATER_WEAPON_NAMES: Record<WeaponTypeId, readonly [string, string, string]> = {
+  sword: ["空游剑", "并真剑", "渡劫剑"],
+  "dual-swords": ["裂空双剑", "合真双剑", "劫外双剑"],
+  dagger: ["虚无匕", "并影匕", "渡影匕"],
+  gauntlets: ["碎空拳套", "合脉拳套", "渡劫拳套"],
+  saber: ["断空刀", "并岳刀", "渡川刀"],
+  greatsaber: ["开虚巨刀", "合川巨刀", "劫外巨刀"],
+  axe: ["裂界斧", "并山斧", "渡岳斧"],
+  hammer: ["镇空锤", "合岳锤", "渡劫锤"],
+  spear: ["破虚枪", "并潮枪", "渡云枪"],
+  halberd: ["虚阙戟", "合阙戟", "劫阙戟"],
+  staff: ["定空棍", "并海棍", "渡风棍"],
+  "hook-sickle": ["空钩镰", "合钩镰", "渡劫镰"],
+  whip: ["缠虚鞭", "并龙鞭", "乘风鞭"],
+  "chain-blade": ["碎空链刃", "合狩链刃", "劫外链刃"],
+  "meteor-hammer": ["虚坠流星锤", "并坠流星锤", "渡坠流星锤"],
+  "silk-ribbon": ["空纱绫", "合元绫", "劫纱绫"],
+  bow: ["贯虚弓", "并星弓", "渡星弓"],
+  crossbow: ["裂界弩", "合工弩", "劫外弩"],
+  fan: ["空纹扇", "并阙扇", "乘风扇"],
+  umbrella: ["虚幕伞", "合幕伞", "渡劫伞"],
+};
+
+const LATER_WEAPON_COST = [10, 22, 36] as const;
+
+for (const typeId of Object.keys(WEAPON_TYPE_DEFINITIONS) as WeaponTypeId[]) {
+  const tier5 = Object.values(WEAPON_LOADOUT_DEFS).find(
+    (weapon) => weapon.weaponTypeId === typeId && weapon.weaponTier === 5,
+  );
+  if (!tier5) throw new Error(`missing tier 5 weapon for ${typeId}`);
+  for (let step = 0; step < 3; step += 1) {
+    const tier = (6 + step) as WeaponTier;
+    const id = `${typeId}-tier-${tier}`;
+    WEAPON_LOADOUT_DEFS[id] = wl(
+      id,
+      LATER_WEAPON_NAMES[typeId][step]!,
+      typeId,
+      tier,
+      tier5.attackPowerBonus + (step + 1) * 2,
+      tier5.coreSkillSpiritCost + LATER_WEAPON_COST[step]!,
+    );
+  }
+}
+
 export const WEAPON_LOADOUT_DEFINITIONS = WEAPON_LOADOUT_DEFS as Record<WeaponLoadoutId, WeaponLoadoutDefinition>;
 
-// ---- Spell Loadouts (15 branches × 5 tiers = 75) ----
+// ---- Spell Loadouts (15 branches × 8 tiers = 120) ----
 type SLD = SpellLoadoutDefinition;
 function sl(id: string, name: string, branchId: SpellBranchId, tier: SpellTier, apb: number, cost: number, style: CombatStyle): SLD {
   const branch = SPELL_BRANCH_STATUS_MAP[branchId];
@@ -439,6 +483,30 @@ const SPELL_LOADOUT_DEFS: Record<any, SpellLoadoutDefinition> = {
   "earth-vein-tier-4":     sl("earth-vein-tier-4",     "土·地脉·真诀篇", "earth-vein", 4, 10, 45, "tactic"),
   "earth-vein-tier-5":     sl("earth-vein-tier-5",     "土·地脉·秘传篇", "earth-vein", 5, 15, 58, "tactic"),
 };
+
+const LATER_SPELL_CHAPTER = ["炼虚篇", "合体篇", "大乘篇"] as const;
+const LATER_SPELL_COST = [10, 22, 36] as const;
+
+for (const branchId of Object.keys(SPELL_BRANCH_ELEMENT_MAP) as SpellBranchId[]) {
+  const tier5 = Object.values(SPELL_LOADOUT_DEFS).find(
+    (spell) => spell.spellBranchId === branchId && spell.spellTier === 5,
+  );
+  if (!tier5) throw new Error(`missing tier 5 spell for ${branchId}`);
+  const stem = tier5.name.replace(/秘传篇$/, "");
+  for (let step = 0; step < 3; step += 1) {
+    const tier = (6 + step) as SpellTier;
+    const id = `${branchId}-tier-${tier}`;
+    SPELL_LOADOUT_DEFS[id] = sl(
+      id,
+      `${stem}${LATER_SPELL_CHAPTER[step]}`,
+      branchId,
+      tier,
+      tier5.attackPowerBonus + (step + 1) * 4,
+      tier5.coreSkillSpiritCost + LATER_SPELL_COST[step]!,
+      tier5.coreSkillCategory,
+    );
+  }
+}
 
 export const SPELL_LOADOUT_DEFINITIONS = SPELL_LOADOUT_DEFS as Record<SpellLoadoutId, SpellLoadoutDefinition>;
 

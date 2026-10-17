@@ -33,6 +33,7 @@ Dungeon guardians resolve as turn-based fights with a role and named skills: `ha
 City duels, a chosen role, a reserve seat, and small skill practice: `harness/scenarios/combat-party-deepen-v2.md`.
 Named aftermath notes, harder rank 3 packs, and a wound a teammate can tend: `harness/scenarios/combat-deepen-v3.md`.
 Weapon families and the five root schools each run from 入门 to 化神, with a shop, a sect exchange, and a realm gate: `harness/scenarios/combat-content-deepen-v1.md`.
+炼虚、合体、大乘各有兵器和功法，坊市不卖，化神装备不上: `harness/scenarios/combat-ladder-past-spirit.md`.
 金丹后期往后的元婴和化神，材料在甲级高层，破境可能受伤: `harness/scenarios/realm-ladder-past-core.md`.
 甲级三层秘境的守关各有压力，输了会挂伤掉灵石: `harness/scenarios/high-realm-dungeon-pressure.md`.
 炼气仍在洞府破境，金丹走结丹仪，元婴前期炼婴、中期守魂灯、后期渡劫，化神前期落神纹、中期守神台: `harness/scenarios/breakthrough-methods.md`.

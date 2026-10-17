@@ -1,4 +1,5 @@
 import { aboveSpiritOutcome, aboveSpiritWhere } from "./above-spirit.js";
+import { bandForLevel } from "./combat-content.js";
 import { breakthroughMethodNarrative, quietMethodStep } from "./breakthrough-methods.js";
 import { jiaFightWarning } from "./high-realm-dungeon.js";
 import { resourceGoals } from "./high-realm.js";
@@ -165,14 +166,14 @@ export function realmPathView(input: {
   if (!next) {
     const mahayana = level >= 22;
     const line = mahayana
-      ? "大乘后期暂时没有更高的境界。凉州和雷州的灵脉仍会分出乘风灰，兵器和功法也停在化神。"
+      ? "大乘后期暂时没有更高的境界。凉州和雷州的灵脉仍会分出乘风灰。大乘的兵器和功法也停在这一档，坊市不卖。"
       : "化神后期暂时没有更高的境界。神纹天隙还能拿这一档的灵材，兵器和功法也停在化神。";
     return {
       ...base,
       where: mahayana ? "凉州和雷州的灵脉仍会分出乘风灰。" : "甲级地宫七层到九层的神纹天隙仍是这一档。",
       risk: "没有下一道门槛。",
       outcome: mahayana ? "大乘后期是目前这条梯子的顶。" : "化神后期是目前这条梯子的顶。",
-      catalogTier: "化神",
+      catalogTier: bandForLevel(level).manualRank,
       method: null,
       methodName: null,
       sequence: [line],
@@ -247,7 +248,7 @@ function lateCopy(level: number, successRate: number | null): {
       where: aboveSpiritWhere(level),
       risk: "",
       outcome: aboveSpiritOutcome(level),
-      catalogTier: "化神",
+      catalogTier: bandForLevel(level).manualRank,
     };
   }
   if (level === 12) {

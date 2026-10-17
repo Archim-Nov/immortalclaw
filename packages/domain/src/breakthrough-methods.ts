@@ -155,7 +155,7 @@ export function breakthroughMethodNarrative(input: {
 export function quietMethodStep(realmLevel: number): string | null {
   const level = Math.max(1, Math.floor(realmLevel));
   if (level >= 24) {
-    return "大乘后期是眼下这条梯子的顶。凉州和雷州的灵脉仍会分出乘风灰。兵器和功法也停在化神。";
+    return "大乘后期是眼下这条梯子的顶。凉州和雷州的灵脉仍会分出乘风灰。大乘的兵器和功法也停在这一档，坊市不卖。";
   }
   const above = aboveQuietStep(level);
   if (above) return above;

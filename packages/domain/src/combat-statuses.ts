@@ -50,7 +50,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "defense_down",
-    tierValues: [6, 8, 10, 12, 14], // percent
+    tierValues: [6, 8, 10, 12, 14, 16, 18, 20], // percent
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -62,12 +62,12 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "initiative_down",
-    tierValues: [8, 12, 16, 20, 24], // flat initiative
+    tierValues: [8, 12, 16, 20, 24, 28, 32, 36], // flat initiative
     expiryMode: "round_decay",
     triggerWindow: "passive",
     secondaryEffects: {
       effectKind: "dodge_down",
-      tierValues: [3, 4, 5, 6, 7],
+      tierValues: [3, 4, 5, 6, 7, 8, 9, 10],
     },
   },
   [STATUS_REJUVENATION]: {
@@ -78,7 +78,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "heal_over_time",
-    tierValues: [3, 4, 5, 6, 7], // percent of maxHp
+    tierValues: [3, 4, 5, 6, 7, 8, 9, 10], // percent of maxHp
     expiryMode: "round_decay",
     triggerWindow: "round_end",
   },
@@ -90,7 +90,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "damage_over_time",
-    tierValues: [18, 24, 30, 36, 42], // percent of spellAttack
+    tierValues: [18, 24, 30, 36, 42, 48, 54, 60], // percent of spellAttack
     expiryMode: "round_decay",
     triggerWindow: "round_end",
   },
@@ -102,7 +102,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "damage_taken_down",
-    tierValues: [6, 8, 10, 12, 14], // percent
+    tierValues: [6, 8, 10, 12, 14, 16, 18, 20], // percent
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -116,7 +116,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "next_core_skill_damage_taken_up",
-    tierValues: [8, 10, 12, 14, 16], // percent
+    tierValues: [8, 10, 12, 14, 16, 18, 20, 22], // percent
     expiryMode: "consume_on_trigger",
     triggerWindow: "on_core_skill_damage_taken",
   },
@@ -128,12 +128,12 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "accuracy_up",
-    tierValues: [4, 5, 6, 7, 8], // flat accuracy
+    tierValues: [4, 5, 6, 7, 8, 9, 10, 11], // flat accuracy
     expiryMode: "round_decay",
     triggerWindow: "passive",
     secondaryEffects: {
       effectKind: "crit_up",
-      tierValues: [2, 3, 4, 5, 6], // percent
+      tierValues: [2, 3, 4, 5, 6, 7, 8, 9], // percent
     },
   },
   [STATUS_SPELL_BREAK]: {
@@ -144,7 +144,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "next_core_skill_damage_taken_down",
-    tierValues: [12, 15, 18, 21, 24], // percent
+    tierValues: [12, 15, 18, 21, 24, 27, 30, 33], // percent
     expiryMode: "consume_on_trigger",
     triggerWindow: "on_core_skill_damage_taken",
   },
@@ -156,7 +156,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "damage_and_healing_up",
-    tierValues: [4, 6, 8, 10, 12], // percent
+    tierValues: [4, 6, 8, 10, 12, 14, 16, 18], // percent
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -168,7 +168,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "initiative_down_extra",
-    tierValues: [12, 16, 20, 24, 28], // flat initiative
+    tierValues: [12, 16, 20, 24, 28, 32, 36, 40], // flat initiative
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -180,7 +180,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "spirit_regen",
-    tierValues: [4, 6, 8, 10, 12], // flat spirit
+    tierValues: [4, 6, 8, 10, 12, 14, 16, 18], // flat spirit
     expiryMode: "round_decay",
     triggerWindow: "round_end",
   },
@@ -192,7 +192,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "initiative_down_extra",
-    tierValues: [10, 14, 18, 22, 26], // flat initiative
+    tierValues: [10, 14, 18, 22, 26, 30, 34, 38], // flat initiative
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -204,12 +204,12 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "accuracy_down",
-    tierValues: [4, 5, 6, 7, 8], // flat accuracy
+    tierValues: [4, 5, 6, 7, 8, 9, 10, 11], // flat accuracy
     expiryMode: "round_decay",
     triggerWindow: "passive",
     secondaryEffects: {
       effectKind: "crit_down",
-      tierValues: [2, 3, 4, 5, 6], // percent
+      tierValues: [2, 3, 4, 5, 6, 7, 8, 9], // percent
     },
   },
   [STATUS_SOFTEN_FORCE]: {
@@ -220,7 +220,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "next_damage_taken_down",
-    tierValues: [10, 12, 14, 16, 18], // percent
+    tierValues: [10, 12, 14, 16, 18, 20, 22, 24], // percent
     expiryMode: "consume_on_trigger",
     triggerWindow: "on_damage_taken",
   },
@@ -232,7 +232,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "defense_down",
-    tierValues: [4, 6, 8, 10, 12], // percent
+    tierValues: [4, 6, 8, 10, 12, 14, 16, 18], // percent
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -244,7 +244,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "next_core_skill_damage_taken_up",
-    tierValues: [10, 13, 16, 19, 22], // percent
+    tierValues: [10, 13, 16, 19, 22, 25, 28, 31], // percent
     expiryMode: "consume_on_trigger",
     triggerWindow: "on_core_skill_damage_taken",
   },
@@ -256,7 +256,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "fire_damage_taken_up",
-    tierValues: [8, 10, 12, 14, 16], // percent
+    tierValues: [8, 10, 12, 14, 16, 18, 20, 22], // percent
     expiryMode: "round_decay",
     triggerWindow: "passive",
   },
@@ -268,12 +268,12 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "damage_dealt_down",
-    tierValues: [4, 6, 8, 10, 12], // percent
+    tierValues: [4, 6, 8, 10, 12, 14, 16, 18], // percent
     expiryMode: "round_decay",
     triggerWindow: "passive",
     secondaryEffects: {
       effectKind: "initiative_down",
-      tierValues: [8, 12, 16, 20, 24],
+      tierValues: [8, 12, 16, 20, 24, 28, 32, 36],
     },
   },
   [STATUS_STABILIZE]: {
@@ -284,12 +284,12 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 2,
     stacking: "refresh",
     effectKind: "guard_heart_up",
-    tierValues: [4, 5, 6, 7, 8], // flat/percent guardHeart
+    tierValues: [4, 5, 6, 7, 8, 9, 10, 11], // flat/percent guardHeart
     expiryMode: "round_decay",
     triggerWindow: "passive",
     secondaryEffects: {
       effectKind: "dodge_up",
-      tierValues: [4, 5, 6, 7, 8],
+      tierValues: [4, 5, 6, 7, 8, 9, 10, 11],
     },
   },
   [STATUS_EARTH_WALL]: {
@@ -300,7 +300,7 @@ export const COMBAT_STATUS_DEFINITIONS: Record<CombatStatusId, CombatStatusDefin
     durationRounds: 1,
     stacking: "refresh",
     effectKind: "next_damage_taken_down",
-    tierValues: [12, 15, 18, 21, 24], // percent
+    tierValues: [12, 15, 18, 21, 24, 27, 30, 33], // percent
     expiryMode: "consume_on_trigger",
     triggerWindow: "on_damage_taken",
   },
