@@ -35,6 +35,12 @@ The closing timeout used to call the safe signature option whenever `phase` was 
 
 The close now runs only when `currentPassage` is empty. While a step is open, the deadline does not answer it and does not grant the signature item, and the job stays alive so the next tick cannot finish the run in its place. Finishing a step arms one new window of the existing `choiceTicks` and gives the job at least that many ticks. The catalog numbers stay at two and three. Lengthening those numbers as well would be a second clock: a longer static deadline would still skip the step if the close were allowed to run, and the run would end on a different tick from the choice window.
 
+## Follow-up: a manual close must not skip an open step
+
+The deadline already refused to close while a passage step was open. The action list still offered the signature choice, the side room, and the farther room on the first tick, and submitting the signature choice cleared the cave.
+
+While `currentPassage` is set, the action list is only that step and leave. The state view leaves `options`, `interior`, and `deeper` empty. Submitting a signature option is refused with 路还没走完，还不能收这一处。 Submitting a side room or a farther room is refused with 路还没走完，旁边和更里面还没到。 After the queue is empty, those choices appear together, and a manual close or a timeout can still grant the signature item. The three shorter caves have no passage, so their first screen is unchanged.
+
 ## Verification
 
 - `node --import tsx --test packages/domain/src/regional-dungeons.test.ts packages/domain/src/dungeon-interior.test.ts`

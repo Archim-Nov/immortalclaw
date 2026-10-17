@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### 主题洞收束不能跳过探路 / A manual close cannot skip the passage
+
+九州主题洞进门以后，行动里只有当前这一步探路和退出。遇敌或人情要等探路走完才出现。收束、侧室和更里面要等这两步都走完才出现。探路还开着时直接去收会被拒绝，签名物不进袋子。时辰到了也不跳过去。两步走完以后，手动收束和超时都能把签名物放进袋子。散修旧洞、游商暗仓、古修闭关室仍是进门就能选。
+
+On a state dungeon the action list is only the open passage step and leave. The foe or favor appears after the scout. The signature choice, the side room, and the farther room appear after both steps. Submitting the close early is refused and does not grant the drop. A timeout still waits. Once the passage is empty, a manual close or a timeout can grant it. The three shorter caves are unchanged.
+
 ### 元婴和化神按阶段换做法 / A different rite for each phase
 
 元婴前期到宗门驻地或甲级门口炼婴，中期才回洞府守魂灯，后期仍去渡劫。化神前期在驻地铺神纹，中期到荒野或甲级门口守神台。材料还是原来的甲级层。材料不齐或拿错这一阶的东西，破境不做，袋子里的东西不动。一个人炼婴或守神台会挂一点伤，有人看着就不挂。化神前期和中期的六个时辰摘要不再把人送去迎天劫。见闻和生平是同一句中文，不写行动标识。

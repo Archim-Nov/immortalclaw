@@ -1862,6 +1862,20 @@ export function submitRegionalChoice(
     const line = applyPassageChoice(world, run, step, chosen, combatantOf);
     return { summary: line, done: false };
   }
+  // The close, the side room, and the farther room stay shut until the scout
+  // and the foe or favor are both done. Listing them is not enough: a direct
+  // submit used to clear the cave and grant the signature item.
+  if (step) {
+    if (dungeon.options.some((option) => option.id === optionId)) {
+      throw new GameplayRejection("路还没走完，还不能收这一处。");
+    }
+    const sideRoom = Boolean(
+      interiorScene(run.dungeonId)?.options.some((option) => option.id === optionId)
+      || deeperScene(run.dungeonId)?.options.some((option) => option.id === optionId),
+    );
+    if (sideRoom) throw new GameplayRejection("路还没走完，旁边和更里面还没到。");
+    throw new GameplayRejection("这个选择不在当前岔路上。");
+  }
   const scene = interiorScene(run.dungeonId);
   const interiorOption = scene?.options.find((option) => option.id === optionId) ?? null;
   if (interiorOption) {
@@ -2039,6 +2053,8 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
   const run = findRun(world, cultivator.id);
   const dungeon = run ? dungeonOf(run.dungeonId) : null;
   const leader = run ? world.cultivators[run.leaderId] : null;
+  const passage = run && run.phase === "choice" ? passageViewOf(world, run) : null;
+  const laterOpen = run?.phase === "choice" && !passage;
   const active = run && dungeon && leader && run.phase !== "resolved"
     ? {
       dungeonId: dungeon.id,
@@ -2048,19 +2064,21 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
       phase: run.phase,
       stepLine: run.phase === "vigil"
         ? `${dungeon.name}里还坐着。时辰没到，灰不落。`
-        : `${currentPassage(run)?.prompt ?? ""}${dungeon.prompt}${run.interiorResolved ? "" : interiorScene(dungeon.id)?.prompt ?? ""}${run.deeperResolved ? "" : deeperScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
-      safeOptionId: run.phase === "choice" ? safeOption(dungeon).id : null,
-      awaitingNames: run.phase === "choice"
+        : passage
+          ? `${passage.prompt}人已经在里面。`
+          : `${dungeon.prompt}${run.interiorResolved ? "" : interiorScene(dungeon.id)?.prompt ?? ""}${run.deeperResolved ? "" : deeperScene(dungeon.id)?.prompt ?? ""}人已经在里面。`,
+      safeOptionId: run.phase === "choice" ? (passage?.safeOptionId ?? safeOption(dungeon).id) : null,
+      awaitingNames: laterOpen
         ? presentCultivators(world, run).filter((person) => !run.votes[person.id]).map((person) => person.name)
         : [],
-      options: run.phase === "choice"
+      options: laterOpen
         ? dungeon.options.map((option) => ({
           optionId: option.id,
           label: option.label,
           description: option.description,
         }))
         : [],
-      interior: run.phase === "choice" && !run.interiorResolved && interiorScene(dungeon.id)
+      interior: laterOpen && !run.interiorResolved && interiorScene(dungeon.id)
         ? {
           prompt: interiorScene(dungeon.id)!.prompt,
           safeOptionId: interiorSafe(dungeon.id)?.id ?? "",
@@ -2071,7 +2089,7 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
           })),
         }
         : null,
-      deeper: run.phase === "choice" && !run.deeperResolved && deeperScene(dungeon.id)
+      deeper: laterOpen && !run.deeperResolved && deeperScene(dungeon.id)
         ? {
           prompt: deeperScene(dungeon.id)!.prompt,
           safeOptionId: deeperSafe(dungeon.id)?.id ?? "",
@@ -2082,7 +2100,7 @@ export function viewRegionalDungeons(world: WorldState, cultivator: Cultivator):
           })),
         }
         : null,
-      passage: passageViewOf(world, run),
+      passage,
     }
     : null;
   const names = places.map((place) => place.name);
@@ -2120,43 +2138,46 @@ export function listRegionalChoiceActions(world: WorldState, cultivator: Cultiva
   const actions: AvailableAction[] = [];
   if (run.phase === "choice" && presentCultivators(world, run).some((person) => person.id === cultivator.id)) {
     const step = currentPassage(run);
-    for (const option of step?.options ?? []) {
-      actions.push({
-        actionId: `regional-choice:${option.id}` as ActionId,
-        label: `${dungeon.name}：${option.label}`,
-        description: `${step?.prompt ?? ""}${option.description}`,
-        durationTicks: 0,
-        kind: "immediate",
-      });
-    }
-    const scene = run.interiorResolved ? null : interiorScene(dungeon.id);
-    for (const option of scene?.options ?? []) {
-      actions.push({
-        actionId: `regional-choice:${option.id}` as ActionId,
-        label: `${dungeon.name}：${option.label}`,
-        description: `${scene?.prompt ?? ""}${option.description}`,
-        durationTicks: 0,
-        kind: "immediate",
-      });
-    }
-    const farther = run.deeperResolved ? null : deeperScene(dungeon.id);
-    for (const option of farther?.options ?? []) {
-      actions.push({
-        actionId: `regional-choice:${option.id}` as ActionId,
-        label: `${dungeon.name}：${option.label}`,
-        description: `${farther?.prompt ?? ""}${option.description}`,
-        durationTicks: 0,
-        kind: "immediate",
-      });
-    }
-    for (const option of dungeon.options) {
-      actions.push({
-        actionId: `regional-choice:${option.id}` as ActionId,
-        label: `${dungeon.name}：${option.label}`,
-        description: `${dungeon.prompt}${option.description}`,
-        durationTicks: 0,
-        kind: "immediate",
-      });
+    if (step) {
+      for (const option of step.options) {
+        actions.push({
+          actionId: `regional-choice:${option.id}` as ActionId,
+          label: `${dungeon.name}：${option.label}`,
+          description: `${step.prompt}${option.description}`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+    } else {
+      const scene = run.interiorResolved ? null : interiorScene(dungeon.id);
+      for (const option of scene?.options ?? []) {
+        actions.push({
+          actionId: `regional-choice:${option.id}` as ActionId,
+          label: `${dungeon.name}：${option.label}`,
+          description: `${scene?.prompt ?? ""}${option.description}`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+      const farther = run.deeperResolved ? null : deeperScene(dungeon.id);
+      for (const option of farther?.options ?? []) {
+        actions.push({
+          actionId: `regional-choice:${option.id}` as ActionId,
+          label: `${dungeon.name}：${option.label}`,
+          description: `${farther?.prompt ?? ""}${option.description}`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
+      for (const option of dungeon.options) {
+        actions.push({
+          actionId: `regional-choice:${option.id}` as ActionId,
+          label: `${dungeon.name}：${option.label}`,
+          description: `${dungeon.prompt}${option.description}`,
+          durationTicks: 0,
+          kind: "immediate",
+        });
+      }
     }
   }
   if (run.leaderId === cultivator.id) {

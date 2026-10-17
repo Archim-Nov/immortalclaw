@@ -57,6 +57,17 @@ function actionIds(world: WorldState, cultivatorId: string): string[] {
   return listAvailableActions(world, cultivatorId).map((action) => action.actionId);
 }
 
+function finishOpenPassage(world: WorldState, dungeonId: string, voterIds: string[]): void {
+  const steps = regionalPassage(dungeonId) ?? [];
+  for (const step of steps) {
+    const option = step.options.find((entry) => entry.safe) ?? step.options[0];
+    assert.ok(option);
+    for (const id of voterIds) {
+      performAction(world, id, `regional-choice:${option.id}` as ActionId);
+    }
+  }
+}
+
 function assertChinese(text: string): void {
   assert.match(text, /[\u4e00-\u9fff]/);
   assert.equal(/欢迎|请您|很高兴为|客服/.test(text), false, text);
@@ -159,9 +170,18 @@ test("waiting for the dew carries the core, a sighting, and a cooldown", () => {
   performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
   const pending = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
   assert.equal(pending?.name, "青岚药窟");
-  assert.equal(pending?.safeOptionId, "qinglan-wait");
-  assert.deepEqual(pending?.options.map((option) => option.label), ["等露", "割藤", "拔根"]);
-  for (const option of pending?.options ?? []) assertChinese(option.description);
+  assert.equal(pending?.passage?.kind, "scout");
+  assert.equal(pending?.safeOptionId, "pass-qinglan-follow");
+  assert.deepEqual(pending?.options, []);
+  assert.equal(pending?.interior, null);
+  assert.equal(pending?.deeper, null);
+  assert.equal(actionIds(world, cultivator.id).includes("regional-choice:qinglan-wait"), false);
+  finishOpenPassage(world, "qinglan-herb-cave", [cultivator.id]);
+  const opened = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(opened?.passage ?? null, null);
+  assert.equal(opened?.safeOptionId, "qinglan-wait");
+  assert.deepEqual(opened?.options.map((option) => option.label), ["等露", "割藤", "拔根"]);
+  for (const option of opened?.options ?? []) assertChinese(option.description);
 
   const persisted = hydrateWorldState(toPersistedWorldState(world));
   const saved = persisted.cultivators[LEADER_ID]!;
@@ -194,6 +214,7 @@ test("the dark hold costs stones and a wound, and does not give the crystal", ()
   ready(cultivator, 12, "cangzhou:main-city");
   const stones = cultivator.spiritStones;
   performAction(world, cultivator.id, "enter-regional:salt-wreck");
+  finishOpenPassage(world, "salt-wreck", [cultivator.id]);
   performAction(world, cultivator.id, "regional-choice:salt-dark");
   assert.equal(cultivator.inventory["salt-pattern-crystal"], 0);
   assert.equal(cultivator.spiritStones, stones - 24);
@@ -240,6 +261,9 @@ test("two companions must agree, and the drop stays in the leader's bag", () => 
 
   performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
   assert.equal(world.regionalRuns?.[cultivator.id]?.companionIds.includes(mate.id), true);
+  assert.equal(actionIds(world, mate.id).includes("regional-choice:qinglan-wait"), false);
+  assert.ok(actionIds(world, mate.id).includes("regional-choice:pass-qinglan-follow"));
+  finishOpenPassage(world, "qinglan-herb-cave", [cultivator.id, mate.id]);
   assert.ok(actionIds(world, mate.id).includes("regional-choice:qinglan-wait"));
   const first = performAction(world, mate.id, "regional-choice:qinglan-pull");
   assert.match(first.summary, /放了下来/);
@@ -271,7 +295,6 @@ test("two companions must agree, and the drop stays in the leader's bag", () => 
   assert.ok(secondInvite);
   performAction(split, companion.id, `accept-party:${secondInvite}`);
   performAction(split, lead.id, "enter-regional:qinglan-herb-cave");
-  performAction(split, companion.id, "regional-choice:qinglan-pull");
   advanceWorld(split, 2);
   assert.equal(lead.inventory["qinglan-dew-core"] ?? 0, 0);
   assert.equal(getCultivatorState(split, lead.id).regionalDungeons?.active?.passage?.kind, "scout");
@@ -421,6 +444,7 @@ test("cutting the vine is a fight the cultivator can finish, and leaving is not"
   const cultivator = leader(world);
   ready(cultivator, 4, "qingzhou:main-city");
   performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
+  finishOpenPassage(world, "qinglan-herb-cave", [cultivator.id]);
   performAction(world, cultivator.id, "regional-choice:qinglan-cut");
   assert.equal(cultivator.regionalReport?.outcome, "cleared");
   assert.equal(cultivator.inventory["qinglan-dew-core"], 1);
@@ -641,8 +665,9 @@ test("青岚药窟 walks a sighting and a named foe before the dew, and leaving 
   assert.equal(opened?.passage?.step, 1);
   assert.equal(opened?.passage?.total, 2);
   assert.equal(opened?.passage?.kind, "scout");
-  assert.deepEqual(opened?.options.map((option) => option.label), ["等露", "割藤", "拔根"]);
+  assert.deepEqual(opened?.options, []);
   assert.equal(actionIds(world, cultivator.id).includes("regional-choice:pass-qinglan-drive"), false);
+  assert.equal(actionIds(world, cultivator.id).includes("regional-choice:qinglan-wait"), false);
   const scouted = performAction(world, cultivator.id, "regional-choice:pass-qinglan-follow");
   assertNoActionLeak(scouted.summary);
   assert.match(scouted.summary, /见闻/);
@@ -661,6 +686,10 @@ test("青岚药窟 walks a sighting and a named foe before the dew, and leaving 
   assert.equal(foughtLog?.enemyName, "露虫");
   assert.equal(foughtLog?.combatRounds?.[0]?.outcome, "win");
   assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage, null);
+  assert.deepEqual(
+    getCultivatorState(world, cultivator.id).regionalDungeons?.active?.options.map((option) => option.label),
+    ["等露", "割藤", "拔根"],
+  );
   performAction(world, cultivator.id, "regional-choice:qinglan-wait");
   assert.equal(cultivator.inventory["qinglan-dew-core"], 1);
   assert.equal(cultivator.regionalReport?.outcome, "cleared");
@@ -736,4 +765,92 @@ test("茶桥旧席 can yield the cold tea as a favor before the pattern enters t
   assert.equal(cultivator.regionalReport?.signatureName, "旧茶纹");
   assertNoActionLeak(cultivator.regionalReport?.line ?? "");
   assert.match(mate.regionalReport?.line ?? "", /袋子里/);
+});
+
+test("听潮钟窟 keeps the close off the list until the passage is done, and a manual close cannot skip it", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  ready(cultivator, 5, "yangzhou:main-city");
+  performAction(world, cultivator.id, "enter-regional:tide-bell-cave");
+  const opened = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(opened?.passage?.kind, "scout");
+  assert.equal(opened?.passage?.step, 1);
+  assert.deepEqual(opened?.options, []);
+  assert.equal(opened?.interior, null);
+  assert.equal(opened?.deeper, null);
+  const first = actionIds(world, cultivator.id);
+  assert.ok(first.includes("regional-choice:pass-tide-line"));
+  assert.ok(first.includes("regional-choice:pass-tide-listen"));
+  assert.ok(first.includes("regional-choice:pass-tide-dry"));
+  assert.ok(first.includes("leave-regional"));
+  for (const id of ["tide-walk", "tide-strike", "tide-dive", "room-tide-pass", "deep-tide-pass", "pass-tide-drive"]) {
+    assert.equal(first.includes(`regional-choice:${id}`), false, id);
+  }
+  assert.throws(
+    () => performAction(world, cultivator.id, "regional-choice:tide-walk"),
+    (error: Error) => {
+      assert.match(error.message, /路还没走完，还不能收这一处/);
+      assert.equal(/[A-Za-z]/.test(error.message), false, error.message);
+      return true;
+    },
+  );
+  assert.throws(
+    () => performAction(world, cultivator.id, "regional-choice:room-tide-pass"),
+    /旁边和更里面还没到/,
+  );
+  assert.equal(cultivator.inventory["tide-bell-shard"] ?? 0, 0);
+  assert.equal(cultivator.regionalReport ?? null, null);
+  assert.ok(cultivator.activeJobId);
+  assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage?.kind, "scout");
+
+  performAction(world, cultivator.id, "regional-choice:pass-tide-line");
+  const mid = actionIds(world, cultivator.id);
+  assert.ok(mid.includes("regional-choice:pass-tide-around"));
+  assert.ok(mid.includes("regional-choice:pass-tide-drive"));
+  assert.equal(mid.includes("regional-choice:tide-walk"), false);
+  assert.equal(mid.includes("regional-choice:room-tide-pass"), false);
+  assert.equal(mid.includes("regional-choice:deep-tide-pass"), false);
+  assert.throws(
+    () => performAction(world, cultivator.id, "regional-choice:tide-walk"),
+    /路还没走完，还不能收这一处/,
+  );
+  assert.equal(cultivator.inventory["tide-bell-shard"] ?? 0, 0);
+  assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage?.kind, "fight");
+  assert.ok(cultivator.activeJobId);
+
+  performAction(world, cultivator.id, "regional-choice:pass-tide-around");
+  const close = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(close?.passage ?? null, null);
+  assert.deepEqual(close?.options.map((option) => option.label), ["绕开钟", "敲钟", "潜入钟腹"]);
+  assert.ok(close?.interior);
+  assert.ok(close?.deeper);
+  const listed = actionIds(world, cultivator.id);
+  assert.ok(listed.includes("regional-choice:tide-walk"));
+  assert.ok(listed.includes("regional-choice:tide-strike"));
+  assert.ok(listed.includes("regional-choice:tide-dive"));
+  assert.ok(listed.includes("regional-choice:room-tide-pass"));
+  assert.ok(listed.includes("regional-choice:deep-tide-pass"));
+  assert.ok(listed.includes("leave-regional"));
+  performAction(world, cultivator.id, "regional-choice:tide-walk");
+  assert.equal(cultivator.inventory["tide-bell-shard"], 1);
+  assert.equal(cultivator.regionalReport?.outcome, "cleared");
+  assert.equal(cultivator.regionalReport?.signatureName, "潮钟碎片");
+  assert.match(cultivator.regionalReport?.line ?? "", /潮钟碎片/);
+  assertNoActionLeak(cultivator.regionalReport?.line ?? "");
+
+  const waited = createSeedWorld();
+  const sitter = leader(waited);
+  ready(sitter, 5, "yangzhou:main-city");
+  performAction(waited, sitter.id, "enter-regional:tide-bell-cave");
+  finishOpenPassage(waited, "tide-bell-cave", [sitter.id]);
+  assert.equal(sitter.inventory["tide-bell-shard"] ?? 0, 0);
+  assert.equal(getCultivatorState(waited, sitter.id).regionalDungeons?.active?.passage ?? null, null);
+  advanceWorld(waited, 1);
+  assert.equal(sitter.inventory["tide-bell-shard"] ?? 0, 0);
+  assert.ok(sitter.activeJobId);
+  advanceWorld(waited, 1);
+  assert.equal(sitter.activeJobId, null);
+  assert.equal(sitter.inventory["tide-bell-shard"], 1);
+  assert.equal(sitter.regionalReport?.outcome, "cleared");
+  assert.equal(sitter.regionalReport?.signatureName, "潮钟碎片");
 });

@@ -13,6 +13,7 @@ import {
   regionalDeeper,
   regionalInterior,
   regionalInteriorIds,
+  regionalPassage,
   resolveInteriorSkirmish,
   wildRoomLine,
 } from "./dungeon-interior.js";
@@ -25,8 +26,20 @@ import {
   performAction,
 } from "./index.js";
 import { regionalCatalog } from "./regional-dungeons.js";
+import type { ActionId, WorldState } from "./model.js";
 
 const LEADER_ID = "yun-zhong-he";
+
+function finishOpenPassage(world: WorldState, dungeonId: string, voterIds: string[]): void {
+  const steps = regionalPassage(dungeonId) ?? [];
+  for (const step of steps) {
+    const option = step.options.find((entry) => entry.safe) ?? step.options[0];
+    assert.ok(option);
+    for (const id of voterIds) {
+      performAction(world, id, `regional-choice:${option.id}` as ActionId);
+    }
+  }
+}
 
 function assertChinese(text: string): void {
   assert.match(text, /[\u4e00-\u9fff]/);
@@ -274,6 +287,10 @@ test("a regional run keeps the signature choice and also offers a side room", ()
   cultivator.activeJobId = null;
   const before = cultivator.spiritStones;
   performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
+  const entered = listAvailableActions(world, cultivator.id).map((action) => action.actionId);
+  assert.equal(entered.includes("regional-choice:room-qinglan-look"), false);
+  assert.equal(entered.includes("regional-choice:qinglan-wait"), false);
+  finishOpenPassage(world, "qinglan-herb-cave", [cultivator.id]);
   const view = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
   assert.deepEqual(view?.options.map((option) => option.label), ["等露", "割藤", "拔根"]);
   assert.equal(view?.interior?.options.length, 4);
@@ -307,6 +324,10 @@ test("a regional run can answer the farther room without granting the signature 
   cultivator.spiritualPower = cultivator.maxSpiritualPower;
   cultivator.activeJobId = null;
   performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
+  const entered = listAvailableActions(world, cultivator.id).map((action) => action.actionId);
+  assert.equal(entered.includes("regional-choice:deep-qinglan-stand"), false);
+  assert.equal(entered.includes("regional-choice:qinglan-wait"), false);
+  finishOpenPassage(world, "qinglan-herb-cave", [cultivator.id]);
   const view = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
   assert.match(view?.deeper?.prompt ?? "", /还在滴/);
   assert.equal(view?.deeper?.options.length, 4);
