@@ -274,6 +274,8 @@ export interface Residence {
   fixtures?: ResidenceFixture[];
   /** Last tick each guest was hosted. */
   hostTicks?: Record<string, number>;
+  /** Local reputation this cave has already paid out. Clearing furniture does not refund it. */
+  reputationClaimed?: number;
   /** One 甲 relic set on the table. The bag still holds the item. Absent when the table is clear. */
   displayedRelic?: {
     itemId: ItemId;

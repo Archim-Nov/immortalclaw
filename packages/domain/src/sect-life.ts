@@ -607,6 +607,7 @@ function dailyLine(
   member: Membership,
   tierName: string,
   raidOpen: boolean,
+  borderCampOpen: boolean,
   feudLine: string | null,
 ): string {
   const post = cultivator.sectPost ? postOf(cultivator.sectPost) : null;
@@ -614,8 +615,10 @@ function dailyLine(
   if (!post) base = "今天先在山门领一份外门杂役。杂役做完，宗门声望和你的贡献都会记上一笔。";
   else if (cultivator.realmLevel < 4) {
     base = `你现在是${post.name}。今天把本职做完，再去本宗的药田收一份炼气灵材。筑基以前别去宣战。`;
-  } else if (raidOpen && (post.id === "steward" || post.id === "elder" || post.id === "master-seat")) {
+  } else if (borderCampOpen && (post.id === "steward" || post.id === "elder" || post.id === "master-seat")) {
     base = `你现在是${post.name}。本州有邻宗占着的边寨，可以宣战夺脉。山门眼下是${tierName}。`;
+  } else if (raidOpen && (post.id === "steward" || post.id === "elder" || post.id === "master-seat")) {
+    base = `你现在是${post.name}。本州还有别人占着的脉，可以宣战夺过来。山门眼下是${tierName}。`;
   } else if (post.id === "elder" || post.id === "master-seat") {
     base = `你现在是${post.name}。今天可以上堂议事，也可以看看本州哪条脉能夺。山门眼下是${tierName}。`;
   } else {
@@ -715,21 +718,29 @@ export function settleVeinYields(world: WorldState): void {
   settleBorderPressure(world);
 }
 
+function borderCampSentence(vein: SpiritVeinNode, yours: boolean): string {
+  if (vein.kind !== "border-camp") return "";
+  if (yours) return "这座边寨已经是本宗的。守在这里，出产归本宗，不必再宣战。";
+  if (vein.ownerId && vein.ownerKind !== "none") return "这是邻宗占在本州的边寨，护脉收不下来，要夺就宣战。";
+  return "这座边寨还没有主。护脉就能替山门收下。";
+}
+
 function veinView(world: WorldState, cultivator: Cultivator, vein: SpiritVeinNode, member: Membership) {
   const owner = ownerMember(world, vein);
   const yours = vein.ownerKind === member.kind && vein.ownerId === member.record.id;
   const gatherOk = gatherBlock(cultivator, vein, member) === null;
+  const where = world.locations[vein.locationId]?.name ?? "那一处";
   return {
     id: vein.id,
     name: vein.name,
     kind: vein.kind,
     band: vein.band,
     locationId: vein.locationId,
-    locationName: world.locations[vein.locationId]?.name ?? vein.locationId,
+    locationName: where,
     ownerName: owner?.record.name ?? "还没有主",
     yours,
     stock: veinStock(vein),
-    materials: `${BAND_SENTENCE[vein.band]}${vein.kind === "border-camp" ? "这是邻宗占在本州的边寨，护脉收不下来，要夺就宣战。" : ""}人要到${world.locations[vein.locationId]?.name ?? "那一处"}才能收。`,
+    materials: `${BAND_SENTENCE[vein.band]}${borderCampSentence(vein, yours)}人要到${where}才能收。`,
     gatherActionId: gatherOk ? `gather-vein:${vein.id}` : null,
   };
 }
@@ -766,6 +777,10 @@ export function buildSectLifeView(world: WorldState, cultivator: Cultivator): Se
     if (block) return [];
     return [{ id: chain.id, name: chain.name, actionId: `sect-chain:${chain.id}`, summary: chain.summary }];
   });
+  const borderCampOpen = Object.values(world.spiritVeins ?? {}).some((vein) => {
+    if (vein.kind !== "border-camp") return false;
+    return raidBlock(world, cultivator, vein, member) === null;
+  });
   const raids = Object.values(world.spiritVeins ?? {}).flatMap((vein) => {
     const block = raidBlock(world, cultivator, vein, member);
     if (block) return [];
@@ -789,7 +804,7 @@ export function buildSectLifeView(world: WorldState, cultivator: Cultivator): Se
     merit: tier.merit,
     veinCount: tier.veinCount,
     nextRequirement: nextRequirement(world, member),
-    daily: dailyLine(cultivator, member, tier.name, raids.length > 0, borderFeuds[0]?.line ?? null),
+    daily: dailyLine(cultivator, member, tier.name, raids.length > 0, borderCampOpen, borderFeuds[0]?.line ?? null),
     veins,
     chains,
     raids,

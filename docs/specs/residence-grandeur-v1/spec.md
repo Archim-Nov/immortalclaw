@@ -1,5 +1,7 @@
 # Residence Grandeur
 
+Prices, furniture tiers, and benefit caps in this spec were raised in `docs/specs/residence-sink-v1/spec.md`. That file is the current contract. The numbers below are the first pass.
+
 ## Summary
 
 A cultivator can keep spending spirit stones on the home they already own. The first purchase stays `buy-residence`. After that, the same cave can be rebuilt from 草庐 or 石室 through 洞府, 灵府, 仙府, and 洞天, and then expanded without a last tier. Furniture fills a limited number of slots. The benefits are larger than the first pass, and they still stop. Visitors in the same city can see the place, and a host can ask someone in.

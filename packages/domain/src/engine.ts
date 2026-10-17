@@ -253,6 +253,7 @@ import {
   applyUpgrade,
   benefitsOf,
   buildOwnedResidenceView,
+  claimCaveReputation,
   discountedSpiritCost,
   fixtureFamily,
   fixtureOffers,
@@ -8328,7 +8329,7 @@ function residenceGrandeurActions(world: WorldState, cultivator: Cultivator): Av
     actions.push({
       actionId: `display-relic:${relic.itemId}` as ActionId,
       label: `把${relic.name}摆上案`,
-      description: `${relic.arcLine}摆上以后东西还在袋子里。来的人能在洞府的 glance 和 homeLine 里读到这一句。`,
+      description: `${relic.arcLine}摆上以后东西还在袋子里。来府里的人能看见案上这一句。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -12947,7 +12948,9 @@ function performResidenceGrandeurAction(
     const previous = residenceTierName(residence);
     cultivator.spiritStones -= quote.price;
     withResidence(cultivator, residence.id, (home) => applyUpgrade(home, quote.nextGrandeur));
-    const text = `${cultivator.name}把${residence.name}从${previous}修成了${quote.tierName}，花了${quote.price}灵石。`;
+    const grant = claimCaveReputation(cultivator, residence);
+    const fame = grant > 0 ? `本州声望涨了${grant}点。` : "";
+    const text = `${cultivator.name}把${residence.name}从${previous}修成了${quote.tierName}，花了${quote.price}灵石。${fame}`;
     addDaoLog(world, cultivator.id, "修缮洞府", text, ["residence", "purchase", "grandeur"]);
     recordLife(cultivator, { tick: world.tick, kind: "growth", text });
     pushTravelNote(cultivator, travelNote({
@@ -12978,9 +12981,11 @@ function performResidenceGrandeurAction(
     }
     cultivator.spiritStones -= offer.price;
     withResidence(cultivator, residence.id, (home) => applyFixture(home, placing, offer.nextTier));
+    const grant = claimCaveReputation(cultivator, residence);
+    const fame = grant > 0 ? `本州声望涨了${grant}点。` : "";
     const text = offer.cosmetic
-      ? `${cultivator.name}在${residence.name}添了${offer.tierName}的${family.name}，花了${offer.price}灵石。来的人看得见。`
-      : `${cultivator.name}在${residence.name}安了${offer.tierName}的${family.name}，花了${offer.price}灵石。`;
+      ? `${cultivator.name}在${residence.name}添了${offer.tierName}的${family.name}，花了${offer.price}灵石。来的人看得见。${fame}`
+      : `${cultivator.name}在${residence.name}安了${offer.tierName}的${family.name}，花了${offer.price}灵石。${fame}`;
     addDaoLog(world, cultivator.id, "置办陈设", text, ["residence", "purchase", "fixture"]);
     recordLife(cultivator, { tick: world.tick, kind: "growth", text });
     pushTravelNote(cultivator, travelNote({

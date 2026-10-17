@@ -195,8 +195,13 @@ test("the cave table shows one relic without taking it out of the bag", () => {
   host.inventory[page.itemId] = 1;
   host.inventory[ash.itemId] = 1;
 
-  const listed = listAvailableActions(world, host.id).map((action) => action.actionId);
+  const listedActions = listAvailableActions(world, host.id);
+  const listed = listedActions.map((action) => action.actionId);
   assert.ok(listed.includes(`display-relic:${page.itemId}`));
+  const relicCard = listedActions.find((action) => action.actionId === `display-relic:${page.itemId}`);
+  assert.match(relicCard?.description ?? "", /来府里的人能看见/);
+  assert.equal((relicCard?.description ?? "").includes("glance"), false);
+  assert.equal((relicCard?.description ?? "").includes("homeLine"), false);
   performAction(world, host.id, `display-relic:${page.itemId}`);
   assert.equal(host.inventory[page.itemId], 1);
 
