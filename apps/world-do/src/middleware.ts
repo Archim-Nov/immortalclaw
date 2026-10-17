@@ -1,3 +1,4 @@
+import { actionFailureBody } from "@immortal-claw/domain";
 import type { Hono } from "hono";
 import { cors } from "hono/cors";
 import { isAllowedCorsOrigin, type WorldDOEnv, type WorldDOHonoEnv } from "./env.js";
@@ -14,11 +15,7 @@ function readStatus(error: unknown) {
 }
 
 function readMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unexpected server error.";
+  return actionFailureBody(error).error;
 }
 
 function normalizeJsonContentType(contentType: string | null): string | null {
@@ -58,6 +55,7 @@ export function registerMiddleware(app: Hono<WorldDOHonoEnv>, env: WorldDOEnv) {
 
   app.onError((error, context) => {
     const status = readStatus(error) as 400 | 401 | 409 | 500;
-    return context.json({ error: readMessage(error) }, status);
+    const message = readMessage(error);
+    return context.json({ error: message, summary: message }, status);
   });
 }

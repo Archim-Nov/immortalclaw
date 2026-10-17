@@ -226,7 +226,7 @@ const EXPLORATION_BEATS: readonly Beat[] = [
     semanticType: "fortune",
     description: "药担翻在路口，叶子撒了一地。挑担的人坐在石头上揉脚踝，说自己一时站不起来。好叶子都在最上面。",
     title: "翻倒的药担",
-    prompt: "药担翻了，人还坐在石头上。你好叶子和担子都看得见。你怎么做？",
+    prompt: "药担翻了，人还坐在石头上。药叶子和担子都看得见。你怎么做？",
     walk: ["问一声就走", "你问了脚踝的事，没有动手，担子还翻着。"],
     help: ["把担子扶起来，叶子归回筐里", "你把叶子归回筐里。他只能给你四枚灵石，又说以后认得你。"],
     take: ["只拣最上面那几片好叶子", "好叶子进了你的袋，担子还是翻的。", 10],
@@ -994,6 +994,10 @@ const STATE_TRAVEL: readonly StateBeat[] = [
 
 function rowsFor(beats: readonly StateBeat[], stateId: string): StateEventRow[] {
   return beats.filter((beat) => beat.stateId === stateId).map(toStateRow);
+}
+
+export function sceneEventFromBeat(beat: Beat): EventTemplate {
+  return toGlobalRow(beat);
 }
 
 export function createExplorationSceneRows(): EventTemplate[] {

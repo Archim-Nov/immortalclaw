@@ -63,6 +63,7 @@ import {
   eventSeverityOf,
   type EventSourceType,
 } from "./events.js";
+import { jiaDungeonSideEvents } from "./events/content/jia-scene-choices.js";
 import { realmLabelForLevel, repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import {
   breakthroughMethodIdForLevel,
@@ -4292,6 +4293,17 @@ function positiveInventoryDelta(
   return delta;
 }
 
+function mergePositiveDrops(
+  base: Partial<Record<ItemId, number>>,
+  delta: Partial<Record<ItemId, number>>,
+): Partial<Record<ItemId, number>> {
+  const merged = { ...base };
+  for (const [itemId, count] of Object.entries(delta) as Array<[ItemId, number]>) {
+    if (count > 0) merged[itemId] = (merged[itemId] ?? 0) + count;
+  }
+  return merged;
+}
+
 function safeExpeditionReturnLocationId(world: WorldState, fromLocationId: string): string {
   return findNearestLocationId(world, fromLocationId, (candidate) => canHealAtLocation(candidate)) ?? fromLocationId;
 }
@@ -4955,6 +4967,15 @@ function finalizeDungeonExpedition(
     outcome,
     seed: `${cultivator.id}:${progress.jobId}:${progress.targetRank}`,
   });
+  if (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0)) {
+    const beforeClose = structuredClone(cultivator.inventory);
+    grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
+    grantCultivationDrop(world, cultivator, metadata.grade, progress.targetRank);
+    progress = {
+      ...progress,
+      secondaryDrops: mergePositiveDrops(progress.secondaryDrops, positiveInventoryDelta(beforeClose, cultivator.inventory)),
+    };
+  }
   const report = createDungeonExpeditionReport({
     progress,
     outcome,
@@ -4966,11 +4987,6 @@ function finalizeDungeonExpedition(
     realmProgressCapped: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && progress.realmProgressGain <= 0,
   });
 
-  // ---- Loadout source drop (dungeon expedition) ----
-  if (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0)) {
-    grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
-    grantCultivationDrop(world, cultivator, metadata.grade, progress.targetRank);
-  }
   if (relic) {
     cultivator.inventory[relic.itemId] = (cultivator.inventory[relic.itemId] ?? 0) + 1;
   }
@@ -5695,12 +5711,8 @@ function resolveDungeonExpeditionStepIfDue(
     .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
     .slice(0, 2)
     .map(([itemId, count]) => ({ name: ITEM_CATALOG[itemId]?.name ?? itemId, count }));
-  const tierPool = breakthroughDropPool(metadata.materialBand, effectiveProgress.targetRank);
-  let primaryMaterialCount = 0;
-  for (const matId of tierPool) {
-    primaryMaterialCount += inventoryDelta[matId] ?? 0;
-    delete inventoryDelta[matId];
-  }
+  const primaryMaterialCount = inventoryDelta[metadata.materialBand] ?? 0;
+  delete inventoryDelta[metadata.materialBand];
 
   let updatedProgress = recordDungeonExpeditionStep({
     progress: effectiveProgress,
@@ -5862,10 +5874,13 @@ function maybeQueueDungeonSideChoice(
   const queued = job.meta?.dungeonSideChoicesQueued ?? 0;
   if (queued >= DUNGEON_SIDE_CHOICE_CAP) return;
   const stateId = stateIdFromLocationId(cultivator.locationId);
-  const scenes = [
-    ...world.eventPools.globalCommon,
-    ...(world.eventPools.stateSpecific[stateId] ?? []),
-  ].filter((event) => event.sceneChoice);
+  const grade = dungeonMetadataOf(world.locations[cultivator.locationId])?.grade;
+  const scenes = grade === "甲"
+    ? jiaDungeonSideEvents()
+    : [
+        ...world.eventPools.globalCommon,
+        ...(world.eventPools.stateSpecific[stateId] ?? []),
+      ].filter((event) => event.sceneChoice);
   if (scenes.length === 0) return;
   const pick = scenes[hashString(`${job.id}:${world.tick}:dungeon-side`) % scenes.length];
   if (!pick) return;
