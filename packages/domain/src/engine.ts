@@ -63,7 +63,14 @@ import {
   eventSeverityOf,
   type EventSourceType,
 } from "./events.js";
-import { jiaDungeonSideEvents } from "./events/content/jia-scene-choices.js";
+import { jiaDungeonSideEvents, jiaScenePack } from "./events/content/jia-scene-choices.js";
+import {
+  jiaChoiceLine,
+  jiaClosingDrop,
+  jiaHaulForOption,
+  jiaHaulSummaryClause,
+  jiaTemperamentForRank,
+} from "./jia-temperament.js";
 import { realmLabelForLevel, repairCultivatorRealm, realmStageForLevel } from "./realms.js";
 import {
   breakthroughMethodIdForLevel,
@@ -2574,9 +2581,10 @@ function resolveSceneChoiceAction(
   const beforeMorality = cultivator.moralityScore;
   applyEventEffectBundle(cultivator, option.effectBundle, `scene-choice:${choice.id}`);
   cultivator.moralityScore = beforeMorality;
+  const haulNote = rememberJiaHaulChoice(world, cultivator, choice.eventId, option.id);
   cultivator.pendingSceneChoiceId = null;
   delete world.pendingSceneChoices?.[choice.id];
-  const summary = `${cultivator.name}在${choice.title}里选了「${option.label}」。${option.summary}`;
+  const summary = `${cultivator.name}在${choice.title}里选了「${option.label}」。${option.summary}${haulNote ?? ""}`;
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
     locationId: cultivator.locationId,
@@ -2593,6 +2601,45 @@ function resolveSceneChoiceAction(
     accepted: true,
     summary,
   };
+}
+
+function rememberJiaHaulChoice(
+  world: WorldState,
+  cultivator: Cultivator,
+  eventId: string,
+  optionId: string,
+): string | null {
+  if (!jiaScenePack(eventId)) return null;
+  const haul = jiaHaulForOption(optionId);
+  const progress = world.dungeonExpeditions[cultivator.id];
+  if (!haul || !progress || progress.grade !== "甲") return null;
+  progress.jiaHaul = haul;
+  const temperament = progress.jiaTemperament ?? jiaTemperamentForRank(progress.targetRank);
+  let injuryEased = false;
+  if (haul === "spare") {
+    const relief = Math.min(2, cultivator.injuryTicksRemaining);
+    if (relief > 0) {
+      cultivator.injuryTicksRemaining -= relief;
+      syncWounded(cultivator);
+      progress.injuryTicksGained = Math.max(0, (progress.injuryTicksGained ?? 0) - relief);
+      injuryEased = true;
+    }
+  }
+  const line = jiaChoiceLine({
+    rank: progress.targetRank,
+    temperament,
+    haul,
+    injuryEased,
+  });
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: "find",
+    title: "这一择",
+    detail: line,
+    locationId: cultivator.locationId,
+    mood: "先记在袖上",
+  }));
+  return line;
 }
 
 function policyMatchesCultivator(sect: Sect, cultivator: Cultivator): boolean {
@@ -4886,6 +4933,22 @@ function assertMysteryRank(cultivator: Cultivator, grade: DungeonGrade, rank: nu
   if (!gate.ok) throw new GameplayRejection(gate.line);
 }
 
+function grantJiaTemperamentDrop(
+  cultivator: Cultivator,
+  progress: DungeonExpeditionProgress,
+  outcome: "completed" | "withdrew",
+): void {
+  if (progress.grade !== "甲") return;
+  const drop = jiaClosingDrop({
+    rank: progress.targetRank,
+    outcome,
+    temperament: progress.jiaTemperament ?? jiaTemperamentForRank(progress.targetRank),
+    haul: progress.jiaHaul ?? null,
+  });
+  if (drop.count <= 0) return;
+  cultivator.inventory[drop.itemId] = (cultivator.inventory[drop.itemId] ?? 0) + drop.count;
+}
+
 function grantCultivationDrop(
   world: WorldState,
   cultivator: Cultivator,
@@ -4971,6 +5034,7 @@ function finalizeDungeonExpedition(
     const beforeClose = structuredClone(cultivator.inventory);
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
     grantCultivationDrop(world, cultivator, metadata.grade, progress.targetRank);
+    grantJiaTemperamentDrop(cultivator, progress, outcome);
     progress = {
       ...progress,
       secondaryDrops: mergePositiveDrops(progress.secondaryDrops, positiveInventoryDelta(beforeClose, cultivator.inventory)),
@@ -4993,6 +5057,26 @@ function finalizeDungeonExpedition(
 
   world.dungeonExpeditionReports[cultivator.id] = report;
   delete world.dungeonExpeditions[cultivator.id];
+  const haulClause = jiaHaulSummaryClause({
+    grade: progress.grade,
+    rank: progress.targetRank,
+    outcome,
+    secondaryDrops: report.secondaryDrops,
+    haul: progress.jiaHaul ?? null,
+  });
+  if (haulClause) {
+    const haulTitle = report.secondaryDropCards?.find((card) => (
+      card.itemId === "danxia-cinder" || card.itemId === "fire-poison-bead" || card.itemId === "array-shard"
+    ))?.itemName ?? "旁支";
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "find",
+      title: haulTitle,
+      detail: haulClause,
+      locationId: cultivator.locationId,
+      mood: "袖上还沾着",
+    }));
+  }
   settleDungeonCompanion(world, cultivator, progress, outcome, returnLocationId);
   publishPartyExpeditionMemories(world, progress);
   if (relic) publishJiaRelicChronicle(world, cultivator, progress, relic);
@@ -5875,8 +5959,12 @@ function maybeQueueDungeonSideChoice(
   if (queued >= DUNGEON_SIDE_CHOICE_CAP) return;
   const stateId = stateIdFromLocationId(cultivator.locationId);
   const grade = dungeonMetadataOf(world.locations[cultivator.locationId])?.grade;
+  const expedition = world.dungeonExpeditions[cultivator.id];
+  const temperament = grade === "甲"
+    ? expedition?.jiaTemperament ?? (expedition ? jiaTemperamentForRank(expedition.targetRank) : undefined)
+    : undefined;
   const scenes = grade === "甲"
-    ? jiaDungeonSideEvents()
+    ? jiaDungeonSideEvents(temperament)
     : [
         ...world.eventPools.globalCommon,
         ...(world.eventPools.stateSpecific[stateId] ?? []),

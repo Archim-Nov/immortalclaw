@@ -1,3 +1,4 @@
+import type { JiaTemperamentId } from "../../model.js";
 import type { EventTemplate } from "../../events.js";
 import { sceneEventFromBeat, type Beat } from "./scene-choices.js";
 
@@ -114,6 +115,24 @@ const JIA_BEATS: readonly Beat[] = [
   },
 ];
 
-export function jiaDungeonSideEvents(): EventTemplate[] {
-  return JIA_BEATS.map(sceneEventFromBeat);
+const JIA_SCENE_PACK: Record<string, JiaTemperamentId> = {
+  "jia-sc-01": "danxia",
+  "jia-sc-04": "danxia",
+  "jia-sc-06": "danxia",
+  "jia-sc-02": "fire-poison",
+  "jia-sc-07": "fire-poison",
+  "jia-sc-03": "array",
+  "jia-sc-05": "array",
+  "jia-sc-08": "array",
+};
+
+export function jiaScenePack(eventId: string): JiaTemperamentId | null {
+  return JIA_SCENE_PACK[eventId] ?? null;
+}
+
+export function jiaDungeonSideEvents(temperament?: JiaTemperamentId): EventTemplate[] {
+  const beats = temperament
+    ? JIA_BEATS.filter((beat) => JIA_SCENE_PACK[beat.id] === temperament)
+    : JIA_BEATS;
+  return beats.map(sceneEventFromBeat);
 }

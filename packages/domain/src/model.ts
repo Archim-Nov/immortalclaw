@@ -594,6 +594,9 @@ export type LegacyItemId =
   | "core-nourish-dew"
   | "nascent-nourish-sand"
   | "spirit-nourish-dust"
+  | "danxia-cinder"
+  | "fire-poison-bead"
+  | "array-shard"
   | "danxia-page-scrap"
   | "danxia-kiln-ash"
   | "danxia-pattern-flake"
@@ -989,7 +992,15 @@ export interface DungeonExpeditionProgress {
   partyWakeKinds?: PartyWakeKind[];
   /** Favors, cracks, and shared lines waiting for the exit digest. Absent on older expeditions. */
   partyMoments?: PartyExpeditionMoment[];
+  /** 甲级这一趟的气质池。旧存档没有时按层数再算。 */
+  jiaTemperament?: JiaTemperamentId;
+  /** 中途抉择对带出的改动。旧存档没有就是没改。 */
+  jiaHaul?: JiaHaulChoice;
 }
+
+export type JiaTemperamentId = "danxia" | "fire-poison" | "array";
+
+export type JiaHaulChoice = "spare" | "swap" | "extra";
 
 export interface JiaRelicNote {
   itemId: ItemId;
