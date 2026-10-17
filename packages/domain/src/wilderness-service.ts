@@ -1,6 +1,7 @@
 import { recordWildernessAttunement } from "./guixu-service.js";
 import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
 import { wildRoomLine } from "./dungeon-interior.js";
+import { syncWildBeat } from "./wild-beats.js";
 import {
   noteWild,
   pickWildLine,
@@ -293,6 +294,10 @@ export function applyWildernessPressure(world: WorldState, cultivator: Cultivato
     cultivator.maxSpiritualPower,
   );
 
+  if (syncWildBeat(progress, place, Boolean(cultivator.activeJobId))) {
+    return null;
+  }
+
   if (
     progress.ticksSurvived >= layer.survivalPressure.maxSurvivalTicks
     || cultivator.qi <= 0
@@ -381,5 +386,6 @@ export function resolveWildernessSurvey(
     withdrawFromWilderness(world, cultivator, eventId);
   }
 
-  return `${cultivator.name} ${eventDefinition.summary}.`;
+  if (surveyed) return `${surveyed.name}这一段走完了。`;
+  return `${cultivator.name}在这一层走了一段。`;
 }

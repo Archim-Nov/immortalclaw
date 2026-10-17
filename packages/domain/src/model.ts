@@ -864,6 +864,12 @@ export interface WildernessProgress {
   lastEventId: string | null;
   /** Survived ticks when the last 见闻 was written. Absent on older runs. */
   lastSightingAt?: number;
+  /** How many wilderness beats are already answered. Absent on older runs. */
+  beatsCleared?: number;
+  /** Survived ticks when the next beat may open. Absent until the first beat is answered. */
+  nextBeatAt?: number;
+  /** The beat waiting for a choice. Absent when the path is clear. */
+  pendingBeatId?: string;
 }
 
 export interface DungeonYieldEstimate {
@@ -1249,7 +1255,7 @@ export interface CultivatorDigest {
   relationships: string[];
   quotes: readonly { speakerName: string; line: string; tick: number }[];
   summary: string;
-  /** Present while a dungeon wake is waiting for a choice. */
+  /** Present while a dungeon wake or a wilderness beat is waiting for a choice. */
   priorities?: string[];
   /** Present from 金丹后期 on, including at 大乘后期. Omitted earlier. */
   nextStep?: string;
@@ -1579,6 +1585,7 @@ export type ImmediateActionId =
   | "join-sect"
   | "leave-neutral-sect"
   | "withdraw-from-wilderness"
+  | `wild-choice:${string}`
   | `challenge-cultivator:${string}`
   | `accept-pvp-challenge:${string}`
   | `reject-pvp-challenge:${string}`
@@ -3187,6 +3194,15 @@ export interface CultivatorStateView {
     statusLabel?: string;
     enemyLabel?: string;
     followerLabel?: string;
+    /** The open mid-run beat. Absent once it is answered, and on older views. */
+    beat?: {
+      step: 1 | 2;
+      total: 2;
+      kind: "历练" | "奇遇" | "人情";
+      prompt: string;
+      decisionLine: string;
+      options: Array<{ id: string; label: string; description: string }>;
+    };
   } | null;
   /** The wilderness road or 八荒 band an agent can read before and during the trip. Omitted by older view fixtures. */
   wildRoute?: WildRouteView | null;

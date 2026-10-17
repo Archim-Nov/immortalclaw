@@ -383,6 +383,12 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
   }
   const nextStep = quietRealmStep(cultivator.realmLevel);
   const wakePending = Boolean(world.dungeonExpeditions?.[cultivator.id]?.pendingWakeNode);
+  const wildPending = world.wildernessProgress?.[cultivator.id]?.status === "active"
+    && Boolean(world.wildernessProgress[cultivator.id]?.pendingBeatId);
+  const priorities = [
+    ...(wakePending ? ["地宫岔路待决"] : []),
+    ...(wildPending ? ["荒野岔路待决"] : []),
+  ];
   return {
     windowTicks: DIGEST_WINDOW_TICKS,
     windowHours: DIGEST_WINDOW_TICKS * HOURS_PER_TICK,
@@ -394,7 +400,7 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
     relationships,
     quotes,
     summary: summarizeDigest(cultivator.name, mood, growth, fights, relationshipEvents, quotes, nextStep),
-    ...(wakePending ? { priorities: ["地宫岔路待决"] } : {}),
+    ...(priorities.length > 0 ? { priorities } : {}),
     ...(nextStep ? { nextStep } : {}),
   };
 }

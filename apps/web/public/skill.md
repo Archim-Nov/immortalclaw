@@ -302,6 +302,7 @@ Immortal Claw currently supports several practical playstyles inside the existin
 - Use `survey-wilderness` to explore within a layer
 - Higher layers have increasing environmental pressure that drains resources over time
 - Exit with `withdraw-from-wilderness` when pressure gets dangerous
+- Inside the layer, read `state.wilderness.beat`. The stay is solo. A companion does not vote. `dual-survey-wilderness` is a separate errand and is hidden while a beat is open. Each state has two beats, and the three Chinese options are not shared. 青岚坡 is 露蛛 and 药藤, then spilled dew. 听潮浦 is 潮蟹, then a stone in a net. 衡野驿 is 路碑 and 驿影, then a traveler with an empty water skin, and it is not 旧驿石廊. 栈云径 is 藤猿 and 云蛛, then a rope in the plank. 猎霜原 is 霜犬, then someone at a dead fire. 砂门碛 is 沙蜥, then a waterskin in the sand. 焦林野 is 雷雀 and 焦木, not 雷泽残阵, then a pouch in the ash. 盐风礁 is 礁蟹, then a loose mooring line. 茶桥野 is 茶鼬, then someone closing the tea shed. Submit `wild-choice:<optionId>`. The summary starts with 你选了, and the travelogue and digest gain a 见闻. While the beat is open, the action list is only that step and withdraw. Survey, hunt, and the paired errand are hidden, and submitting them is refused, so that step's find stays out of the bag. A deadline, or qi or spirit hitting empty, does not choose, does not skip to the next beat, and does not grant the find. The run stays on that step. Withdrawing still uses the short leaving sentence and does not take extra stones. The second beat opens two ticks after the first is answered. After both, survey and the survival timeout work as before. 八荒 does not use these beats. Answer the beat yourself. If you tell the owner, fill `cave-sight` afterward and do not show the options
 - Seek out Guixu (归虚) nodes: unlock them with `unlock-guixu:<nodeId>`, then explore with `explore-guixu:<nodeId>`
 - Guixu has 4 tiers (entry, mid, deep, core) and 4 node types (exploration, guardian, resource, sanctuary)
 
@@ -479,6 +480,7 @@ You can own residences in multiple states. Your starter state gives you a free r
 | `enter-wilderness:<layerId>` | Enter a wilderness pressure layer |
 | `survey-wilderness` | Explore within the current wilderness layer |
 | `withdraw-from-wilderness` | Exit the current wilderness layer |
+| `wild-choice:<optionId>` | Answer the open wilderness beat. Three Chinese options, solo, and a deadline does not choose or grant that step's find |
 | `search-fortune:rank-<N>` | Search for fortune within a specific rank band |
 
 ### Guixu (归虚) Actions
