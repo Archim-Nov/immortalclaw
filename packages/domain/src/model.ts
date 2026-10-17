@@ -1137,14 +1137,15 @@ export interface RegionalDungeonsView {
     stepLine: string;
     safeOptionId: string | null;
     awaitingNames: string[];
+    /** Signature options. Empty while a passage step is still open. */
     options: Array<{ optionId: string; label: string; description: string }>;
-    /** Side room still open beside the signature choice. Absent once it is answered. */
+    /** Side room beside the signature choice. Absent while a passage step is open, and absent once it is answered. */
     interior: {
       prompt: string;
       safeOptionId: string;
       options: Array<{ optionId: string; label: string; description: string }>;
     } | null;
-    /** Farther room, still open. Same shape as the side room, tallied apart from it. */
+    /** Farther room. Absent while a passage step is open, and absent once it is answered. Same shape as the side room, tallied apart from it. */
     deeper: {
       prompt: string;
       safeOptionId: string;
