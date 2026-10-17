@@ -11781,8 +11781,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       completedAtTick: null,
     };
     world.commissions[commId] = commission;
-    addDaoLog(world, cultivator.id, "发布委托", `${cultivator.name}在告示板发布了${type === "gather" ? "采集" : "运送"}${targetItemId}的委托，悬赏${rewardAmount}灵石。`, ["social", "commission"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} posted a ${type} commission for ${targetItemId}.` };
+    const commissionLabel = `${type === "gather" ? "采集" : "运送"}${itemDisplayName(targetItemId)}`;
+    const postedDetail = `${cultivator.name}在${location.name}的告示上贴了${commissionLabel}的委托，悬赏${rewardAmount}灵石。`;
+    addDaoLog(world, cultivator.id, "发布委托", postedDetail, ["social", "commission"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: postedDetail };
   }
 
   // ---- Social Verbs: accept-commission ----
@@ -11804,13 +11806,13 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     cultivator.spiritStones += commission.rewardSpiritStones;
     world.commissions[acceptCommId] = { ...commission, acceptedById: cultivator.id, completedAtTick: world.tick };
     addMutualAffinity(world, cultivator.id, commission.posterId, 25);
-    const posterName = world.cultivators[commission.posterId]?.name ?? "unknown";
+    const posterName = world.cultivators[commission.posterId]?.name ?? "某人";
     addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commission.type === "gather" ? "采集" : "运送"}${commission.targetItemId}委托。`, { fromCultivatorId: cultivator.id });
     addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commission.targetItemId}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
     addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commission.targetItemId}委托。好感度+25。`, ["social", "commission"]);
     grantOwedFavor(world, cultivator.id, commission.posterId, "办了我的委托", "commission");
     const poster = world.cultivators[commission.posterId];
-    const commissionDetail = `${cultivator.name}办完了${posterName}贴出的${commission.targetItemId}委托。灵石进了口袋，${posterName}还欠着一份人情。`;
+    const commissionDetail = `${cultivator.name}办完了${posterName}贴出的${itemDisplayName(commission.targetItemId)}委托。灵石进了口袋，${posterName}还欠着一份人情。`;
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "person",
@@ -11829,7 +11831,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: "告示上的事有人接了",
       }));
     }
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} fulfilled ${posterName}'s commission for ${commission.targetItemId}. Reward: ${commission.rewardSpiritStones} stones. Affinity +25.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: commissionDetail };
   }
 
   const answerHelpRequesterId = parseAnswerHelp(actionId);
@@ -11930,7 +11932,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       mood: "话留在了原地",
     }));
     recordLife(cultivator, { tick: world.tick, kind: "relationship", text: boardDetail, topic: "note", names: [cultivator.name] });
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} left a ${boardKind} note on the board at ${boardLocation.name}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: boardDetail };
   }
 
   const callFavorTargetId = parseCallFavor(actionId);

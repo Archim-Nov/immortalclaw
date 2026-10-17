@@ -32,7 +32,7 @@ When the run ends, an idle companion still at the dungeon leaves with the leader
 - A withdrawal or collapse costs the companion stones and an injury.
 - An abort walks them out together with no stone loss.
 
-`post-board-note` and `post-board-note:journey` still pin the latest travel line. `post-board-note:favor`, `post-board-note:rival`, and `post-board-note:sect` are listed only when there is a favor owed to the author, a rival mark, or a sect. Empty kinds are refused. `call-favor:<id>` is face to face and spends one favor: twelve spirit stones when the debtor has them, otherwise a promise in both diaries. `press-rival:<id>` is face to face, keeps the rival mark, and refuses a second scene for six ticks.
+`post-board-note` and `post-board-note:journey` still pin the latest travel line. `post-board-note:favor`, `post-board-note:rival`, and `post-board-note:sect` are listed only when there is a favor owed to the author, a rival mark, or a sect. Empty kinds are refused. A successful pin returns the Chinese `summary` already written for the travelogue, naming the place and what was pinned. The kind stays 见闻, 人情, 过节, or 同门 inside that sentence. `call-favor:<id>` is face to face and spends one favor: twelve spirit stones when the debtor has them, otherwise a promise in both diaries. `press-rival:<id>` is face to face, keeps the rival mark, and refuses a second scene for six ticks.
 
 Six sect errands write 报名, 执事, 同门点名, 夜谈, 长老, and 同门之约, then the counter resets. The elder's beat still grants realm progress. A same-sect cultivator at the gate is the named mate and receives a diary line each beat. The last beat leaves them owing one favor. With nobody else at the gate, the mate is a stable named figure from the sect roster.
 

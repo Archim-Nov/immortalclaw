@@ -179,9 +179,14 @@ test("help, a gift, and a commission leave favors both agents can report", () =>
 
   const posted = performAction(world, first.id, "post-commission:gather:spirit-ore");
   assert.equal(posted.accepted, true);
+  assert.match(posted.summary, /[\u4e00-\u9fff]/);
+  assert.match(posted.summary, /告示/);
+  assert.doesNotMatch(posted.summary, /posted a .+ commission/);
   const commissionId = Object.keys(world.commissions)[0];
   assert.ok(commissionId);
-  performAction(world, second.id, `accept-commission:${commissionId}`);
+  const accepted = performAction(world, second.id, `accept-commission:${commissionId}`);
+  assert.match(accepted.summary, /[\u4e00-\u9fff]/);
+  assert.doesNotMatch(accepted.summary, /fulfilled .+ commission/);
   assert.equal(getSocialLink(world, second.id, first.id)?.favorBalance, 1);
   assert.ok((first.travelNotes ?? []).some((note) => note.detail.includes("委托")));
   assert.ok((second.travelNotes ?? []).some((note) => note.title.includes("委托")));

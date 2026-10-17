@@ -193,7 +193,12 @@ test("a favor board note can be read, then called in for stones", () => {
   assert.ok(actions.includes(`call-favor:${first.id}`));
   assert.equal(actions.includes("post-board-note:rival"), false);
 
-  performAction(world, second.id, "post-board-note:favor");
+  const postedNote = performAction(world, second.id, "post-board-note:favor");
+  assert.equal(postedNote.accepted, true);
+  assert.match(postedNote.summary, /[\u4e00-\u9fff]/);
+  assert.match(postedNote.summary, /告示/);
+  assert.doesNotMatch(postedNote.summary, /left a .+ note on the board/);
+  assert.doesNotMatch(postedNote.summary, /\bfavor\b/);
   const board = getCultivatorState(world, first.id).localBoard ?? [];
   assert.ok(board.some((note) => note.kind === "favor" && note.text.includes(first.name)));
 
