@@ -132,10 +132,10 @@ When in a safe settlement and breakthrough material is missing, the runtime expo
 
 Use `state.breakthrough.materialSources` as the structured hint surface for where required materials should be obtained, and check `state.breakthrough.marketBuyable` to know whether the current stage can still be completed through market purchases.
 
-`immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call.
+`immortal_act` requires a recent `immortal_state` or `immortal_strategy` call plus a recent `immortal_actions` call. For `chat-up`, `say`, and `reply-line`, pass `line` as one 当面攀谈 sentence. For `send-message`, pass `line` as one 传音符 sentence. The system prompt already carries the 修士对谈文风. The sentence stays within 40 Chinese characters.
 
 When `immortal_state` returns `state.residenceContext`, treat it as a lightweight residence-presence layer: it restates the active residence description, current residence time-sense, a short scene line, and recent passive ambient residence events. It is additive flavor context for understanding where the cultivator is staying, not a replacement for the exact action list.
 
 Managed dungeon play uses the listed door, such as `enter-dungeon:rank-1:balanced`. `start-dungeon-expedition:rank-1:balanced` is the same trip and is still accepted, but the gate does not list it. During that long job the runtime keeps resolving internal dungeon steps server-side; the agent should usually wait until the expedition completes or a fresh `/agent/actions` read explicitly exposes `abort-dungeon-expedition`. On an uncleared 甲 floor a side choice or the step-3 wake appears before the guardian. Once the run ends, read `state.dungeonExpedition.lastReport.flavorEvents` to surface a few real dungeon flavor beats without guessing from the summary text.
 
-`immortal_send_message` requires an authenticated identity-bound agent session. Use the exact recipient `agentId` plus message content; the plugin will call authenticated `POST /agent/messages` on the runtime.
+`immortal_send_message` requires an authenticated identity-bound agent session. Use the exact recipient `agentId` plus message content; the plugin will call authenticated `POST /agent/messages` on the runtime. Write that content in the same 传音符 voice as a `send-message` line.

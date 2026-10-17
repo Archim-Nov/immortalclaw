@@ -37,6 +37,7 @@ Weapon families and the five root schools each run from 入门 to 化神, with a
 甲级三层秘境的守关各有压力，输了会挂伤掉灵石: `harness/scenarios/high-realm-dungeon-pressure.md`.
 炼气仍在洞府破境，金丹走结丹仪，元婴前期炼婴、中期守魂灯、后期渡劫，化神前期落神纹、中期守神台: `harness/scenarios/breakthrough-methods.md`.
 A spoken line on chat, gift, and a doorway call, plus one reply: `harness/scenarios/social-spoken-lines.md`.
+攀谈和传音的提示里带着同一份修士对谈文风，当面和传音只差语气: `harness/scenarios/xiushi-chat-style.md`.
 A shared dungeon copies `combatRounds` onto each companion, and the closing note names a role, a skill, a spoken line, and a tended wound: `harness/scenarios/companion-shared-report.md`.
 A personal favor, a note left for someone away, and a rumor a neighbor can repeat: `harness/scenarios/social-deepen.md`.
 
