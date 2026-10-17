@@ -850,11 +850,88 @@ test("creation, registration, sect errand, and dual wilderness text stays Chines
   const duty = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("sect-quest-complete"));
   assert.equal(duty?.title, "宗门差事");
   assert.equal(duty?.content, "青萝把宗门差事做完了。");
+  const finishedDao = getDaoLogs(world, created.id).filter((entry) => entry.tags.includes("action-complete") && entry.tags.includes("take-sect-errand"));
+  assert.ok(finishedDao.length > 0);
+  assert.ok(finishedDao.every((entry) => entry.title === "行动完成" && entry.content === "青萝把宗门差事做完了。"));
+  assert.equal(getDaoLogs(world, created.id).some((entry) => entry.title === "Action Complete"), false);
 
   const named = finishDual(world, created.id, { dualTaskId: "dwt-01", dualRole: "partner" });
   assert.equal(named, "青萝完成了双人荒野任务：联手猎妖。");
   const unnamed = finishDual(world, created.id, {});
   assert.equal(unnamed, "青萝完成了双人荒野任务。");
+});
+
+test("入门、离宗、换装和地宫岔路的道心用中文", () => {
+  const world = createSeedWorld();
+  const created = createCultivator(world, { name: "青萝" });
+  saveCultivationRegistration(world, created.id, rawRegistrationRecord());
+  const cultivator = world.cultivators[created.id]!;
+  cultivator.completedBaseQuests = 1;
+  cultivator.locationId = "qingzhou:sect-outpost:cang-mu-gu";
+  cultivator.activeJobId = null;
+  cultivator.injuryTicksRemaining = 0;
+
+  const joinedNeutral = performAction(world, created.id, "join-neutral-sect:cang-mu-gu");
+  assert.equal(joinedNeutral.summary, "青萝入了苍木谷。");
+  const joinLog = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("join-neutral-sect"));
+  assert.equal(joinLog?.title, "入门");
+  assert.equal(joinLog?.content, "青萝入了苍木谷。");
+  const notice = world.messages.find((message) => message.cultivatorId === created.id && message.content.includes("苍木谷"));
+  assert.equal(notice?.subject, "入门");
+  assert.equal(notice?.content, "青萝入了苍木谷。");
+
+  const left = performAction(world, created.id, "leave-neutral-sect");
+  assert.equal(left.summary, "青萝离开了苍木谷。");
+  const leaveLog = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("leave-neutral-sect"));
+  assert.equal(leaveLog?.title, "离宗");
+  assert.equal(leaveLog?.content, "青萝离开了苍木谷。");
+
+  const sect = seedQingyun(world);
+  cultivator.locationId = sect.headquarters;
+  const joined = performAction(world, created.id, "join-sect");
+  assert.equal(joined.summary, "青萝入了青云宗。");
+  const sectLog = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("sect-join-log"));
+  assert.equal(sectLog?.title, "入门");
+  assert.equal(sectLog?.content, "青萝入了青云宗。");
+  const joinedMorality = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("morality") && entry.tags.includes("join-sect"));
+  assert.equal(joinedMorality?.title, "心性偏移");
+  assert.equal(joinedMorality?.content, "青萝因入门，心性往正道偏了8分。");
+  assert.equal(/Morality Shift|gained|lost|morality/.test(`${joinedMorality?.title} ${joinedMorality?.content}`), false);
+
+  const weaponId = cultivator.unlockedWeaponLoadoutIds.find((id) => id !== cultivator.equippedWeaponLoadoutId);
+  const spellId = cultivator.unlockedSpellLoadoutIds.find((id) => id !== cultivator.equippedSpellLoadoutId);
+  assert.ok(weaponId);
+  assert.ok(spellId);
+  const weapon = performAction(world, created.id, `equip-weapon:${weaponId}` as never);
+  const weaponLog = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("equip-weapon"));
+  assert.equal(weaponLog?.title, "装配切换");
+  assert.equal(weaponLog?.content, weapon.summary);
+  assert.match(weapon.summary, /^青萝换上了.+。$/);
+  assert.equal(weapon.summary.includes("equipped"), false);
+  const spell = performAction(world, created.id, `equip-spell:${spellId}` as never);
+  const spellLog = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("equip-spell"));
+  assert.equal(spellLog?.title, "装配切换");
+  assert.equal(spellLog?.content, spell.summary);
+  assert.match(spell.summary, /^青萝换上了.+。$/);
+  assert.equal(spell.summary.includes("equipped"), false);
+
+  cultivator.locationId = "qingzhou:dungeon-c";
+  cultivator.qi = cultivator.maxQi;
+  cultivator.spiritualPower = cultivator.maxSpiritualPower;
+  performAction(world, created.id, "enter-dungeon:rank-1:conservative" as never);
+  let shifted = false;
+  while (cultivator.activeJobId && !shifted) {
+    advanceWorld(world, 1);
+    if (!listAvailableActions(world, created.id).some((action) => action.actionId === "dungeon-wake-decision:aid-wounded")) continue;
+    performAction(world, created.id, "dungeon-wake-decision:aid-wounded" as never);
+    const wake = getDaoLogs(world, created.id).find((entry) => entry.tags.includes("morality") && entry.tags.includes("dungeon-wake"));
+    assert.equal(wake?.title, "心性偏移");
+    assert.equal(wake?.content, "青萝因地宫里的岔路，心性往正道偏了2分。");
+    assert.equal(/Morality Shift|gained|lost|dungeon-wake|morality/.test(`${wake?.title} ${wake?.content}`), false);
+    shifted = true;
+  }
+  assert.equal(shifted, true);
+  assert.equal(getDaoLogs(world, created.id).some((entry) => entry.title === "Joined Neutral Sect" || entry.title === "Left Neutral Sect" || entry.title === "Joined Sect" || entry.title === "Action Complete" || entry.title === "Morality Shift"), false);
 });
 
 function rawRegistrationRecord(): CultivationRegistrationRecord {

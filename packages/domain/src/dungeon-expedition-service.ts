@@ -1034,13 +1034,16 @@ export function dungeonPostureLabel(policy: DungeonExpeditionPolicy): string {
   return POSTURE_LABEL[policy];
 }
 
-const RANK_ONE_BEATS: readonly DungeonBeat[] = [
-  {
+function rankOneHerbGatherer(grade: DungeonGrade): DungeonBeat {
+  return {
     kind: "person",
     title: "灯下的采药人",
-    detail: "丙级地宫的第一层里，一个采药人蹲在灯下分拣断根。见你来，把一截还能用的灵草推过来，说再往里别一个人走。",
+    detail: `${grade}级地宫的第一层里，一个采药人蹲在灯下分拣断根。见你来，把一截还能用的灵草推过来，说再往里别一个人走。`,
     mood: "记住了那张被灯熏黄的脸",
-  },
+  };
+}
+
+const RANK_ONE_BEATS_REST: readonly DungeonBeat[] = [
   {
     kind: "find",
     title: "砖缝里的储物袋",
@@ -1116,8 +1119,12 @@ export function rankOneMoralFork(
   };
 }
 
-function beatForRank(rank: DungeonRank, seed: string): DungeonBeat {
-  const pool = rank === 1 ? RANK_ONE_BEATS : DUNGEON_BEAT_POOL;
+function rankOneBeats(grade: DungeonGrade): readonly DungeonBeat[] {
+  return [rankOneHerbGatherer(grade), ...RANK_ONE_BEATS_REST];
+}
+
+function beatForRank(rank: DungeonRank, grade: DungeonGrade, seed: string): DungeonBeat {
+  const pool = rank === 1 ? rankOneBeats(grade) : DUNGEON_BEAT_POOL;
   return pool[hashString(`${seed}:beat`) % pool.length]!;
 }
 
@@ -1240,6 +1247,7 @@ const DUNGEON_BEAT_POOL: readonly DungeonBeat[] = [
 export function expeditionPressureFor(input: {
   policy: DungeonExpeditionPolicy;
   rank: DungeonRank;
+  grade: DungeonGrade;
   action: "search" | "guardian";
   seed: string;
   qiRatio: number;
@@ -1253,7 +1261,7 @@ export function expeditionPressureFor(input: {
   beat: DungeonBeat;
 } {
   const roll = hashString(`${input.seed}:pressure`) % 100;
-  const beat = beatForRank(input.rank, input.seed);
+  const beat = beatForRank(input.rank, input.grade, input.seed);
   const rankBump = input.rank >= 7 ? 2 : input.rank >= 4 ? 1 : 0;
   const guardianBump = input.action === "guardian" ? 1 : 0;
   const aggressiveRankDrain = input.policy === "aggressive" && input.rank >= 4
