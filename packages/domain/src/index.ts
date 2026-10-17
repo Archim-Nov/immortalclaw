@@ -135,3 +135,12 @@ export {
   getCultivatorsAtLocation,
 } from "./social.js";
 export { actionFailureBody } from "./gameplay-error.js";
+export {
+  type DialogueChannel,
+  FACE_DIALOGUE_LEAD,
+  TALISMAN_DIALOGUE_LEAD,
+  DIALOGUE_STYLE_SHARED,
+  dialogueChannelForAction,
+  buildDialogueStylePrompt,
+  buildDialogueStyleSection,
+} from "./xiushi-chat-style.js";

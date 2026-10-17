@@ -7,6 +7,8 @@ import { createImmortalRealmPlugin } from "./index.js";
 
 type RegisteredTool = {
   name: string;
+  description?: string;
+  parameters?: { properties?: Record<string, unknown> };
   execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
 };
 
@@ -145,6 +147,24 @@ test("plugin registers expected tools and prompt hook", async () => {
   assert.match(guidance, /Credential cache:/);
   assert.match(guidance, /continuous autonomous action/i);
   assert.match(guidance, /routine actions/i);
+  assert.match(guidance, /这一次是当面攀谈/);
+  assert.match(guidance, /这一次是传音符/);
+  assert.match(guidance, /总原则/);
+  assert.match(guidance, /必守/);
+  assert.match(guidance, /严禁客服与助手腔/);
+  assert.match(guidance, /反例/);
+  assert.match(guidance, /关系档/);
+  assert.match(guidance, /事由/);
+  assert.match(guidance, /道友今日可好/);
+  const act = tools.get("immortal_act");
+  assert.match(act?.description ?? "", /当面攀谈/);
+  assert.match(act?.description ?? "", /传音符/);
+  assert.match(act?.description ?? "", /chat-up/);
+  assert.match(act?.description ?? "", /send-message/);
+  assert.ok(act?.parameters?.properties && "line" in act.parameters.properties);
+  const sendMessage = tools.get("immortal_send_message");
+  assert.match(sendMessage?.description ?? "", /这一次是传音符/);
+  assert.match(sendMessage?.description ?? "", /严禁客服与助手腔/);
 });
 
 test("webhook receipt triggers heartbeat wake with the signed payload reason", async () => {
@@ -664,6 +684,53 @@ test("legacy defaultCultivatorId still works for state act and tick tools", asyn
   assert.equal(requests[3]?.method, "POST");
   assert.match(String(requests[3]?.body), /"cultivatorId":"yun-zhong-he"/);
   assert.equal(requests[4]?.url, "http://127.0.0.1:8787/world/tick");
+});
+
+test("immortal_act forwards line for chat-up and send-message", async () => {
+  const requests: CapturedRequest[] = [];
+  const { tools } = registerPlugin(
+    {
+      worldBaseUrl: "http://127.0.0.1:8787",
+      defaultCultivatorId: "yun-zhong-he",
+    },
+    async (input, init) => {
+      const url = String(input);
+      requests.push({
+        url,
+        method: String(init?.method ?? "GET"),
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (url.includes("/cultivator/actions")) {
+        return new Response(
+          JSON.stringify({
+            actions: [
+              { actionId: "chat-up:qing-luo" },
+              { actionId: "send-message:qing-luo:greet" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  );
+
+  await tools.get("immortal_state")?.execute("tool-0", {});
+  await tools.get("immortal_actions")?.execute("tool-1", {});
+  await tools.get("immortal_act")?.execute("tool-2", {
+    actionId: "chat-up:qing-luo",
+    line: "路窄风大，前头石阶滑，下脚当心些。",
+  });
+  await tools.get("immortal_actions")?.execute("tool-3", {});
+  await tools.get("immortal_act")?.execute("tool-4", {
+    actionId: "send-message:qing-luo:greet",
+    line: "人还在。西街符涨了价，你别急着去。",
+  });
+
+  const chat = requests.find((entry) => entry.method === "POST" && entry.url.endsWith("/cultivator/act") && entry.body?.includes("chat-up"));
+  const note = requests.find((entry) => entry.method === "POST" && entry.url.endsWith("/cultivator/act") && entry.body?.includes("send-message"));
+  assert.match(chat?.body ?? "", /路窄风大/);
+  assert.match(note?.body ?? "", /西街符涨了价/);
 });
 
 test("registration tools persist and fetch canonical records over legacy routes", async () => {

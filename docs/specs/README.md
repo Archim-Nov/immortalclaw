@@ -47,6 +47,7 @@ Recent supporting gameplay specs:
 - `docs/specs/high-realm-resources/spec.md`
 - `docs/specs/high-realm-dungeon-pressure/spec.md`
 - `docs/specs/social-spoken-lines/spec.md`
+- `docs/specs/xiushi-chat-style/spec.md`
 - `docs/specs/companion-shared-report/spec.md`
 - `docs/specs/relationship-mood-digest/spec.md`
 - `docs/specs/social-deepen/spec.md`

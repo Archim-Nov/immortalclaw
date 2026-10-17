@@ -3,6 +3,7 @@ import path from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import type { CultivationRegistrationRecord } from "../domain/src/runtime.js";
+import { buildDialogueStylePrompt, buildDialogueStyleSection } from "../domain/src/xiushi-chat-style.js";
 
 type FetchLike = typeof fetch;
 type JsonSchema = Record<string, unknown>;
@@ -167,6 +168,11 @@ const ACT_SCHEMA = {
       type: "string",
       description: "Exact actionId returned by immortal_actions.",
     },
+    line: {
+      type: "string",
+      description:
+        "Spoken sentence for this act, at most 40 Chinese characters, one complete sentence. For chat-up, say, and reply-line, write it as 当面攀谈. For send-message (greet, share-info, request-help, gift-item, rendezvous-at-gate, ready-to-enter, wait), write it as 传音符. Do not put action ids, English, or these instructions into the sentence.",
+    },
   },
 };
 
@@ -218,6 +224,9 @@ const SEND_MESSAGE_SCHEMA = {
     },
   },
 };
+
+const DIALOGUE_STYLE_SECTION = buildDialogueStyleSection();
+const TALISMAN_DIALOGUE_PROMPT = buildDialogueStylePrompt("talisman");
 
 function normalizeBaseUrl(input: unknown): string {
   if (typeof input !== "string" || input.trim().length === 0) {
@@ -847,6 +856,8 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- immortal_tick is an operator or GM action. Only use it when the user explicitly wants to advance time or when you are running the simulation for testing.",
     "- Routine actions (cultivate, meditate, travel, mine, tasks, recovery) need no per-action user message. Report only milestones, risks, choices, or surprising outcomes.",
     "- Aim for roughly 3-5 routine actions per heartbeat session before summarizing. Do not loop indefinitely.",
+    "- When immortal_act is chat-up, say, or reply-line, set line from the 当面攀谈 lead. When it is send-message (greet, share-info, request-help, gift-item, rendezvous-at-gate, ready-to-enter, wait), set line from the 传音符 lead. immortal_send_message content uses the same 传音符 voice and may run longer than one sentence. The sentence in line is spoken Chinese only, 40 characters at most.",
+    DIALOGUE_STYLE_SECTION,
   ]
     .filter(Boolean)
     .join("\n");
@@ -1513,8 +1524,11 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       api.registerTool({
         name: "immortal_send_message",
         label: "Immortal Send Message",
-        description:
+        description: [
           "Send a private message to another registered agent by exact targetAgentId using the authenticated /agent/messages route.",
+          "Write content in the 传音符 voice below. Concrete, with a person and a thing in it. Not a helpdesk greeting, not a system notice.",
+          TALISMAN_DIALOGUE_PROMPT,
+        ].join("\n"),
         parameters: SEND_MESSAGE_SCHEMA,
         execute: async (_toolCallId, rawParams) => {
           const session = await ensureAgentSession(rawParams);
@@ -1616,12 +1630,16 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
       api.registerTool({
         name: "immortal_act",
         label: "Immortal Act",
-        description:
+        description: [
           "Execute an action for a cultivator in the Immortal Realm world. The actionId must come from immortal_actions.",
+          "For chat-up, say, and reply-line, pass line as one 当面攀谈 sentence. For send-message, pass line as one 传音符 sentence. At most 40 Chinese characters. No action ids and no English inside line.",
+          DIALOGUE_STYLE_SECTION,
+        ].join("\n"),
         parameters: ACT_SCHEMA,
         execute: async (_toolCallId, rawParams) => {
           const target = await resolveTarget(rawParams);
           const actionId = trimString(rawParams.actionId);
+          const line = trimString(rawParams.line);
           if (!actionId) {
             throw new Error("actionId is required.");
           }
@@ -1640,11 +1658,15 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             target.mode === "agent"
               ? await requestAgentWorld(target.session, "/agent/act", {
                   method: "POST",
-                  body: JSON.stringify({ actionId }),
+                  body: JSON.stringify({ actionId, ...(line ? { line } : {}) }),
                 })
               : await requestWorld(fetchImpl, config, "/cultivator/act", {
                   method: "POST",
-                  body: JSON.stringify({ cultivatorId: target.cultivatorId, actionId }),
+                  body: JSON.stringify({
+                    cultivatorId: target.cultivatorId,
+                    actionId,
+                    ...(line ? { line } : {}),
+                  }),
                 });
           return jsonResult("immortal_act", payload);
         },
