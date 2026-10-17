@@ -30,6 +30,8 @@ Chat-up, a gift, a greet, and a party call already wrote a notice, but the notic
 
 Chat-up, greet, share-info, request-help, and gift-item attach the same kind of sentence. Party calls `send-message:<id>:rendezvous-at-gate`, `ready-to-enter`, and `wait` keep their old subject and the old instruction, then add the spoken sentence in 「」.
 
+The act receipt for chat-up, greet, share-info, and request-help repeats that sentence inside 「」. A chat-up reads like 顾长川和阿絮搭了话：「……」。 A greet, a shared sighting, and a request for help keep 好感+3 after the quote. When names and the sentence together would pass about eighty characters, the quote is shortened with … and the brackets stay. Voice-transmit does not take a `line`. Its receipt is Chinese, for example 顾长川向墨儿传了一音。好感至854（挚友）。
+
 `state.pendingDialogue` lists up to four unanswered lines: `fromId`, `fromName`, `line`, `tick`, and `replyActionId`. It is omitted when nothing is waiting. After a reply, that person's row drops off.
 
 A second free line from the same speaker inside 2 ticks is refused with 话太密了. A fourth free line inside 6 ticks is refused with 这几句已经说完了. The same sentence inside that window is refused with 这句话刚说过. A second doorway call of the same kind inside 3 ticks is refused with 这句话刚传过.
@@ -44,7 +46,9 @@ A second free line from the same speaker inside 2 ticks is refused with 话太�
 
 ## Acceptance Criteria
 
-- A chat-up with `line` stores that sentence on `spokenLine`, inside 「」 in the message, and in both travelogues.
+- A chat-up with `line` stores that sentence on `spokenLine`, inside 「」 in the message, and in both travelogues. The act `summary` repeats that same sentence inside 「」.
+- Greet, share-info, and request-help do the same in `summary`, and still end with 好感+3.
+- A voice-transmit `summary` is Chinese. It does not contain `sent` or `Affinity`.
 - A gift and a greet do the same with a generated sentence when `line` is omitted.
 - `say` then `reply-line` lands the reply on the first speaker's travelogue. A further reply inside the window is refused.
 - Two `rendezvous-at-gate` calls in one tick: the second is refused. After the cooldown, the generated sentence is a different one.

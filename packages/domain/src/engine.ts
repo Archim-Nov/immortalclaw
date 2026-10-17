@@ -9978,6 +9978,19 @@ const parseEquipSpellLoadoutId = (actionId: ActionId): SpellLoadoutId | null =>
 const parseUnlockLoadoutItemId = (actionId: ActionId): ItemId | null =>
   actionId.startsWith("unlock-loadout:") ? actionId.slice("unlock-loadout:".length) as ItemId : null;
 
+const ACT_SUMMARY_CAP = 80;
+
+function summaryWithSpokenLine(lead: string, spoken: string, tail = ""): string {
+  const head = `${lead}：「`;
+  const foot = `」${tail}`;
+  const room = ACT_SUMMARY_CAP - Array.from(head).length - Array.from(foot).length;
+  const spokenChars = Array.from(spoken);
+  const shown = room >= spokenChars.length
+    ? spoken
+    : `${spokenChars.slice(0, Math.max(1, room - 1)).join("")}…`;
+  return `${head}${shown}${foot}`;
+}
+
 function immediateAction(world: WorldState, cultivator: Cultivator, actionId: ActionId, speechLine?: string | null, bodyItemId?: string | null): ActionExecutionResult {
   const sectSummary = performSectImmediate(world, cultivator, actionId);
   if (sectSummary) {
@@ -10452,7 +10465,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       `${cultivator.name}说：「${spoken}」`,
       "spoken",
     );
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}和${target.name}搭了话。` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: summaryWithSpokenLine(`${cultivator.name}和${target.name}搭了话`, spoken, "。") };
   }
 
   // ---- Social: 传音 (Voice Transmit) ----
@@ -10468,7 +10481,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const level = getAffinityLevel(linkAB.affinity);
     addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传音交流，好感度${linkAB.affinity}（${level}）。`, ["social", "voice-transmit"]);
     addMessage(world, target.id, "传音", `来自${cultivator.name}的传音`, `${cultivator.name}向你传音问候。`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id });
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} sent a voice message to ${target.name}. Affinity: ${linkAB.affinity} (${level}).` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}向${target.name}传了一音。好感至${linkAB.affinity}（${level}）。` };
   }
 
   // ---- Social: 申请道侣 (Propose Dao Companion) ----
@@ -11350,9 +11363,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       shareMoment(world, [cultivator, target], note.title, `${note.detail}${said}`, `${cultivator.name}说：「${spoken}」`, "spoken");
     }
     const messageSummaries: Record<string, string> = {
-      greet: `${cultivator.name}向${target.name}问了好。好感+3。`,
-      "share-info": `${cultivator.name}把见闻说给了${target.name}。好感+3。`,
-      "request-help": `${cultivator.name}向${target.name}求了一手。好感+3。`,
+      greet: summaryWithSpokenLine(`${cultivator.name}向${target.name}问了好`, spoken, "。好感+3。"),
+      "share-info": summaryWithSpokenLine(`${cultivator.name}把见闻说给了${target.name}`, spoken, "。好感+3。"),
+      "request-help": summaryWithSpokenLine(`${cultivator.name}向${target.name}求了一手`, spoken, "。好感+3。"),
     };
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: messageSummaries[kind] ?? `${cultivator.name}向${target.name}传了话。好感+3。` };
   }
