@@ -331,6 +331,33 @@ test("recentCombats keeps victory and defeat, and shows Chinese status names", (
   assert.equal(world.combatLogs[0]?.statusChanges?.[1]?.statusName, "Qi Surge");
 });
 
+test("travel that cannot start answers in Chinese", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "yangzhou:wilderness";
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.activeJobId = null;
+  const latin = /[A-Za-z]{4,}/;
+  const expectChinese = (actionId: string, message: string) => {
+    assert.throws(
+      () => performAction(world, CULTIVATOR_ID, actionId as never),
+      (error: unknown) => {
+        assert.ok(error instanceof GameplayRejection);
+        const body = actionFailureBody(error);
+        assert.equal(body.summary, message);
+        assert.equal(body.error, message);
+        assert.equal(latin.test(body.summary), false);
+        assert.equal(latin.test(body.error), false);
+        return true;
+      },
+    );
+  };
+
+  expectChinese("travel-to:yangzhou:wilderness", "从这里去不了那里，得先换条路。");
+  expectChinese("travel-to:qingzhou:main-city", "从这里去不了那里，得先换条路。");
+  expectChinese("travel-to:yangzhou:no-such-place", "去不了那里。");
+});
+
 test("travel-to a wilderness starts toward the place name", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators[CULTIVATOR_ID]!;
