@@ -48,6 +48,7 @@ A finished 甲 run leaves one 残页, 炉灰, or 纹屑, and a companion can quo
 排名层和州府秘境在进门与守关之间还有侧室、探路和有名字的中途敌人: `harness/scenarios/dungeon-interior-v1.md`.
 九州荒野各有一处名字，八荒按深浅分成荒尘驿、断碑原、无灯壑: `harness/scenarios/wild-route-identity.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
+洞府升阶和绝品陈设是灵石无底洞，夺下的边寨 materials 改口为本宗出产: `harness/scenarios/residence-sink-v1.md`.
 
 Fast local smoke entrypoint:
 

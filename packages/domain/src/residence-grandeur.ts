@@ -1,3 +1,4 @@
+import { STATE_IDS, type StateId } from "./constants.js";
 import type { Cultivator, ItemId, Residence } from "./model.js";
 import { residenceRiskMultiplier } from "./residence.js";
 
@@ -8,24 +9,25 @@ import { residenceRiskMultiplier } from "./residence.js";
 
 export const HOST_COOLDOWN_TICKS = 4;
 export const HOST_AFFINITY_BASE = 6;
-export const HOST_AFFINITY_CAP = 4;
-export const MEDITATE_PROGRESS_CAP = 4;
-export const MEDITATE_FRACTION_CAP = 0.3;
-export const HEAL_TICK_CAP = 2;
-export const QI_BONUS_CAP = 8;
-export const PRODUCE_DISCOUNT_CAP = 0.2;
+export const HOST_AFFINITY_CAP = 6;
+export const MEDITATE_PROGRESS_CAP = 6;
+export const MEDITATE_FRACTION_CAP = 0.42;
+export const HEAL_TICK_CAP = 3;
+export const QI_BONUS_CAP = 12;
+export const PRODUCE_DISCOUNT_CAP = 0.28;
+export const CAVE_REPUTATION_CAP = 24;
 export const FIXTURE_SLOT_CAP = 12;
 
 export const RESIDENCE_BENEFIT_LINE =
-  "陈设的用处有顶。闭关最多比原来多四分进境，疗伤最多快两刻，调息最多多八点气血，炼制最多少花两成灵石，待客最多多四点好感。同一路的第二件只算一半，第三件只算四分之一。屏风和观景台只给人看，不进这些数。";
+  "陈设和府邸的用处有顶。闭关最多比原来多六分进境，疗伤最多快三刻，调息最多多十二点气血，炼制最多少花不到三成灵石，待客最多多六点好感，这处府在本州的声望最多涨二十四点。同一路的第二件只算一半，第三件只算四分之一。府邸本身也会添一点，但到不了顶。屏风和观景台只给人看，不进这些数。";
 
-const FIXTURE_TIER_BASE = [0, 2_400, 12_000, 56_000, 220_000] as const;
-const FIXTURE_TIER_NAMES = ["", "粗成", "灵纹", "宝光", "仙品"] as const;
+const FIXTURE_TIER_BASE = [0, 3_600, 18_000, 88_000, 360_000, 1_600_000] as const;
+const FIXTURE_TIER_NAMES = ["", "粗成", "灵纹", "宝光", "仙品", "绝品"] as const;
 
 interface FixtureFamily {
   readonly id: string;
   readonly name: string;
-  readonly maxTier: 3 | 4;
+  readonly maxTier: 3 | 4 | 5;
   readonly priceScale: number;
   readonly cosmetic: boolean;
   readonly blurb: string;
@@ -40,67 +42,67 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
   {
     id: "putuan",
     name: "蒲团",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1,
     cosmetic: false,
     blurb: "闭关时进境会多一点点。",
-    meditate: [0, 0.05, 0.09, 0.14, 0.22],
+    meditate: [0, 0.04, 0.08, 0.13, 0.22, 0.3],
   },
   {
     id: "juling",
     name: "聚灵阵",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1.6,
     cosmetic: false,
     blurb: "打坐和调息都顺一点。",
-    meditate: [0, 0.03, 0.05, 0.07, 0.1],
-    qi: [0, 2, 4, 6, 8],
+    meditate: [0, 0.02, 0.04, 0.06, 0.08, 0.11],
+    qi: [0, 2, 4, 6, 8, 11],
   },
   {
     id: "danlu",
     name: "丹炉",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1.8,
     cosmetic: false,
     blurb: "炼丹少花一点灵石。",
-    produce: [0, 0.05, 0.08, 0.13, 0.17],
+    produce: [0, 0.04, 0.07, 0.11, 0.16, 0.24],
   },
   {
     id: "lianqi",
     name: "炼器台",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1.5,
     cosmetic: false,
     blurb: "炼器少花一点灵石。",
-    produce: [0, 0.03, 0.05, 0.08, 0.11],
+    produce: [0, 0.02, 0.04, 0.06, 0.1, 0.14],
   },
   {
     id: "lingquan",
     name: "灵泉",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1.4,
     cosmetic: false,
     blurb: "疗伤时伤势退得快一点。",
-    heal: [0, 1, 1, 1, 2],
+    heal: [0, 1, 1, 1, 2, 2],
   },
   {
     id: "yaopu",
     name: "药圃",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1.2,
     cosmetic: false,
     blurb: "在府里歇着，心会静一点。",
-    meditate: [0, 0.02, 0.03, 0.04, 0.05],
+    meditate: [0, 0.02, 0.03, 0.04, 0.05, 0.06],
   },
   {
     id: "cangjing",
     name: "藏经阁",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 2.2,
     cosmetic: false,
     blurb: "请人进来说话时，底气稳一点。",
-    meditate: [0, 0.02, 0.03, 0.05, 0.07],
-    host: [0, 0, 1, 2, 3],
+    meditate: [0, 0.02, 0.03, 0.04, 0.05, 0.07],
+    host: [0, 0, 1, 1, 2, 3],
   },
   {
     id: "pingfeng",
@@ -113,11 +115,11 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
   {
     id: "lingshou",
     name: "灵兽窝",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 1.3,
     cosmetic: false,
     blurb: "窝里有活物，府里不那么冷清。",
-    host: [0, 0, 0, 1, 2],
+    host: [0, 0, 0, 1, 1, 2],
   },
   {
     id: "guanjing",
@@ -130,20 +132,20 @@ export const FIXTURE_FAMILIES: readonly FixtureFamily[] = [
   {
     id: "hushan",
     name: "护山阵",
-    maxTier: 4,
+    maxTier: 5,
     priceScale: 2.4,
     cosmetic: false,
     blurb: "把门挡住，养伤的人也踏实一点。",
-    heal: [0, 0, 1, 1, 1],
+    heal: [0, 0, 1, 1, 1, 2],
   },
   {
     id: "chaan",
     name: "茶案",
-    maxTier: 3,
+    maxTier: 4,
     priceScale: 0.9,
     cosmetic: false,
     blurb: "请人进来坐，好感多一点点。",
-    host: [0, 1, 2, 3],
+    host: [0, 1, 2, 3, 4],
   },
 ] as const;
 
@@ -301,14 +303,14 @@ export function fixtureSlotCount(grandeur: number): number {
 
 export function upgradeCostBase(nextGrandeur: number): number {
   if (nextGrandeur <= 2) return 8_000;
-  if (nextGrandeur === 3) return 28_000;
-  if (nextGrandeur === 4) return 96_000;
-  if (nextGrandeur === 5) return 280_000;
-  let cost = 280_000;
+  if (nextGrandeur === 3) return 36_000;
+  if (nextGrandeur === 4) return 160_000;
+  if (nextGrandeur === 5) return 720_000;
+  let cost = 720_000;
   const steps = nextGrandeur - 5;
   for (let index = 0; index < steps; index += 1) {
-    if (cost > Number.MAX_SAFE_INTEGER / 2) return Number.MAX_SAFE_INTEGER;
-    cost *= 2;
+    if (cost > Number.MAX_SAFE_INTEGER / 3) return Number.MAX_SAFE_INTEGER;
+    cost *= 3;
   }
   return cost;
 }
@@ -368,24 +370,70 @@ function channelValues(residence: Residence, channel: "meditate" | "qi" | "heal"
   return values;
 }
 
+function round4(value: number): number {
+  return Math.round(value * 10_000) / 10_000;
+}
+
+/** The cave itself pays a little. The plateau is below the furniture ceiling. */
+function grandeurChannels(grandeur: number): {
+  meditate: number;
+  qi: number;
+  heal: number;
+  produce: number;
+  host: number;
+} {
+  const tier = Math.max(1, Math.floor(grandeur));
+  const past = Math.max(0, tier - 5);
+  return {
+    meditate: tier <= 1 ? 0 : Math.min(0.12, 0.02 * Math.min(tier - 1, 4) + past * 0.01),
+    qi: Math.min(4, tier <= 2 ? 0 : tier === 3 ? 1 : tier === 4 ? 2 : 3 + Math.floor(past / 2)),
+    heal: tier >= 5 ? 1 : 0,
+    produce: tier < 4 ? 0 : Math.min(0.06, 0.02 + (tier - 4) * 0.01),
+    host: tier >= 5 ? 1 : 0,
+  };
+}
+
 export function benefitsOf(residence: Residence | null): ResidenceBenefits {
   if (!residence) {
     return { meditateFraction: 0, qiBonus: 0, healBonus: 0, produceDiscount: 0, hostAffinity: 0, prestige: 0 };
   }
   const grandeur = residenceGrandeur(residence);
+  const fromCave = grandeurChannels(grandeur);
   const fixturePrestige = placedFixtures(residence).reduce((sum, fixture) => {
     const family = fixtureFamily(fixture.id);
     const weight = family?.cosmetic ? 2 : 1;
     return sum + fixture.tier * weight;
   }, 0);
   return {
-    meditateFraction: Math.min(MEDITATE_FRACTION_CAP, diminish(channelValues(residence, "meditate"))),
-    qiBonus: Math.min(QI_BONUS_CAP, Math.round(diminish(channelValues(residence, "qi")))),
-    healBonus: Math.min(HEAL_TICK_CAP, Math.round(diminish(channelValues(residence, "heal")))),
-    produceDiscount: Math.min(PRODUCE_DISCOUNT_CAP, diminish(channelValues(residence, "produce"))),
-    hostAffinity: Math.min(HOST_AFFINITY_CAP, Math.round(diminish(channelValues(residence, "host")))),
+    meditateFraction: Math.min(MEDITATE_FRACTION_CAP, diminish(channelValues(residence, "meditate")) + fromCave.meditate),
+    qiBonus: Math.min(QI_BONUS_CAP, Math.round(diminish(channelValues(residence, "qi")) + fromCave.qi)),
+    healBonus: Math.min(HEAL_TICK_CAP, Math.round(diminish(channelValues(residence, "heal")) + fromCave.heal)),
+    produceDiscount: Math.min(PRODUCE_DISCOUNT_CAP, round4(diminish(channelValues(residence, "produce")) + fromCave.produce)),
+    hostAffinity: Math.min(HOST_AFFINITY_CAP, Math.round(diminish(channelValues(residence, "host")) + fromCave.host)),
     prestige: grandeur * 3 + fixturePrestige,
   };
+}
+
+export function reputationEntitled(residence: Residence): number {
+  const earned = Math.floor(Math.max(0, benefitsOf(residence).prestige - 3) / 3);
+  return Math.min(CAVE_REPUTATION_CAP, earned);
+}
+
+export function claimCaveReputation(cultivator: Cultivator, residence: Residence): number {
+  const entitled = reputationEntitled(residence);
+  const mirror = cultivator.residence?.id === residence.id ? cultivator.residence.reputationClaimed ?? 0 : 0;
+  const stored = cultivator.residences.find((home) => home.id === residence.id)?.reputationClaimed ?? 0;
+  const claimed = Math.max(residence.reputationClaimed ?? 0, stored, mirror);
+  const grant = Math.max(0, entitled - claimed);
+  const next = Math.max(claimed, entitled);
+  withResidence(cultivator, residence.id, (home) => {
+    home.reputationClaimed = Math.max(home.reputationClaimed ?? 0, next);
+  });
+  if (grant <= 0) return 0;
+  if (!(STATE_IDS as readonly string[]).includes(residence.stateId)) return 0;
+  const key = residence.stateId as StateId;
+  cultivator.stateReputation[key] = (cultivator.stateReputation[key] ?? 0) + grant;
+  return grant;
 }
 
 export function meditateProgressBonus(residence: Residence | null, baseGain: number): number {
@@ -452,9 +500,16 @@ export function fixtureOffers(residence: Residence): ResidenceOfferView[] {
     const price = fixturePrice(residence.stateId, family, nextTier);
     const tierName = fixtureTierName(nextTier);
     const replacing = current > 0;
+    const payoff = family.cosmetic
+      ? family.blurb
+      : nextTier >= 5
+        ? `${family.blurb}这一阶最贵，修炼、歇息或炼制上的加成也最明显，仍有顶。`
+        : nextTier >= 4
+          ? `${family.blurb}这一阶不便宜，加成比前一阶明显。`
+          : family.blurb;
     const line = replacing
-      ? `把${family.name}换成${tierName}，要${price}灵石。还是占原来那个位子。${family.blurb}`
-      : `安一件${tierName}的${family.name}，要${price}灵石。${family.blurb}`;
+      ? `把${family.name}换成${tierName}，要${price}灵石。还是占原来那个位子。${payoff}`
+      : `安一件${tierName}的${family.name}，要${price}灵石。${payoff}`;
     offers.push({
       actionId: `place-fixture:${family.id}`,
       fixtureId: family.id,

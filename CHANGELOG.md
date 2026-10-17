@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### 洞府继续烧灵石，夺下的边寨改口 / A deeper cave sink, and a captured camp speaks as ours
+
+洞府升阶的安全州价格是 8000、36000、160000、720000，洞天以后每一重乘三。家具大多到绝品，茶案到仙品，屏风和观景台仍停在宝光。一档的底价是 3600、18000、88000、360000、1600000，再乘每件自己的倍数。把位子补满并升到十二个位子，安全州要两千万灵石以上。
+
+加成仍有顶，比原来松一点：闭关最多多六分进境，疗伤最多快三刻，调息最多多十二点气血，炼制最多约少两成八，待客最多多六点好感，这处府在本州的声望最多涨二十四点。府邸本身会添一点，到不了顶。一件绝品单独也到不了顶。撤下陈设不退灵石，也不再发一次声望。
+
+边寨还在邻宗手里时，materials 仍写邻宗占在本州。夺下来以后改成己宗守着、出产归本宗。还没有主的边寨不写邻宗。
+
+Cave upgrades in a safe state cost 8000, 36000, 160000, and 720000, then triple. Most furniture reaches 绝品. Filling the slots and the cave costs more than twenty million stones. The caps are a little higher and still stop. A captured border camp's materials line speaks as our yield. A neighbor's camp still says 邻宗.
+
 ### 地宫里再往里走一段 / Another stretch inside the same doors
 
 排名层仍最多醒三次，第三步仍是伤者。第六步和第八步还可以是枯井、窄梁、残灯、低语或浅滩，四个中文做法，句子里带着这一层的地方。搜寻的第二步和第五步还是原来的那一队。第三步若仍是搜寻，会遇见这一层的后手；第六步若仍是搜寻，后手再加一只精英。雷泽残阵的后手是雷鞭客、跳符修、阵眼客。探路、歇脚、侧室在后一段换成另一句。

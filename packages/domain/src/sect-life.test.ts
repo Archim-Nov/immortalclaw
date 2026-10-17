@@ -94,6 +94,7 @@ test("owned veins produce the breakthrough materials of their band", () => {
   cultivator.locationId = herb.locationId;
   const described = getCultivatorState(world, cultivator.id).sectLife?.veins.find((vein) => vein.id === herb.id);
   assert.match(described?.materials ?? "", /凝气清露/);
+  assert.equal((described?.materials ?? "").includes("邻宗"), false);
   performAction(world, cultivator.id, `gather-vein:${herb.id}`);
   runUntilIdle(world, cultivator.id);
   assert.ok(QI_ITEMS.some((itemId) => (cultivator.inventory[itemId] ?? 0) > 0));
@@ -369,6 +370,10 @@ test("本州存在可宣战脉", () => {
   const life = getCultivatorState(world, cultivator.id).sectLife;
   assert.ok(life?.raids.some((raid) => raid.veinId === camp.id));
   assert.match(life?.daily ?? "", /宣战夺脉/);
+  assert.match(life?.daily ?? "", /邻宗占着的边寨/);
+  const heldByNeighbor = life?.veins.find((vein) => vein.id === camp.id);
+  assert.match(heldByNeighbor?.materials ?? "", /邻宗占在本州/);
+  assert.match(heldByNeighbor?.materials ?? "", /要夺就宣战/);
   const raid = listAvailableActions(world, cultivator.id).find((action) => action.actionId === `declare-raid:${camp.id}`);
   assert.match(raid?.label ?? "", /^宣战夺脉：/);
   assert.match(raid?.label ?? "", /苍木谷边寨/);
@@ -390,9 +395,23 @@ test("本州存在可宣战脉", () => {
   const written = (cultivator.lifeLog ?? []).map((event) => event.text).join("");
   assert.match(written, /见闻：/);
   assert.match(written, /夺下了苍木谷边寨/);
+  const taken = getCultivatorState(world, cultivator.id).sectLife;
+  const ownedCamp = taken?.veins.find((vein) => vein.id === camp.id);
+  assert.equal(ownedCamp?.yours, true);
+  assert.match(ownedCamp?.materials ?? "", /已经是本宗的/);
+  assert.match(ownedCamp?.materials ?? "", /出产归本宗/);
+  assert.equal((ownedCamp?.materials ?? "").includes("邻宗"), false);
+  assert.equal((ownedCamp?.materials ?? "").includes("要夺就宣战"), false);
+  assert.equal((taken?.daily ?? "").includes("邻宗占着的边寨"), false);
   const dao = world.daoLogs.filter((entry) => entry.cultivatorId === cultivator.id).map((entry) => entry.content).join("");
   assert.match(dao, /见闻：/);
   assert.match(dao, /夺下了/);
+
+  camp.ownerKind = "none";
+  camp.ownerId = null;
+  const vacant = getCultivatorState(world, cultivator.id).sectLife?.veins.find((vein) => vein.id === camp.id);
+  assert.match(vacant?.materials ?? "", /还没有主/);
+  assert.equal((vacant?.materials ?? "").includes("邻宗"), false);
 });
 
 test("a border raid feuds even when nobody is standing on the camp", () => {
