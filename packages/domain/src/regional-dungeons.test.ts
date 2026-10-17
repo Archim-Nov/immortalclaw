@@ -183,9 +183,9 @@ test("waiting for the dew carries the core, a sighting, and a cooldown", () => {
   ready(quietLeader, 4, "qingzhou:main-city");
   performAction(quiet, quietLeader.id, "enter-regional:qinglan-herb-cave");
   advanceWorld(quiet, 2);
-  assert.equal(quietLeader.activeJobId, null);
-  assert.equal(quietLeader.inventory["qinglan-dew-core"], 1);
-  assert.equal(quietLeader.regionalReport?.outcome, "cleared");
+  assert.ok(quietLeader.activeJobId);
+  assert.equal(quietLeader.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.equal(getCultivatorState(quiet, quietLeader.id).regionalDungeons?.active?.passage?.kind, "scout");
 });
 
 test("the dark hold costs stones and a wound, and does not give the crystal", () => {
@@ -273,9 +273,20 @@ test("two companions must agree, and the drop stays in the leader's bag", () => 
   performAction(split, lead.id, "enter-regional:qinglan-herb-cave");
   performAction(split, companion.id, "regional-choice:qinglan-pull");
   advanceWorld(split, 2);
+  assert.equal(lead.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.equal(getCultivatorState(split, lead.id).regionalDungeons?.active?.passage?.kind, "scout");
+  assert.ok(lead.activeJobId);
+
+  performAction(split, lead.id, "regional-choice:pass-qinglan-follow");
+  performAction(split, companion.id, "regional-choice:pass-qinglan-follow");
+  performAction(split, lead.id, "regional-choice:pass-qinglan-around");
+  performAction(split, companion.id, "regional-choice:pass-qinglan-around");
+  assert.equal(getCultivatorState(split, lead.id).regionalDungeons?.active?.passage ?? null, null);
+  performAction(split, companion.id, "regional-choice:qinglan-pull");
+  advanceWorld(split, 2);
   assert.equal(lead.inventory["qinglan-dew-core"], 1);
   assert.equal(lead.regionalReport?.outcome, "cleared");
-  assert.match(lead.regionalReport?.line ?? "", /露/);
+  assert.match(lead.regionalReport?.line ?? "", /露滴进瓶子/);
 });
 
 test("sitting out the vigil keeps the ash until the hours are done", () => {
@@ -556,6 +567,69 @@ test("each state dungeon has a scout step and then a foe or a favor", () => {
   assert.equal(regionalPassage("wanderer-cave"), null);
   assert.equal(regionalPassage("merchant-hold"), null);
   assert.equal(regionalPassage("ancient-vigil"), null);
+});
+
+test("a theme-dungeon deadline stays on the open passage and closes only after that passage is done", () => {
+  const world = createSeedWorld();
+  const cultivator = leader(world);
+  ready(cultivator, 4, "qingzhou:main-city");
+  performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave");
+  advanceWorld(world, 2);
+  const held = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(held?.passage?.kind, "scout");
+  assert.equal(held?.passage?.step, 1);
+  assert.equal(held?.passage?.enemyName ?? null, null);
+  assert.equal(cultivator.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.equal(cultivator.regionalReport == null, true);
+  assert.ok(cultivator.activeJobId);
+
+  advanceWorld(world, 4);
+  const still = getCultivatorState(world, cultivator.id).regionalDungeons?.active;
+  assert.equal(still?.passage?.kind, "scout");
+  assert.equal(still?.passage?.step, 1);
+  assert.equal(cultivator.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.ok(cultivator.activeJobId);
+
+  performAction(world, cultivator.id, "regional-choice:pass-qinglan-follow");
+  assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage?.enemyName, "露虫");
+  performAction(world, cultivator.id, "regional-choice:pass-qinglan-around");
+  assert.equal(getCultivatorState(world, cultivator.id).regionalDungeons?.active?.passage ?? null, null);
+  assert.equal(cultivator.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.ok(cultivator.activeJobId);
+
+  advanceWorld(world, 1);
+  assert.equal(cultivator.inventory["qinglan-dew-core"] ?? 0, 0);
+  assert.ok(cultivator.activeJobId);
+  advanceWorld(world, 1);
+  assert.equal(cultivator.activeJobId, null);
+  assert.equal(cultivator.inventory["qinglan-dew-core"], 1);
+  assert.equal(cultivator.regionalReport?.outcome, "cleared");
+  assert.equal(cultivator.regionalReport?.signatureName, "青岚露芯");
+  assert.match(cultivator.regionalReport?.line ?? "", /露滴进瓶子/);
+
+  const tea = createSeedWorld();
+  const sitter = leader(tea);
+  ready(sitter, 7, "wanzhou:main-city");
+  performAction(tea, sitter.id, "enter-regional:old-tea-seat");
+  advanceWorld(tea, 2);
+  assert.equal(getCultivatorState(tea, sitter.id).regionalDungeons?.active?.passage?.kind, "scout");
+  assert.equal(sitter.inventory["old-tea-pattern"] ?? 0, 0);
+  assert.ok(sitter.activeJobId);
+  advanceWorld(tea, 3);
+  assert.equal(getCultivatorState(tea, sitter.id).regionalDungeons?.active?.passage?.kind, "scout");
+  assert.equal(sitter.inventory["old-tea-pattern"] ?? 0, 0);
+
+  performAction(tea, sitter.id, "regional-choice:pass-tea-stain");
+  assert.equal(getCultivatorState(tea, sitter.id).regionalDungeons?.active?.passage?.kind, "favor");
+  performAction(tea, sitter.id, "regional-choice:pass-tea-yield");
+  assert.equal(getCultivatorState(tea, sitter.id).regionalDungeons?.active?.passage ?? null, null);
+  assert.equal(sitter.inventory["old-tea-pattern"] ?? 0, 0);
+  advanceWorld(tea, 1);
+  assert.equal(sitter.inventory["old-tea-pattern"] ?? 0, 0);
+  advanceWorld(tea, 1);
+  assert.equal(sitter.inventory["old-tea-pattern"], 1);
+  assert.equal(sitter.regionalReport?.signatureName, "旧茶纹");
+  assert.match(sitter.regionalReport?.line ?? "", /旧茶纹是从席子边上揭下来的/);
 });
 
 test("青岚药窟 walks a sighting and a named foe before the dew, and leaving reads differently", () => {
