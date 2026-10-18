@@ -472,7 +472,7 @@ const WILDERNESS_LAYERS: Record<string, WildernessLayer> = {
 const GUIXU_NODES: Record<string, GuixuNode> = {
   "guixu-threshold-gate": {
     nodeId: "guixu-threshold-gate",
-    name: "Guixu Threshold Gate",
+    name: "归虚门槛",
     tier: "entry",
     unlockRequirement: {
       wildernessProgress: 2,
@@ -483,11 +483,11 @@ const GUIXU_NODES: Record<string, GuixuNode> = {
     sharedProgress: false,
     anchorLocationId: "qingzhou:dungeon-a",
     explorationDurationTicks: 2,
-    eventPool: ["guixu-threshold-vision"],
+    eventPool: ["guixu-threshold-vision", "guixu-threshold-echo", "guixu-abyssal-cache"],
   },
   "guixu-ancient-seal": {
     nodeId: "guixu-ancient-seal",
-    name: "Guixu Ancient Seal",
+    name: "归虚古印",
     tier: "core",
     unlockRequirement: {
       wildernessProgress: 2,
@@ -498,11 +498,11 @@ const GUIXU_NODES: Record<string, GuixuNode> = {
     sharedProgress: true,
     anchorLocationId: "qingzhou:dungeon-a",
     explorationDurationTicks: 2,
-    eventPool: ["guixu-ancient-seal"],
+    eventPool: ["guixu-ancient-seal", "guixu-ancient-seal-light", "guixu-ancient-seal-crack"],
   },
   "guixu-spirit-nexus": {
     nodeId: "guixu-spirit-nexus",
-    name: "Guixu Spirit Nexus",
+    name: "归虚灵枢",
     tier: "core",
     unlockRequirement: {
       wildernessProgress: 4,
@@ -513,11 +513,11 @@ const GUIXU_NODES: Record<string, GuixuNode> = {
     sharedProgress: false,
     anchorLocationId: "qingzhou:dungeon-a",
     explorationDurationTicks: 3,
-    eventPool: ["guixu-spirit-nexus-echo"],
+    eventPool: ["guixu-spirit-nexus-echo", "guixu-spirit-nexus-well", "guixu-spirit-nexus-pulse"],
   },
   "guixu-void-corridor": {
     nodeId: "guixu-void-corridor",
-    name: "Guixu Void Corridor",
+    name: "归虚虚廊",
     tier: "deep",
     unlockRequirement: {
       wildernessProgress: 6,
@@ -528,11 +528,11 @@ const GUIXU_NODES: Record<string, GuixuNode> = {
     sharedProgress: true,
     anchorLocationId: "qingzhou:dungeon-a",
     explorationDurationTicks: 3,
-    eventPool: ["guixu-void-corridor-trial"],
+    eventPool: ["guixu-void-corridor-trial", "guixu-void-corridor-span", "guixu-void-corridor-lamp"],
   },
   "guixu-origin-heart": {
     nodeId: "guixu-origin-heart",
-    name: "Guixu Origin Heart",
+    name: "归虚本源心",
     tier: "deep",
     unlockRequirement: {
       wildernessProgress: 8,
@@ -543,7 +543,7 @@ const GUIXU_NODES: Record<string, GuixuNode> = {
     sharedProgress: true,
     anchorLocationId: "qingzhou:dungeon-a",
     explorationDurationTicks: 4,
-    eventPool: ["guixu-origin-heart-awakening"],
+    eventPool: ["guixu-origin-heart-awakening", "guixu-origin-heart-ember", "guixu-origin-heart-ash"],
   },
 };
 

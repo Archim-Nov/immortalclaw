@@ -403,9 +403,12 @@ export function buildCultivatorDigest(world: WorldState, cultivator: Cultivator)
   const wakePending = Boolean(world.dungeonExpeditions?.[cultivator.id]?.pendingWakeNode);
   const wildPending = world.wildernessProgress?.[cultivator.id]?.status === "active"
     && Boolean(world.wildernessProgress[cultivator.id]?.pendingBeatId);
+  const activeJob = cultivator.activeJobId ? world.jobs[cultivator.activeJobId] : null;
+  const guixuPending = Boolean(activeJob?.meta?.guixuWake);
   const priorities = [
     ...(wakePending ? ["地宫岔路待决"] : []),
     ...(wildPending ? ["荒野岔路待决"] : []),
+    ...(guixuPending ? ["归虚岔路待决"] : []),
   ];
   return {
     windowTicks: DIGEST_WINDOW_TICKS,
