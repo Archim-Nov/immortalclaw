@@ -5,6 +5,7 @@ import { mysteryForRank } from "./high-realm.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
 import { jiaRelicHint } from "./jia-relics.js";
 import { jiaHaulSummaryClause, jiaTemperamentForRank, jiaTemperamentItemId } from "./jia-temperament.js";
+import { breakthroughDropPool } from "./realm-path.js";
 import { lightMysteryHint } from "./yi-mystery.js";
 import type {
   ActionJob,
@@ -131,6 +132,71 @@ function yieldBandForRank(rank: DungeonRank): "1-3" | "4-6" | "7-9" {
   return "7-9";
 }
 
+/** The piece the gate names for this floor. 甲 follows the realm ladder; 乙 and 丙 keep the grade band. */
+export function expeditionPrimaryMaterialId(
+  grade: DungeonGrade,
+  rank: DungeonRank,
+  materialBand: ItemId,
+): ItemId {
+  if (grade !== "甲") return materialBand;
+  if (rank >= 7) return "divine-thought-crystal";
+  if (rank >= 4) return "infant-fire-lotus";
+  return "golden-spirit-flower";
+}
+
+/** Same numbers the gate prints. Expedition drops aim at this range. */
+export function estimatedPrimaryYield(
+  rank: DungeonRank,
+  policy: DungeonExpeditionPolicy,
+): { min: number; max: number } {
+  return { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[yieldBandForRank(rank)][policy] };
+}
+
+export function expeditionPrimaryTarget(input: {
+  rank: DungeonRank;
+  policy: DungeonExpeditionPolicy;
+  runSeed: string;
+}): number {
+  const range = estimatedPrimaryYield(input.rank, input.policy);
+  const span = Math.max(1, range.max - range.min + 1);
+  return range.min + (hashString(`${input.runSeed}:primary-target`) % span);
+}
+
+/**
+ * One breakthrough piece for an expedition step.
+ * Across a full run of granting steps the headline count lands inside the gate's range.
+ * The other pieces in that floor's pool fill the remaining steps, new ones first.
+ */
+export function pickExpeditionBreakthroughDrop(input: {
+  band: ItemId;
+  grade: DungeonGrade;
+  rank: DungeonRank;
+  policy: DungeonExpeditionPolicy;
+  stepIndex: number;
+  maxSteps: number;
+  primarySoFar: number;
+  seen?: Partial<Record<ItemId, number>>;
+  runSeed: string;
+  stepSeed: string;
+}): ItemId {
+  const primary = expeditionPrimaryMaterialId(input.grade, input.rank, input.band);
+  const others = breakthroughDropPool(input.band, input.rank).filter((itemId) => itemId !== primary);
+  const target = expeditionPrimaryTarget({
+    rank: input.rank,
+    policy: input.policy,
+    runSeed: input.runSeed,
+  });
+  const still = target - input.primarySoFar;
+  const remaining = Math.max(1, input.maxSteps - input.stepIndex);
+  if (still > 0 && (still >= remaining || hashString(`${input.stepSeed}:grant`) % remaining < still)) {
+    return primary;
+  }
+  if (others.length === 0) return primary;
+  const unseen = others.filter((itemId) => (input.seen?.[itemId] ?? 0) <= 0);
+  const source = unseen.length > 0 ? unseen : others;
+  return source[hashString(`${input.stepSeed}:companion`) % source.length]!;
+}
+
 export function buildDungeonRankYieldHints(
   availableRanks: DungeonRank[],
   primaryMaterial: ItemId,
@@ -139,6 +205,7 @@ export function buildDungeonRankYieldHints(
 ): DungeonRankYieldHint[] {
   return availableRanks.map((rank) => {
     const band = yieldBandForRank(rank);
+    const primary = grade ? expeditionPrimaryMaterialId(grade, rank, primaryMaterial) : primaryMaterial;
     const mystery = grade ? mysteryForRank(grade, rank) : null;
     const light = !mystery && grade ? lightMysteryHint(grade, rank, stateId) : null;
     const notableSecondaryDrops = [...SECONDARY_DROPS_BY_BAND[band]];
@@ -152,12 +219,12 @@ export function buildDungeonRankYieldHints(
     const relicLine = jiaRelicHint(grade, rank);
     return {
       rank,
-      primaryMaterial,
-      primaryMaterialName: playerItemName(primaryMaterial),
+      primaryMaterial: primary,
+      primaryMaterialName: playerItemName(primary),
       estimatedExpeditionYieldByPolicy: {
-        conservative: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].conservative },
-        balanced: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].balanced },
-        aggressive: { ...ESTIMATED_MATERIAL_YIELD_BY_BAND[band].aggressive },
+        conservative: estimatedPrimaryYield(rank, "conservative"),
+        balanced: estimatedPrimaryYield(rank, "balanced"),
+        aggressive: estimatedPrimaryYield(rank, "aggressive"),
       },
       notableSecondaryDrops,
       notableSecondaryDropCards: notableSecondaryDrops.map((itemId) => ({
@@ -1043,14 +1110,28 @@ function summarizeSecondaryDrops(drops: Partial<Record<ItemId, number>>): string
   return topDrops.length > 0 ? topDrops.join("，") : null;
 }
 
-function fightLine(progress: DungeonExpeditionProgress): string | null {
+function stripCarriedClause(text: string): string {
+  return text.replace(/带出何物：[^。]*。/gu, "").trim();
+}
+
+function scopedCarriedClause(carried: string | null | undefined): string | null {
+  if (!carried) return null;
+  const body = carried.replace(/^带出何物：/u, "").replace(/。$/u, "").trim();
+  if (!body) return null;
+  const counted = /\d+份|\d+枚/.test(body);
+  const tail = counted ? "这一笔已经算进上面的总数。" : "";
+  return `最近一场胜仗当场带出何物：${body}。${tail}`;
+}
+
+function fightLine(progress: DungeonExpeditionProgress, omitCarried = false): string | null {
   const last = progress.combatRounds?.[progress.combatRounds.length - 1];
   if (!last) return null;
   const result = last.outcome === "win" ? "胜" : last.outcome === "loss" ? "负" : last.outcome === "draw" ? "平" : "撤";
   const who = last.party.map((member) => `${member.name}（${member.roleLabel}）`).join("、");
   const wound = last.wound
     ?? ((progress.injuryTicksGained ?? 0) > 0 ? "这一趟已经挂了伤。" : "");
-  return `最近一战对上${last.enemyName}，${who ? `${who}上场，` : ""}结果${result}。${last.beats.join("")}${wound}`;
+  const beats = omitCarried ? last.beats.map((beat) => stripCarriedClause(beat)) : last.beats;
+  return `最近一战对上${last.enemyName}，${who ? `${who}上场，` : ""}结果${result}。${beats.join("")}${wound}`;
 }
 
 function outcomePhrase(outcome: DungeonExpeditionReport["outcome"]): string {
@@ -1116,6 +1197,30 @@ const RANK_ONE_BEATS_REST: readonly DungeonBeat[] = [
     detail: "第一层并不深，潮气却已经压到胸口。灯火矮，脚步声显得很长。",
     mood: "还没出事，已经想记下来",
   },
+  {
+    kind: "find",
+    title: "熄了的壁灯",
+    detail: "壁上有一盏灯，油尽了，灯芯还是黑的。你没有去点，只把位置记住。",
+    mood: "黑归黑，路还认得",
+  },
+  {
+    kind: "close-call",
+    title: "脚边的断箭",
+    detail: "砖缝里斜插着一枝断箭，箭头对着来路。你侧过脚，箭杆在靴边轻轻响了一下。",
+    mood: "这一步放轻了",
+  },
+  {
+    kind: "person",
+    title: "没人认的水囊",
+    detail: "石阶下压着一只水囊，水还是温的，囊绳却断了。你喝了一口，把空囊放回原处。",
+    mood: "有人刚走过",
+  },
+  {
+    kind: "mood",
+    title: "旧脚印叠在一起",
+    detail: "石阶上的脚印新旧叠着，有的朝里，有的朝外。你跟着朝外的那串看了一眼，还是继续往里。",
+    mood: "知道自己在往哪边走",
+  },
 ];
 
 export function rankOneMoralFork(
@@ -1165,9 +1270,29 @@ function rankOneBeats(grade: DungeonGrade): readonly DungeonBeat[] {
   return [rankOneHerbGatherer(grade), ...RANK_ONE_BEATS_REST];
 }
 
-function beatForRank(rank: DungeonRank, grade: DungeonGrade, seed: string): DungeonBeat {
+function beatForRank(
+  rank: DungeonRank,
+  grade: DungeonGrade,
+  seed: string,
+  usedTitles: readonly string[],
+): DungeonBeat {
   const pool = rank === 1 ? rankOneBeats(grade) : DUNGEON_BEAT_POOL;
-  return pool[hashString(`${seed}:beat`) % pool.length]!;
+  const fresh = pool.filter((beat) => !usedTitles.includes(beat.title));
+  if (fresh.length === 0) {
+    return {
+      kind: "mood",
+      title: "这一截没有新句子",
+      detail: "石壁上先前的字还在，这一截没有再多半句。",
+      mood: "路还在",
+    };
+  }
+  return fresh[hashString(`${seed}:beat`) % fresh.length]!;
+}
+
+function beatNotYetUsed(candidate: DungeonBeat, fallback: DungeonBeat, usedTitles: readonly string[]): DungeonBeat {
+  if (!usedTitles.includes(candidate.title)) return candidate;
+  if (!usedTitles.includes(fallback.title)) return fallback;
+  return candidate;
 }
 
 const AGGRESSIVE_LOW_QI_BEAT: DungeonBeat = {
@@ -1284,7 +1409,33 @@ const DUNGEON_BEAT_POOL: readonly DungeonBeat[] = [
     detail: "暗处扫来一道锋芒，肩上被拉开一道不深的口子。血不多，可袖子已经湿了一块。",
     mood: "带伤，还想再看一段",
   },
+  {
+    kind: "find",
+    title: "砖上的干血",
+    detail: "一块砖上有一小片干了的血，颜色已经发暗。你绕开那一脚，没有去擦。",
+    mood: "别人先走过这里",
+  },
+  {
+    kind: "insight",
+    title: "风从缝里来",
+    detail: "墙缝里有一丝风，不是阵，是外面的气漏进来。吸一口，胸口松半寸。",
+    mood: "还连着外面",
+  },
 ];
+
+const SAFE_RETREAT_BEAT: DungeonBeat = {
+  kind: "close-call",
+  title: "收手及时",
+  detail: "那一下本来能伤到人。稳妥的走法让你提前侧开，只留下掌心一层冷汗。",
+  mood: "还活着，而且知道自己为什么还活着",
+};
+
+const BALANCED_GRAZE_BEAT: DungeonBeat = {
+  kind: "injury",
+  title: "擦伤",
+  detail: "均衡着往前走，还是被阵纹擦到了小臂。不至于退，接下来几步会疼。",
+  mood: "挂着轻伤，还没到该撤的时候",
+};
 
 export function expeditionPressureFor(input: {
   policy: DungeonExpeditionPolicy;
@@ -1293,6 +1444,7 @@ export function expeditionPressureFor(input: {
   action: "search" | "guardian";
   seed: string;
   qiRatio: number;
+  usedBeatTitles?: readonly string[];
 }): {
   qiDrain: number;
   spiritualDrain: number;
@@ -1303,7 +1455,8 @@ export function expeditionPressureFor(input: {
   beat: DungeonBeat;
 } {
   const roll = hashString(`${input.seed}:pressure`) % 100;
-  const beat = beatForRank(input.rank, input.grade, input.seed);
+  const usedTitles = input.usedBeatTitles ?? [];
+  const beat = beatForRank(input.rank, input.grade, input.seed, usedTitles);
   const rankBump = input.rank >= 7 ? 2 : input.rank >= 4 ? 1 : 0;
   const guardianBump = input.action === "guardian" ? 1 : 0;
   const aggressiveRankDrain = input.policy === "aggressive" && input.rank >= 4
@@ -1320,14 +1473,7 @@ export function expeditionPressureFor(input: {
       realmProgress: 2 + guardianBump,
       stoneDelta,
       moralityDelta,
-      beat: beat.kind === "injury"
-        ? {
-            kind: "close-call",
-            title: "收手及时",
-            detail: "那一下本来能伤到人。稳妥的走法让你提前侧开，只留下掌心一层冷汗。",
-            mood: "还活着，而且知道自己为什么还活着",
-          }
-        : beat,
+      beat: beat.kind === "injury" ? beatNotYetUsed(SAFE_RETREAT_BEAT, beat, usedTitles) : beat,
     };
   }
 
@@ -1341,7 +1487,7 @@ export function expeditionPressureFor(input: {
       realmProgress: 7 + guardianBump + Math.floor((input.rank - 1) / 3),
       stoneDelta,
       moralityDelta,
-      beat: injured ? AGGRESSIVE_LOW_QI_BEAT : beat,
+      beat: injured ? beatNotYetUsed(AGGRESSIVE_LOW_QI_BEAT, beat, usedTitles) : beat,
     };
   }
 
@@ -1353,14 +1499,7 @@ export function expeditionPressureFor(input: {
     realmProgress: 4 + guardianBump,
     stoneDelta,
     moralityDelta,
-    beat: grazed
-      ? {
-          kind: "injury",
-          title: "擦伤",
-          detail: "均衡着往前走，还是被阵纹擦到了小臂。不至于退，接下来几步会疼。",
-          mood: "挂着轻伤，还没到该撤的时候",
-        }
-      : beat,
+    beat: grazed ? beatNotYetUsed(BALANCED_GRAZE_BEAT, beat, usedTitles) : beat,
   };
 }
 
@@ -1484,6 +1623,10 @@ export function createDungeonExpeditionReport(input: {
   const place = input.returnPlaceName?.trim() || "能歇脚的地方";
   const sideLoot = summarizeSecondaryDrops(secondaryDrops);
   const brought = broughtClause(playerItemName(input.primaryMaterial), input.progress.primaryMaterialCount, sideLoot);
+  const carriedScope = scopedCarriedClause(input.progress.carriedLine);
+  const rememberedDetail = remembered
+    ? (carriedScope ? stripCarriedClause(remembered.detail) : remembered.detail)
+    : "";
   const haulClause = jiaHaulSummaryClause({
     grade: input.progress.grade,
     rank: input.progress.targetRank,
@@ -1500,10 +1643,10 @@ export function createDungeonExpeditionReport(input: {
     (secondaryDrops["eight-wastes-pass"] ?? 0) > 0
       ? `袖里还有${(secondaryDrops["eight-wastes-pass"] ?? 0) > 1 ? `${secondaryDrops["eight-wastes-pass"]}枚` : "一枚"}八荒令。`
       : null,
-    remembered ? `记得最清楚的是：${remembered.detail}` : null,
-    input.progress.carriedLine ?? null,
+    rememberedDetail ? `记得最清楚的是：${rememberedDetail}` : null,
+    carriedScope,
     input.relic?.arcLine ?? null,
-    fightLine(input.progress),
+    fightLine(input.progress, Boolean(carriedScope)),
     `人已回到${place}。`,
   ].filter((part): part is string => Boolean(part)).join("");
 

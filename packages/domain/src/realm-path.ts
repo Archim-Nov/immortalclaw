@@ -123,7 +123,7 @@ function earlyWhere(level: number): string {
     }
     return bought;
   }
-  return `金丹前期和中期的材料坊市不卖，甲级一到三层的丹霞内府，探宝和守关都会掉。${jiaFightWarning(1)}四层的婴火莲池要金丹后期才开。`;
+  return `金丹前期和中期的材料坊市不卖。甲级一到三层的丹霞内府，探宝和守关都会掉金灵花这一档。${jiaFightWarning(1)}四层的婴火莲池要金丹后期才开。`;
 }
 
 export function realmPathView(input: {
