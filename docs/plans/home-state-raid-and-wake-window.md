@@ -12,7 +12,7 @@ Give every state a neighbor-owned border camp a 筑基 steward can raid, and mak
 
 `ensureSpiritVeins` keeps the herb field, mine, and spirit vein, then adds `{stateId}:border-camp` on the east town. The owner is the neutral sect of the first cross-state neighbor. `raidBlock` already allows an in-state vein owned by someone else, so the new node shows up as `declare-raid` without opening cross-state war. Sect tier counts only veins whose `stateId` matches the sect.
 
-Dungeon wake timeout and sect-scene wait both become 10. `settleDungeonWakeNode` stamps `你选了` or `时辰到了，代选了` onto the beat. The manual act and the timeout path each write a dao log. The pending view adds `decisionLine`, and the digest adds `priorities`, both saying 地宫岔路待决.
+Dungeon wake timeout and sect-scene wait both become 10. `settleDungeonWakeNode` leaves a manual beat as the scene itself. A timeout stamps `时辰到了，代选了` once. The manual act and the timeout path each write a dao log. The pending view adds `decisionLine`, and the digest adds `priorities`, both saying 地宫岔路待决.
 
 `earlyWhere` appends the 金丹 sentence only at realm levels 5 and 6.
 

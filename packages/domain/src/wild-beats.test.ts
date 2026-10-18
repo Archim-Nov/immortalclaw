@@ -91,6 +91,7 @@ test("entering 青岚坡 opens a Chinese choice and records the 见闻 when it i
   const chosen = performAction(world, CULTIVATOR_ID, "wild-choice:qing-vine" as never);
   assert.equal(chosen.accepted, true);
   assert.match(chosen.summary, /你选了/);
+  assert.equal((chosen.summary.match(/你选了/g) ?? []).length, 1);
   assert.match(chosen.summary, /青岚坡这一段的见闻/);
   assert.match(chosen.summary, /药藤/);
   assert.equal(chosen.summary.includes("wild-choice"), false);

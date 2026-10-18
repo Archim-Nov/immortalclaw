@@ -456,8 +456,10 @@ function applyScene(world: WorldState, cultivator: Cultivator, job: ActionJob, o
       writeSight(world, foe, `见闻：${tense}`, [cultivator.name]);
     }
   }
-  if (timedOut) line = `时辰到了，代选了${option.label}。${line}`;
-  else line = `你选了${option.label}。${line}`;
+  if (timedOut) {
+    const lead = `时辰到了，代选了${option.label}。`;
+    if (!line.startsWith(lead)) line = `${lead}${line}`;
+  }
   const stamped = line.startsWith("见闻：") ? line : `见闻：${line}`;
   writeSight(world, cultivator, stamped, names);
   const meta = { ...(job.meta ?? {}) };

@@ -381,8 +381,14 @@ test("pending dungeon wake nodes auto-resolve after timeout ticks", () => {
   assert.equal(resolvedState.dungeonExpedition.wakeNodeHint ?? null, null);
   const written = (cultivator.lifeLog ?? []).map((event) => event.text).join("");
   assert.match(written, /时辰到了，代选了/);
+  assert.equal((written.match(/时辰到了，代选了/g) ?? []).length, 1, written);
   const dao = world.daoLogs.filter((entry) => entry.cultivatorId === CULTIVATOR_ID).map((entry) => entry.content).join("");
   assert.match(dao, /时辰到了，代选了/);
+  assert.equal((dao.match(/时辰到了，代选了/g) ?? []).length, 1, dao);
+  const wakeNote = (cultivator.travelNotes ?? []).find((note) => note.detail.includes("时辰到了，代选了"));
+  assert.ok(wakeNote);
+  assert.equal(wakeNote.detail.startsWith(wakeNote.title), false);
+  assert.equal((`${wakeNote.title} ${wakeNote.detail}`.match(/时辰到了，代选了/g) ?? []).length, 1);
 });
 
 test("a manual dungeon wake choice is written into the beat and the dao log", () => {
@@ -402,11 +408,18 @@ test("a manual dungeon wake choice is written into the beat and the dao log", ()
   assert.ok(choice);
   const acted = performAction(world, CULTIVATOR_ID, choice.actionId);
   assert.equal(acted.accepted, true);
-  assert.match(acted.summary, /你选了/);
+  assert.match(acted.summary, /在地宫里/);
+  assert.doesNotMatch(acted.summary, /你选了/);
+  const label = choice.label;
+  if (label && acted.summary.includes(label)) {
+    assert.equal(acted.summary.split(label).length - 1, 1, acted.summary);
+  }
+  assert.ok(acted.summary.split("。").length >= 3, acted.summary);
   const beat = world.dungeonExpeditions[CULTIVATOR_ID]?.beats?.at(-1);
-  assert.match(beat?.detail ?? "", /你选了/);
+  assert.doesNotMatch(beat?.detail ?? "", /你选了/);
   const dao = world.daoLogs.filter((entry) => entry.cultivatorId === CULTIVATOR_ID).map((entry) => entry.content).join("");
-  assert.match(dao, /你选了/);
+  assert.doesNotMatch(dao, /你选了/);
+  assert.match(dao, /在地宫里/);
   assert.equal(getCultivatorState(world, CULTIVATOR_ID).dungeonExpedition.wakeNodeHint ?? null, null);
 });
 

@@ -107,6 +107,7 @@ import {
   noteWound,
   recordLife,
   recordSpokenEcho,
+  relativeWaitPhrase,
   spreadNearbyGossip,
   GIFT_STONE_CARD_AMOUNTS,
   GIFT_STONES_AFFINITY,
@@ -4249,6 +4250,28 @@ function dungeonViewForLocation(
   };
 }
 
+function materialDungeonNode(realmLevel: number): DungeonNodeType {
+  if (realmLevel <= 3) return "dungeon-c";
+  if (realmLevel <= 6) return "dungeon-b";
+  return "dungeon-a";
+}
+
+function travelToward(world: WorldState, fromLocationId: string, targetLocationId: string): ActionId | null {
+  if (fromLocationId === targetLocationId) return null;
+  const here = getDistanceBetween(world, fromLocationId, targetLocationId);
+  if (!Number.isFinite(here)) return null;
+  let bestId: string | null = null;
+  let bestDistance = here;
+  for (const neighbor of getNeighborLocations(world, fromLocationId)) {
+    const distance = getDistanceBetween(world, neighbor.locationId, targetLocationId);
+    if (Number.isFinite(distance) && distance < bestDistance) {
+      bestDistance = distance;
+      bestId = neighbor.locationId;
+    }
+  }
+  return bestId ? travelActionIdOf(bestId) : null;
+}
+
 function preferredDungeonGuardianAction(
   world: WorldState,
   cultivator: Cultivator,
@@ -4268,7 +4291,79 @@ function preferredDungeonGuardianAction(
     cultivator.locationId,
     (candidate) => candidate.nodeType === nodeType,
   );
-  return nearestDungeonId ? travelActionIdOf(nearestDungeonId) : null;
+  return nearestDungeonId ? travelToward(world, cultivator.locationId, nearestDungeonId) : null;
+}
+
+function progressionMaterialLine(cultivator: Cultivator): string {
+  if (cultivator.realmLevel <= 3) return "炼气这一步的灵材，丙级地宫里有。";
+  if (cultivator.realmLevel <= 6) return "筑基这一步的灵材，荒野和乙级地宫里有。坊市买得到的，就在城里买。";
+  if (cultivator.realmLevel >= 15) return "这一阶的灵材坊市不卖。凉州或雷州的灵脉，还有甲级地宫，都能取。";
+  if (cultivator.realmLevel >= 12) return "化神这一步的灵材，坊市里买不到。得到甲级地宫七层往后去取。";
+  if (cultivator.realmLevel >= 9) return "元婴这一步的灵材，坊市里买不到。得到甲级地宫四层往后去取。";
+  return "金丹这一步的灵材，坊市里买不到。得到甲级地宫去取。";
+}
+
+function progressionMaterialAction(world: WorldState, cultivator: Cultivator): ActionId | null {
+  const node = materialDungeonNode(cultivator.realmLevel);
+  const location = world.locations[cultivator.locationId];
+  if (location?.nodeType === node) {
+    const view = dungeonViewForLocation(world, cultivator, location);
+    if (view && !view.lockReason) return enterDungeonActionIdOf(view.recommendedRank, "balanced");
+  }
+  const definition = breakthroughDefinitionOf(cultivator);
+  return definition ? preferredMaterialAction(world, cultivator, definition) : null;
+}
+
+function usefulResidenceCraft(cultivator: Cultivator): { name: string; recipeId: string; spiritStoneCost: number } | null {
+  const definition = breakthroughDefinitionOf(cultivator);
+  const missing = new Set<string>();
+  if (definition) {
+    for (const material of [...definition.genericMaterials, definition.specialMaterial]) {
+      if ((cultivator.inventory[material.itemId] ?? 0) < material.count) missing.add(material.itemId);
+    }
+  }
+  const equippedWeaponTier = cultivator.equippedWeaponLoadoutId
+    ? (getWeaponLoadoutDefinition(cultivator.equippedWeaponLoadoutId)?.weaponTier ?? 0)
+    : 0;
+  const equippedSpellTier = cultivator.equippedSpellLoadoutId
+    ? (getSpellLoadoutDefinition(cultivator.equippedSpellLoadoutId)?.spellTier ?? 0)
+    : 0;
+  let best: { name: string; recipeId: string; spiritStoneCost: number; rank: number } | null = null;
+  for (const recipe of getLiveCraftableRecipes(cultivator)) {
+    if (!recipe.id.startsWith("recipe-forge-") && !recipe.id.startsWith("recipe-synthesize-")) continue;
+    const item = ITEM_CATALOG[recipe.outputItemId];
+    if (!item) continue;
+    let rank: number | null = null;
+    if (missing.has(recipe.outputItemId)) {
+      rank = 0;
+    } else {
+      const weaponId = item.use.grantsWeaponLoadoutId;
+      const spellId = item.use.grantsSpellLoadoutId;
+      if (weaponId) {
+        if (cultivator.unlockedWeaponLoadoutIds.includes(weaponId)) continue;
+        if ((cultivator.inventory[recipe.outputItemId] ?? 0) > 0) continue;
+        const tier = getWeaponLoadoutDefinition(weaponId)?.weaponTier ?? 0;
+        if (tier <= equippedWeaponTier || !tierAllowed(cultivator.realmLevel, tier)) continue;
+        rank = tier - equippedWeaponTier;
+      } else if (spellId) {
+        if (cultivator.unlockedSpellLoadoutIds.includes(spellId)) continue;
+        if ((cultivator.inventory[recipe.outputItemId] ?? 0) > 0) continue;
+        const tier = getSpellLoadoutDefinition(spellId)?.spellTier ?? 0;
+        if (tier <= equippedSpellTier || !tierAllowed(cultivator.realmLevel, tier)) continue;
+        rank = tier - equippedSpellTier;
+      }
+    }
+    if (rank === null) continue;
+    if (!best || rank < best.rank) {
+      best = {
+        name: item.name,
+        recipeId: recipe.id,
+        spiritStoneCost: recipe.spiritStoneCost,
+        rank,
+      };
+    }
+  }
+  return best;
 }
 
 function trimPrependedEntries<T>(entries: T[], previousLength: number): void {
@@ -7137,15 +7232,6 @@ function guidance(world: WorldState, cultivator: Cultivator) {
   const safeTravelAction = nearestSafeLocationId ? travelActionIdOf(nearestSafeLocationId) : "meditate";
   const nearestMainCityId = findNearestLocationId(world, cultivator.locationId, (candidate) => isMainCityNode(candidate.nodeType));
   const mainCityTravelAction = nearestMainCityId ? travelActionIdOf(nearestMainCityId) : "meditate";
-  const nearestDungeonId = findNearestLocationId(
-    world,
-    cultivator.locationId,
-    (candidate) => {
-      const metadata = dungeonMetadataOf(candidate);
-      return !!metadata && meetsRealmRequirement(cultivator, metadata.minRealm);
-    },
-  );
-  const dungeonTravelAction = nearestDungeonId ? travelActionIdOf(nearestDungeonId) : "meditate";
   const nearestWildernessId = findNearestLocationId(world, cultivator.locationId, (candidate) => candidate.nodeType === "wilderness");
   const wildernessTravelAction = nearestWildernessId ? travelActionIdOf(nearestWildernessId) : "meditate";
   const nearestBahuangEntryId = findNearestLocationId(
@@ -7244,13 +7330,9 @@ function guidance(world: WorldState, cultivator: Cultivator) {
     && !breakthrough.readyByMaterials
     && !breakthrough.marketBuyable;
   if (needsProgressionMaterials) {
-    breakthroughPriorities.push("进阶材料无法购买，需挑战对应等阶副本获取。");
-    const dungeonView = dungeonViewForLocation(world, cultivator, location);
-    breakthroughActions.push(
-      dungeonView && !dungeonView.lockReason
-        ? enterDungeonActionIdOf(dungeonView.recommendedRank, "balanced")
-        : dungeonTravelAction,
-    );
+    breakthroughPriorities.push(progressionMaterialLine(cultivator));
+    const materialAction = progressionMaterialAction(world, cultivator);
+    if (materialAction) breakthroughActions.push(materialAction);
   }
   const needsRareExpeditionRewards = meetsRealmRequirement(cultivator, REALM_CORE)
     && cultivator.inventory["ancient-artifact"] <= 0;
@@ -7277,6 +7359,8 @@ function guidance(world: WorldState, cultivator: Cultivator) {
       if (lockLine) {
         locationPriorities.push(lockLine);
         locationActions.push("dungeon-gate-locked");
+      } else if (needsProgressionMaterials && location.nodeType !== materialDungeonNode(cultivator.realmLevel)) {
+        locationPriorities.push("这一处出的不是你这一步要的灵材。得到对口的地宫去取。");
       } else {
         locationPriorities.push("身处秘境入口，可挑战副本获取进阶材料。");
       }
@@ -7318,12 +7402,18 @@ function guidance(world: WorldState, cultivator: Cultivator) {
       }
     }
     if (registration.fortuneBonus >= 8) {
-      const dungeonView = dungeonViewForLocation(world, cultivator, location);
-      locationActions.push(
-        dungeonView && !dungeonView.lockReason
-          ? searchFortuneActionIdOf(dungeonView.recommendedRank)
-          : dungeonTravelAction,
-      );
+      const node = materialDungeonNode(cultivator.realmLevel);
+      const here = world.locations[cultivator.locationId];
+      if (here?.nodeType === node) {
+        const dungeonView = dungeonViewForLocation(world, cultivator, here);
+        if (dungeonView && !dungeonView.lockReason) {
+          locationActions.push(searchFortuneActionIdOf(dungeonView.recommendedRank));
+        }
+      } else {
+        const targetId = findNearestLocationId(world, cultivator.locationId, (candidate) => candidate.nodeType === node);
+        const hop = targetId ? travelToward(world, cultivator.locationId, targetId) : null;
+        if (hop) locationActions.push(hop);
+      }
     }
     if (registration.mineBonus >= 6) locationActions.push(location?.nodeType === "wilderness" ? "mine-spirit-stones" : wildernessTravelAction);
     if (registration.cultivateBonus >= 8) locationActions.push("cultivate");
@@ -7350,13 +7440,10 @@ function guidance(world: WorldState, cultivator: Cultivator) {
 
   // Residence crafting recommendations
   if (isAtResidence(cultivator)) {
-    const craftable = getLiveCraftableRecipes(cultivator);
-    for (const recipe of craftable) {
-      if (recipe.id.startsWith("recipe-forge-") || recipe.id.startsWith("recipe-synthesize-")) {
-        locationActions.push(`residence-produce:${recipe.id}` as ActionId);
-        locationPriorities.push(`居所可炼制：${ITEM_CATALOG[recipe.outputItemId]?.name ?? "这件东西"}，消耗 ${recipe.spiritStoneCost} 灵石。`);
-        break;
-      }
+    const craft = usefulResidenceCraft(cultivator);
+    if (craft) {
+      locationActions.push(`residence-produce:${craft.recipeId}` as ActionId);
+      locationPriorities.push(`居所可炼制：${craft.name}，消耗 ${craft.spiritStoneCost} 灵石。`);
     }
   }
 
@@ -9418,14 +9505,25 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
           });
         }
         if (!onCooldown) {
+          const known = Boolean(existingLink);
           actions.push({
             actionId: `chat-up:${chatTarget.id}` as ActionId,
-            label: feud ? `攀谈：${chatTarget.name}（${feud}，剑拔弩张）` : fellow ? `攀谈：${chatTarget.name}（同门）` : `搭讪：${chatTarget.name}（${levelLabel}）`,
+            label: feud
+              ? `攀谈：${chatTarget.name}（${feud}，剑拔弩张）`
+              : fellow
+                ? `攀谈：${chatTarget.name}（同门）`
+                : known
+                  ? `攀谈：${chatTarget.name}（${levelLabel}）`
+                  : `搭讪：${chatTarget.name}（陌生人）`,
             description: feud
               ? `${chatTarget.name}和你有${feud}，见面剑拔弩张。这句话会很硬。不想给面子，就拒礼，或者再战。`
               : fellow
-                ? `${chatTarget.name}是同门。话可以直说，赠礼也更顺。认识之后才能组队。`
-                : `与${chatTarget.name}攀谈，增进好感度。认识之后才能组队，同一心跳里可以接着邀请。`,
+                ? known
+                  ? `${chatTarget.name}是同门。话可以直说，赠礼也更顺。`
+                  : `${chatTarget.name}是同门。话可以直说，赠礼也更顺。认识之后才能组队。`
+                : known
+                  ? `与${chatTarget.name}攀谈，好感还会再涨一点。`
+                  : `与${chatTarget.name}搭话，增进好感。认识之后才能组队，同一心跳里可以接着邀请。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -9441,7 +9539,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push({
         actionId: `voice-transmit:${link.targetCultivatorId}` as ActionId,
         label: `传音：${friendName}（${bondLabel}）`,
-        description: `向${friendName}传音交流，维系情谊。`,
+        description: `向${friendName}传一音。可以另写一句，最多四十字。不另外写，就代说一句，每次不一样。同一句不连着说。`,
         durationTicks: 0,
         kind: "immediate",
       });
@@ -9481,10 +9579,13 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         const sparReady = link.lastSparTeachTick === undefined || world.tick - link.lastSparTeachTick >= SPAR_TEACH_COOLDOWN_TICKS;
         const shareReady = link.lastShareTick === undefined || world.tick - link.lastShareTick >= SHARE_RESOURCE_COOLDOWN_TICKS;
         if (sparReady) {
+          const feud = grudgeArcOf(link.grudge ?? 0);
           actions.push({
             actionId: `spar-teach:${peer.id}` as ActionId,
             label: `指点：${peer.name}`,
-            description: `你们已是知己。带${peer.name}把一式走两遍，对方会更熟一点。`,
+            description: feud
+              ? `你们已是知己，也有${feud}，见面剑拔弩张。带${peer.name}把一式走两遍，对方会更熟一点。`
+              : `你们已是知己。带${peer.name}把一式走两遍，对方会更熟一点。`,
             durationTicks: 0,
             kind: "immediate",
           });
@@ -9640,12 +9741,18 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     // send-message to nearby cultivators at same location
     const nearbyTargets = socialActionTargets(world, cultivator);
     for (const target of nearbyTargets) {
+      const targetLink = getSocialLink(world, cultivator.id, target.id);
+      const targetFeud = grudgeArcOf(targetLink?.grudge ?? 0);
       for (const kind of ["greet", "share-info", "request-help"] as const) {
         actions.push({
           actionId: `send-message:${target.id}:${kind}` as ActionId,
           label: `发送消息（${SEND_MESSAGE_KIND_ZH[kind]}）：${target.name}`,
           description: kind === "greet"
-            ? `向${target.name}问候。问候之后就认识了，可以接着组队。`
+            ? targetFeud
+              ? `向${target.name}问一声。你们有${targetFeud}，见面剑拔弩张，这句话会很硬。`
+              : targetLink
+                ? `向${target.name}问一声好。`
+                : `向${target.name}问候。问候之后就认识了，可以接着组队。`
             : kind === "share-info"
               ? `向${target.name}分享见闻。`
               : `向${target.name}求援。`,
@@ -10720,32 +10827,29 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const voiceTargetId = parseVoiceTransmitTarget(actionId);
   if (voiceTargetId) {
     const target = getCultivatorOrThrow(world, voiceTargetId);
-    if (cultivator.id === target.id) throw new Error("Cannot voice-transmit to yourself.");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能给自己传音。");
     const link = getSocialLink(world, cultivator.id, target.id);
     if (!link || !meetsAffinityLevel(link.affinity, VOICE_TRANSMIT_MIN_LEVEL)) {
-      throw new Error(`传音 requires at least ${VOICE_TRANSMIT_MIN_LEVEL} level relationship.`);
+      throw new GameplayRejection(`传音要到${VOICE_TRANSMIT_MIN_LEVEL}才传得出去。`);
     }
     const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.voiceTransmit);
     const level = getAffinityLevel(linkAB.affinity);
-    const spoken = cleanSpokenLine(speechLine);
-    addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传音交流，好感度${linkAB.affinity}（${level}）。`, ["social", "voice-transmit"]);
+    const spoken = openSpokenLine(world, cultivator.id, target.id, "voice-transmit", world.tick, speechLine);
+    addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传了一音：「${spoken}」。好感度${linkAB.affinity}（${level}）。`, ["social", "voice-transmit"]);
     addMessage(
       world,
       target.id,
       "传音",
       `来自${cultivator.name}的传音`,
-      spoken ? `${cultivator.name}向你传了一音：「${spoken}」` : `${cultivator.name}向你传音问候。`,
-      { fromCultivatorId: cultivator.id, toCultivatorId: target.id, ...(spoken ? { spokenLine: spoken } : {}) },
+      `${cultivator.name}向你传了一音：「${spoken}」`,
+      { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: spoken },
     );
-    const affinityTail = `。好感至${linkAB.affinity}（${level}）。`;
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: spoken
-        ? summaryWithSpokenLine(`${cultivator.name}向${target.name}传了一音`, spoken, affinityTail)
-        : `${cultivator.name}向${target.name}传了一音${affinityTail}`,
+      summary: summaryWithSpokenLine(`${cultivator.name}向${target.name}传了一音`, spoken, `。好感至${linkAB.affinity}（${level}）。`),
     };
   }
 
@@ -10753,41 +10857,40 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const proposeDaoTargetId = parseProposeDaoCompanion(actionId);
   if (proposeDaoTargetId) {
     const target = getCultivatorOrThrow(world, proposeDaoTargetId);
-    if (cultivator.id === target.id) throw new Error("Cannot propose to yourself.");
-    if (hasDaoCompanion(world, cultivator.id)) throw new Error("You already have a dao companion.");
-    if (hasDaoCompanion(world, target.id)) throw new Error("Target already has a dao companion.");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能跟自己结道侣。");
+    if (hasDaoCompanion(world, cultivator.id)) throw new GameplayRejection("你已经有道侣了。");
+    if (hasDaoCompanion(world, target.id)) throw new GameplayRejection(`${target.name}已经有道侣了。`);
     const link = getSocialLink(world, cultivator.id, target.id);
     if (!link || !meetsAffinityLevel(link.affinity, DAO_COMPANION_MIN_LEVEL)) {
-      throw new Error(`道侣申请 requires at least ${DAO_COMPANION_MIN_LEVEL} level relationship.`);
+      throw new GameplayRejection(`结为道侣要到${DAO_COMPANION_MIN_LEVEL}才提得出去。`);
     }
-    // Check no existing pending proposal between these two
     const existing = Object.values(world.daoCompanionProposals ?? {}).find(
       (p) => (p.fromCultivatorId === cultivator.id && p.toCultivatorId === target.id)
         || (p.fromCultivatorId === target.id && p.toCultivatorId === cultivator.id),
     );
-    if (existing) throw new Error("A dao companion proposal already exists between you two.");
+    if (existing) throw new GameplayRejection("你们之间已经有一份道侣之约。");
     if (!world.daoCompanionProposals) (world as unknown as Record<string, unknown>).daoCompanionProposals = {};
     if (typeof (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence !== "number") (world as unknown as Record<string, unknown>).nextDaoCompanionProposalSequence = 1;
     const proposalId = `dao-proposal-${world.nextDaoCompanionProposalSequence++}`;
     const proposal = { id: proposalId, fromCultivatorId: cultivator.id, toCultivatorId: target.id, createdAtTick: world.tick, expiresAtTick: world.tick + DAO_COMPANION_PROPOSAL_EXPIRY };
     world.daoCompanionProposals[proposalId] = proposal;
-    addMessage(world, target.id, "道侣之约", "道侣申请", `${cultivator.name}向你提出了道侣之约，请在${DAO_COMPANION_PROPOSAL_EXPIRY}个tick内回复。`, { fromCultivatorId: cultivator.id });
+    addMessage(world, target.id, "道侣之约", "道侣申请", `${cultivator.name}向你提出了道侣之约。${relativeWaitPhrase(DAO_COMPANION_PROPOSAL_EXPIRY)}就作废，请在这之前回复。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "道侣申请", `${cultivator.name}向${target.name}提出了道侣之约。`, ["social", "dao-companion", "proposal"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} proposed dao companionship to ${target.name}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}向${target.name}提出了道侣之约。` };
   }
 
   // ---- Social: 接受道侣 (Accept Dao Companion) ----
   const acceptDaoProposalId = parseAcceptDaoCompanion(actionId);
   if (acceptDaoProposalId) {
     const proposal = (world.daoCompanionProposals ?? {})[acceptDaoProposalId];
-    if (!proposal) throw new Error("Dao companion proposal not found or expired.");
-    if (proposal.toCultivatorId !== cultivator.id) throw new Error("Only the target can accept.");
+    if (!proposal) throw new GameplayRejection("这份道侣之约已经不在了。");
+    if (proposal.toCultivatorId !== cultivator.id) throw new GameplayRejection("这约是提给别人的。");
     if (world.tick >= proposal.expiresAtTick) {
       delete world.daoCompanionProposals[acceptDaoProposalId];
-      throw new Error("Dao companion proposal has expired.");
+      throw new GameplayRejection("这份道侣之约已经过了时辰。");
     }
-    if (hasDaoCompanion(world, cultivator.id)) throw new Error("You already have a dao companion.");
-    if (hasDaoCompanion(world, proposal.fromCultivatorId)) throw new Error("Proposer already has a dao companion.");
+    if (hasDaoCompanion(world, cultivator.id)) throw new GameplayRejection("你已经有道侣了。");
+    if (hasDaoCompanion(world, proposal.fromCultivatorId)) throw new GameplayRejection("对方已经有道侣了。");
     // Set mutual 道侣 bond
     const linkAB = setBond(getOrCreateSocialLink(world, proposal.fromCultivatorId, cultivator.id), "道侣");
     const linkBA = setBond(getOrCreateSocialLink(world, cultivator.id, proposal.fromCultivatorId), "道侣");
@@ -10798,15 +10901,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣确立", `${cultivator.name}接受了你的道侣之约，你们正式结为道侣。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "道侣确立", `${cultivator.name}与${proposerName}正式结为道侣。`, ["social", "dao-companion", "accepted"]);
     addDaoLog(world, proposal.fromCultivatorId, "道侣确立", `${proposerName}与${cultivator.name}正式结为道侣。`, ["social", "dao-companion", "accepted"]);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted dao companionship with ${proposerName}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}应下了${proposerName}的道侣之约。` };
   }
 
   // ---- Social: 拒绝道侣 (Reject Dao Companion) ----
   const rejectDaoProposalId = parseRejectDaoCompanion(actionId);
   if (rejectDaoProposalId) {
     const proposal = (world.daoCompanionProposals ?? {})[rejectDaoProposalId];
-    if (!proposal) throw new Error("Dao companion proposal not found or expired.");
-    if (proposal.toCultivatorId !== cultivator.id) throw new Error("Only the target can reject.");
+    if (!proposal) throw new GameplayRejection("这份道侣之约已经不在了。");
+    if (proposal.toCultivatorId !== cultivator.id) throw new GameplayRejection("这约是提给别人的。");
     delete world.daoCompanionProposals[rejectDaoProposalId];
     const proposerName = world.cultivators[proposal.fromCultivatorId]?.name ?? "unknown";
     addMessage(world, proposal.fromCultivatorId, "道侣之约", "道侣婉拒", `${cultivator.name}婉拒了你的道侣之约。`, { fromCultivatorId: cultivator.id });
@@ -10815,7 +10918,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const proposer = world.cultivators[proposal.fromCultivatorId];
     if (proposer) shiftCultivatorMood(world, proposer, "rejection", `${cultivator.name}婉拒了道侣之约，这句话会在心里停一阵。`);
     shiftCultivatorMood(world, cultivator, "rejection", `婉拒了${proposerName}的道侣之约，话说完，场上也静了。`);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected dao companionship with ${proposerName}.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}婉拒了${proposerName}的道侣之约。` };
   }
 
   // ---- Social page: show the next unbound agents ----
@@ -10831,7 +10934,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} turned the social page to ${next.page + 1}/${next.pageCount}.`,
+      summary: `翻到了同场的人，现在是第${next.page + 1}页，一共${next.pageCount}页。`,
     };
   }
 

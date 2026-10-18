@@ -226,8 +226,9 @@ test("a solo 乙 run spends step 6 on a chance and step 8 on a quarrel", () => {
   assert.equal(aggressive?.defaultOptionId, "pry-spark");
   progress.pendingWakeNode = aggressive;
   const settlement = settleDungeonWakeNode(progress, "pry-spark");
-  assert.match(settlement.beat?.detail ?? "", /你选了伸手摘下来/);
+  assert.doesNotMatch(settlement.beat?.detail ?? "", /你选了/);
   assert.match(settlement.beat?.detail ?? "", /雷泽残阵/);
+  assert.match(settlement.beat?.title ?? "", /残雷/);
   assert.equal(settlement.stoneDelta, 8);
   assert.equal(/[A-Za-z]/.test(settlement.beat?.detail ?? ""), false);
 

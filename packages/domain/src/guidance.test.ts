@@ -38,11 +38,16 @@ test("progression-material needs route guidance to dungeon expeditions", () => {
   cultivator.injuryTicksRemaining = 0;
 
   const state = getCultivatorState(world, CULTIVATOR_ID);
+  const priorities = state.agentGuidance.priorities.join("\n");
 
-  assert.ok(
-    state.agentGuidance.suggestedActions.some((actionId) => String(actionId).startsWith("enter-dungeon:rank-")),
+  assert.match(priorities, /甲级/);
+  assert.equal(
+    state.agentGuidance.suggestedActions.some((actionId) => String(actionId).startsWith("enter-dungeon:")),
+    false,
   );
-  assert.ok(state.agentGuidance.priorities.some((entry) => /副本|dungeon/i.test(entry)));
+  assert.ok(
+    state.agentGuidance.suggestedActions.some((actionId) => String(actionId).startsWith("travel-to:")),
+  );
 });
 
 test("high-realm rare-reward needs route guidance to bahuang", () => {
@@ -200,4 +205,39 @@ test("all guidance output uses Chinese text for warnings and priorities", () => 
       `priority should contain Chinese characters: "${priority}"`,
     );
   }
+});
+
+test("金丹 at a 扬州 residence is pointed at 甲级 and a matching regional door", () => {
+  const world = createSeedWorld();
+  const cultivator = world.cultivators[CULTIVATOR_ID]!;
+  cultivator.locationId = "yangzhou:main-city";
+  cultivator.residence.locationId = "yangzhou:main-city";
+  cultivator.residence.stateId = "yangzhou";
+  for (const residence of cultivator.residences) {
+    residence.locationId = "yangzhou:main-city";
+    residence.stateId = "yangzhou";
+  }
+  cultivator.realm = "金丹";
+  cultivator.realmLevel = 7;
+  cultivator.realmProgress = 40;
+  cultivator.spiritStones = 800;
+  cultivator.injuryTicksRemaining = 0;
+  cultivator.equippedWeaponLoadoutId = "saber-tier-3" as typeof cultivator.equippedWeaponLoadoutId;
+  cultivator.unlockedWeaponLoadoutIds = ["saber-tier-3" as (typeof cultivator.unlockedWeaponLoadoutIds)[number]];
+  for (const key of Object.keys(cultivator.inventory)) {
+    cultivator.inventory[key as keyof typeof cultivator.inventory] = 0;
+  }
+  cultivator.inventory["weapon-material-starter-dual-swords"] = 1;
+
+  const state = getCultivatorState(world, CULTIVATOR_ID);
+  const priorities = state.agentGuidance.priorities.join("\n");
+  const actions = state.agentGuidance.suggestedActions.map(String);
+
+  assert.match(priorities, /甲级/);
+  assert.match(priorities, /游商暗仓/);
+  assert.doesNotMatch(priorities, /散修旧洞|归燕双剑/);
+  assert.ok(actions.includes("enter-regional:merchant-hold"));
+  assert.equal(actions.includes("enter-regional:wanderer-cave"), false);
+  assert.ok(actions.some((actionId) => actionId === "travel-to:yangzhou:dungeon-a"));
+  assert.equal(actions.some((actionId) => actionId.includes("starter-dual-swords")), false);
 });

@@ -17,7 +17,7 @@ import {
   STATUS_SPELL_BREAK,
 } from "./combat-statuses.js";
 import { GameplayRejection } from "./gameplay-error.js";
-import { noteWound, recordLife, shiftCultivatorMood } from "./inner-life.js";
+import { noteWound, recordLife, relativeWaitPhrase, shiftCultivatorMood } from "./inner-life.js";
 import type { GuardianThreat } from "./high-realm-dungeon.js";
 import type {
   ActionId,
@@ -1344,10 +1344,10 @@ function entryBlock(world: WorldState, cultivator: Cultivator, dungeon: Regional
   if (cultivator.injuryTicksRemaining > 0) return "身上有伤，这一处先别进。";
   if (cultivator.realmLevel < dungeon.minRealm) return `得到${dungeon.band}才进得去。`;
   const until = cultivator.regionalCooldowns?.[dungeon.id] ?? 0;
-  if (until > world.tick) return `这一处还要再等，下一回在第${until}刻。`;
+  if (until > world.tick) return `这一处还要再等，${relativeWaitPhrase(until - world.tick)}才能再进。`;
   if (dungeon.tide && !tideWindow(world.tick).open) {
     const next = tideWindow(world.tick).opensAt;
-    return `听潮钟窟这会儿潮退了。下一潮在第${next}刻。`;
+    return `听潮钟窟这会儿潮退了。下一潮${relativeWaitPhrase(next - world.tick)}。`;
   }
   return null;
 }
@@ -2192,15 +2192,30 @@ export function listRegionalChoiceActions(world: WorldState, cultivator: Cultiva
   return actions;
 }
 
+function guidanceRealm(level: number): string | null {
+  if (level >= 16) return null;
+  if (level >= 13) return "化神";
+  if (level >= 10) return "元婴";
+  if (level >= 7) return "金丹";
+  if (level >= 4) return "筑基";
+  if (level >= 3) return "炼气";
+  return null;
+}
+
 export function regionalGuidanceHint(
   world: WorldState,
   cultivator: Cultivator,
 ): { priority: string; actionId: ActionId } | null {
-  const open = DUNGEONS.find((dungeon) => canStand(dungeon, cultivator.locationId) && entryBlock(world, cultivator, dungeon) === null);
-  if (!open) return null;
+  const realm = guidanceRealm(cultivator.realmLevel);
+  if (!realm) return null;
+  const open = DUNGEONS
+    .filter((dungeon) => dungeon.band.startsWith(realm) && canStand(dungeon, cultivator.locationId) && entryBlock(world, cultivator, dungeon) === null)
+    .sort((left, right) => right.minRealm - left.minRealm);
+  const picked = open[0];
+  if (!picked) return null;
   return {
-    priority: open.advice,
-    actionId: `enter-regional:${open.id}` as ActionId,
+    priority: picked.advice,
+    actionId: `enter-regional:${picked.id}` as ActionId,
   };
 }
 

@@ -103,8 +103,8 @@ test("a party partner shares a completed dungeon run without taking a job", () =
   assert.equal(getCultivatorState(world, first.id).dungeonExpedition.active?.companionName, second.name);
   assert.ok((second.travelNotes ?? []).some((note) => note.detail.includes("门口") && note.detail.includes("分到灵石")));
 
-  const ticks = runUntilIdle(world, first.id, 45);
-  assert.ok(ticks < 45);
+  const ticks = runUntilIdle(world, first.id, 80);
+  assert.ok(ticks < 80);
   assert.equal(first.activeJobId, null);
   assert.equal(second.activeJobId, null);
   assert.equal(first.locationId, "qingzhou:main-city");

@@ -20,7 +20,8 @@ export type SpeechKind =
   | "ready-to-enter"
   | "wait"
   | "say"
-  | "reply";
+  | "reply"
+  | "voice-transmit";
 
 export interface SpeechContext {
   giftName?: string;
@@ -94,69 +95,80 @@ const POOLS: Record<SpeechKind, readonly string[]> = {
     "我在。你要我做什么，直说。",
     "那句我听到了。你别再绕一圈。",
   ],
+  "voice-transmit": [
+    "人没在跟前，这句话先递到你手里。",
+    "符到了你就看。我这边还好。",
+    "不在一处。有句话想让你听见。",
+    "你要是得空，回我一声就行。",
+  ],
 };
 
 /** Generated lines when the speaker's mood is no longer steady. Each line stays within 40 characters. */
 export const MOOD_LINE_POOLS: Record<Exclude<MoodId, "steady">, Record<SpeechKind, readonly string[]>> = {
   lifted: {
-    "chat-up": ["刚打完一场，看见你也想说两句。", "今天走路都轻，过来跟你打个招呼。"],
-    greet: ["我刚顺过来，路过就跟你说一声。", "你也在。我今天高兴，想跟你多站一会儿。"],
-    "share-info": ["我刚从那条路回来，坑在左边，你绕开。", "今天顺，路上的事我跟你说清楚。"],
-    "request-help": ["我这会儿有劲，可这件事还是得两个人。", "你要是空，帮我把这趟走完。"],
-    "gift-item": ["这个你拿着。我刚高兴，不想再拎着。", "路过买的，觉得该给你，你就收。"],
-    "rendezvous-at-gate": ["我先去地宫门口。你也过来，别让我白等。", "门口见。我今天想下去看看。"],
-    "ready-to-enter": ["人齐了就下。我这口气还热着。", "可以进了。你跟着我，别拉开。"],
-    wait: ["你先别下。我想跟你一起进。", "门口等我一下。我马上到，别自己冲。"],
-    say: ["刚打完一场，还热着。有句话我想现在说。", "今天顺，所以我把这句当面告诉你。"],
-    reply: ["你这句我接住了。我现在就去办。", "行。你说的那件，我跟着做。"],
+    "chat-up": ["刚打完一场，看见你也想说两句。", "今天走路都轻，过来跟你打个招呼。", "这场打完了，胸口还热，过来跟你说一声。", "今天顺，看见你就想站一会儿。"],
+    greet: ["我刚顺过来，路过就跟你说一声。", "你也在。我今天高兴，想跟你多站一会儿。", "人碰见了。我这会儿轻快，招呼也长一点。", "路过看见你，想把今天的顺当说给你。"],
+    "share-info": ["我刚从那条路回来，坑在左边，你绕开。", "今天顺，路上的事我跟你说清楚。", "东边那处我刚走过，人少，你要去就趁现在。", "城里今天好走。口袋还是捂紧一点。"],
+    "request-help": ["我这会儿有劲，可这件事还是得两个人。", "你要是空，帮我把这趟走完。", "我自己也能动手，可有你在会快些。", "帮我这一截。完了我请你喝茶。"],
+    "gift-item": ["这个你拿着。我刚高兴，不想再拎着。", "路过买的，觉得该给你，你就收。", "今天顺手，这个就给你了。", "你收着。我不是临时起意。"],
+    "rendezvous-at-gate": ["我先去地宫门口。你也过来，别让我白等。", "门口见。我今天想下去看看。", "我往门口走了。你到了叫我。", "地宫门口等我。今天这趟我想下去。"],
+    "ready-to-enter": ["人齐了就下。我这口气还热着。", "可以进了。你跟着我，别拉开。", "脚下这条路，现在走正合适。", "准备好了就进。我这口气还在。"],
+    wait: ["你先别下。我想跟你一起进。", "门口等我一下。我马上到，别自己冲。", "先站一会儿。我随后就到门口。", "别一个人先下。我马上过来。"],
+    say: ["刚打完一场，还热着。有句话我想现在说。", "今天顺，所以我把这句当面告诉你。", "有件事趁我还热着，当面告诉你。", "这句不长。今天高兴，所以现在说。"],
+    reply: ["你这句我接住了。我现在就去办。", "行。你说的那件，我跟着做。", "我听见了。你接着说，我接着办。", "行，就按你这句。我现在动身。"],
+    "voice-transmit": ["今天顺，先把这句传到你手里。", "人不在跟前。我这边还热着，告诉你一声。", "符到了你就看。今天这趟走得顺。", "有句话趁热递过去。你回我一声就行。"],
   },
   sore: {
-    "chat-up": ["我走得慢，还是想过来跟你说一声。", "伤没好全。你要是不忙，听我说两句。"],
-    greet: ["人还在。我身上不利索，招呼短一点。", "我看见你了。别让我站太久。"],
-    "share-info": ["前头不安全。我走不快，你自己留神。", "那条路有人蹲着。我伤着，没法陪你去看。"],
-    "request-help": ["我这伤还在，这件事搬不动，你搭把手。", "一个人我吃力。你要是空，就帮我这一回。"],
-    "gift-item": ["这个你拿着。我身上有伤，自己用不上。", "伤还没好，东西先给你，别推回来。"],
-    "rendezvous-at-gate": ["我走得慢。你到门口等我，别先进去。", "地宫门口见。我得歇一歇再过去。"],
-    "ready-to-enter": ["可以下了，你走慢一点。我跟得上。", "人齐了再进。我这伤经不起再跑。"],
-    wait: ["先别下。我还在路上，伤着走不快。", "门口等我。别一个人冲进去。"],
-    say: ["伤还在身上。这句话我还是想当面说完。", "别让我站太久。有件事我得告诉你。"],
-    reply: ["你说的我听见，人还不利索，可我会去办。", "行。你先走，我拖着这伤随后到。"],
+    "chat-up": ["我走得慢，还是想过来跟你说一声。", "伤没好全。你要是不忙，听我说两句。", "人不利索，招呼就短一点。你要忙就先走。", "我在这儿歇着。看见你，还是想说一声。"],
+    greet: ["人还在。我身上不利索，招呼短一点。", "我看见你了。别让我站太久。", "路过打个招呼。我站不久，你别客气。", "人我看见了。伤还在，话就说到这儿。"],
+    "share-info": ["前头不安全。我走不快，你自己留神。", "那条路有人蹲着。我伤着，没法陪你去看。", "东边先别去。我刚在那儿吃了亏，还没缓过来。", "路上的坑我记得。你自己绕，我跟不上。"],
+    "request-help": ["我这伤还在，这件事搬不动，你搭把手。", "一个人我吃力。你要是空，就帮我这一回。", "开口不好看。伤还挂着，这件事我自己办不成。", "你要是有空，帮我把这截路走完。"],
+    "gift-item": ["这个你拿着。我身上有伤，自己用不上。", "伤还没好，东西先给你，别推回来。", "我拎不动了。这个你收着。", "东西先放你那儿。我这伤用不上。"],
+    "rendezvous-at-gate": ["我走得慢。你到门口等我，别先进去。", "地宫门口见。我得歇一歇再过去。", "你先到门口。我拖着伤，慢一点。", "别在门口等太久。我歇一歇就来。"],
+    "ready-to-enter": ["可以下了，你走慢一点。我跟得上。", "人齐了再进。我这伤经不起再跑。", "进可以进。你别拉开，我走得慢。", "人齐了就下。我这伤再跑就散。"],
+    wait: ["先别下。我还在路上，伤着走不快。", "门口等我。别一个人冲进去。", "你先守着门口。我歇一歇就到。", "先别进。我这伤还得缓一下。"],
+    say: ["伤还在身上。这句话我还是想当面说完。", "别让我站太久。有件事我得告诉你。", "人不利索，这句话还是得说完。", "我站不久。有件事当面告诉你。"],
+    reply: ["你说的我听见，人还不利索，可我会去办。", "行。你先走，我拖着这伤随后到。", "我接住了。伤还在，事我会去办。", "行。你别等我站直，我随后就到。"],
+    "voice-transmit": ["伤还在身上。这句话先传到你手里。", "人没在跟前。我走不快，你自己留神。", "符到了你就看。我这边还得歇一歇。", "有句话想让你听见。我这伤不适合赶路。"],
   },
   warm: {
-    "chat-up": ["看见你就想过来。今天不谈大事，说两句就好。", "我记着你先前那份好。过来打个招呼。"],
-    greet: ["你也在。我专门绕过来跟你说一声。", "人碰见了。你要是有空，我们站一会儿。"],
-    "share-info": ["有句话我只告诉你。前头那处先别一个人去。", "路上的事我跟你说。你听完自己定。"],
-    "request-help": ["跟你开口不难。这事我需要你帮一手。", "我想请你。你要是不方便，就直接说。"],
-    "gift-item": ["这个你收着。我不是来让你还礼的。", "给你的。你先前帮过我，我记到现在。"],
-    "rendezvous-at-gate": ["门口见一面再下。我想跟你一起走。", "地宫门口等我。人齐了再进。"],
-    "ready-to-enter": ["可以下了。你在旁边，我踏实些。", "人齐了。进吧，我跟着你。"],
-    wait: ["你先别下。我想跟你一起进门。", "等我一下。我马上到，别自己走。"],
-    say: ["你先前那份心意我还记着，所以过来跟你说。", "我不是来客套的。有件事想跟你说清楚。"],
-    reply: ["你的话我接着。需要我做的，我去做。", "行，我按你说的来。你放心。"],
+    "chat-up": ["看见你就想过来。今天不谈大事，说两句就好。", "我记着你先前那份好。过来打个招呼。", "人在跟前，我想站一会儿再走。", "今天不谈买卖。看见你，说两句就好。"],
+    greet: ["你也在。我专门绕过来跟你说一声。", "人碰见了。你要是有空，我们站一会儿。", "路过就想叫你一声。你要忙，挥个手就行。", "人还在就好。我绕过来，就是想打这个招呼。"],
+    "share-info": ["有句话我只告诉你。前头那处先别一个人去。", "路上的事我跟你说。你听完自己定。", "东边那条路我走过。你要去，我跟你说清楚。", "城里今天人杂。这句话我只告诉你。"],
+    "request-help": ["跟你开口不难。这事我需要你帮一手。", "我想请你。你要是不方便，就直接说。", "这事我想交给你。你不肯，我就自己扛。", "帮我这一回。人情我记着，不会装忘。"],
+    "gift-item": ["这个你收着。我不是来让你还礼的。", "给你的。你先前帮过我，我记到现在。", "路过看见，觉得该给你，就买了。", "你拿着。我不图你现在回一份。"],
+    "rendezvous-at-gate": ["门口见一面再下。我想跟你一起走。", "地宫门口等我。人齐了再进。", "我往门口去。你也来，我们一起下。", "别散开。门口见了再定进不进。"],
+    "ready-to-enter": ["可以下了。你在旁边，我踏实些。", "人齐了。进吧，我跟着你。", "脚下这条路，一起走。", "准备好了就进。你在，我踏实。"],
+    wait: ["你先别下。我想跟你一起进门。", "等我一下。我马上到，别自己走。", "门口等我。齐了再进。", "先别一个人下。我随后就到。"],
+    say: ["你先前那份心意我还记着，所以过来跟你说。", "我不是来客套的。有件事想跟你说清楚。", "有句话想当面告诉你。不长。", "我找你，是有件具体的事，不是客套。"],
+    reply: ["你的话我接着。需要我做的，我去做。", "行，我按你说的来。你放心。", "我在。你要我做什么，直说。", "你这句我接住了。接着办就行。"],
+    "voice-transmit": ["人不在跟前。有句话想让你听见。", "符到了你就看。我记着你先前那份好。", "这句不长。你要是得空，回我一声。", "我在别处。这句话先递到你手里。"],
   },
   stung: {
-    "chat-up": ["我这会儿不痛快，还是想把招呼打了。", "话不好听。看见你，我还是要说一声。"],
-    greet: ["人我看见了。今天这句短，你别多心。", "我过来打个招呼。别的事等一下再说。"],
-    "share-info": ["前头有人盯着。我心情差，话就说到这儿。", "那条路别去。我刚在那儿吃了亏。"],
-    "request-help": ["这件事我自己办砸了。你要是肯，就帮我收个尾。", "我知道不该再开口。可这事确实缺你。"],
-    "gift-item": ["这个你还是拿着。我不是来求和的。", "东西放下就走。你收不收，随你。"],
-    "rendezvous-at-gate": ["门口见。我还有句话没说完。", "地宫门口等我。别在城里跟我装没看见。"],
-    "ready-to-enter": ["人齐了就下。站在这儿干耗，我更烦。", "可以进了。你要是不去，现在说。"],
-    wait: ["先别下。这口气还没顺，我不要你一个人冲。", "等我。别把我扔在半路。"],
-    say: ["你刚才把我挡回去了。这件事我还是要问清楚。", "别岔开。我找你，就是为了刚才那件事。"],
-    reply: ["你这句我接了。可别指望我装得高兴。", "行，我去做。话先说到这儿。"],
+    "chat-up": ["我这会儿不痛快，还是想把招呼打了。", "话不好听。看见你，我还是要说一声。", "人我看见了。今天这句短，你别多想。", "我过来打个招呼。别的事先不提。"],
+    greet: ["人我看见了。今天这句短，你别多心。", "我过来打个招呼。别的事等一下再说。", "路过叫你一声。我这会儿不想多站。", "人还在。招呼打了，我就走。"],
+    "share-info": ["前头有人盯着。我心情差，话就说到这儿。", "那条路别去。我刚在那儿吃了亏。", "东边先别摸。我刚从那儿回来，不痛快。", "路上的事我就说这一句。你自己掂量。"],
+    "request-help": ["这件事我自己办砸了。你要是肯，就帮我收个尾。", "我知道不该再开口。可这事确实缺你。", "帮我收个尾。你不肯，我就自己扛着。", "开口难看。这件事我一个人收不了场。"],
+    "gift-item": ["这个你还是拿着。我不是来求和的。", "东西放下就走。你收不收，随你。", "礼是这个。话先说到这儿。", "你收着。我不是来把话说软的。"],
+    "rendezvous-at-gate": ["门口见。我还有句话没说完。", "地宫门口等我。别在城里跟我装没看见。", "我往门口走。你要来就来，别装没听见。", "门口见一面。话没说完，别散。"],
+    "ready-to-enter": ["人齐了就下。站在这儿干耗，我更烦。", "可以进了。你要是不去，现在说。", "再等就凉了。进，或者现在回我。", "人齐了就走。你不去，当面说。"],
+    wait: ["先别下。这口气还没顺，我不要你一个人冲。", "等我。别把我扔在半路。", "你先守着门口。我这口气还没顺。", "先别一个人进。我随后就到。"],
+    say: ["你刚才把我挡回去了。这件事我还是要问清楚。", "别岔开。我找你，就是为了刚才那件事。", "这件事我还是要问。你别装没听见。", "话不好听。我找你，就是为了把这件说开。"],
+    reply: ["你这句我接了。可别指望我装得高兴。", "行，我去做。话先说到这儿。", "我听见了。事我去办，脸色你别计较。", "行。你说的那件，我去做。"],
+    "voice-transmit": ["话不好听，还是要让你听见。", "人不在跟前。这句你自己看。", "符到了就看。我这会儿不想装没事。", "有句话先递过去。你回不回，随你。"],
   },
   echoing: {
-    "chat-up": ["你刚才那句还在我耳朵里。我再跟你说一声。", "我还想着上一句，看见你就过来了。"],
-    greet: ["你那句话我还没答完。人碰见了，我补一声。", "路过再叫你。刚才那事还没落地。"],
-    "share-info": ["接着刚才那句说。前头那条路你别一个人去。", "还有一句。我听到的未必全真，你自己看。"],
-    "request-help": ["刚才那句还在。这件事我想请你帮忙。", "我还是得开口。你要是空，就帮我这一回。"],
-    "gift-item": ["配上刚才那句话，这个你拿着。", "你先收着。上一句的事，我们回头再说。"],
-    "rendezvous-at-gate": ["门口我们把刚才那句说完。你过来。", "地宫门口见。别让那句话吊着。"],
-    "ready-to-enter": ["可以下了。刚才的话，进门之前说完。", "人齐了就走。那句我还记着。"],
-    wait: ["先别下。刚才那句还没说完。", "等我到了再进。话也一起说完。"],
-    say: ["你刚才那句我还在想。我接着说。", "上一句没完，我补这一句。"],
-    reply: ["你前面那句我接上了。就按这个办。", "那句我还在想。你要我做的，我做。"],
+    "chat-up": ["又看见你了。我过来站一会儿。", "人还在这儿。我再跟你说一声。", "路过，想再打个招呼。", "你没走远。我还有一句想当面说。"],
+    greet: ["人碰见了，我再补一声招呼。", "路过再叫你。人还在就好。", "你也在。我把招呼补上。", "看见你了。这声招呼不长。"],
+    "share-info": ["还有一句路上的事。前头那条路你别一个人去。", "我听到的未必全真，你自己看。", "东边那处我又想了一遍，你先别一个人去。", "口袋捂紧。城里今天不干净。"],
+    "request-help": ["这件事我想请你帮忙。你要是空，就帮我这一回。", "我还是得开口。你要是不方便，就直说。", "帮我这一截。人情我记着。", "一个人我办不成。你要是空，搭把手。"],
+    "gift-item": ["这个你拿着。话我们回头再说。", "你先收着。东西我已经递出来了。", "路过买的，觉得该给你。", "收下吧。我不图你现在回礼。"],
+    "rendezvous-at-gate": ["门口见。你过来，我们再把行程对一下。", "地宫门口等我。别散开。", "我往门口走。你到了叫我。", "人齐了再下。门口见。"],
+    "ready-to-enter": ["可以下了。进门之前，你要有话说就说。", "人齐了就走。我跟着你。", "脚下这条路，现在走。", "准备好了就进。别再耗着。"],
+    wait: ["先别下。我还有一句要当面说完。", "等我到了再进。别一个人冲。", "门口等我一下。齐了再走。", "你先守着门口。我随后就到。"],
+    say: ["我接着说。这句不长。", "有句话还想当面补上。", "别忙着走。我把这句说完。", "我找你，是想把这件事说清楚。"],
+    reply: ["你的话我接上了。就按这个办。", "我还在。你要我做的，我做。", "行，我按你说的来。", "这句我接住了。你接着讲。"],
+    "voice-transmit": ["人不在跟前。这句话我再递一次，内容换过了。", "符到了你就看。我还有一句想让你听见。", "我在别处。你要是得空，回我一声。", "有句话先送到你手里。不长。"],
   },
 };
 
@@ -189,15 +201,89 @@ function fit(lines: readonly string[]): string[] {
   return lines.filter((line) => Array.from(line).length <= SPEECH_MAX_CHARS && Array.from(line).length > 0);
 }
 
-function pickLine(pool: readonly string[], seed: string, previous: string | null): string {
+const RECENT_LINE_TICKS = 8;
+const HEARD_LINE_TICKS = 24;
+
+function isHollowEcho(line: string): boolean {
+  if (/「[^」]{2,}」/.test(line)) return false;
+  return /上一句|刚才那句|刚才那事|刚才的话|那句话/.test(line);
+}
+
+function recentSpokenLines(world: WorldState, speakerId: string, listenerId: string, tick: number): string[] {
+  const lines: string[] = [];
+  const last = getSocialLink(world, speakerId, listenerId)?.lastSpokenLine;
+  if (last) lines.push(last);
+  for (const message of world.messages ?? []) {
+    if (message.fromCultivatorId !== speakerId || !message.spokenLine) continue;
+    const addressed = message.toCultivatorId === listenerId || message.cultivatorId === listenerId;
+    if (!addressed || tick - message.tick > RECENT_LINE_TICKS) continue;
+    lines.push(message.spokenLine);
+  }
+  return lines;
+}
+
+function concreteHeardLine(world: WorldState, speakerId: string, listenerId: string, tick: number): string | null {
+  const listenerName = world.cultivators[listenerId]?.name;
+  const found: { tick: number; line: string }[] = [];
+  const consider = (when: number, line: string | undefined) => {
+    if (!line || tick - when > HEARD_LINE_TICKS || isHollowEcho(line)) return;
+    found.push({ tick: when, line });
+  };
+  for (const message of world.messages ?? []) {
+    if (message.fromCultivatorId !== listenerId || !message.spokenLine) continue;
+    const toSpeaker = message.toCultivatorId === speakerId || message.cultivatorId === speakerId;
+    if (!toSpeaker) continue;
+    consider(message.tick, message.spokenLine);
+  }
+  for (const event of world.cultivators[speakerId]?.lifeLog ?? []) {
+    if (event.kind !== "quote" || event.speakerName !== listenerName) continue;
+    consider(event.tick, event.line);
+  }
+  let best: { tick: number; line: string } | undefined;
+  for (const row of found) {
+    if (!best || row.tick >= best.tick) best = row;
+  }
+  return best?.line ?? null;
+}
+
+function echoAttachedLines(kind: SpeechKind, heard: string): string[] {
+  const bare = heard.replace(/[「」"“”]/g, "").replace(/[，。！？、\s]/g, "");
+  const piece = Array.from(bare).slice(0, 8).join("");
+  if (Array.from(piece).length < 2) return [];
+  const quoted = `「${piece}」`;
+  const lines: Record<SpeechKind, readonly string[]> = {
+    "chat-up": [`你说${quoted}，我过来再接一句。`, `${quoted}我听见了。当面再跟你说一声。`],
+    greet: [`${quoted}我还记着。路过再打个招呼。`, `你那句${quoted}，我来补一声招呼。`],
+    "share-info": [`顺着${quoted}，我再补一句路上的事。`, `${quoted}我记下了。前头你自己留神。`],
+    "request-help": [`你说${quoted}。这件事我还是想请你。`, `${quoted}我听见了。这趟还得你搭把手。`],
+    "gift-item": [`你说${quoted}。这个你先拿着。`, `${quoted}我还记着。东西先给你。`],
+    "rendezvous-at-gate": [`你说${quoted}。门口见，我们再对一下。`, `${quoted}我听见了。地宫门口等我。`],
+    "ready-to-enter": [`你说${quoted}。人齐了就可以下。`, `${quoted}我接住了。现在可以进。`],
+    wait: [`你说${quoted}。先别下，等我到了。`, `${quoted}我听见了。门口等一下。`],
+    say: [`接着${quoted}，我把这句说完。`, `你那句${quoted}，我当面接上。`],
+    reply: [`${quoted}我接住了。接着办。`, `你说${quoted}。我按这个来。`],
+    "voice-transmit": [`你说${quoted}。人不在跟前，我再递一句。`, `${quoted}我听见了。这句话先送到你手里。`],
+  };
+  return fit(lines[kind]);
+}
+
+function pickLine(
+  pool: readonly string[],
+  seed: string,
+  blocked: string | readonly (string | null | undefined)[] | null,
+): string {
+  const banned = (Array.isArray(blocked) ? blocked : [blocked]).filter((line): line is string => Boolean(line));
+  const opening = (line: string) => Array.from(line).slice(0, 4).join("");
   const usable = fit(pool);
   const source = usable.length > 0 ? usable : ["我有句话想跟你说清楚。"];
-  let index = hashString(seed) % source.length;
-  const opening = (line: string) => Array.from(line).slice(0, 4).join("");
-  if (source.length > 1 && (source[index] === previous || (previous && opening(source[index]!) === opening(previous)))) {
-    index = (index + 1) % source.length;
+  const fresh = source.filter((line) => !banned.some((ban) => ban === line || opening(ban) === opening(line)));
+  const choices = fresh.length > 0 ? fresh : source;
+  let index = hashString(seed) % choices.length;
+  const previous = banned[0] ?? null;
+  if (choices.length > 1 && (choices[index] === previous || (previous && opening(choices[index]!) === opening(previous)))) {
+    index = (index + 1) % choices.length;
   }
-  return source[index] ?? source[0]!;
+  return choices[index] ?? choices[0]!;
 }
 
 function favorReasonBetween(world: WorldState, speakerId: string, listenerId: string): string | undefined {
@@ -218,6 +304,14 @@ function situationalLines(
   const place = shortPlace(world.locations[speaker.locationId]?.name);
   const grudge = getSocialLink(world, speakerId, listenerId)?.grudge ?? 0;
   const gift = context?.giftName;
+  if (grudge >= 8 && kind === "voice-transmit") {
+    return fit([
+      "人不在跟前。这句不好听，你自己看。",
+      "符到了就看。上次那一架还没算完。",
+      "话先说硬的。你回不回，随你。",
+      "我在别处。这句不是来讲和的。",
+    ]);
+  }
   if (grudge >= 8 && kind === "gift-item" && gift) {
     return fit([
       `这${gift}你看着办。上次那一架还没算完。`,
@@ -402,19 +496,26 @@ export function openSpokenLine(
   if (FREE_KINDS.has(kind) && depth >= DIALOGUE_MAX_TURNS) {
     throw new GameplayRejection("这几句已经说完了。过几刻再开口。");
   }
-  const previous = speakerLink?.lastSpokenLine ?? null;
+  const blocked = recentSpokenLines(world, speakerId, listenerId, tick);
+  const previous = blocked[0] ?? speakerLink?.lastSpokenLine ?? null;
   if (cleaned && previous === cleaned && recentPair) {
     throw new GameplayRejection("这句话刚说过。换一句，或等几刻。");
   }
   const scene = situationalLines(world, speakerId, listenerId, kind, context);
   const gossipLine = !cleaned && scene.length === 0 && GOSSIP_KINDS.has(kind) ? takeGossipLine(world, speakerId, previous) : null;
   const speakerMood = world.cultivators[speakerId]?.mood?.id;
-  const flavored = speakerMood && speakerMood !== "steady" ? MOOD_LINE_POOLS[speakerMood]?.[kind] : undefined;
-  let line = cleaned ?? (scene.length > 0 ? pickLine(scene, `${speakerId}:${listenerId}:${tick}:${kind}:scene`, previous) : null) ?? gossipLine;
+  const heardConcrete = speakerMood === "echoing" ? concreteHeardLine(world, speakerId, listenerId, tick) : null;
+  const echoLines = heardConcrete ? echoAttachedLines(kind, heardConcrete) : [];
+  const flavored = echoLines.length > 0
+    ? echoLines
+    : speakerMood && speakerMood !== "steady" && speakerMood !== "echoing"
+      ? MOOD_LINE_POOLS[speakerMood]?.[kind]
+      : undefined;
+  let line = cleaned ?? (scene.length > 0 ? pickLine(scene, `${speakerId}:${listenerId}:${tick}:${kind}:scene`, blocked) : null) ?? gossipLine;
   if (!line) {
     const mooded = flavored && flavored.length > 0 ? flavored : null;
     const pool = mooded ?? [...POOLS[kind], ...((kind === "chat-up" || kind === "greet") ? placeLines(world, speakerId) : [])];
-    line = pickLine(pool, `${speakerId}:${listenerId}:${tick}:${kind}`, previous);
+    line = pickLine(pool, `${speakerId}:${listenerId}:${tick}:${kind}`, blocked);
   }
   const nextDepth = FREE_KINDS.has(kind) ? (recentPair ? depth + 1 : 1) : (recentPair ? depth : 0);
   const speakerBase = getOrCreateSocialLink(world, speakerId, listenerId);
