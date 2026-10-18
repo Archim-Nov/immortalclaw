@@ -10550,8 +10550,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const chatUpTargetId = parseChatUpTarget(actionId);
   if (chatUpTargetId) {
     const target = getCultivatorOrThrow(world, chatUpTargetId);
-    if (cultivator.locationId !== target.locationId) throw new Error("搭讪 requires being at the same location.");
-    if (cultivator.id === target.id) throw new Error("Cannot chat up yourself.");
+    if (cultivator.locationId !== target.locationId) throw new GameplayRejection("要跟对方在同一地点才能搭讪。");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能搭讪自己。");
     const existingLink = getSocialLink(world, cultivator.id, target.id);
     if (existingLink?.lastChatUpTick !== undefined && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS) {
       const wait = CHAT_UP_COOLDOWN_TICKS - (world.tick - existingLink.lastChatUpTick);
@@ -10734,8 +10734,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const partyInviteTargetId = parsePartyInviteTarget(actionId);
   if (partyInviteTargetId) {
     const target = getCultivatorOrThrow(world, partyInviteTargetId);
-    if (cultivator.id === target.id) throw new Error("Cannot invite yourself to a party.");
-    if (cultivator.locationId !== target.locationId) throw new Error("组队邀请 requires being at the same location.");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能邀请自己组队。");
+    if (cultivator.locationId !== target.locationId) throw new GameplayRejection("要跟对方在同一地点才能组队。");
     const ownParty = getPartyOf(world, cultivator.id);
     if (ownParty && ownParty.memberIds.length >= PARTY_MAX_MEMBERS) {
       throw new GameplayRejection("队伍已满，五人就是上限。这一趟带不了第六个人。");
@@ -14154,11 +14154,25 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   return immediateAction(world, cultivator, actionId, speechLine, bodyItemId);
 }
 
+function isPlayerFacingChinese(message: string): boolean {
+  return /[\u4e00-\u9fff]/u.test(message) && !/[A-Za-z]{3,}/u.test(message);
+}
+
+function playerFacingJobFailure(job: ActionJob, error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (message && isPlayerFacingChinese(message)) {
+    return message;
+  }
+  if (job.actionId === "survey-wilderness" || job.actionId === "dual-survey-wilderness") {
+    return "再探时岔路散了，这一段见闻没留下";
+  }
+  return "这一趟没走完";
+}
+
 function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown): string {
-  const message = error instanceof Error ? error.message : "Action failed.";
   const cultivator = world.cultivators[job.cultivatorId];
   if (!cultivator) {
-    return `Action ended early: ${message}`;
+    return "行动提前结束。人已经不在这世上。";
   }
   cultivator.activeJobId = null;
   const progress = world.dungeonExpeditions[cultivator.id];
@@ -14180,7 +14194,7 @@ function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown)
       cultivator.locationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
     }
   }
-  const summary = `${cultivator.name} 的行动提前结束：${message}。人已经空出来，世界仍在往前走。`;
+  const summary = `${cultivator.name} 的行动提前结束：${playerFacingJobFailure(job, error)}。人已经空出来，世界仍在往前走。`;
   addDaoLog(world, cultivator.id, "行动中断", summary, ["action-failed", job.actionId]);
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
