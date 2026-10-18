@@ -126,6 +126,43 @@ export const WILDERNESS_EVENT_POOL: Record<string, WildernessEventDefinition> = 
       "spirit-ore": 1,
     },
   },
+  // starter-wilderness-tier-1 survey pool. Calm tier-1 sights: light rewards, no fight.
+  "wilderness-calm-foraging": {
+    eventId: "wilderness-calm-foraging",
+    title: "静处采药",
+    content: "风不大，草叶还潮。这一片药长得齐，蹲下来就能采到几株。",
+    summary: "在静处采了一回药",
+    severity: "medium",
+    tags: ["wilderness", "resource", "herb"],
+    spiritStoneReward: 40,
+    rewards: {
+      "still-cloud-wood": 1,
+    },
+  },
+  "wilderness-beast-trace": {
+    eventId: "wilderness-beast-trace",
+    title: "兽迹",
+    content: "地上有一串浅爪印，兽已经走远了。顺着印子走了几步，石缝里还夹着一点矿屑。",
+    summary: "顺着兽迹捡到一点矿",
+    severity: "medium",
+    tags: ["wilderness", "story", "beast"],
+    spiritStoneReward: 30,
+    rewards: {
+      "spirit-ore": 1,
+    },
+  },
+  "wilderness-spirit-vein-fragment": {
+    eventId: "wilderness-spirit-vein-fragment",
+    title: "灵脉碎屑",
+    content: "石壁上渗出一点细灵气，凝成碎屑，还没成脉。捡起来不多，但能用。",
+    summary: "捡到一点灵脉碎屑",
+    severity: "medium",
+    tags: ["wilderness", "resource", "spirit"],
+    spiritStoneReward: 50,
+    rewards: {
+      "spirit-ore": 1,
+    },
+  },
   // ── New: Combat-adjacent encounters ──
   "wilderness-dust-crawler-raid": {
     eventId: "wilderness-dust-crawler-raid",

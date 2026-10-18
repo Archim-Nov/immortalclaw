@@ -14154,11 +14154,25 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   return immediateAction(world, cultivator, actionId, speechLine, bodyItemId);
 }
 
+function isPlayerFacingChinese(message: string): boolean {
+  return /[\u4e00-\u9fff]/u.test(message) && !/[A-Za-z]{3,}/u.test(message);
+}
+
+function playerFacingJobFailure(job: ActionJob, error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (message && isPlayerFacingChinese(message)) {
+    return message;
+  }
+  if (job.actionId === "survey-wilderness" || job.actionId === "dual-survey-wilderness") {
+    return "再探时岔路散了，这一段见闻没留下";
+  }
+  return "这一趟没走完";
+}
+
 function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown): string {
-  const message = error instanceof Error ? error.message : "Action failed.";
   const cultivator = world.cultivators[job.cultivatorId];
   if (!cultivator) {
-    return `Action ended early: ${message}`;
+    return "行动提前结束。人已经不在这世上。";
   }
   cultivator.activeJobId = null;
   const progress = world.dungeonExpeditions[cultivator.id];
@@ -14180,7 +14194,7 @@ function settleFailedTimedJob(world: WorldState, job: ActionJob, error: unknown)
       cultivator.locationId = safeExpeditionReturnLocationId(world, cultivator.locationId);
     }
   }
-  const summary = `${cultivator.name} 的行动提前结束：${message}。人已经空出来，世界仍在往前走。`;
+  const summary = `${cultivator.name} 的行动提前结束：${playerFacingJobFailure(job, error)}。人已经空出来，世界仍在往前走。`;
   addDaoLog(world, cultivator.id, "行动中断", summary, ["action-failed", job.actionId]);
   addWorldEvent(world, {
     cultivatorId: cultivator.id,
