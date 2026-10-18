@@ -14,7 +14,7 @@ A cultivator playing with others should come back with favors, rivals, and a not
 1. One cultivator sends `send-message:<other>:request-help`.
 2. The other uses `answer-help:<asker>`.
 3. Read both `state.socialLinks`. The helper's link should show a favor owed, and both travelogues should mention the help.
-4. From a safe place, `post-board-note`. The other cultivator at that place should see the line on `state.localBoard`.
+4. From a safe place, `post-board-note` twice. The other cultivator at that place should see the line on `state.localBoard`, and the second pin should not wrap `把一句话钉在` around the first. Post again with body `line` and confirm that sentence is the board text.
 5. Start `enter-dungeon:rank-4:aggressive` with healthy qi. Advance until the job ends.
 
 ## Expected

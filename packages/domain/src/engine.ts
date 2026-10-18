@@ -1798,6 +1798,19 @@ const parseBoardNoteKind = (actionId: ActionId | string): "journey" | "favor" | 
   const kind = actionId.slice("post-board-note:".length);
   return kind === "favor" || kind === "rival" || kind === "sect" ? kind : null;
 };
+const BOARD_NOTE_TITLE = "在告示上留了话";
+const BOARD_NOTE_WRAP = /把一句话钉在.+告示上：/;
+function isBoardPostTravelNote(note: { title: string; detail: string }): boolean {
+  return note.title === BOARD_NOTE_TITLE || BOARD_NOTE_WRAP.test(note.detail);
+}
+function latestJourneyBoardText(cultivator: Cultivator): string {
+  for (const note of cultivator.travelNotes ?? []) {
+    if (isBoardPostTravelNote(note)) continue;
+    const detail = note.detail.trim();
+    if (detail.length > 0) return detail;
+  }
+  return `${cultivator.name}路过此地，留了一句话。`;
+}
 const RIVAL_SCENE_COOLDOWN_TICKS = 6;
 const FAVOR_CALL_STONES = 12;
 const parseDungeonRank = (actionId: ActionId, prefix: "search-fortune:rank-" | "challenge-guardian:rank-"): DungeonRank | null => {
@@ -8443,6 +8456,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         posterName: facingPersonName(world.cultivators[c.posterId]?.name ?? "某人"),
         type: c.type,
         targetItemId: c.targetItemId,
+        itemName: itemDisplayName(c.targetItemId),
         targetCount: c.targetCount,
         rewardSpiritStones: c.rewardSpiritStones,
       })),
@@ -9669,7 +9683,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       actions.push({
         actionId: "post-board-note",
         label: "在告示上留话",
-        description: "把最近的见闻贴在此地，后来的人能读到。",
+        description: "把最近的见闻贴在此地，后来的人能读到。另写一句就钉那一句，最多四十字。",
         durationTicks: 0,
         kind: "immediate",
       });
@@ -11727,9 +11741,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (commission.posterId === cultivator.id) throw new Error("Cannot accept your own commission.");
     if (commission.locationId !== cultivator.locationId) throw new Error("Must be at the same location as the commission.");
     // Check if the acceptor has the required item
+    const commissionItemName = itemDisplayName(commission.targetItemId);
+    const commissionKind = commission.type === "gather" ? "采集" : "运送";
     const hasItem = (cultivator.inventory[commission.targetItemId] ?? 0) >= commission.targetCount;
     if (!hasItem) {
-      throw new GameplayRejection(`Need ${commission.targetCount} ${commission.targetItemId} to fulfill this commission. It is not listed while you are short.`);
+      throw new GameplayRejection(`身上的${commissionItemName}不够，这一单告示上暂时接不了。`);
     }
     // Fulfill immediately: deduct item, pay reward, add affinity
     cultivator.inventory[commission.targetItemId] = (cultivator.inventory[commission.targetItemId] ?? 0) - commission.targetCount;
@@ -11737,9 +11753,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     world.commissions[acceptCommId] = { ...commission, acceptedById: cultivator.id, completedAtTick: world.tick };
     addMutualAffinity(world, cultivator.id, commission.posterId, 25);
     const posterName = world.cultivators[commission.posterId]?.name ?? "某人";
-    addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commission.type === "gather" ? "采集" : "运送"}${commission.targetItemId}委托。`, { fromCultivatorId: cultivator.id });
-    addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commission.targetItemId}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
-    addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commission.targetItemId}委托。好感度+25。`, ["social", "commission"]);
+    addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commissionKind}${commissionItemName}委托。`, { fromCultivatorId: cultivator.id });
+    addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commissionItemName}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
+    addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commissionItemName}委托。好感度+25。`, ["social", "commission"]);
     grantOwedFavor(world, cultivator.id, commission.posterId, "办了我的委托", "commission");
     const poster = world.cultivators[commission.posterId];
     const commissionDetail = `${cultivator.name}办完了${posterName}贴出的${itemDisplayName(commission.targetItemId)}委托。灵石进了口袋，${posterName}还欠着一份人情。`;
@@ -11812,7 +11828,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const links = Object.values(world.socialLinks?.[cultivator.id] ?? {});
     let text: string | null = null;
     if (boardKind === "journey") {
-      text = cultivator.travelNotes?.[0]?.detail ?? `${cultivator.name}路过此地，留了一句话。`;
+      text = cleanSpokenLine(speechLine) ?? latestJourneyBoardText(cultivator);
     } else if (boardKind === "favor") {
       const owed = links.filter((link) => (link.favorBalance ?? 0) > 0);
       if (owed.length === 0) {
@@ -11856,7 +11872,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,
       kind: "mood",
-      title: "在告示上留了话",
+      title: BOARD_NOTE_TITLE,
       detail: boardDetail,
       locationId: cultivator.locationId,
       mood: "话留在了原地",

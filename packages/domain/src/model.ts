@@ -3285,7 +3285,7 @@ export interface CultivatorStateView {
   residenceContext: ResidenceContextView | null;
   productionQueue: readonly { slot: number; recipeId: string; ticksRemaining: number }[];
   pendingGifts: readonly { messageId: string; fromCultivatorId?: string; fromName: string; itemId: ItemId; itemName?: string; count: number }[];
-  localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; targetCount: number; rewardSpiritStones: number }[];
+  localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; itemName: string; targetCount: number; rewardSpiritStones: number }[];
   /** Notes other cultivators left at this location. Omitted by older view fixtures. */
   localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];
   /** Why social buttons cover only a prefix of nearbyCultivators. Omitted by older view fixtures. */
