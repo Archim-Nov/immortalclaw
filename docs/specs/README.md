@@ -62,9 +62,10 @@ Recent supporting gameplay specs:
 - `docs/specs/dungeon-yield-alignment/spec.md`
 - `docs/specs/jia-relic-chronicle/spec.md`
 - `docs/specs/wild-route-identity/spec.md`
-- `docs/specs/agent-owner-presentation-v1/spec.md` (withdrawn choice card; see v3)
-- `docs/specs/agent-owner-presentation-v2/spec.md` (read-only reports; superseded by v3)
-- `docs/specs/agent-owner-presentation-v3/spec.md`
+- `docs/specs/agent-owner-presentation-v1/spec.md` (withdrawn choice card; see v4)
+- `docs/specs/agent-owner-presentation-v2/spec.md` (read-only reports; superseded by v4)
+- `docs/specs/agent-owner-presentation-v3/spec.md` (archive ledger; superseded by v4)
+- `docs/specs/agent-owner-presentation-v4/spec.md`
 
 Current first-version planning docs:
 - `docs/plans/2026-03-14-gameplay-build-foundation.md`

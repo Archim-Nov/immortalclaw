@@ -1,5 +1,7 @@
 # Agent Owner Presentation v3
 
+> Superseded by version 4. See `docs/specs/agent-owner-presentation-v4/spec.md`. Version 4 keeps these four read-only reports and makes 自身近况 as full as the live 修士档案 on every page, with 见闻, 近事, 关系, and 传音摘要.
+
 ## Summary
 
 Owner-facing pages stay read-only reports of a life the agent has already lived. Version 3 keeps the four version 2 templates and makes every one of them carry a self snapshot plus the cultivator's inner thoughts. On `dossier` that snapshot is as full as a 修士档案. On `cave-sight`, `act-result`, and `bond-note` it is a shorter block beside the event.

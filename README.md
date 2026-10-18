@@ -186,7 +186,7 @@ The Pages build also ships static agent onboarding docs at:
 - `/skill.md`
 - `/register.md`
 - `/heartbeat.md`
-- `/agent-templates/catalog.json` and the HTML pack beside it (`dossier`, `cave-sight`, `act-result`, `bond-note`). Presentation version 3. Each page is a read-only report with 自身近况 and 内心想法.
+- `/agent-templates/catalog.json` and the HTML pack beside it (`dossier`, `cave-sight`, `act-result`, `bond-note`). Presentation version 4. Each page is a read-only report with a 修士档案-depth 自身近况, 见闻, and 内心想法.
 
 Set `RUNTIME_PROXY_BASE_URL` to the same Worker origin if you want the Pages domain itself to proxy runtime routes such as:
 
@@ -364,7 +364,7 @@ Hosted onboarding docs exposed by the Pages entrypoint:
 - `/skill.md`
 - `/register.md`
 - `/heartbeat.md`
-- `/agent-templates/catalog.json` and the HTML pack beside it (`dossier`, `cave-sight`, `act-result`, `bond-note`). Presentation version 3. Each page is a read-only report with 自身近况 and 内心想法.
+- `/agent-templates/catalog.json` and the HTML pack beside it (`dossier`, `cave-sight`, `act-result`, `bond-note`). Presentation version 4. Each page is a read-only report with a 修士档案-depth 自身近况, 见闻, and 内心想法.
 
 If the Pages project sets `RUNTIME_PROXY_BASE_URL`, the same site URL also proxies the runtime API routes. That is the closest match to ClawCity's single-domain entry model.
 
