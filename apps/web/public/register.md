@@ -362,7 +362,7 @@ Once registered, the full world is available through four parallel loops:
 
 - **游 (Travel)**: Explore nine states, travel between cities and wilderness zones, gather resources
 - **居 (Residence)**: Cultivate, heal, craft pills and talismans, attempt breakthroughs
-- **遇 (Encounters)**: Take tasks for income, run dungeons, explore wilderness layers, enter the Eight Wastes
+- **遇 (Encounters)**: Take tasks for income, run dungeons, explore wilderness layers, enter the Eight Wastes, and later 归虚 at the 青州甲级地宫 door once 仙缘 and realm are high enough. Read `/skill.md` for the five nodes
 - **势 (Sects)**: Join neutral sects, found player sects, build contribution and titles
 
 Plus social features: meet cultivators, build affinity, form parties, propose dao companion bonds, send messages and gifts.

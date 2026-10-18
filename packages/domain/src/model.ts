@@ -1266,7 +1266,7 @@ export interface CultivatorDigest {
   relationships: string[];
   quotes: readonly { speakerName: string; line: string; tick: number }[];
   summary: string;
-  /** Present while a dungeon wake or a wilderness beat is waiting for a choice. */
+  /** Present while a dungeon wake, a wilderness beat, or a 归虚 fork is waiting for a choice. */
   priorities?: string[];
   /** Present from 金丹后期 on, including at 大乘后期. Omitted earlier. */
   nextStep?: string;
@@ -1519,6 +1519,27 @@ export interface GuixuProgress {
   lastResolvedEventIds: Record<string, string | null>;
 }
 
+export interface GuixuNodeCard {
+  nodeId: string;
+  name: string;
+  tier: string;
+  nodeType: string;
+  shared: boolean;
+  unlocked: boolean;
+  attunementNeeded: number;
+  advice: string;
+  lockLine?: string;
+}
+
+export interface GuixuRunView {
+  nodeId: string;
+  nodeName: string;
+  decisionLine: string;
+  context: string;
+  deadlineTick: number;
+  options: Array<{ optionId: string; label: string; description: string }>;
+}
+
 export type WarFaction = "righteous" | "demonic";
 
 export interface WarObjective {
@@ -1683,6 +1704,7 @@ export type ImmediateActionId =
   | "dungeon-gate-locked"
   | `sect-scene:${string}`
   | `bahuang-wake-decision:${string}`
+  | `guixu-choice:${string}`
   | `regional-choice:${string}`
   | "leave-regional";
 
@@ -2148,6 +2170,19 @@ export interface ActionJob {
     sectSceneLine?: string;
     guixuNodeId?: string;
     guixuEventId?: string;
+    /** Set while a 归虚 explore job is waiting on a Chinese choice. */
+    guixuWake?: {
+      sceneId: string;
+      context: string;
+      deadlineTick: number;
+      options: Array<{ optionId: string; label: string; description: string }>;
+    };
+    /** How many 归虚 forks this explore job has already opened. */
+    guixuWakesOpened?: number;
+    /** A 见闻 is owed on the next beat after a fork closes. */
+    guixuAmbientDue?: boolean;
+    /** Flavor lines already written on this explore job. */
+    guixuSeenLines?: string[];
     dualTaskId?: string;
     dualPartnerId?: string;
     dualRole?: "initiator" | "partner";
@@ -3225,6 +3260,12 @@ export interface CultivatorStateView {
     unlockedNodeIds: string[];
     sharedUnlockedNodeIds: string[];
     availableNodeIds: string[];
+    /** Chinese cards for the nodes anchored at the current place. */
+    nodes?: GuixuNodeCard[];
+    /** The open mid-run fork. Null once it is answered or the deadline passes. */
+    run?: GuixuRunView | null;
+    /** Where to stand, and that wildernessAttunement is 仙缘. */
+    placeLine?: string;
   } | null;
   derivedState: DerivedStateView;
   socialLinks: readonly import("./social.js").SocialLinkView[];

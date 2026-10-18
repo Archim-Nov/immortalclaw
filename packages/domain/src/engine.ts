@@ -304,10 +304,18 @@ import {
 } from "./economy.js";
 import { getActiveFactionWarForState, recordFactionWarContribution } from "./faction-war.js";
 import {
+  answerGuixuChoice,
   canUnlockGuixuNode,
   getCultivatorUnlockedGuixuNodeIds,
   getGuixuNodeById,
+  guixuNodeCards,
+  guixuNodeName,
+  guixuPlaceLine,
+  guixuRunView,
+  guixuUnlockSentence,
+  holdGuixuExploration,
   isGuixuNodeUnlockedForCultivator,
+  listGuixuChoiceActions,
   listGuixuNodesForLocation,
   pickGuixuEventId,
   resolveGuixuExploration,
@@ -7950,6 +7958,9 @@ function buildGuixuView(world: WorldState, cultivator: Cultivator): CultivatorSt
     unlockedNodeIds,
     sharedUnlockedNodeIds,
     availableNodeIds,
+    nodes: guixuNodeCards(world, cultivator),
+    run: guixuRunView(world, cultivator),
+    placeLine: guixuPlaceLine(world, cultivator),
   };
 }
 
@@ -8916,6 +8927,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   const highRiskAllowed = readinessLevel === "ready" || readinessLevel === "advantaged";
     if (cultivator.activeJobId) {
     ensureDungeonWakeOnJob(world, cultivator);
+    const guixuBusy = listGuixuChoiceActions(world, cultivator);
+    if (guixuBusy.length > 0) return guixuBusy;
     const sectBusy = listSectSceneActions(world, cultivator);
     const regionalBusy = listRegionalChoiceActions(world, cultivator);
     const sceneBusy = sceneChoiceActions(world, cultivator);
@@ -9396,11 +9409,14 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   }
   if (!activeWilderness) {
     for (const node of listGuixuNodesForLocation(world, cultivator.locationId)) {
+      const nodeName = guixuNodeName(node);
+      const advice = guixuNodeCards(world, cultivator).find((card) => card.nodeId === node.nodeId)?.advice
+        ?? `走进${nodeName}，把这一处的事看完。`;
       if (isGuixuNodeUnlockedForCultivator(world, cultivator.id, node.nodeId)) {
         actions.push({
           actionId: `explore-guixu:${node.nodeId}` as ActionId,
-          label: `探${node.name}`,
-          description: `走进${node.name}，把这一处的事看完。`,
+          label: `探${nodeName}`,
+          description: advice,
           durationTicks: node.explorationDurationTicks,
           kind: "timed",
         });
@@ -9411,8 +9427,8 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if (unlockCheck.allowed) {
         actions.push({
           actionId: `unlock-guixu:${node.nodeId}` as ActionId,
-          label: `打开${node.name}`,
-          description: `用荒野里积下的感应打开${node.name}。`,
+          label: `打开${nodeName}`,
+          description: advice,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -10568,7 +10584,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} unlocked ${node.name}.`,
+      summary: guixuUnlockSentence(cultivator, node),
     };
   }
   const joinNeutralSectId = parseJoinNeutralSectId(actionId);
@@ -13986,6 +14002,12 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
   if (actionId.startsWith("sect-scene:")) {
     return answerSectDutyScene(world, cultivator, actionId.slice("sect-scene:".length));
   }
+  if (actionId.startsWith("guixu-choice:")) {
+    const summary = answerGuixuChoice(world, cultivator, actionId.slice("guixu-choice:".length));
+    if (cultivator.injuryTicksRemaining > 0) syncWounded(cultivator);
+    addDaoLog(world, cultivator.id, "归虚岔路", summary, ["guixu", "choice"]);
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary };
+  }
   if (actionId.startsWith("wild-choice:")) {
     const progress = getActiveWildernessProgress(world, cultivator.id);
     const place = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
@@ -14366,19 +14388,19 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     if (exploreGuixuNodeId) {
       const node = getGuixuNodeById(world, exploreGuixuNodeId);
       if (!node) {
-        throw new Error(`Guixu node not found: ${exploreGuixuNodeId}`);
+        throw new GameplayRejection("没有这一处归虚。");
       }
       if (node.anchorLocationId !== cultivator.locationId) {
-        throw new Error("Current location does not connect to this Guixu node.");
+        throw new GameplayRejection("要站在这一处的门口才能进去。");
       }
       if (!isGuixuNodeUnlockedForCultivator(world, cultivator.id, exploreGuixuNodeId)) {
-        throw new Error(`Guixu node not unlocked: ${exploreGuixuNodeId}`);
+        throw new GameplayRejection("这一处还没打开。");
       }
       const eventId = pickGuixuEventId(
         node,
         `${world.tick}:${cultivator.id}:${world.nextJobSequence}:${exploreGuixuNodeId}:guixu`,
       );
-      return startJob(world, cultivator, actionId as TimedActionId, `探${node.name}`, {
+      return startJob(world, cultivator, actionId as TimedActionId, `探${guixuNodeName(node)}`, {
         guixuNodeId: node.nodeId,
         guixuEventId: eventId,
       });
@@ -14833,6 +14855,7 @@ export function advanceWorld(world: WorldState, steps: number): TickSummary {
         tickRegionalRun(world, job, (person) => battleCombatantFromCultivator(person));
       }
       holdSectDutyScene(world, job);
+      holdGuixuExploration(world, job);
 
       if (job.remainingTicks > 0 && !(combatState?.resolved)) {
         continue;
