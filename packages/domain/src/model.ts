@@ -1451,6 +1451,8 @@ export interface BahuangExpeditionProgress {
   lastSightingDepth?: number;
   /** Depths to walk before the next 见闻. Two, three, or four. */
   nextSightingGap?: number;
+  /** Cultivators already met on this run. Absent on older expeditions. */
+  metCultivatorIds?: string[];
 }
 
 export interface WildRouteView {
@@ -2248,7 +2250,7 @@ export interface PendingPvpChallenge {
   locationId: string;
 }
 
-export type PvpBattleKind = "city-duel" | "wilderness-clash";
+export type PvpBattleKind = "city-duel" | "wilderness-clash" | "bahuang-meeting";
 
 // ---- Weapon and Combat Loadout System ----
 export type WeaponFamilyId = "quick" | "heavy" | "polearm" | "flexible" | "ranged-mystic";

@@ -51,6 +51,7 @@ A finished 甲 run leaves one 残页, 炉灰, or 纹屑, and a companion can quo
 九州各有一处只能从这一州进去的秘境，主题洞进门以后还有探路和遇敌或人情，主城和宗门驻地另有三处短洞: `harness/scenarios/regional-dungeons-v1.md`.
 排名层和州府秘境在进门与守关之间还有侧室、探路和有名字的中途敌人: `harness/scenarios/dungeon-interior-v1.md`.
 九州荒野各有一处名字，八荒按深浅分成荒尘驿、断碑原、无灯壑: `harness/scenarios/wild-route-identity.md`.
+八荒三段各有自己的岔路。同一段里碰见另一个修士，可以避开、攀谈，或交手: `harness/scenarios/bahuang-midrun-deepen.md`.
 走进荒野层以后还有两步一个人走的中文岔路，时辰到了不代选，也不把这一步的东西放进袋子: `harness/scenarios/wilderness-midrun-v1.md`.
 The OpenClaw onboarding walkthrough now lives at `harness/scenarios/openclaw-self-serve-onboarding.md`.
 洞府升阶和绝品陈设是灵石无底洞，夺下的边寨 materials 改口为本宗出产: `harness/scenarios/residence-sink-v1.md`.

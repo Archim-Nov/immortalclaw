@@ -1,7 +1,26 @@
+import { bahuangBandScenes, bahuangOptionEffect, type BahuangOptionEffect } from "./bahuang-scenes.js";
+import { grantCombatPractice } from "./combat-skills.js";
+import { buildCultivatorCombatSnapshot } from "./combat-snapshot.js";
 import { bahuangRoomLine } from "./dungeon-interior.js";
+import { GameplayRejection } from "./gameplay-error.js";
 import { recordWildernessAttunement } from "./guixu-service.js";
-import { recordLife } from "./inner-life.js";
+import {
+  GRUDGE_FROM_DRAW,
+  GRUDGE_FROM_DUEL,
+  grudgeArcOf,
+  moodCauseForDuel,
+  recordLife,
+  shiftCultivatorMood,
+} from "./inner-life.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
+import { fightDigestText, type PartyBattleResult } from "./party-battle.js";
+import { runCultivatorSkillDuel } from "./skill-duel.js";
+import {
+  AFFINITY_GAINS,
+  addMutualAffinity,
+  addMutualGrudge,
+  getSocialLink,
+} from "./social.js";
 import {
   bahuangBandForDepth,
   noteWild,
@@ -11,6 +30,7 @@ import {
 import type {
   BahuangExpeditionProgress,
   BahuangExpeditionStateView,
+  CombatLogEntry,
   Cultivator,
   ItemId,
   RunStrategy,
@@ -73,105 +93,91 @@ function finishBahuangWake(input: {
   context: string;
   options: WakeNode["options"];
   defaultOptionId: string;
+  subjectId?: string;
 }): WakeNode {
   return { ...input, timeoutTicks: WAKE_TIMEOUT_TICKS };
 }
 
-function bahuangWakeOf(kind: number, progress: BahuangExpeditionProgress, nodeId: string): WakeNode {
-  if (kind === 0) {
-    return finishBahuangWake({
-      nodeId,
-      sceneKind: "depth",
-      context: "深处的压力突然重了一截。可以继续往下、先把收获收好、只探一处口袋，或者丢一份干粮换一段退路。",
-      options: [
-        { optionId: "continue-deeper", label: "继续往下", description: "压力会松一点，路还是往深处。" },
-        { optionId: "bank-now", label: "先把收获收好", description: "把已经到手的灵石再稳一成。" },
-        { optionId: "scout-pocket", label: "只探一处口袋", description: "不多走，只在手边摸一把。" },
-        { optionId: "drop-ration", label: "丢一份干粮", description: "少一口粮，换压力退一截。" },
-      ],
-      defaultOptionId: progress.strategy.pushPreference === "push" ? "continue-deeper" : "bank-now",
-    });
-  }
-  if (kind === 1) {
-    return finishBahuangWake({
-      nodeId,
-      sceneKind: "cache",
-      context: "荒尘里露出一只不稳的匣子。可以耗一张符撬开、绕开、用灵石硬砸，或者做个记号以后再来。",
-      options: [
-        { optionId: "spend-rare-supply", label: "耗一张符", description: "有符就换一把更厚的收获。" },
-        { optionId: "skip-cache", label: "绕开匣子", description: "不耗补给，路还按原来的走。" },
-        { optionId: "crack-cache", label: "用灵石砸开", description: "花一点灵石，匣子里未必比花掉的多多少。" },
-        { optionId: "leave-mark", label: "做个记号", description: "先记下位置，人继续往前。" },
-      ],
-      defaultOptionId: progress.strategy.bias === "reward-first" ? "spend-rare-supply" : "skip-cache",
-    });
-  }
-  if (kind === 2) {
-    return finishBahuangWake({
-      nodeId,
-      sceneKind: "hazard",
-      context: "前面是一条险廊，旁边有绕路。可以硬穿、走长路、贴着灯沿，或者等尘土落下再走。",
-      options: [
-        { optionId: "detour-hazard", label: "硬穿险廊", description: "压力升高，修为也会多一点。" },
-        { optionId: "safe-route", label: "走长路", description: "绕开这一段，人稳一些。" },
-        { optionId: "lamp-edge", label: "贴着灯沿走", description: "不快不慢，手边也许能摸到几枚灵石。" },
-        { optionId: "wait-dust", label: "等尘土落下", description: "停一停，压力会退一点。" },
-      ],
-      defaultOptionId: progress.strategy.posture === "aggressive" ? "detour-hazard" : "safe-route",
-    });
-  }
-  if (kind === 3) {
-    return finishBahuangWake({
-      nodeId,
-      sceneKind: "retreat",
-      context: "压力已经顶到该撤的地方。可以守住原来的走法、立刻撤出，或者把脚步放慢。",
-      options: [
-        { optionId: "hold-line", label: "守住原来的走法", description: "不改路线，按进八荒时定的姿态走。" },
-        { optionId: "emergency-retreat", label: "立刻撤出", description: "这一趟到此为止，人先出去。" },
-        { optionId: "slow-step", label: "把脚步放慢", description: "不撤，只是这一段走得轻一点。" },
-      ],
-      defaultOptionId: progress.strategy.pushPreference === "retreat" ? "emergency-retreat" : "hold-line",
-    });
-  }
-  if (kind === 4) {
-    return finishBahuangWake({
-      nodeId,
-      sceneKind: "trace",
-      context: "尘上有一串还没被盖住的脚印。可以顺着走、把脚印抹平、在旁边加一个自己的记号，或者踩着脚印追。",
-      options: [
-        { optionId: "smooth-trace", label: "把脚印抹平", description: "后来的人少被这串脚印带偏。" },
-        { optionId: "mark-trace", label: "在旁边做记号", description: "自己的记号留下，脚印不动。" },
-        { optionId: "follow-trace", label: "顺着脚印走", description: "不追人，只沿着印子走一段。" },
-        { optionId: "chase-trace", label: "踩着脚印追", description: "追得上也许有东西，尘也会扬起来。" },
-      ],
-      defaultOptionId: progress.strategy.bias === "reward-first" ? "chase-trace" : "smooth-trace",
-    });
-  }
+function sceneWake(progress: BahuangExpeditionProgress, nodeId: string): WakeNode {
+  const band = bahuangBandForDepth(progress.depth);
+  const scenes = bahuangBandScenes(band.name);
+  const used = new Set(progress.encounteredWakeNodes.map((node) => node.sceneKind).filter((kind): kind is string => Boolean(kind)));
+  const open = scenes.filter((scene) => !used.has(scene.sceneKind));
+  const pool = open.length > 0 ? open : scenes;
+  const scene = pool[hashString(`${nodeId}:type`) % pool.length] ?? scenes[0]!;
   return finishBahuangWake({
     nodeId,
-    sceneKind: "camp",
-    context: "背风处有一堆灭掉的火。可以烤一会儿、把剩下的干柴留下、只看灰里有没有字，或者把灰翻开。",
+    sceneKind: scene.sceneKind,
+    context: scene.context,
+    options: scene.options.map((option) => ({
+      optionId: option.optionId,
+      label: option.label,
+      description: option.description,
+    })),
+    defaultOptionId: scene.defaultOptionId,
+  });
+}
+
+function meetingWake(progress: BahuangExpeditionProgress, other: Cultivator, nodeId: string): WakeNode {
+  const band = bahuangBandForDepth(progress.depth);
+  return finishBahuangWake({
+    nodeId,
+    sceneKind: "meeting",
+    subjectId: other.id,
+    context: `${band.name}里碰见${other.name}。${band.statusLabel}还挂着，${band.enemy}在前，${band.follower}跟在旁边。可以避开，也可以攀谈，也可以在这里交手。`,
     options: [
-      { optionId: "warm-camp", label: "烤一会儿", description: "火已经灭了，余温还在。" },
-      { optionId: "leave-camp", label: "把干柴留下", description: "自己不烤，留给后来的人。" },
-      { optionId: "read-camp", label: "只看灰里的字", description: "有字就记下，灰不翻。" },
-      { optionId: "rake-camp", label: "把灰翻开", description: "灰里可能有东西，尘也会扑到脸上。" },
+      { optionId: "slip-past", label: "避开", description: "不打招呼，从旁边走过去。" },
+      { optionId: "speak-with", label: "攀谈", description: "停下来说两句，这一架先不开。" },
+      { optionId: "cross-hands", label: "交手", description: "在这里过一手。" },
     ],
-    defaultOptionId: progress.strategy.posture === "aggressive" ? "rake-camp" : "warm-camp",
+    defaultOptionId: "slip-past",
   });
 }
 
 export function previewBahuangWakes(progress: BahuangExpeditionProgress): WakeNode[] {
-  return [0, 1, 2, 3, 4, 5].map((kind) => placeWake(progress, bahuangWakeOf(kind, progress, `bahuang-preview-${kind}`)));
-}
-
-function placeWake(progress: BahuangExpeditionProgress, node: WakeNode): WakeNode {
   const band = bahuangBandForDepth(progress.depth);
-  if (node.context.startsWith(band.name)) return node;
-  return { ...node, context: `${band.name}里。${node.context}` };
+  return bahuangBandScenes(band.name).map((scene, index) => finishBahuangWake({
+    nodeId: `bahuang-preview-${band.name}-${index}`,
+    sceneKind: scene.sceneKind,
+    context: scene.context,
+    options: scene.options.map((option) => ({
+      optionId: option.optionId,
+      label: option.label,
+      description: option.description,
+    })),
+    defaultOptionId: scene.defaultOptionId,
+  }));
 }
 
-function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number): WakeNode | null {
+function rememberMet(progress: BahuangExpeditionProgress, otherId: string): void {
+  const met = progress.metCultivatorIds ?? [];
+  if (met.includes(otherId)) return;
+  progress.metCultivatorIds = [...met, otherId];
+}
+
+function findBahuangPeer(world: WorldState, progress: BahuangExpeditionProgress): Cultivator | null {
+  const bandName = bahuangBandForDepth(progress.depth).name;
+  const met = new Set(progress.metCultivatorIds ?? []);
+  const peers = Object.values(world.cultivators).filter((candidate) => {
+    if (candidate.id === progress.cultivatorId || met.has(candidate.id)) return false;
+    const other = world.bahuangProgress[candidate.id];
+    if (!other || other.status !== "active") return false;
+    return bahuangBandForDepth(other.depth).name === bandName;
+  }).sort((left, right) => left.id.localeCompare(right.id));
+  if (peers.length === 0) return null;
+  const index = hashString(`${progress.cultivatorId}:${progress.depth}:peer`) % peers.length;
+  return peers[index] ?? null;
+}
+
+function peerStillHere(world: WorldState, progress: BahuangExpeditionProgress, peerId: string): Cultivator | null {
+  const peer = world.cultivators[peerId];
+  const peerRun = world.bahuangProgress[peerId];
+  if (!peer || !peerRun || peerRun.status !== "active") return null;
+  if (bahuangBandForDepth(peerRun.depth).name !== bahuangBandForDepth(progress.depth).name) return null;
+  return peer;
+}
+
+function createWakeNode(world: WorldState, progress: BahuangExpeditionProgress, worldTick: number): WakeNode | null {
   if (progress.encounteredWakeNodes.length >= MAX_WAKE_NODES || progress.pendingWakeNodeIndex !== null) {
     return null;
   }
@@ -184,8 +190,13 @@ function createWakeNode(progress: BahuangExpeditionProgress, worldTick: number):
   }
 
   const nodeId = `bahuang-wake-${progress.cultivatorId}-${progress.depth}-${progress.encounteredWakeNodes.length + 1}`;
-  const type = hashString(`${nodeId}:type`) % 6;
-  return placeWake(progress, bahuangWakeOf(type, progress, nodeId));
+  const alreadyMet = progress.encounteredWakeNodes.some((node) => node.sceneKind === "meeting");
+  const peer = alreadyMet ? null : findBahuangPeer(world, progress);
+  if (peer) {
+    rememberMet(progress, peer.id);
+    return meetingWake(progress, peer, nodeId);
+  }
+  return sceneWake(progress, nodeId);
 }
 
 function rememberBahuangLine(world: WorldState, cultivator: Cultivator, title: string, detail: string): void {
@@ -243,31 +254,31 @@ export function canEnterBahuang(
   world: WorldState,
 ): { allowed: boolean; reason?: string } {
   if (!EIGHT_WASTES_CONTENT.entryLocationIds.includes(locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
-    return { allowed: false, reason: "Current location does not connect to 八荒入口." };
+    return { allowed: false, reason: "这里连不上八荒的入口。" };
   }
 
   const realmScore = (REALM_ORDER[cultivator.realm] ?? 0) * 10 + cultivator.realmLevel;
   const requiredScore = (REALM_ORDER[EIGHT_WASTES_CONTENT.entryRequirement.minRealm] ?? 0) * 10 + 1;
   if (realmScore < requiredScore) {
-    return { allowed: false, reason: "Realm requirement not met." };
+    return { allowed: false, reason: "境界还没到，进不了八荒。" };
   }
   if (cultivator.realmLevel < EIGHT_WASTES_CONTENT.entryRequirement.minRealmLevel) {
-    return { allowed: false, reason: `需要境界等级 ≥ ${EIGHT_WASTES_CONTENT.entryRequirement.minRealmLevel}，当前 ${cultivator.realmLevel}。` };
+    return { allowed: false, reason: "境界等级还没到，进不了八荒。" };
   }
   const attunement = world.guixuProgress.wildernessAttunement[cultivator.id] ?? 0;
   if (attunement < EIGHT_WASTES_CONTENT.entryRequirement.minWildernessAttunement) {
-    return { allowed: false, reason: `需要荒野适性 ≥ ${EIGHT_WASTES_CONTENT.entryRequirement.minWildernessAttunement}，当前 ${attunement}。` };
+    return { allowed: false, reason: "荒野里的感应还不够，进不了八荒。" };
   }
   if (cultivator.totalContribution < EIGHT_WASTES_CONTENT.entryRequirement.minContribution) {
-    return { allowed: false, reason: "Sect contribution requirement not met." };
+    return { allowed: false, reason: "宗门贡献还不够，进不了八荒。" };
   }
   if ((cultivator.inventory[EIGHT_WASTES_CONTENT.entryRequirement.entryTicket] ?? 0) <= 0) {
-    return { allowed: false, reason: "Entry ticket missing." };
+    return { allowed: false, reason: "没有八荒路引，进不了八荒。" };
   }
   const { entryWindowCycle, entryWindowDuration } = EIGHT_WASTES_CONTENT.entryRequirement;
   if (world.tick % entryWindowCycle >= entryWindowDuration) {
     const ticksUntilOpen = entryWindowCycle - (world.tick % entryWindowCycle);
-    return { allowed: false, reason: `八荒入口目前关闭，将在 ${ticksUntilOpen} ticks 后开放。` };
+    return { allowed: false, reason: `八荒入口关着，再过${ticksUntilOpen}刻才开。` };
   }
 
   return { allowed: true };
@@ -279,12 +290,12 @@ export function enterBahuangExpedition(
   strategyPosture: RunStrategy["posture"],
 ): BahuangExpeditionProgress {
   if (world.bahuangProgress[cultivator.id]?.status === "active") {
-    throw new Error("Bahuang expedition already active.");
+    throw new GameplayRejection("八荒这一趟还没走完。");
   }
 
   const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
   if (!gate.allowed) {
-    throw new Error(gate.reason ?? "Cannot enter bahuang.");
+    throw new GameplayRejection(gate.reason ?? "这会儿进不了八荒。");
   }
 
   cultivator.inventory[EIGHT_WASTES_CONTENT.entryRequirement.entryTicket] -= 1;
@@ -369,7 +380,7 @@ export function retreatFromBahuang(
     tags: ["bahuang", "retreat", reason],
   });
 
-  return `${cultivator.name} retreated from 八荒.`;
+  return leaving;
 }
 
 export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivator): void {
@@ -383,6 +394,12 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
       progress.pendingWakeNodeDeadlineTick !== null
       && world.tick >= progress.pendingWakeNodeDeadlineTick
     ) {
+      const wake = progress.encounteredWakeNodes[progress.pendingWakeNodeIndex];
+      const band = bahuangBandForDepth(progress.depth);
+      const timedOut = wake?.sceneKind === "meeting"
+        ? `${band.name}里时辰到了。这一面没碰上，也没有交手。`
+        : `${band.name}里时辰到了，这一处没选，东西没有进袋子。`;
+      rememberBahuangLine(world, cultivator, "八荒里的见闻", timedOut);
       progress.pendingWakeNodeIndex = null;
       progress.pendingWakeNodeDeadlineTick = null;
       progress.resolvedWakeNodeCount += 1;
@@ -448,7 +465,7 @@ export function advanceBahuangExpedition(world: WorldState, cultivator: Cultivat
   maybeBahuangSighting(world, cultivator, progress);
   maybeBahuangRoom(world, cultivator, progress);
 
-  const wakeNode = createWakeNode(progress, world.tick);
+  const wakeNode = createWakeNode(world, progress, world.tick);
   if (wakeNode) {
     progress.encounteredWakeNodes.push(wakeNode);
     progress.pendingWakeNodeIndex = progress.encounteredWakeNodes.length - 1;
@@ -534,6 +551,260 @@ export function buildBahuangStateView(
   };
 }
 
+function closeBahuangWake(
+  world: WorldState,
+  cultivator: Cultivator,
+  progress: BahuangExpeditionProgress,
+  option: WakeNode["options"][number],
+): string {
+  progress.pendingWakeNodeIndex = null;
+  progress.pendingWakeNodeDeadlineTick = null;
+  progress.resolvedWakeNodeCount += 1;
+  const sentence = `${cultivator.name}在八荒里选了「${option.label}」。${option.description}`;
+  rememberBahuangLine(world, cultivator, "八荒里的抉择", sentence);
+  return sentence;
+}
+
+function applySceneEffect(
+  cultivator: Cultivator,
+  progress: BahuangExpeditionProgress,
+  effect: BahuangOptionEffect,
+): void {
+  if (effect.kind === "ease") {
+    progress.pressure = Math.max(0, progress.pressure - effect.pressure);
+    return;
+  }
+  if (effect.kind === "pocket") {
+    progress.pressure += 1;
+    progress.rewards.spiritStones += 6;
+    cultivator.spiritStones += 6;
+    return;
+  }
+  if (effect.kind === "stones") {
+    progress.pressure += effect.pressure ?? 0;
+    progress.rewards.spiritStones += effect.amount;
+    cultivator.spiritStones += effect.amount;
+    return;
+  }
+  if (effect.kind === "realm") {
+    progress.pressure += effect.pressure;
+    progress.rewards.realmProgress += effect.amount;
+    cultivator.realmProgress = Math.min(100, cultivator.realmProgress + effect.amount);
+    return;
+  }
+  if (effect.kind === "ration") {
+    if (effect.delta < 0 && progress.supplies.rations <= 0) return;
+    progress.supplies.rations = Math.max(0, progress.supplies.rations + effect.delta);
+    progress.pressure = Math.max(0, progress.pressure - effect.pressure);
+    return;
+  }
+  if (effect.kind === "spend") {
+    if (cultivator.spiritStones < effect.cost) return;
+    cultivator.spiritStones -= effect.cost;
+    progress.rewards.spiritStones += effect.gain;
+    cultivator.spiritStones += effect.gain;
+  }
+}
+
+function wearFromFight(cultivator: Cultivator, hpLostRatio: number): void {
+  const qiLoss = Math.max(2, Math.round(cultivator.maxQi * Math.min(1, Math.max(0, hpLostRatio)) * 0.18));
+  const spiritLoss = Math.max(1, Math.round(cultivator.maxSpiritualPower * 0.08));
+  cultivator.qi = clamp(cultivator.qi - qiLoss, 1, cultivator.maxQi);
+  cultivator.spiritualPower = clamp(cultivator.spiritualPower - spiritLoss, 0, cultivator.maxSpiritualPower);
+}
+
+function writeMeetingCombat(
+  world: WorldState,
+  cultivator: Cultivator,
+  opponent: Cultivator,
+  battle: PartyBattleResult,
+  summary: string,
+  won: boolean,
+): void {
+  const entry: CombatLogEntry = {
+    id: `combat-${world.nextCombatSequence++}`,
+    tick: world.tick,
+    cultivatorId: cultivator.id,
+    locationId: cultivator.locationId,
+    encounterId: "bahuang-meeting",
+    enemyName: opponent.name,
+    outcome: won ? "victory" : "defeat",
+    damageTaken: 0,
+    spiritualPowerSpent: Math.max(1, Math.round(cultivator.maxSpiritualPower * 0.08)),
+    loot: {},
+    summary,
+    encounterTemplateId: "bahuang-meeting",
+    encounterBuildId: "bahuang-meeting",
+    pvpOpponentCultivatorId: opponent.id,
+    pvpOpponentName: opponent.name,
+    pvpBattleKind: "bahuang-meeting",
+    totalRounds: battle.roundsPlayed,
+    combatRounds: [battle.summary],
+  };
+  world.combatLogs.unshift(entry);
+}
+
+function closePeerMeeting(world: WorldState, actor: Cultivator, peer: Cultivator): void {
+  const progress = world.bahuangProgress[peer.id];
+  if (!progress || progress.status !== "active" || progress.pendingWakeNodeIndex === null) return;
+  const wake = progress.encounteredWakeNodes[progress.pendingWakeNodeIndex];
+  if (!wake || wake.sceneKind !== "meeting" || wake.subjectId !== actor.id) return;
+  progress.pendingWakeNodeIndex = null;
+  progress.pendingWakeNodeDeadlineTick = null;
+  progress.resolvedWakeNodeCount += 1;
+  rememberMet(progress, actor.id);
+}
+
+function resolveBahuangMeeting(
+  world: WorldState,
+  cultivator: Cultivator,
+  progress: BahuangExpeditionProgress,
+  wakeNode: WakeNode,
+  optionId: string,
+): string {
+  const band = bahuangBandForDepth(progress.depth);
+  const peerId = wakeNode.subjectId;
+  const named = peerId ? world.cultivators[peerId] : null;
+  const peer = peerId ? peerStillHere(world, progress, peerId) : null;
+  const gone = `${band.name}里本来要碰见${named?.name ?? "那个人"}。人已经不在这一带，这一架没开。`;
+
+  if (optionId === "slip-past") {
+    const sentence = peer
+      ? `${cultivator.name}在${band.name}避开了${peer.name}。人从旁边走过去，这一架没开。`
+      : gone;
+    progress.pendingWakeNodeIndex = null;
+    progress.pendingWakeNodeDeadlineTick = null;
+    progress.resolvedWakeNodeCount += 1;
+    rememberBahuangLine(world, cultivator, "八荒里的见闻", sentence);
+    return sentence;
+  }
+
+  if (optionId === "speak-with") {
+    progress.pendingWakeNodeIndex = null;
+    progress.pendingWakeNodeDeadlineTick = null;
+    progress.resolvedWakeNodeCount += 1;
+    if (!peer) {
+      rememberBahuangLine(world, cultivator, "八荒里的见闻", gone);
+      return gone;
+    }
+    const link = getSocialLink(world, cultivator.id, peer.id);
+    const feud = grudgeArcOf(link?.grudge ?? 0);
+    let sentence: string;
+    if (feud) {
+      sentence = `${cultivator.name}在${band.name}和${peer.name}说了两句。话没热，剑拔弩张。`;
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: sentence, names: [peer.name] });
+      recordLife(peer, { tick: world.tick, kind: "relationship", text: sentence, names: [cultivator.name] });
+    } else {
+      const { linkAB } = addMutualAffinity(world, cultivator.id, peer.id, 3);
+      sentence = `${cultivator.name}在${band.name}和${peer.name}攀谈了两句。好感+3，现在是${linkAB.affinity}。`;
+    }
+    rememberBahuangLine(world, cultivator, "八荒里的见闻", sentence);
+    rememberBahuangLine(world, peer, "八荒里的见闻", sentence);
+    return sentence;
+  }
+
+  if (optionId !== "cross-hands") {
+    throw new GameplayRejection("这个选择不在当前岔路上。");
+  }
+
+  progress.pendingWakeNodeIndex = null;
+  progress.pendingWakeNodeDeadlineTick = null;
+  progress.resolvedWakeNodeCount += 1;
+  if (!peer) {
+    rememberBahuangLine(world, cultivator, "八荒里的见闻", gone);
+    return gone;
+  }
+
+  const battle = runCultivatorSkillDuel({
+    left: cultivator,
+    right: peer,
+    seed: `${world.tick}:${cultivator.id}:${peer.id}:bahuang-meeting`,
+    maxRounds: 7,
+  });
+  const rightSnap = buildCultivatorCombatSnapshot(peer, true);
+  const rightEnd = battle.finalHp[peer.id] ?? rightSnap.maxHp;
+  const rightRatio = Math.max(0, (rightSnap.maxHp - rightEnd) / Math.max(1, rightSnap.maxHp));
+  wearFromFight(cultivator, battle.leaderHpLostRatio);
+  wearFromFight(peer, rightRatio);
+  for (const entry of battle.practice) {
+    const person = world.cultivators[entry.id];
+    if (person) grantCombatPractice(person, entry.skillIds, 1);
+  }
+
+  const leftBefore = cultivator.spiritStones;
+  const rightBefore = peer.spiritStones;
+  let leftResult: "win" | "loss" | "draw" | "retreat" = "draw";
+  let rightResult: "win" | "loss" | "draw" | "retreat" = "draw";
+  if (battle.outcome === "win") {
+    cultivator.spiritStones += 12;
+    peer.spiritStones = Math.max(0, peer.spiritStones - 6);
+    leftResult = "win";
+    rightResult = "loss";
+  } else if (battle.outcome === "loss") {
+    cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 8);
+    peer.spiritStones += 10;
+    leftResult = "loss";
+    rightResult = "win";
+  } else if (battle.outcome === "withdraw") {
+    if (battle.retreatingSide === "enemy") {
+      cultivator.spiritStones += 8;
+      peer.spiritStones = Math.max(0, peer.spiritStones - 4);
+      leftResult = "win";
+      rightResult = "retreat";
+    } else {
+      cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 6);
+      peer.spiritStones += 4;
+      leftResult = "retreat";
+      rightResult = "win";
+    }
+  }
+  const purse = (name: string, before: number, after: number) => {
+    const delta = after - before;
+    if (delta > 0) return `${name}收下${delta}枚灵石`;
+    if (delta < 0) return `${name}落下${-delta}枚灵石`;
+    return `${name}灵石没动`;
+  };
+  const verdict = battle.outcome === "win"
+    ? `${cultivator.name}在${band.name}赢了${peer.name}`
+    : battle.outcome === "loss"
+      ? `${cultivator.name}在${band.name}输给了${peer.name}`
+      : battle.outcome === "withdraw"
+        ? `${battle.retreatingSide === "enemy" ? peer.name : cultivator.name}从${band.name}这一场里撤了`
+        : `${cultivator.name}和${peer.name}在${band.name}打成平手`;
+  const skillLine = fightDigestText(battle.summary) ?? battle.summary.beats[0] ?? "";
+  const sentence = `${verdict}。${skillLine}${purse(cultivator.name, leftBefore, cultivator.spiritStones)}。${purse(peer.name, rightBefore, peer.spiritStones)}。`;
+  const leftWon = leftResult === "win";
+  writeMeetingCombat(world, cultivator, peer, battle, sentence, leftWon);
+  writeMeetingCombat(world, peer, cultivator, battle, sentence, rightResult === "win");
+  addMutualGrudge(world, cultivator.id, peer.id, battle.outcome === "draw" ? GRUDGE_FROM_DRAW : GRUDGE_FROM_DUEL);
+  addMutualAffinity(world, cultivator.id, peer.id, AFFINITY_GAINS.pvpDuel);
+  shiftCultivatorMood(world, cultivator, moodCauseForDuel(leftResult));
+  shiftCultivatorMood(world, peer, moodCauseForDuel(rightResult));
+  recordLife(cultivator, { tick: world.tick, kind: "fight", text: sentence, names: [peer.name] });
+  recordLife(peer, { tick: world.tick, kind: "fight", text: sentence, names: [cultivator.name] });
+  pushTravelNote(cultivator, travelNote({
+    tick: world.tick,
+    kind: "person",
+    title: "八荒里的交手",
+    detail: sentence,
+    locationId: cultivator.locationId,
+    mood: "这一架会记住",
+  }));
+  pushTravelNote(peer, travelNote({
+    tick: world.tick,
+    kind: "person",
+    title: "八荒里的交手",
+    detail: sentence,
+    locationId: peer.locationId,
+    mood: "这一架会记住",
+  }));
+  rememberMet(progress, peer.id);
+  const peerRun = world.bahuangProgress[peer.id];
+  if (peerRun) rememberMet(peerRun, cultivator.id);
+  closePeerMeeting(world, cultivator, peer);
+  return sentence;
+}
+
 export function resolveBahuangWakeDecision(
   world: WorldState,
   cultivator: Cultivator,
@@ -541,21 +812,37 @@ export function resolveBahuangWakeDecision(
 ): string {
   const progress = world.bahuangProgress[cultivator.id];
   if (!progress || progress.status !== "active") {
-    throw new Error("No active bahuang expedition.");
+    throw new GameplayRejection("眼前没有在走的八荒。");
   }
   if (progress.pendingWakeNodeIndex === null) {
-    throw new Error("No pending wake node to resolve.");
+    throw new GameplayRejection("眼前没有待决的岔路。");
   }
   const wakeNode = progress.encounteredWakeNodes[progress.pendingWakeNodeIndex];
   if (!wakeNode) {
-    throw new Error("Wake node not found.");
+    throw new GameplayRejection("这处岔路已经不在了。");
   }
   const option = wakeNode.options.find((o) => o.optionId === optionId);
   if (!option) {
-    throw new Error(`Invalid wake option: ${optionId}. Valid: ${wakeNode.options.map((o) => o.optionId).join(", ")}`);
+    throw new GameplayRejection("这个选择不在当前岔路上。");
   }
 
-  // Apply option effects
+  if (wakeNode.sceneKind === "meeting") {
+    return resolveBahuangMeeting(world, cultivator, progress, wakeNode, optionId);
+  }
+
+  const sceneEffect = bahuangOptionEffect(optionId);
+  if (sceneEffect) {
+    if (sceneEffect.kind === "retreat") {
+      const leaving = `${cultivator.name}在八荒里选了「${option.label}」。${option.description}`;
+      rememberBahuangLine(world, cultivator, "八荒里的抉择", leaving);
+      retreatFromBahuang(world, cultivator, "emergency-wake-retreat");
+      return leaving;
+    }
+    applySceneEffect(cultivator, progress, sceneEffect);
+    return closeBahuangWake(world, cultivator, progress, option);
+  }
+
+  // Older saves can still be holding one of the first six wakes.
   if (optionId === "continue-deeper") {
     progress.pressure = Math.max(0, progress.pressure - 2);
   } else if (optionId === "bank-now") {
