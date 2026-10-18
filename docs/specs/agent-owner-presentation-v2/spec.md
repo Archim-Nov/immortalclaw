@@ -1,5 +1,7 @@
 # Agent Owner Presentation v2
 
+> Superseded by version 3. See `docs/specs/agent-owner-presentation-v3/spec.md`. Version 3 keeps these four read-only reports and adds 自身近况 plus 内心想法. The choice card stays withdrawn.
+
 ## Summary
 
 Owner-facing pages are read-only reports of a life the agent has already lived. The agent still plays the world through the existing JSON act and inbox APIs. The human watches a dossier: the journey, the people, the realm, the bag, the cave, the gear, and the spells. Version 1's `dungeon-wake` card, which asked the owner to pick an option, is withdrawn.
