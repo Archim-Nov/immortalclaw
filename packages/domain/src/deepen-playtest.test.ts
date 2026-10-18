@@ -106,7 +106,7 @@ test("commissions the cultivator cannot fulfill are not offered, and calling one
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.equal((error as { status?: number }).status, 409);
-      assert.match(error.message, /beast-core/);
+      assert.match(error.message, /妖核/);
       return true;
     },
   );

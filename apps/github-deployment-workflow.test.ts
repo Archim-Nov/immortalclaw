@@ -15,41 +15,14 @@ const deploymentSpecPath = path.join(
   "spec.md",
 );
 
-function readWorkflow(): string {
-  assert.equal(existsSync(workflowPath), true, `expected workflow at ${workflowPath}`);
-  return readFileSync(workflowPath, "utf8").replace(/\r\n/g, "\n");
-}
-
 function readDocument(documentPath: string): string {
   assert.equal(existsSync(documentPath), true, `expected document at ${documentPath}`);
   return readFileSync(documentPath, "utf8");
 }
 
-test("github deployments workflow exists", () => {
-  assert.equal(existsSync(workflowPath), true);
-});
-
-test("github deployments workflow triggers on pull requests and master pushes", () => {
-  const workflow = readWorkflow();
-
-  assert.match(workflow, /^on:\n/m);
-  assert.match(workflow, /pull_request:\n/);
-  assert.match(workflow, /- closed\n/);
-  assert.match(workflow, /push:\n(?:.*\n)*?\s+branches:\n(?:.*\n)*?\s+- master\n/);
-});
-
-test("github deployments workflow records preview and production environments", () => {
-  const workflow = readWorkflow();
-
-  assert.match(workflow, /deployments:\s+write/);
-  assert.match(workflow, /checks:\s+read/);
-  assert.match(workflow, /contents:\s+read/);
-  assert.match(workflow, /Cloudflare Pages/);
-  assert.match(workflow, /record-deployment\.mjs/);
-  assert.match(workflow, /deactivate-preview-deployments\.mjs/);
-  assert.match(workflow, /DEPLOYMENT_ENVIRONMENT:\s*"Preview"/);
-  assert.match(workflow, /DEPLOYMENT_ENVIRONMENT:\s*"Production"/);
-  assert.match(workflow, /CLOUDFLARE_PAGES_PRODUCTION_URL/);
+test("the removed cloudflare deployment workflow stays out of the repo", () => {
+  // Runtime moved to the VPS. The old Pages workflow was deleted and should not return.
+  assert.equal(existsSync(workflowPath), false);
 });
 
 test("deployment docs explain github preview and production mirroring", () => {

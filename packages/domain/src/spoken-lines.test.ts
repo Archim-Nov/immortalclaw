@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { advanceWorld, createSeedWorld, getCultivatorState, listAvailableActions, performAction, syncCultivatorFromPersona } from "./index.js";
 import { GameplayRejection } from "./gameplay-error.js";
-import { getAffinityLevel, getOrCreateSocialLink, getSocialLink, writeSocialLink } from "./social.js";
+import { shiftCultivatorMood } from "./inner-life.js";
+import { addMutualAffinity, addMutualGrudge, getAffinityLevel, getOrCreateSocialLink, getSocialLink, writeSocialLink } from "./social.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -213,4 +214,95 @@ test("a long spoken receipt keeps a piece of the quote inside eighty characters"
   assert.ok(quote.startsWith("甲"));
   assert.ok(quote.endsWith("…」。"));
   assert.equal(Array.from(result.summary).length <= 80, true);
+});
+
+test("an omitted voice-transmit still speaks a sentence, and the next one is different", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-voice-empty", "阿絮");
+  const listener = world.cultivators[CULTIVATOR_ID]!;
+  listener.locationId = "qingzhou:main-city";
+  addMutualAffinity(world, speaker.id, listener.id, 80);
+
+  const first = performAction(world, speaker.id, `voice-transmit:${listener.id}`);
+  const second = performAction(world, speaker.id, `voice-transmit:${listener.id}`);
+  assert.match(first.summary, /阿絮向.*传了一音：「.+」。好感至/);
+  assert.match(second.summary, /「.+」/);
+  assert.notEqual(first.summary, second.summary);
+  assert.doesNotMatch(`${first.summary}${second.summary}`, /传音问候|requires|tick/);
+  const heard = (world.messages ?? []).filter((message) => message.toCultivatorId === listener.id && message.subject.includes("传音"));
+  assert.equal(heard.length >= 2, true);
+  assert.ok(heard.every((message) => message.spokenLine && message.content.includes(`「${message.spokenLine}」`)));
+  assert.notEqual(heard[0]?.spokenLine, heard[1]?.spokenLine);
+
+  const card = listAvailableActions(world, speaker.id).find((action) => action.actionId === `voice-transmit:${listener.id}`);
+  assert.match(card?.description ?? "", /另写一句/);
+  assert.match(card?.description ?? "", /四十字/);
+});
+
+test("voice-transmit below 朋友 is refused in Chinese", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-voice-low", "阿絮");
+  const listener = world.cultivators[CULTIVATOR_ID]!;
+  assert.throws(
+    () => performAction(world, speaker.id, `voice-transmit:${listener.id}`),
+    (error: unknown) => {
+      assert.ok(error instanceof GameplayRejection);
+      assert.match(error.message, /传音要到朋友才传得出去/);
+      assert.doesNotMatch(error.message, /requires|relationship/);
+      return true;
+    },
+  );
+});
+
+test("echoing chat-up falls back when there is no real previous sentence, and does not repeat", () => {
+  const world = createSeedWorld();
+  const speaker = world.cultivators[CULTIVATOR_ID]!;
+  const listener = spawn(world, "agent-echo-loop", "墨儿");
+  shiftCultivatorMood(world, speaker, "spoken");
+  const lines: string[] = [];
+  for (let turn = 0; turn < 4; turn += 1) {
+    if (turn > 0) advanceWorld(world, 4);
+    const result = performAction(world, speaker.id, `chat-up:${listener.id}`);
+    const spoken = result.summary.slice(result.summary.indexOf("：「") + 2, result.summary.lastIndexOf("」"));
+    lines.push(spoken);
+    assert.doesNotMatch(spoken, /上一句|刚才那句|刚才那事/);
+  }
+  assert.equal(new Set(lines).size, lines.length);
+});
+
+test("echoing chat-up quotes a sentence that was actually heard", () => {
+  const world = createSeedWorld();
+  const speaker = world.cultivators[CULTIVATOR_ID]!;
+  const listener = spawn(world, "agent-echo-heard", "墨儿");
+  const heard = "听潮浦左边有坑，你别一个人踩下去。";
+  performAction(world, listener.id, `say:${speaker.id}`, heard);
+  const result = performAction(world, speaker.id, `chat-up:${listener.id}`);
+  assert.match(result.summary, /听潮浦左边有坑/);
+  assert.doesNotMatch(result.summary, /上一句|刚才那句/);
+});
+
+test("strangers are 搭讪 and people already known are 攀谈", () => {
+  const world = createSeedWorld();
+  const speaker = world.cultivators[CULTIVATOR_ID]!;
+  const listener = spawn(world, "agent-label-axu", "阿絮");
+  const strangerCard = listAvailableActions(world, speaker.id).find((action) => action.actionId === `chat-up:${listener.id}`);
+  const strangerGreet = listAvailableActions(world, speaker.id).find((action) => action.actionId === `send-message:${listener.id}:greet`);
+  assert.match(strangerCard?.label ?? "", /^搭讪：阿絮（陌生人）/);
+  assert.match(strangerCard?.description ?? "", /认识之后才能组队/);
+  assert.match(strangerGreet?.description ?? "", /问候之后就认识了/);
+
+  performAction(world, speaker.id, `chat-up:${listener.id}`);
+  advanceWorld(world, 4);
+  addMutualAffinity(world, speaker.id, listener.id, 200);
+  const knownCard = listAvailableActions(world, speaker.id).find((action) => action.actionId === `chat-up:${listener.id}`);
+  const knownGreet = listAvailableActions(world, speaker.id).find((action) => action.actionId === `send-message:${listener.id}:greet`);
+  assert.match(knownCard?.label ?? "", /^攀谈：阿絮（挚友）/);
+  assert.doesNotMatch(knownCard?.description ?? "", /认识之后才能组队/);
+  assert.doesNotMatch(knownGreet?.description ?? "", /问候之后就认识了/);
+
+  addMutualGrudge(world, speaker.id, listener.id, 8);
+  const teach = listAvailableActions(world, speaker.id).find((action) => action.actionId === `spar-teach:${listener.id}`);
+  assert.match(teach?.description ?? "", /知己/);
+  assert.match(teach?.description ?? "", /嫌隙/);
+  assert.match(teach?.description ?? "", /剑拔弩张/);
 });

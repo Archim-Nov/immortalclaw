@@ -688,9 +688,13 @@ export function settleDungeonWakeNode(
     ? { ...rawBeat, detail: `${place}里。${rawBeat.detail}` }
     : rawBeat;
   const label = progress.pendingWakeNode.options.find((option) => option.optionId === chosenOptionId)?.label ?? "这一条";
-  const lead = source === "timeout" ? `时辰到了，代选了${label}。` : `你选了${label}。`;
-  const beat: DungeonBeat | null = placed && !placed.detail.startsWith(lead)
-    ? { ...placed, detail: `${lead}${placed.detail}` }
+  const lead = source === "timeout" ? `时辰到了，代选了${label}。` : "";
+  const beat: DungeonBeat | null = placed && lead && !placed.detail.startsWith(lead)
+    ? {
+        ...placed,
+        title: placed.title === label ? placed.mood : placed.title,
+        detail: `${lead}${placed.detail}`,
+      }
     : placed;
   const stoneDelta = known ? known.stoneDelta : 0;
   const reportStone = known ? known.stoneDelta : (risky ? 18 : 0);

@@ -105,6 +105,8 @@ test("an outer duty pauses for a Chinese choice, then still pays the post", () =
   assert.equal(LATIN.test(plain.description), false);
   const chosen = performAction(world, cultivator.id, "sect-scene:plain");
   assert.match(chosen.summary, /见闻/);
+  assert.doesNotMatch(chosen.summary, /你选了/);
+  if (plain.label) assert.ok((chosen.summary.split(plain.label).length - 1) <= 1, chosen.summary);
   advanceWorld(world, 1);
   assert.equal(cultivator.activeJobId, null);
   const after = getCultivatorState(world, cultivator.id);

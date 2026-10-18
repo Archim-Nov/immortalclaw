@@ -153,6 +153,11 @@ test("dao companion proposal-accept flow creates mutual bond", () => {
   // Propose
   const proposeResult = performAction(world, first.id, `propose-dao-companion:${second.id}`);
   assert.equal(proposeResult.accepted, true);
+  assert.match(proposeResult.summary, /道侣之约/);
+  assert.doesNotMatch(proposeResult.summary, /tick|proposed/i);
+  const proposalLetter = (world.messages ?? []).find((message) => message.subject.includes("道侣"));
+  assert.match(proposalLetter?.content ?? "", /时辰/);
+  assert.doesNotMatch(proposalLetter?.content ?? "", /tick/);
 
   // Find proposal
   const proposals = Object.values(world.daoCompanionProposals);

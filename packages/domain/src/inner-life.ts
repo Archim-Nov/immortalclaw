@@ -39,6 +39,18 @@ const GRUDGE_ORDER: readonly GrudgeArc[] = ["嫌隙", "宿怨"];
 export const DIGEST_WINDOW_TICKS = 6;
 export const HOURS_PER_TICK = 2;
 
+/**
+ * How long from now, in words a cultivator would actually say.
+ * One tick is one 时辰. Short waits stay as 刻. Longer waits say 时辰.
+ * Never an absolute world tick.
+ */
+export function relativeWaitPhrase(ticks: number): string {
+  const wait = Math.max(1, Math.ceil(ticks));
+  if (wait === 1) return "还有一刻";
+  if (wait <= 6) return `还有${wait}刻`;
+  return `约${wait}个时辰后`;
+}
+
 export const SPAR_TEACH_COOLDOWN_TICKS = 4;
 export const SHARE_RESOURCE_COOLDOWN_TICKS = 4;
 export const SHARE_RESOURCE_STONES = 8;

@@ -14,6 +14,7 @@ import {
 import type { ActionId, Cultivator, WorldState } from "./model.js";
 import type { ResolvedCombatSkill } from "./combat-skills.js";
 import { regionalPassage } from "./dungeon-interior.js";
+import { relativeWaitPhrase } from "./inner-life.js";
 import {
   prepareRegionalFighter,
   regionalCatalog,
@@ -154,11 +155,13 @@ test("realm, a wound, and a cooldown each keep the door shut", () => {
   cultivator.regionalCooldowns = { "qinglan-herb-cave": 16 };
   world.tick = 4;
   const cooling = getCultivatorState(world, cultivator.id).regionalDungeons?.places.find((place) => place.id === "qinglan-herb-cave");
-  assert.match(cooling?.lockReason ?? "", /第16刻/);
+  assert.match(cooling?.lockReason ?? "", /约12个时辰后/);
+  assert.equal(cooling?.lockReason, `这一处还要再等，${relativeWaitPhrase(16 - world.tick)}才能再进。`);
+  assert.doesNotMatch(cooling?.lockReason ?? "", /第\d+刻|tick/);
   assert.equal(cooling?.cooldownUntilTick, 16);
   assert.throws(
     () => performAction(world, cultivator.id, "enter-regional:qinglan-herb-cave"),
-    /第16刻/,
+    /约12个时辰后/,
   );
 });
 
@@ -196,7 +199,10 @@ test("waiting for the dew carries the core, a sighting, and a cooldown", () => {
   const digest = getCultivatorState(persisted, saved.id).digest?.summary ?? "";
   assert.match(digest, /见闻/);
   assert.equal(saved.regionalCooldowns?.["qinglan-herb-cave"], 16);
-  assert.throws(() => performAction(persisted, saved.id, "enter-regional:qinglan-herb-cave"), /第16刻/);
+  assert.throws(
+    () => performAction(persisted, saved.id, "enter-regional:qinglan-herb-cave"),
+    new RegExp(relativeWaitPhrase(16 - persisted.tick)),
+  );
 
   const quiet = createSeedWorld();
   const quietLeader = leader(quiet);
@@ -239,6 +245,8 @@ test("the tide bell only opens for the first eight ticks of the day", () => {
   const closed = getCultivatorState(world, cultivator.id).regionalDungeons?.places.find((place) => place.id === "tide-bell-cave");
   assert.equal(closed?.open, false);
   assert.match(closed?.lockReason ?? "", /潮退了/);
+  assert.match(closed?.lockReason ?? "", /约16个时辰后/);
+  assert.doesNotMatch(closed?.lockReason ?? "", /第\d+刻|tick/);
   assert.equal(closed?.opensAtTick, 24);
   assert.equal(actionIds(world, cultivator.id).includes("enter-regional:tide-bell-cave"), false);
   assert.throws(() => performAction(world, cultivator.id, "enter-regional:tide-bell-cave"), /潮退了/);
