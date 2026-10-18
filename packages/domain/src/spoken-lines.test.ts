@@ -306,3 +306,143 @@ test("strangers are 搭讪 and people already known are 攀谈", () => {
   assert.match(teach?.description ?? "", /嫌隙/);
   assert.match(teach?.description ?? "", /剑拔弩张/);
 });
+
+function formParty(world: ReturnType<typeof createSeedWorld>, leaderId: string, mateId: string) {
+  performAction(world, leaderId, `chat-up:${mateId}`);
+  performAction(world, leaderId, `party-invite:${mateId}`);
+  const inviteId = Object.keys(world.partyInvitations).find((id) => world.partyInvitations[id]?.toCultivatorId === mateId);
+  assert.ok(inviteId);
+  performAction(world, mateId, `accept-party:${inviteId}`);
+}
+
+function setAffinity(world: ReturnType<typeof createSeedWorld>, aId: string, bId: string, affinity: number) {
+  for (const [ownerId, otherId] of [[aId, bId], [bId, aId]] as const) {
+    writeSocialLink(world, ownerId, { ...getOrCreateSocialLink(world, ownerId, otherId), affinity });
+  }
+}
+
+function notesMatching(person: { travelNotes?: ReadonlyArray<{ title: string; detail: string; mood?: string }> }, needle: string) {
+  return (person.travelNotes ?? []).filter((note) => note.detail.includes(needle) || note.title.includes(needle));
+}
+
+test("a party witness overhears a chat-up without taking the addressee's title", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-witness-speaker", "顾长川");
+  const listener = spawn(world, "agent-witness-listener", "柳如烟");
+  const witness = spawn(world, "agent-witness-moer", "墨儿");
+  const beside = spawn(world, "agent-witness-beside", "楚晚");
+  const away = spawn(world, "agent-witness-away", "青萝");
+  formParty(world, speaker.id, witness.id);
+  formParty(world, speaker.id, beside.id);
+  formParty(world, speaker.id, away.id);
+  away.locationId = "qingzhou:sub-town-east";
+  setAffinity(world, speaker.id, listener.id, 200);
+
+  const line = "柳如烟，广津城的风今晚有点硬。";
+  performAction(world, speaker.id, `chat-up:${listener.id}`, line);
+
+  for (const person of [witness, beside]) {
+    const overheard = notesMatching(person, line);
+    assert.equal(overheard.length, 1, person.name);
+    assert.equal(overheard[0]!.title, "听见顾长川跟柳如烟攀谈");
+    assert.equal(overheard[0]!.mood, "同队的人听见了");
+    assert.match(overheard[0]!.detail, /顾长川在.+跟柳如烟攀谈，说到：「柳如烟，广津城的风今晚有点硬。」/);
+    assert.doesNotMatch(`${overheard[0]!.title}${overheard[0]!.detail}`, /过来攀谈|关系到了|关系从|墨儿/);
+  }
+  assert.equal(notesMatching(away, line).length, 0);
+
+  const addressed = notesMatching(listener, line);
+  assert.equal(addressed.length, 1);
+  assert.equal(addressed[0]!.title, "顾长川过来攀谈");
+  assert.equal(addressed[0]!.mood, "有人找上门说话");
+  assert.match(addressed[0]!.detail, /关系到了挚友/);
+
+  const spoken = notesMatching(speaker, line);
+  assert.equal(spoken.length, 1);
+  assert.equal(spoken[0]!.title, "与柳如烟说上了话");
+  assert.match(spoken[0]!.detail, /关系到了挚友/);
+
+  advanceWorld(world, 4);
+  const direct = "墨儿，这句是对你说的。";
+  performAction(world, speaker.id, `chat-up:${witness.id}`, direct);
+  const toWitness = notesMatching(witness, direct);
+  assert.equal(toWitness.length, 1);
+  assert.equal(toWitness[0]!.title, "顾长川过来攀谈");
+  assert.equal(toWitness[0]!.mood, "有人找上门说话");
+  assert.match(toWitness[0]!.detail, /关系到了/);
+  const besideHeard = notesMatching(beside, direct);
+  assert.equal(besideHeard.length, 1);
+  assert.equal(besideHeard[0]!.title, "听见顾长川跟墨儿攀谈");
+  assert.equal(besideHeard[0]!.mood, "同队的人听见了");
+  assert.doesNotMatch(`${besideHeard[0]!.title}${besideHeard[0]!.detail}`, /过来攀谈|关系到了|关系从/);
+});
+
+test("a party witness hears a say, a reply, and a gift as overheard", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-witness-say", "顾长川");
+  const listener = spawn(world, "agent-witness-say-listener", "柳如烟");
+  const witness = spawn(world, "agent-witness-say-moer", "墨儿");
+  formParty(world, speaker.id, witness.id);
+  formParty(world, speaker.id, listener.id);
+
+  const said = "柳如烟，灯还在你袖子里。";
+  performAction(world, speaker.id, `say:${listener.id}`, said);
+  const heardSay = notesMatching(witness, said);
+  assert.equal(heardSay.length, 1);
+  assert.equal(heardSay[0]!.title, "听见顾长川对柳如烟说了一句");
+  assert.equal(heardSay[0]!.mood, "同队的人听见了");
+  assert.match(heardSay[0]!.detail, /顾长川对柳如烟说：「柳如烟，灯还在你袖子里。」/);
+  const addressedSay = notesMatching(listener, said);
+  assert.equal(addressedSay[0]!.title, "顾长川说了一句");
+  assert.equal(addressedSay[0]!.mood, "话留在了耳朵里");
+
+  const replied = "顾长川，灯在我袖子里。";
+  performAction(world, listener.id, `reply-line:${speaker.id}`, replied);
+  const heardReply = notesMatching(witness, replied);
+  assert.equal(heardReply.length, 1);
+  assert.equal(heardReply[0]!.title, "听见柳如烟回顾长川一句");
+  assert.equal(heardReply[0]!.mood, "同队的人听见了");
+  assert.match(heardReply[0]!.detail, /柳如烟回顾长川：「顾长川，灯在我袖子里。」/);
+  assert.equal(notesMatching(speaker, replied)[0]!.title, "柳如烟回了一句");
+
+  for (const key of Object.keys(speaker.inventory)) speaker.inventory[key as keyof typeof speaker.inventory] = 0;
+  speaker.inventory["healing-pill"] = 1;
+  speaker.lastGiftTick = -1;
+  const giftLine = "柳如烟，这枚丹你先收着。";
+  performAction(world, speaker.id, `send-message:${listener.id}:gift-item:healing-pill`, giftLine);
+  const heardGift = notesMatching(witness, giftLine);
+  assert.equal(heardGift.length, 1);
+  assert.equal(heardGift[0]!.title, "听见顾长川把礼递给柳如烟");
+  assert.equal(heardGift[0]!.mood, "同队的人听见了");
+  assert.match(heardGift[0]!.detail, /顾长川把1个疗伤丹塞给柳如烟/);
+  assert.doesNotMatch(heardGift[0]!.title, /递来一份礼/);
+  const addressedGift = notesMatching(listener, giftLine);
+  assert.equal(addressedGift[0]!.title, "顾长川递来一份礼");
+  assert.equal(addressedGift[0]!.mood, "手里多了别人的东西");
+});
+
+test("a greet's affinity clause stays on the pair and off the party witness", () => {
+  const world = createSeedWorld();
+  const speaker = spawn(world, "agent-witness-greet", "顾长川");
+  const listener = spawn(world, "agent-witness-greet-listener", "柳如烟");
+  const witness = spawn(world, "agent-witness-greet-moer", "墨儿");
+  formParty(world, speaker.id, witness.id);
+  setAffinity(world, speaker.id, listener.id, 17);
+
+  const line = "柳如烟，路上小心。";
+  performAction(world, speaker.id, `send-message:${listener.id}:greet`, line);
+
+  const overheard = notesMatching(witness, line);
+  assert.equal(overheard.length, 1);
+  assert.equal(overheard[0]!.title, "听见顾长川向柳如烟问了好");
+  assert.equal(overheard[0]!.mood, "同队的人听见了");
+  assert.match(overheard[0]!.detail, /顾长川在.+跟柳如烟点了下头，说：「柳如烟，路上小心。」/);
+  assert.doesNotMatch(`${overheard[0]!.title}${overheard[0]!.detail}`, /关系从|关系到了|过来攀谈/);
+
+  const spoken = notesMatching(speaker, line);
+  assert.equal(spoken[0]!.title, "向柳如烟问了好");
+  assert.match(spoken[0]!.detail, /关系从认识到了熟识/);
+  const addressed = notesMatching(listener, line);
+  assert.equal(addressed[0]!.title, "顾长川打了招呼");
+  assert.match(addressed[0]!.detail, /关系从认识到了熟识/);
+});

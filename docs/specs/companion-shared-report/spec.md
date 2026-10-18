@@ -31,7 +31,7 @@ After the shared job ends, a companion reads `state.dungeonExpedition.lastReport
 
 The closing travel note still says who split the stones, who was dragged out, or who withdrew. It then names the roles, one skill with 使出 when a skill was cast, one fight beat, a spoken 「」 line if one was said at the gate or during the run, and who pressed a wound down if someone did. A companion who had already stepped away still receives the report and a note that they were not at the gate for the split. `leave-shared-expedition` still removes them before the end, so they are not on that copy.
 
-Someone else in the party, standing in the same place, gets a travel note when a party mate speaks, tends a wound, or finishes a city duel. The duel itself writes `recentCombats[0].combatRounds` for both fighters, with the same beats and role labels.
+Someone else in the party, standing in the same place, gets a travel note when a party mate speaks, tends a wound, or finishes a city duel. A spoken echo is overheard wording. The title names both people, for example 听见甲跟乙攀谈, and does not reuse 过来攀谈 or 递来一份礼. The detail quotes the sentence and leaves off 关系到了 and the pair's affinity clause. The person who was actually spoken to still reads 过来攀谈 and 有人找上门说话. The duel itself writes `recentCombats[0].combatRounds` for both fighters, with the same beats and role labels. See `docs/specs/party-witness-echo/spec.md`.
 
 ## Constraints
 
@@ -45,6 +45,7 @@ Someone else in the party, standing in the same place, gets a travel note when a
 - That companion's travelogue has one note naming a role, a skill with 使出, a spoken line from the gate, and a tended wound when those happened.
 - A third party member at the gate receives the same report and the same kind of note.
 - A finished city duel has matching `combatRounds` on both `recentCombats`, and a party witness's travelogue names the duel and a skill.
+- A chat-up heard by a co-located party mate is titled 听见甲跟乙攀谈 and does not say 过来攀谈 or 关系到了. The addressee's own note still does.
 - Spoken-line refusal, doorway cooldown, party max five, and wound blocking still behave as before.
 
 ## Open Questions
