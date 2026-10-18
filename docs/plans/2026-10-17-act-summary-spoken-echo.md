@@ -16,7 +16,7 @@ The strings are built in `immediateAction` in `packages/domain/src/engine.ts`. A
 
 ### Task 1
 
-- Change the voice-transmit summary to `向某人传了一音。好感至N（等级）。`
+- Change the voice-transmit summary to quote the line and name the level. The affinity integer was removed later. See `docs/specs/affinity-receipt-labels/spec.md`.
 - Quote the spoken line on chat-up, greet, share-info, and request-help.
 
 ### Task 2

@@ -59,7 +59,7 @@
   "cultivatorId": "yun-zhong-he",
   "tick": 100,
   "title": "完成委托",
-  "content": "云中鹤完成了某某的spirit-ore委托，获得200灵石。好感度+25。",
+  "content": "云中鹤完成了某某的spirit-ore委托，获得200灵石。两人更近了些（熟识）。",
   "tags": ["social", "commission"],
   "usableFor": {
     "spiritStoneUsage": true,

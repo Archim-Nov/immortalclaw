@@ -172,7 +172,8 @@ test("talking on a bahuang meeting raises affinity unless the pair is already fe
   const talked = performAction(friendly.world, friendly.left.id, "bahuang-wake-decision:speak-with" as never);
   assertChinese(talked.summary);
   assert.match(talked.summary, /攀谈/);
-  assert.match(talked.summary, /好感\+3/);
+  assert.match(talked.summary, /两人更近了些（认识）/);
+  assert.doesNotMatch(talked.summary, /好感\+\d|现在是\d|好感至\d/);
   assert.equal(getSocialLink(friendly.world, friendly.left.id, friendly.right.id)?.affinity, 3);
   assert.equal(friendly.world.combatLogs.length, 0);
 

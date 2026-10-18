@@ -16,7 +16,7 @@ import {
 } from "./index.js";
 import { ITEM_CATALOG } from "./items/catalog.js";
 import type { ActionJob, CultivationRegistrationRecord, ItemId, Sect, WorldState } from "./model.js";
-import { writeSocialLink } from "./social.js";
+import { getAffinityLevel, getSocialLink, writeSocialLink } from "./social.js";
 
 const CULTIVATOR_ID = "yun-zhong-he";
 
@@ -390,7 +390,9 @@ test("a gift receipt names the item in Chinese and shows the affinity delta", ()
   first.lastGiftTick = -1;
 
   const given = performAction(world, first.id, `send-message:${second.id}:gift-item`);
-  assert.equal(given.summary, "云中鹤送了1个回气丹给青萝。好感+15。");
+  assert.equal(given.summary, `云中鹤送了1个回气丹给青萝。两人更近了些（${getAffinityLevel(getSocialLink(world, first.id, second.id)!.affinity)}）。`);
+  assert.equal(given.summary, "云中鹤送了1个回气丹给青萝。两人更近了些（认识）。");
+  assert.doesNotMatch(given.summary, /好感\+\d|好感度\+\d|好感至\d/);
   assert.equal(given.summary.includes("gifted"), false);
   assert.equal(given.summary.includes("Affinity"), false);
   assert.equal(given.summary.includes("qi-pill"), false);
@@ -399,12 +401,14 @@ test("a gift receipt names the item in Chinese and shows the affinity delta", ()
   third.sectId = "qing-yun-sect";
   first.lastGiftTick = -1;
   const fellowGift = performAction(world, first.id, `send-message:${third.id}:gift-item`);
-  assert.equal(fellowGift.summary, "云中鹤送了1个回气丹给同门青禾。好感+21。");
+  assert.equal(fellowGift.summary, "云中鹤送了1个回气丹给同门青禾。两人更近了些（熟识）。");
+  assert.doesNotMatch(fellowGift.summary, /好感\+\d|好感度\+\d|好感至\d/);
 
   const greeted = performAction(world, first.id, `send-message:${second.id}:greet`);
   const greetedLine = (world.messages ?? []).find((message) => message.toCultivatorId === second.id && message.subject === "问候")?.spokenLine;
   assert.ok(greetedLine);
-  assert.equal(greeted.summary, `云中鹤向青萝问了好：「${greetedLine}」。好感+3。`);
+  assert.equal(greeted.summary, `云中鹤向青萝问了好：「${greetedLine}」。两人更近了些（认识）。`);
+  assert.doesNotMatch(greeted.summary, /好感\+\d|好感至\d|好感度\d/);
   assert.equal(greeted.summary.includes("sent"), false);
   assert.equal(greeted.summary.includes("Affinity"), false);
 });
@@ -424,7 +428,8 @@ test("a gift action id or a body itemId selects that item, and the inbox gets on
   first.lastGiftTick = -1;
 
   const given = performAction(world, first.id, `send-message:${second.id}:gift-item:ward-talisman`);
-  assert.equal(given.summary, "云中鹤送了1个镇煞符给青萝。好感+15。");
+  assert.equal(given.summary, "云中鹤送了1个镇煞符给青萝。两人更近了些（认识）。");
+  assert.doesNotMatch(given.summary, /好感\+\d|好感度\+\d|好感至\d/);
   assert.equal(first.inventory["ward-talisman"], 0);
   assert.equal(first.inventory["healing-pill"], 1);
   assert.equal(second.pendingGifts?.[0]?.itemId, "ward-talisman");
@@ -433,7 +438,8 @@ test("a gift action id or a body itemId selects that item, and the inbox gets on
 
   first.lastGiftTick = -1;
   const fromBody = performAction(world, first.id, `send-message:${second.id}:gift-item`, undefined, "healing-pill");
-  assert.equal(fromBody.summary, "云中鹤送了1个疗伤丹给青萝。好感+15。");
+  assert.equal(fromBody.summary, "云中鹤送了1个疗伤丹给青萝。两人更近了些（熟识）。");
+  assert.doesNotMatch(fromBody.summary, /好感\+\d|好感度\+\d|好感至\d/);
   assert.equal(fromBody.actionId, `send-message:${second.id}:gift-item`);
   assert.equal(first.inventory["healing-pill"], 0);
   const later = (world.messages ?? []).filter((message) => message.toCultivatorId === second.id && message.subject.includes("赠礼"));

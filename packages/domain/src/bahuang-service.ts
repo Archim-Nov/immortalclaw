@@ -19,6 +19,8 @@ import {
   AFFINITY_GAINS,
   addMutualAffinity,
   addMutualGrudge,
+  affinityCloserPhrase,
+  getAffinityLevel,
   getSocialLink,
 } from "./social.js";
 import {
@@ -701,7 +703,7 @@ function resolveBahuangMeeting(
       recordLife(peer, { tick: world.tick, kind: "relationship", text: sentence, names: [cultivator.name] });
     } else {
       const { linkAB } = addMutualAffinity(world, cultivator.id, peer.id, 3);
-      sentence = `${cultivator.name}在${band.name}和${peer.name}攀谈了两句。好感+3，现在是${linkAB.affinity}。`;
+      sentence = `${cultivator.name}在${band.name}和${peer.name}攀谈了两句。${affinityCloserPhrase(getAffinityLevel(linkAB.affinity))}。`;
     }
     rememberBahuangLine(world, cultivator, "八荒里的见闻", sentence);
     rememberBahuangLine(world, peer, "八荒里的见闻", sentence);

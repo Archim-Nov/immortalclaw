@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   advanceWorld,
   createSeedWorld,
+  getDaoLogs,
   listAvailableActions,
   performAction,
   syncCultivatorFromPersona,
@@ -79,6 +80,9 @@ test("chat-up creates mutual social links and grows affinity", () => {
   assert.equal(linkAB.affinity, AFFINITY_GAINS.chatUp);
   assert.equal(linkBA.affinity, AFFINITY_GAINS.chatUp);
   assert.equal(getAffinityLevel(linkAB.affinity), "认识");
+  const chatLog = getDaoLogs(world, first.id).find((entry) => entry.tags.includes("chat-up"));
+  assert.match(chatLog?.content ?? "", /两人更近了些（认识）/);
+  assert.doesNotMatch(chatLog?.content ?? "", /好感度\d|好感至\d|好感\+\d|\d/);
 });
 
 test("chat-up requires same location", () => {

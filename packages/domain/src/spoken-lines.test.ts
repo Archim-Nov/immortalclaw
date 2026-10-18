@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advanceWorld, createSeedWorld, getCultivatorState, listAvailableActions, performAction, syncCultivatorFromPersona } from "./index.js";
+import { advanceWorld, createSeedWorld, getCultivatorState, getDaoLogs, listAvailableActions, performAction, syncCultivatorFromPersona } from "./index.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import { shiftCultivatorMood } from "./inner-life.js";
 import { addMutualAffinity, addMutualGrudge, getAffinityLevel, getOrCreateSocialLink, getSocialLink, writeSocialLink } from "./social.js";
@@ -171,10 +171,17 @@ test("a voice-transmit receipt is Chinese and names the affinity", () => {
   const result = performAction(world, speaker.id, `voice-transmit:${listener.id}`, line);
   const link = getSocialLink(world, speaker.id, listener.id);
   assert.ok(link);
-  assert.equal(result.summary, `顾长川向墨儿传了一音：「${line}」。好感至${link.affinity}（${getAffinityLevel(link.affinity)}）。`);
+  const level = getAffinityLevel(link.affinity);
+  assert.equal(result.summary, `顾长川向墨儿传了一音：「${line}」。两人更近了些（${level}）。`);
+  assert.match(result.summary, new RegExp(`（${level}）`));
+  assert.doesNotMatch(result.summary, /好感[^\n。]{0,12}\d|好感至\d|好感度\d|好感\+\d/);
+  assert.equal(result.summary.includes(String(link.affinity)), false);
   assert.equal(result.summary.includes("sent"), false);
   assert.equal(result.summary.includes("Affinity"), false);
   assert.equal(/[A-Za-z]/.test(result.summary), false);
+  const dao = getDaoLogs(world, speaker.id).find((entry) => entry.tags.includes("voice-transmit"));
+  assert.equal(dao?.content, `顾长川向墨儿传了一音：「${line}」。两人更近了些（${level}）。`);
+  assert.doesNotMatch(dao?.content ?? "", /好感[^\n。]{0,12}\d|好感至\d|好感度\d/);
   const heard = (world.messages ?? []).find((message) => message.toCultivatorId === listener.id && message.subject.includes("传音"));
   assert.equal(heard?.spokenLine, line);
   assert.match(heard?.content ?? "", /「听潮浦左边有坑，你别一个人踩下去。」/);
@@ -191,15 +198,18 @@ test("chat-up and the three send-message kinds echo the spoken line", () => {
 
   const greetLine = "青萝，听潮的风还沾在你袖口上。";
   const greet = performAction(world, speaker.id, `send-message:${qingluo.id}:greet`, greetLine);
-  assert.equal(greet.summary, `顾长川向青萝问了好：「${greetLine}」。好感+3。`);
+  assert.equal(greet.summary, `顾长川向青萝问了好：「${greetLine}」。两人更近了些（认识）。`);
+  assert.doesNotMatch(greet.summary, /好感\+\d|好感至\d|好感度\d/);
 
   const sightLine = "听潮浦左边有坑，你别一个人踩下去。";
   const sight = performAction(world, speaker.id, `send-message:${qingluo.id}:share-info`, sightLine);
-  assert.equal(sight.summary, `顾长川把见闻说给了青萝：「${sightLine}」。好感+3。`);
+  assert.equal(sight.summary, `顾长川把见闻说给了青萝：「${sightLine}」。两人更近了些（认识）。`);
+  assert.doesNotMatch(sight.summary, /好感\+\d|好感至\d|好感度\d/);
 
   const helpLine = "这趟我一个人搬不动，你要是空就搭把手。";
   const help = performAction(world, speaker.id, `send-message:${qingluo.id}:request-help`, helpLine);
-  assert.equal(help.summary, `顾长川向青萝求了一手：「${helpLine}」。好感+3。`);
+  assert.equal(help.summary, `顾长川向青萝求了一手：「${helpLine}」。两人更近了些（认识）。`);
+  assert.doesNotMatch(help.summary, /好感\+\d|好感至\d|好感度\d/);
 });
 
 test("a long spoken receipt keeps a piece of the quote inside eighty characters", () => {
@@ -225,7 +235,8 @@ test("an omitted voice-transmit still speaks a sentence, and the next one is dif
 
   const first = performAction(world, speaker.id, `voice-transmit:${listener.id}`);
   const second = performAction(world, speaker.id, `voice-transmit:${listener.id}`);
-  assert.match(first.summary, /阿絮向.*传了一音：「.+」。好感至/);
+  assert.match(first.summary, /阿絮向.*传了一音：「.+」。两人更近了些（朋友）。/);
+  assert.doesNotMatch(first.summary, /好感[^\n。]{0,12}\d|好感至\d|好感度\d|好感\+\d/);
   assert.match(second.summary, /「.+」/);
   assert.notEqual(first.summary, second.summary);
   assert.doesNotMatch(`${first.summary}${second.summary}`, /传音问候|requires|tick/);
