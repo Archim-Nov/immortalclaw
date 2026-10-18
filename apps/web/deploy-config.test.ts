@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -135,4 +137,58 @@ test("web workspace scripts keep explicit typechecking in both pages and root bu
   assert.equal(webPackage.scripts.typecheck, "tsc --noEmit --incremental false");
   assert.match(webPackage.scripts.build, /^npm run typecheck && vite build$/);
   assert.equal(rootPackage.scripts["build:web"], "npm run build --workspace @immortal-claw/web");
+  assert.equal(rootPackage.scripts["build:spectator"], "node ./scripts/build-spectator.mjs");
+});
+
+test("spectator homepage publish keeps agent entrypoints and refuses the vite spa", () => {
+  const sourceRoot = path.resolve(import.meta.dirname);
+  const repoRoot = path.resolve(sourceRoot, "../..");
+  execFileSync(process.execPath, [path.join(repoRoot, "scripts/build-spectator.mjs")], {
+    cwd: repoRoot,
+  });
+
+  for (const name of ["index.html", "styles.css", "app.js", "jiuzhou-ink-wash.png"]) {
+    assert.equal(fs.existsSync(path.join(repoRoot, "dist", "spectator", name)), true, name);
+  }
+
+  const builtIndex = fs.readFileSync(path.join(repoRoot, "dist", "spectator", "index.html"), "utf8");
+  assert.match(builtIndex, /name="openclaw-skill-url"/);
+  assert.match(builtIndex, /name="openclaw-register-url"/);
+  assert.match(builtIndex, /name="openclaw-heartbeat-url"/);
+  assert.match(builtIndex, /不朽爪印/);
+  assert.doesNotMatch(builtIndex, /id="root"/);
+
+  const webRoot = fs.mkdtempSync(path.join(os.tmpdir(), "immortalclaw-spectator-"));
+  execFileSync("bash", [path.join(repoRoot, "deploy", "sync-web-root.sh"), webRoot], {
+    cwd: repoRoot,
+  });
+
+  const published = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
+  assert.match(published, /九州观览/);
+  assert.equal(
+    fs.readFileSync(path.join(webRoot, "skill.md"), "utf8"),
+    fs.readFileSync(path.join(repoRoot, "apps", "web", "public", "skill.md"), "utf8"),
+  );
+  assert.equal(fs.existsSync(path.join(webRoot, "register.md")), true);
+  assert.equal(fs.existsSync(path.join(webRoot, "heartbeat.md")), true);
+  assert.equal(fs.existsSync(path.join(webRoot, "agent-templates", "dossier.html")), true);
+  assert.equal(fs.existsSync(path.join(webRoot, "agent-templates", "catalog.json")), true);
+  assert.equal(fs.existsSync(path.join(webRoot, "agent-templates", "dungeon-wake.html")), false);
+  assert.equal(fs.existsSync(path.join(webRoot, "agent-templates", "progress-summary.html")), false);
+  assert.equal(fs.existsSync(path.join(webRoot, "agent-templates", "gift-notice.html")), false);
+  assert.equal(fs.existsSync(path.join(webRoot, "styles.css")), true);
+  assert.equal(fs.existsSync(path.join(webRoot, "app.js")), true);
+  assert.equal(fs.existsSync(path.join(webRoot, "jiuzhou-ink-wash.png")), true);
+
+  const spaRoot = fs.mkdtempSync(path.join(os.tmpdir(), "immortalclaw-spa-"));
+  fs.writeFileSync(path.join(spaRoot, "index.html"), '<div id="root"></div>\n');
+  assert.throws(
+    () =>
+      execFileSync("bash", [path.join(repoRoot, "deploy", "sync-web-root.sh"), webRoot, spaRoot], {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    /refusing to publish a Vite SPA/,
+  );
+  assert.match(fs.readFileSync(path.join(webRoot, "index.html"), "utf8"), /九州观览/);
 });

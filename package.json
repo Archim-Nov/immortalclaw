@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run build:web",
     "build:web": "npm run build --workspace @immortal-claw/web",
+    "build:spectator": "node ./scripts/build-spectator.mjs",
     "dev:web": "npm run dev --workspace @immortal-claw/web",
     "dev:worker": "npm run dev --workspace @immortal-claw/runtime-worker",
     "dev:server": "npm run dev --workspace @immortal-claw/server",
