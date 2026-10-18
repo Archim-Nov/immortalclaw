@@ -791,9 +791,16 @@ export interface LocationBoardNote {
 export interface PendingGift {
   readonly messageId: string;
   readonly fromCultivatorId: string;
-  readonly itemId: ItemId;
+  /** Omitted when this handoff is spirit stones rather than an item. */
+  readonly itemId?: ItemId;
   readonly count: number;
   readonly tick: number;
+  /**
+   * Set when the sender already handed over spirit stones.
+   * Accepting adds them to the receiver. Rejecting returns them.
+   * Nothing refunds them after accept.
+   */
+  readonly spiritStones?: number;
 }
 
 export type CommissionType = "gather" | "deliver";
@@ -1632,6 +1639,7 @@ export type ImmediateActionId =
   | `reply-line:${string}`
   | `spar-teach:${string}`
   | `share-resource:${string}`
+  | `gift-stones:${string}`
   | `grudge-challenge:${string}`
   | `accept-gift:${string}`
   | `reject-gift:${string}`
@@ -3284,7 +3292,15 @@ export interface CultivatorStateView {
   activeResidence: Residence | null;
   residenceContext: ResidenceContextView | null;
   productionQueue: readonly { slot: number; recipeId: string; ticksRemaining: number }[];
-  pendingGifts: readonly { messageId: string; fromCultivatorId?: string; fromName: string; itemId: ItemId; itemName?: string; count: number }[];
+  pendingGifts: readonly {
+    messageId: string;
+    fromCultivatorId?: string;
+    fromName: string;
+    itemId?: ItemId;
+    itemName?: string;
+    count: number;
+    spiritStones?: number;
+  }[];
   localCommissions: readonly { id: string; posterName: string; type: CommissionType; targetItemId: ItemId; itemName: string; targetCount: number; rewardSpiritStones: number }[];
   /** Notes other cultivators left at this location. Omitted by older view fixtures. */
   localBoard?: readonly { authorName: string; tick: number; text: string; kind?: string }[];

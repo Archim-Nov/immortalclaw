@@ -171,7 +171,12 @@ const ACT_SCHEMA = {
     line: {
       type: "string",
       description:
-        "Spoken sentence for this act, at most 40 Chinese characters, one complete sentence. For chat-up, say, and reply-line, write it as 当面攀谈. For send-message (greet, share-info, request-help, gift-item, rendezvous-at-gate, ready-to-enter, wait), write it as 传音符. Do not put action ids, English, or these instructions into the sentence.",
+        "Spoken sentence for this act, at most 40 Chinese characters, one complete sentence. For chat-up, say, and reply-line, write it as 当面攀谈. For send-message (greet, share-info, request-help, gift-item, rendezvous-at-gate, ready-to-enter, wait) and gift-stones, write it as 传音符. Do not put action ids, English, or these instructions into the sentence.",
+    },
+    itemId: {
+      type: "string",
+      description:
+        "Item that leaves the bag when actionId is send-message:<id>:gift-item and does not already end in gift-item:<itemId>. Ignored when the action id already names the item.",
     },
   },
 };
@@ -849,7 +854,7 @@ function buildPromptGuidance(config: PluginConfig): string {
     "- Call immortal_state, immortal_strategy, and immortal_actions before making strategic recommendations or taking actions.",
     "- Read agentGuidance, statusEffects, and recentEvents from immortal_state instead of inferring risk.",
     "- Use immortal_strategy to pick a short-term goal and recommended action sequence before acting.",
-    "- Use the exact actionId returned by immortal_actions when calling immortal_act.",
+    "- Use the exact actionId returned by immortal_actions when calling immortal_act. A negotiated payment may use gift-stones:<cultivatorId>:<amount> for any whole number from 1 to 800 even when that exact amount is not on a card. When gifting an item, the action id gift-item:<itemId> is what leaves the bag. Pass itemId only when that action id does not already name the item.",
     "- Timed actions are not complete until later state or tick results confirm completion.",
     "- If a local canonical registration_record file is present, the plugin will include it during first registration automatically. If the record is produced later, persist it with immortal_registration_save and read it back with immortal_registration or immortal_state.registration.",
     "- Use immortal_messages, immortal_sect, and immortal_dao_logs for supporting context instead of guessing.",
@@ -1640,12 +1645,14 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
           const target = await resolveTarget(rawParams);
           const actionId = trimString(rawParams.actionId);
           const line = trimString(rawParams.line);
+          const itemId = trimString(rawParams.itemId);
           if (!actionId) {
             throw new Error("actionId is required.");
           }
           ensureRecentInspection(target.cultivatorId);
           const availableActionIds = await loadActions(target);
-          if (!availableActionIds.includes(actionId)) {
+          const negotiatedStoneGift = /^gift-stones:[^:]+:\d+$/.test(actionId);
+          if (!availableActionIds.includes(actionId) && !negotiatedStoneGift) {
             throw new Error(
               `actionId '${actionId}' is not currently available. Use one of: ${availableActionIds.join(", ")}`,
             );
@@ -1658,7 +1665,11 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
             target.mode === "agent"
               ? await requestAgentWorld(target.session, "/agent/act", {
                   method: "POST",
-                  body: JSON.stringify({ actionId, ...(line ? { line } : {}) }),
+                  body: JSON.stringify({
+                    actionId,
+                    ...(line ? { line } : {}),
+                    ...(itemId ? { itemId } : {}),
+                  }),
                 })
               : await requestWorld(fetchImpl, config, "/cultivator/act", {
                   method: "POST",
@@ -1666,6 +1677,7 @@ export function createImmortalRealmPlugin(options: PluginFactoryOptions = {}) {
                     cultivatorId: target.cultivatorId,
                     actionId,
                     ...(line ? { line } : {}),
+                    ...(itemId ? { itemId } : {}),
                   }),
                 });
           return jsonResult("immortal_act", payload);
