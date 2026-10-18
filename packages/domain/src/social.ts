@@ -204,6 +204,11 @@ export function getAffinityLevel(affinity: number): AffinityLevel {
   return "认识";
 }
 
+/** Player-facing closeness. The integer stays on the link. */
+export function affinityCloserPhrase(level: AffinityLevel): string {
+  return `两人更近了些（${level}）`;
+}
+
 export function affinityLevelRank(level: AffinityLevel): number {
   return AFFINITY_LEVELS_ORDERED.indexOf(level);
 }

@@ -18,7 +18,7 @@ When two cultivators speak where a party mate can hear them, that mate still get
 ## Non-Goals
 
 - Changing affinity numbers, bond crossings, or the gossip note `听见了一桩闲话`.
-- Rewriting voice-transmit summaries such as `好感至778（挚友）`.
+- Rewriting voice-transmit summaries. Those receipts later dropped the affinity integer and kept the level. See `docs/specs/affinity-receipt-labels/spec.md`.
 - Changing equip-card attack text.
 - Changing who is eligible to hear the echo, or the city-duel witness line that already says `听见甲与乙切磋`.
 

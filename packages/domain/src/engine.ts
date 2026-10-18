@@ -386,6 +386,7 @@ import {
   describeArcLine,
   describeSocialBond,
   disbandParty,
+  affinityCloserPhrase,
   getAffinityLevel,
   getCultivatorsAtLocation,
   getDaoCompanionId,
@@ -8916,6 +8917,12 @@ function enterDungeonCardDescription(
   return `${yieldLine}${road}${enterDungeonStanceLine(posture)}`;
 }
 
+function attackBonusClause(bonus: number): string {
+  if (bonus > 0) return `，伤害+${bonus}`;
+  if (bonus < 0) return `，伤害${bonus}`;
+  return "";
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -9061,7 +9068,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push({
       actionId: `equip-weapon:${loadoutId}` as ActionId,
       label: `换上${wDef.name}`,
-      description: `把兵器换成${wDef.name}（${WEAPON_TYPE_NAMES_INLINE[wDef.weaponTypeId] ?? wDef.weaponTypeId}，这一式耗灵${wDef.coreSkillSpiritCost}，伤害+${wDef.attackPowerBonus}）。`,
+      description: `把兵器换成${wDef.name}（${WEAPON_TYPE_NAMES_INLINE[wDef.weaponTypeId] ?? wDef.weaponTypeId}，这一式耗灵${wDef.coreSkillSpiritCost}${attackBonusClause(wDef.attackPowerBonus)}）。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -9074,7 +9081,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     actions.push({
       actionId: `equip-spell:${loadoutId}` as ActionId,
       label: `换上${sDef.name}`,
-      description: `把法术换成${sDef.name}（${SPELL_BRANCH_NAMES_INLINE[sDef.spellBranchId] ?? sDef.spellBranchId}，这一式耗灵${sDef.coreSkillSpiritCost}，伤害+${sDef.attackPowerBonus}）。`,
+      description: `把法术换成${sDef.name}（${SPELL_BRANCH_NAMES_INLINE[sDef.spellBranchId] ?? sDef.spellBranchId}，这一式耗灵${sDef.coreSkillSpiritCost}${attackBonusClause(sDef.attackPowerBonus)}）。`,
       durationTicks: 0,
       kind: "immediate",
     });
@@ -10855,7 +10862,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       writeSocialLink(world, target.id, { ...reverse, lastChatUpTick: world.tick });
     }
     const level = getAffinityLevel(linkAB.affinity);
-    addDaoLog(world, cultivator.id, "搭讪", `${cultivator.name}与${target.name}攀谈，好感度上升至${linkAB.affinity}（${level}）。`, ["social", "chat-up"]);
+    addDaoLog(
+      world,
+      cultivator.id,
+      "搭讪",
+      feud
+        ? `${cultivator.name}与${target.name}攀谈，剑拔弩张，好感没有涨。`
+        : `${cultivator.name}与${target.name}攀谈，${affinityCloserPhrase(level)}。`,
+      ["social", "chat-up"],
+    );
     const chatPlace = world.locations[cultivator.locationId]?.name ?? "城里";
     addMessage(world, target.id, cultivator.name, "有人搭讪", `${cultivator.name}在${chatPlace}向你搭话：「${spoken}」`, { fromCultivatorId: cultivator.id, spokenLine: spoken });
     const chatClause = relationClause(getSocialLink(world, cultivator.id, target.id), target.name, previousLevel);
@@ -10900,7 +10915,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const { linkAB } = addMutualAffinity(world, cultivator.id, target.id, AFFINITY_GAINS.voiceTransmit);
     const level = getAffinityLevel(linkAB.affinity);
     const spoken = openSpokenLine(world, cultivator.id, target.id, "voice-transmit", world.tick, speechLine);
-    addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传了一音：「${spoken}」。好感度${linkAB.affinity}（${level}）。`, ["social", "voice-transmit"]);
+    addDaoLog(world, cultivator.id, "传音", `${cultivator.name}向${target.name}传了一音：「${spoken}」。${affinityCloserPhrase(level)}。`, ["social", "voice-transmit"]);
     addMessage(
       world,
       target.id,
@@ -10914,7 +10929,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: summaryWithSpokenLine(`${cultivator.name}向${target.name}传了一音`, spoken, `。好感至${linkAB.affinity}（${level}）。`),
+      summary: summaryWithSpokenLine(`${cultivator.name}向${target.name}传了一音`, spoken, `。${affinityCloserPhrase(level)}。`),
     };
   }
 
@@ -11657,8 +11672,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (!target.pendingGifts) target.pendingGifts = [];
     target.pendingGifts.push(gift);
     const tenseGift = feud === "嫌隙";
+    let stonesCloser = "";
     if (!tenseGift) {
-      addMutualAffinity(world, cultivator.id, target.id, GIFT_STONES_AFFINITY);
+      const gifted = addMutualAffinity(world, cultivator.id, target.id, GIFT_STONES_AFFINITY);
+      stonesCloser = `${affinityCloserPhrase(getAffinityLevel(gifted.linkAB.affinity))}。`;
     } else {
       const place = world.locations[cultivator.locationId]?.name ?? "这里";
       const tense = `${cultivator.name}把${giftName}递给${target.name}，人在${place}。话没热，剑拔弩张，好感没有涨。`;
@@ -11671,7 +11688,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       "赠灵石",
       tenseGift
         ? `${cultivator.name}把${giftName}递给${target.name}。两个人有嫌隙，剑拔弩张，好感没有涨。`
-        : `${cultivator.name}向${target.name}递了${giftName}。好感度+${GIFT_STONES_AFFINITY}。对方还没说收不收。`,
+        : `${cultivator.name}向${target.name}递了${giftName}。${stonesCloser}对方还没说收不收。`,
       ["social", "gift", "stones"],
     );
     pushTravelNote(cultivator, travelNote({
@@ -11695,9 +11712,9 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: tenseGift
+        summary: tenseGift
         ? `${cultivator.name}把${giftName}递给${target.name}。你们有嫌隙，剑拔弩张，好感没有涨。`
-        : `${cultivator.name}把${giftName}递给${target.name}。对方还没说收不收。好感+${GIFT_STONES_AFFINITY}。`,
+        : `${cultivator.name}把${giftName}递给${target.name}。对方还没说收不收。${stonesCloser}`,
     };
   }
 
@@ -11798,8 +11815,10 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       target.pendingGifts.push(gift);
       const fellowGift = sameSectBond(cultivator, target);
       const tenseGift = feud === "嫌隙";
+      let giftCloser = "";
       if (!tenseGift) {
-        addMutualAffinity(world, cultivator.id, target.id, fellowGift ? 21 : 15);
+        const gifted = addMutualAffinity(world, cultivator.id, target.id, fellowGift ? 21 : 15);
+        giftCloser = `${affinityCloserPhrase(getAffinityLevel(gifted.linkAB.affinity))}。`;
       } else {
         const place = world.locations[cultivator.locationId]?.name ?? "这里";
         const tense = `${cultivator.name}把礼递给${target.name}，人在${place}。话没热，剑拔弩张，好感没有涨。`;
@@ -11813,8 +11832,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         tenseGift
           ? `${cultivator.name}把1个${giftName}递给${target.name}。两个人有嫌隙，剑拔弩张，好感没有涨。`
           : fellowGift
-            ? `${cultivator.name}把1个${giftName}递给同门${target.name}。好感度+21。`
-            : `${cultivator.name}向${target.name}赠送了1个${giftName}。好感度+15。`,
+            ? `${cultivator.name}把1个${giftName}递给同门${target.name}。${giftCloser}`
+            : `${cultivator.name}向${target.name}赠送了1个${giftName}。${giftCloser}`,
         ["social", "gift"],
       );
       pushTravelNote(cultivator, travelNote({
@@ -11848,7 +11867,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         accepted: true,
         summary: tenseGift
           ? `${cultivator.name}把1个${giftName}递给${target.name}。你们有嫌隙，剑拔弩张，好感没有涨。`
-          : `${cultivator.name}送了1个${giftName}给${fellowGift ? "同门" : ""}${target.name}。好感+${fellowGift ? 21 : 15}。`,
+          : `${cultivator.name}送了1个${giftName}给${fellowGift ? "同门" : ""}${target.name}。${giftCloser}`,
       };
     }
     // Non-gift message: greet / share-info / request-help
@@ -11857,10 +11876,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const messagePrevious = messageLevelBefore ? getAffinityLevel(messageLevelBefore.affinity) : null;
     const speechKind: SpeechKind = kind === "share-info" || kind === "request-help" ? kind : "greet";
     const spoken = openSpokenLine(world, cultivator.id, target.id, speechKind, world.tick, speechLine);
-    addMutualAffinity(world, cultivator.id, target.id, 3);
+    const messaged = addMutualAffinity(world, cultivator.id, target.id, 3);
+    const messageCloser = `${affinityCloserPhrase(getAffinityLevel(messaged.linkAB.affinity))}。`;
     const msgSubject = kindLabels[kind] ?? kind;
     addMessage(world, target.id, cultivator.name, msgSubject, `${cultivator.name}说：「${spoken}」`, { fromCultivatorId: cultivator.id, toCultivatorId: target.id, spokenLine: spoken });
-    addDaoLog(world, cultivator.id, "消息", `${cultivator.name}向${target.name}发送了${msgSubject}。好感度+3。`, ["social", "message"]);
+    addDaoLog(world, cultivator.id, "消息", `${cultivator.name}向${target.name}发送了${msgSubject}。${messageCloser}`, ["social", "message"]);
     if (kind === "request-help") {
       const existing = (target.pendingHelpRequests ?? []).filter((request) => request.fromCultivatorId !== cultivator.id);
       const request: PendingHelpRequest = {
@@ -11916,11 +11936,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       shareMoment(world, [cultivator, target], note.witnessTitle, note.detail, `${cultivator.name}说：「${spoken}」`, "spoken");
     }
     const messageSummaries: Record<string, string> = {
-      greet: summaryWithSpokenLine(`${cultivator.name}向${target.name}问了好`, spoken, "。好感+3。"),
-      "share-info": summaryWithSpokenLine(`${cultivator.name}把见闻说给了${target.name}`, spoken, "。好感+3。"),
-      "request-help": summaryWithSpokenLine(`${cultivator.name}向${target.name}求了一手`, spoken, "。好感+3。"),
+      greet: summaryWithSpokenLine(`${cultivator.name}向${target.name}问了好`, spoken, `。${messageCloser}`),
+      "share-info": summaryWithSpokenLine(`${cultivator.name}把见闻说给了${target.name}`, spoken, `。${messageCloser}`),
+      "request-help": summaryWithSpokenLine(`${cultivator.name}向${target.name}求了一手`, spoken, `。${messageCloser}`),
     };
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: messageSummaries[kind] ?? `${cultivator.name}向${target.name}传了话。好感+3。` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: messageSummaries[kind] ?? `${cultivator.name}向${target.name}传了话。${messageCloser}` };
   }
 
   // ---- Social Verbs: read-messages ----
@@ -12181,11 +12201,12 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     cultivator.inventory[commission.targetItemId] = (cultivator.inventory[commission.targetItemId] ?? 0) - commission.targetCount;
     cultivator.spiritStones += commission.rewardSpiritStones;
     world.commissions[acceptCommId] = { ...commission, acceptedById: cultivator.id, completedAtTick: world.tick };
-    addMutualAffinity(world, cultivator.id, commission.posterId, 25);
+    const commissioned = addMutualAffinity(world, cultivator.id, commission.posterId, 25);
+    const commissionCloser = `${affinityCloserPhrase(getAffinityLevel(commissioned.linkAB.affinity))}。`;
     const posterName = world.cultivators[commission.posterId]?.name ?? "某人";
     addMessage(world, commission.posterId, "委托", "委托已完成", `${cultivator.name}完成了你发布的${commissionKind}${commissionItemName}委托。`, { fromCultivatorId: cultivator.id });
-    addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commissionItemName}委托，获得${commission.rewardSpiritStones}灵石。好感度+25。`, ["social", "commission"]);
-    addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commissionItemName}委托。好感度+25。`, ["social", "commission"]);
+    addSpiritStoneGainLog(world, cultivator.id, "完成委托", `${cultivator.name}完成了${posterName}的${commissionItemName}委托，获得${commission.rewardSpiritStones}灵石。${commissionCloser}`, ["social", "commission"]);
+    addDaoLog(world, commission.posterId, "委托完成", `${cultivator.name}完成了你发布的${commissionItemName}委托。${commissionCloser}`, ["social", "commission"]);
     grantOwedFavor(world, cultivator.id, commission.posterId, "办了我的委托", "commission");
     const poster = world.cultivators[commission.posterId];
     const commissionDetail = `${cultivator.name}办完了${posterName}贴出的${itemDisplayName(commission.targetItemId)}委托。灵石进了口袋，${posterName}还欠着一份人情。`;
@@ -12725,7 +12746,7 @@ function resolveJob(world: WorldState, job: ActionJob): string {
     if (socialTarget) {
       const { linkAB } = addMutualAffinity(world, cultivator.id, socialTarget.id, AFFINITY_GAINS.residenceSocialize + benefitsOf(residence).hostAffinity);
       const level = getAffinityLevel(linkAB.affinity);
-      addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}与${socialTarget.name}交流心法，好感度${linkAB.affinity}（${level}）。`, ["social", "residence"]);
+      addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}与${socialTarget.name}交流心法，${affinityCloserPhrase(level)}。`, ["social", "residence"]);
     } else {
       addDaoLog(world, cultivator.id, "洞府会友", `${timeSense}的${residence?.name ?? "洞府"}里，${cultivator.name}独自整理心法与见闻。`, ["social", "residence"]);
     }

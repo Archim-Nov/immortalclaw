@@ -3761,6 +3761,30 @@ test("equip actions appear in available actions for unlocked loadouts", () => {
   );
 });
 
+test("equip card writes a negative attack bonus with one minus", () => {
+  const world = createSeedWorld();
+  const cultivatorId = "yun-zhong-he";
+  const cultivator = world.cultivators[cultivatorId]!;
+  const weaponId = (id: string) => id as (typeof cultivator.unlockedWeaponLoadoutIds)[number];
+  const spellId = (id: string) => id as (typeof cultivator.unlockedSpellLoadoutIds)[number];
+  cultivator.unlockedWeaponLoadoutIds = [weaponId("starter-sword"), weaponId("starter-dagger"), weaponId("starter-saber")];
+  cultivator.equippedWeaponLoadoutId = weaponId("starter-sword");
+  cultivator.unlockedSpellLoadoutIds = [spellId("starter-metal-edge"), spellId("starter-water-flow")];
+  cultivator.equippedSpellLoadoutId = spellId("starter-metal-edge");
+  const actions = listAvailableActions(world, cultivatorId);
+  const dagger = actions.find((action) => action.actionId === "equip-weapon:starter-dagger");
+  const saber = actions.find((action) => action.actionId === "equip-weapon:starter-saber");
+  const flow = actions.find((action) => action.actionId === "equip-spell:starter-water-flow");
+  assert.match(dagger?.description ?? "", /伤害-1/);
+  assert.match(saber?.description ?? "", /伤害\+2/);
+  assert.match(flow?.description ?? "", /伤害-1/);
+  assert.doesNotMatch(`${dagger?.description ?? ""}${saber?.description ?? ""}${flow?.description ?? ""}`, /伤害\+-/);
+  cultivator.equippedWeaponLoadoutId = weaponId("starter-dagger");
+  const sword = listAvailableActions(world, cultivatorId).find((action) => action.actionId === "equip-weapon:starter-sword");
+  assert.ok(sword);
+  assert.equal(sword.description.includes("伤害"), false);
+});
+
 test("already-equipped loadout does not appear as equip action", () => {
   const world = createSeedWorld();
   const cultivatorId = "yun-zhong-he";
