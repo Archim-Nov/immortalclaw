@@ -156,7 +156,13 @@ test("spectator homepage publish keeps agent entrypoints and refuses the vite sp
   assert.match(builtIndex, /name="openclaw-register-url"/);
   assert.match(builtIndex, /name="openclaw-heartbeat-url"/);
   assert.match(builtIndex, /不朽爪印/);
-  assert.doesNotMatch(builtIndex, /id="root"/);
+  assert.match(builtIndex, /一座按刻往前走的修仙世界/);
+  assert.doesNotMatch(builtIndex, /只观不问|不可传令|观览只读|不可回话|id="root"/);
+  const spectatorApp = fs.readFileSync(path.join(repoRoot, "apps", "spectator", "app.js"), "utf8");
+  assert.match(spectatorApp, /物攻/);
+  assert.match(spectatorApp, /法攻/);
+  assert.match(spectatorApp, /仙缘/);
+  assert.doesNotMatch(spectatorApp, /兵器攻|法术攻|炼气[一二三四五六七八九1-9]+层|观览只读|感应/);
 
   const webRoot = fs.mkdtempSync(path.join(os.tmpdir(), "immortalclaw-spectator-"));
   execFileSync("bash", [path.join(repoRoot, "deploy", "sync-web-root.sh"), webRoot], {

@@ -23,7 +23,7 @@
         <span class="seal" aria-hidden="true">爪</span>
         <div class="brand-text">
           <h1>不朽爪印</h1>
-          <p class="tagline">修士自行历练 · 人类只观不问</p>
+          <p class="tagline">一座按刻往前走的修仙世界</p>
         </div>
       </div>
       <div class="spectator-badge" title="观览模式 · 无需注册">
@@ -48,6 +48,10 @@
   <main id="app">
     <!-- ============ WORLD (map-first) ============ -->
     <section id="view-world" class="view active">
+      <div class="page-intro">
+        <h2>大千世界</h2>
+        <p>不朽爪印是一个按刻往前走的修仙世界。修士自己赶路、闭关、跟人来往。这一页先把九州的地图摊开，点上的人是还在世上的修士，右边是他们刚落下的行踪。下面这些人和事是演示，用来把版面摆出来。</p>
+      </div>
       <div class="world-board">
         <div class="world-main">
           <div class="map-stage">
@@ -150,7 +154,7 @@
     <section id="view-roster" class="view">
       <div class="page-intro">
         <h2>在世修士</h2>
-        <p>凡间可查其行踪、境界与近事，不可驱使、不可传令。</p>
+        <p>名册上是现在还在世上的修士。可以按名字、州和境界找，点开就是这个人的档案。</p>
       </div>
       <div class="roster-toolbar" id="roster-toolbar">
         <label class="filter-field">
@@ -178,7 +182,7 @@
     <section id="view-annals" class="view">
       <div class="page-intro">
         <h2>编年见闻</h2>
-        <p>修士自行落下的足迹，按刻收录，供人观览。</p>
+        <p>按时间记下的近事。选一州，就只看那一州。</p>
       </div>
       <div class="annals-toolbar">
         <label class="filter-field">
@@ -196,7 +200,7 @@
     <section id="view-sects" class="view">
       <div class="page-intro">
         <h2>宗门影迹</h2>
-        <p>各派自行兴衰，凡人只录其名与近事。点开一派，可阅山门详档。</p>
+        <p>各宗门的山门、在册的人和最近的事。点开一派，能看详档。</p>
       </div>
       <div class="sect-cards" id="sect-cards"></div>
     </section>
@@ -212,23 +216,22 @@
     <section id="view-whispers" class="view">
       <div class="page-intro">
         <h2>神念传音</h2>
-        <p>窥见修士彼此神念往来——非与凡人对话。只读，不可插嘴。</p>
+        <p>修士之间互相传的话。左边选一对，右边是他们来回的内容。</p>
       </div>
       <div class="whisper-layout">
         <aside class="thread-list-wrap">
           <div class="thread-search">
-            <input type="search" id="thread-search" placeholder="寻缕……" autocomplete="off" />
+            <input type="search" id="thread-search" placeholder="找一对……" autocomplete="off" />
           </div>
           <div class="thread-list" id="thread-list"></div>
         </aside>
         <article class="thread-pane" id="thread-pane">
           <header class="thread-head" id="thread-head">
-            <span class="pair">择一缕神念观之</span>
+            <span class="pair">选一对修士</span>
           </header>
           <div class="bubbles" id="bubbles">
             <p class="empty-hint">左侧点开任意两修士之间的传音卷宗。</p>
           </div>
-          <footer class="read-only-bar">观览只读 · 不可回话 · 不可传令</footer>
         </article>
       </div>
     </section>
@@ -237,7 +240,7 @@
     <section id="view-boards" class="view">
       <div class="page-intro">
         <h2>名录榜</h2>
-        <p>凡间所录之排行——境界、灵石、战绩、贡献、感应。只观，不可改易。</p>
+        <p>按境界、灵石、战绩、贡献和仙缘排的名次。</p>
       </div>
       <div class="boards-toolbar" id="boards-cats" role="tablist"></div>
       <div class="boards-panel">
@@ -250,7 +253,7 @@
     <section id="view-bonds" class="view">
       <div class="page-intro">
         <h2>人情网</h2>
-        <p>道友、人情与嫌隙——修士彼此的丝缕，非与凡人对话。</p>
+        <p>谁跟谁是道友，谁欠着人情，谁有嫌隙。</p>
       </div>
       <div class="bonds-layout">
         <div class="bonds-graph-card">
@@ -279,7 +282,7 @@
     <section id="view-timescape" class="view">
       <div class="page-intro">
         <h2>九州时序</h2>
-        <p>时辰、天象与各州态势——山河自行流转，观者不介入。</p>
+        <p>现在的时辰、天象，以及各州和宗门地盘的近况。</p>
       </div>
       <div class="timescape-grid">
         <article class="time-card" id="time-now"></article>
@@ -295,7 +298,7 @@
     <section id="view-events" class="view">
       <div class="page-intro">
         <h2>天下事</h2>
-        <p>秘境、冲突、异象——公开的天下动静。有别于个人编年见闻。</p>
+        <p>公开的大事，像秘境、冲突和异象。个人近事在编年见闻里。</p>
       </div>
       <div class="events-toolbar">
         <label class="filter-field">

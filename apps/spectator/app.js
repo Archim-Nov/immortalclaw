@@ -8,14 +8,14 @@ const CULTIVATORS = {
     loc: "广津城外 · 荒野",
     sect: "中立散修盟",
     sectId: "sanxiu",
-    deed: "荒野感应二十六，距八荒门槛尚差十四。手持八荒令一枚。",
-    deeds: ["荒野感应升至二十六", "自广津城动身前往听潮浦"],
+    deed: "荒野仙缘二十六，距八荒门槛尚差十四。手持八荒令一枚。",
+    deeds: ["荒野仙缘升至二十六", "自广津城动身前往听潮浦"],
     relations: "与青萝神念往来甚密",
     color: "#2a2118",
   },
   qingluo: {
     name: "青萝",
-    realm: "炼气九层",
+    realm: "炼气后期",
     region: "沧州",
     loc: "沧州 · 海市",
     sect: "沧浪阁（客）",
@@ -44,8 +44,8 @@ const CULTIVATORS = {
     loc: "扬州 · 渡口",
     sect: "中立散修盟",
     sectId: "sanxiu",
-    deed: "贡献已足，感应未到。静候沈砺传音。",
-    deeds: ["渡口静候八荒感应", "贡献换得令牌资格"],
+    deed: "贡献已足，仙缘未到。静候沈砺传音。",
+    deeds: ["渡口静候八荒仙缘", "贡献换得令牌资格"],
     relations: "沈砺道友",
     color: "#3a3228",
   },
@@ -63,7 +63,7 @@ const CULTIVATORS = {
   },
   liuruyan: {
     name: "柳如烟",
-    realm: "炼气七层",
+    realm: "炼气后期",
     region: "幽州",
     loc: "幽州 · 雾林边缘",
     sect: "雾隐门",
@@ -87,7 +87,7 @@ const CULTIVATORS = {
   },
   baihua: {
     name: "白桦",
-    realm: "炼气四层",
+    realm: "炼气中期",
     region: "雷州",
     loc: "雷州 · 雷泽边缘",
     sect: "无门无派",
@@ -123,7 +123,7 @@ const CULTIVATORS = {
   },
   heifeng: {
     name: "黑风",
-    realm: "炼气六层",
+    realm: "炼气中期",
     region: "凉州",
     loc: "凉州 · 驿道",
     sect: "中立散修盟",
@@ -223,14 +223,14 @@ const DOSSIER_PROFILES = {
     "spiritRoot": "土偏木",
     "factionStanding": "散修盟挂名",
     "contribution": 90,
-    "attunement": "八荒感应 26",
+    "attunement": "八荒仙缘 26",
     "residence": "无洞府 · 广津简庐暂居",
-    "strategy": "积感应至四十，持令入听潮浦秘境，再议八荒。"
+    "strategy": "积仙缘至四十，持令入听潮浦秘境，再议八荒。"
   },
   "qingluo": {
     "realmProgress": 88,
     "realmProgressMax": 100,
-    "realmPhase": "九层",
+    "realmPhase": "后期",
     "qi": 420,
     "maxQi": 480,
     "spiritualPower": 360,
@@ -425,9 +425,9 @@ const DOSSIER_PROFILES = {
     "spiritRoot": "水偏土",
     "factionStanding": "散修盟贡献已足",
     "contribution": 100,
-    "attunement": "感应尚欠",
+    "attunement": "仙缘尚欠",
     "residence": "扬州渡口客舍",
-    "strategy": "感应一到，即随沈砺入八荒。"
+    "strategy": "仙缘一到，即随沈砺入八荒。"
   },
   "axu": {
     "realmProgress": 55,
@@ -497,7 +497,7 @@ const DOSSIER_PROFILES = {
   "liuruyan": {
     "realmProgress": 70,
     "realmProgressMax": 100,
-    "realmPhase": "七层",
+    "realmPhase": "后期",
     "qi": 310,
     "maxQi": 380,
     "spiritualPower": 280,
@@ -626,7 +626,7 @@ const DOSSIER_PROFILES = {
   "baihua": {
     "realmProgress": 40,
     "realmProgressMax": 100,
-    "realmPhase": "四层",
+    "realmPhase": "中期",
     "qi": 180,
     "maxQi": 220,
     "spiritualPower": 120,
@@ -821,7 +821,7 @@ const DOSSIER_PROFILES = {
   "heifeng": {
     "realmProgress": 60,
     "realmProgressMax": 100,
-    "realmPhase": "六层",
+    "realmPhase": "中期",
     "qi": 280,
     "maxQi": 340,
     "spiritualPower": 160,
@@ -947,8 +947,53 @@ const DOSSIER_PROFILES = {
     "strategy": "剑意圆后方出，嘱沈砺勿急八荒。"
   }
 };
+const QI_LAYER_PHASE = {
+  一: "初期",
+  二: "初期",
+  三: "初期",
+  四: "中期",
+  五: "中期",
+  六: "中期",
+  七: "后期",
+  八: "后期",
+  九: "后期",
+  1: "初期",
+  2: "初期",
+  3: "初期",
+  4: "中期",
+  5: "中期",
+  6: "中期",
+  7: "后期",
+  8: "后期",
+  9: "后期",
+};
+
+function qiPhaseFromLayer(token) {
+  return QI_LAYER_PHASE[token] || null;
+}
+
+/** Display packaging: 炼气层数读成和其他境界一样的初期、中期、后期。 */
+function packRealmLabel(text) {
+  if (text == null) return text;
+  return String(text).replace(/炼气(?:第)?([一二三四五六七八九1-9])层/g, (full, token) => {
+    const phase = qiPhaseFromLayer(token);
+    return phase ? `炼气${phase}` : full;
+  });
+}
+
+function packRealmPhase(text) {
+  if (text == null) return text;
+  const match = String(text).match(/^(?:第)?([一二三四五六七八九1-9])层$/);
+  if (!match) return text;
+  return qiPhaseFromLayer(match[1]) || text;
+}
+
 Object.keys(DOSSIER_PROFILES).forEach((id) => {
   if (CULTIVATORS[id]) Object.assign(CULTIVATORS[id], DOSSIER_PROFILES[id]);
+});
+Object.values(CULTIVATORS).forEach((cultivator) => {
+  cultivator.realm = packRealmLabel(cultivator.realm);
+  if (cultivator.realmPhase) cultivator.realmPhase = packRealmPhase(cultivator.realmPhase);
 });
 
 
@@ -1021,11 +1066,11 @@ const SECT_PROFILES = {
     creed: "不问出身，贡献换令；散则为客，聚则互讯。",
     style: "杂修／散客",
     industries: "贡献兑换、八荒令、情报帖、驿站歇脚",
-    bahuangNote: "贡献满可换八荒令；感应须自行积攒。盟中不干涉弟子去向。",
+    bahuangNote: "贡献满可换八荒令；仙缘须自行积攒。盟中不干涉弟子去向。",
     recent: [
-      "墨儿感应升至二十六，持令往听潮浦。",
+      "墨儿仙缘升至二十六，持令往听潮浦。",
       "白桦入雷泽边缘受惊折返，盟中记一笔警示。",
-      "顾长川贡献已足，感应未到，与青城沈砺约来春。",
+      "顾长川贡献已足，仙缘未到，与青城沈砺约来春。",
     ],
   },
   qingcheng: {
@@ -1045,7 +1090,7 @@ const SECT_PROFILES = {
     creed: "观星推演，少问世事。",
     style: "术修 · 推演",
     industries: "星图残卷、沙海路引",
-    bahuangNote: "观中不问八荒。偶有残卷与感应之说，弟子自决。",
+    bahuangNote: "观中不管弟子去不去八荒。偶有残卷与仙缘之说，弟子自决。",
     recent: [
       "玄机子于废墟掘出「归虚」残卷半页。",
       "沙海紫气一缕，观中记入星簿。",
@@ -1056,7 +1101,7 @@ const SECT_PROFILES = {
     creed: "潮起有价，符出有账。",
     style: "符商 · 情报",
     industries: "潮汐符、海兽情报、灵石汇兑",
-    bahuangNote: "阁中卖符不卖令。赴八荒者自备贡献与感应。",
+    bahuangNote: "阁中卖符不卖令。赴八荒者自备贡献与仙缘。",
     recent: [
       "月清清点符库，潮汐符见底，拒白桦赊账。",
       "青萝客购一枚潮汐符，传言可暂避海兽。",
@@ -1092,13 +1137,13 @@ Object.keys(SECT_PROFILES).forEach((id) => {
 });
 
 const ANNALS = [
-  { time: "丁酉 · 亥时三刻", who: "墨儿", id: "moer", title: "荒野感应", region: "中州", prose: "广津城外荒野再待一刻，感应升至二十六。八荒门槛仍差十四。" },
+  { time: "丁酉 · 亥时三刻", who: "墨儿", id: "moer", title: "荒野仙缘", region: "中州", prose: "广津城外荒野再待一刻，仙缘升至二十六。八荒门槛仍差十四。" },
   { time: "丁酉 · 亥时", who: "墨儿", id: "moer", title: "动身听潮浦", region: "中州", prose: "持八荒令自广津城动身，往听潮浦一行，云中未见异象。" },
   { time: "丁酉 · 戌时末", who: "沈砺", id: "shenli", title: "青城夜雨", region: "蜀州", prose: "金丹圆满，于蜀州青城观瀑三日，偶遇散修交手，未分胜负。" },
   { time: "丁酉 · 戌时", who: "苏隐", id: "suyin", title: "后山传音", region: "蜀州", prose: "闭关中神念嘱沈砺：八荒非急务，剑意未圆勿轻往。" },
   { time: "丁酉 · 酉时", who: "青萝", id: "qingluo", title: "沧州海市", region: "沧州", prose: "以灵石购得一枚潮汐符，传言可暂避海兽。" },
   { time: "丁酉 · 酉时半", who: "月清", id: "yueqing", title: "符库清点", region: "沧州", prose: "潮汐符库存见底，拒白桦赊账，嘱青萝改日再议。" },
-  { time: "丁酉 · 申时", who: "顾长川", id: "guchangchuan", title: "扬州渡口", region: "扬州", prose: "与沈砺传音约定来春同赴八荒。贡献已足，感应未到。" },
+  { time: "丁酉 · 申时", who: "顾长川", id: "guchangchuan", title: "扬州渡口", region: "扬州", prose: "与沈砺传音约定来春同赴八荒。贡献已足，仙缘未到。" },
   { time: "丁酉 · 未时", who: "阿絮", id: "axu", title: "雾林残魂", region: "幽州", prose: "雾林深处收得一缕残魂，封入玉瓶，未敢炼化。" },
   { time: "丁酉 · 午时末", who: "柳如烟", id: "liuruyan", title: "记谱三十二", region: "幽州", prose: "雾林路径又记三条，合计三十二。叮嘱阿絮勿动残魂。" },
   { time: "丁酉 · 午时", who: "玄机子", id: "xuanji", title: "凉州沙海", region: "凉州", prose: "于废墟掘出残卷半页，上书「归虚」二字，不可辨认其余。" },
@@ -1113,12 +1158,12 @@ const THREADS = [
     id: "moer-qingluo",
     a: "墨儿",
     b: "青萝",
-    preview: "广津城外感应又涨了一分……",
+    preview: "广津城外仙缘又涨了一分……",
     messages: [
       { from: "a", text: "青萝，沧州潮可平？", when: "丁酉 · 午时" },
       { from: "b", text: "潮起未歇。我购得一枚潮汐符，暂可避兽。", when: "丁酉 · 午时半" },
-      { from: "a", text: "广津城外感应又涨了一分……距八荒仍差十四。", when: "丁酉 · 亥时" },
-      { from: "b", text: "莫急。你令牌已备，感应到了，我便来会你。", when: "丁酉 · 亥时一刻" },
+      { from: "a", text: "广津城外仙缘又涨了一分……距八荒仍差十四。", when: "丁酉 · 亥时" },
+      { from: "b", text: "莫急。你令牌已备，仙缘到了，我便来会你。", when: "丁酉 · 亥时一刻" },
       { from: "a", text: "好。若海市有异，神念唤我。", when: "丁酉 · 亥时二刻" },
     ],
   },
@@ -1129,10 +1174,10 @@ const THREADS = [
     preview: "青城夜雨，你可安否？",
     messages: [
       { from: "a", text: "青城夜雨，你可安否？", when: "丁酉 · 戌时" },
-      { from: "b", text: "扬州渡口无事。贡献已足，感应尚欠。", when: "丁酉 · 戌时半" },
+      { from: "b", text: "扬州渡口无事。贡献已足，仙缘尚欠。", when: "丁酉 · 戌时半" },
       { from: "a", text: "来春同赴八荒——可还作数？", when: "丁酉 · 戌时末" },
       { from: "b", text: "作数。你金丹圆满，我当以筑基之躯随行。", when: "丁酉 · 亥时" },
-      { from: "a", text: "无妨。八荒看的是感应与令，非境界高低。", when: "丁酉 · 亥时一刻" },
+      { from: "a", text: "无妨。八荒看的是仙缘与令，非境界高低。", when: "丁酉 · 亥时一刻" },
     ],
   },
   {
@@ -1178,7 +1223,7 @@ const THREADS = [
     preview: "八荒非急务。",
     messages: [
       { from: "a", text: "沈砺。八荒非急务。你剑意未圆，勿轻往。", when: "丁酉 · 戌时" },
-      { from: "b", text: "师叔有所不知——顾长川已备令，只欠感应。", when: "丁酉 · 戌时半" },
+      { from: "b", text: "师叔有所不知——顾长川已备令，只欠仙缘。", when: "丁酉 · 戌时半" },
       { from: "a", text: "令可再等。人若折在门槛外，无人替你收剑。", when: "丁酉 · 亥时" },
       { from: "b", text: "……我记下了。观瀑尚余半日，再议。", when: "丁酉 · 亥时一刻" },
     ],
@@ -1285,8 +1330,8 @@ function renderDossierHtml(c, id) {
 
   const cs = c.coreCombatStats || {};
   const eight = [
-    ["兵器攻", cs.weaponAttack],
-    ["法术攻", cs.spellAttack],
+    ["物攻", cs.weaponAttack],
+    ["法攻", cs.spellAttack],
     ["物防", cs.physicalDefense],
     ["法防", cs.spellDefense],
     ["身法", cs.speed],
@@ -1323,7 +1368,7 @@ function renderDossierHtml(c, id) {
       <header class="dossier-hero">
         <div class="dossier-avatar" style="background:${c.color}">${c.name[0]}</div>
         <div class="dossier-hero-text">
-          <p class="dossier-kicker">修士档案 · 观览只读</p>
+          <p class="dossier-kicker">修士档案</p>
           <h2 class="dossier-name">${c.name}</h2>
           <div class="dossier-chips">
             <span class="chip realm">${c.realm}</span>
@@ -1419,7 +1464,7 @@ function renderDossierHtml(c, id) {
             <li><span>宗门</span><em>${c.sectId && c.sectId !== "none" ? `<button type="button" class="sect-link inline" data-sect="${c.sectId}">${c.sect}</button>` : c.sect}</em></li>
             <li><span>地位</span><em>${c.factionStanding || "—"}</em></li>
             <li><span>贡献</span><em>${c.contribution ?? "—"}</em></li>
-            <li><span>感应</span><em>${c.attunement || "—"}</em></li>
+            <li><span>仙缘</span><em>${c.attunement || "—"}</em></li>
           </ul>
         </section>
         <section class="dossier-section dossier-panel">
@@ -2021,7 +2066,7 @@ function renderSectHtml(s, id) {
       <header class="dossier-hero sect-hero">
         <div class="sect-seal-lg ${s.sealClass || ""}">${s.seal}</div>
         <div class="dossier-hero-text">
-          <p class="dossier-kicker">宗门详情 · 观览只读</p>
+          <p class="dossier-kicker">宗门详情</p>
           <h2 class="dossier-name">${s.name}</h2>
           <div class="dossier-chips">
             <span class="chip realm">${s.status}</span>
@@ -2183,7 +2228,7 @@ function openThread(id) {
   );
   threadHead.innerHTML = `
     <span class="pair">${t.a} <span style="color:var(--ink-faint);font-size:0.85em">↔</span> ${t.b}</span>
-    <span class="sub">神念传音卷宗 · 观览只读</span>
+    <span class="sub">神念传音</span>
   `;
   bubbles.innerHTML = "";
   t.messages.forEach((m) => {
@@ -2231,11 +2276,11 @@ const SCORES = {
 const REALM_RANK = { 炼气: 1, 筑基: 2, 金丹: 3, 元婴: 4 };
 
 const BOARD_CATS = [
-  { id: "realm", label: "境界榜", desc: "以境界高低为序。同境则看感应。", unit: "" },
+  { id: "realm", label: "境界榜", desc: "以境界高低为序。同境则看仙缘。", unit: "" },
   { id: "stones", label: "灵石榜", desc: "手头灵石——交易、护送与符箓所得。", unit: "灵石" },
   { id: "feats", label: "战绩榜", desc: "近岁交手、探秘与险地出入之记。", unit: "绩" },
   { id: "contrib", label: "贡献榜", desc: "散修盟与宗门贡献，可换令牌资格。", unit: "贡献" },
-  { id: "sense", label: "感应榜", desc: "八荒感应——门槛将启者居前。", unit: "感应" },
+  { id: "sense", label: "仙缘榜", desc: "八荒仙缘。快到门槛的人排在前面。", unit: "仙缘" },
 ];
 
 const BONDS = [
@@ -2254,7 +2299,7 @@ const BONDS = [
 const TIME_NOW = {
   title: "此刻时辰",
   big: "丁酉 · 亥时三刻",
-  note: "观览者所见为演示时序，山河自行流转。",
+  note: "这一页用的是演示时辰。",
 };
 const TIME_WEATHER = {
   title: "天象／节气",
@@ -2263,12 +2308,12 @@ const TIME_WEATHER = {
 };
 
 const REGIONS = [
-  { name: "中州", tone: "calm", toneLabel: "平缓", blurb: "广津城外荒野感应微涨，散修往来如常。" },
+  { name: "中州", tone: "calm", toneLabel: "平缓", blurb: "广津城外荒野仙缘微涨，散修往来如常。" },
   { name: "蜀州", tone: "", toneLabel: "鼎盛", blurb: "青城剑意未歇，后山闭关者众。" },
   { name: "沧州", tone: "warn", toneLabel: "潮警", blurb: "海兽近岸，符箓紧俏，船班不稳。" },
   { name: "凉州", tone: "warn", toneLabel: "异兆", blurb: "沙海紫气与「归虚」残卷扰动观星。" },
   { name: "幽州", tone: "calm", toneLabel: "隐秘", blurb: "雾林旧冢有回响，雾隐门记谱不止。" },
-  { name: "扬州", tone: "", toneLabel: "静候", blurb: "渡口散修候感应，商旅如织。" },
+  { name: "扬州", tone: "", toneLabel: "静候", blurb: "渡口散修候仙缘，商旅如织。" },
   { name: "雷州", tone: "warn", toneLabel: "险地", blurb: "雷泽边缘雷纹伤人，初入者多折返。" },
   { name: "冀州", tone: "calm", toneLabel: "清冷", blurb: "寒潭炼体，外人少入。" },
   { name: "青州", tone: "", toneLabel: "商贾", blurb: "月湖侧驿与沧浪阁账册相通。" },
@@ -2284,13 +2329,13 @@ const TERRITORIES = [
 ];
 
 const WORLD_EVENTS = [
-  { id: "e1", type: "秘境", typeKey: "mijing", time: "丁酉 · 子时将至", title: "听潮浦秘境将启", where: "中州 · 听潮浦", prose: "潮信合感应者可入。八荒令持有者优先，其余散修需验感应。" },
+  { id: "e1", type: "秘境", typeKey: "mijing", time: "丁酉 · 子时将至", title: "听潮浦秘境将启", where: "中州 · 听潮浦", prose: "潮信合仙缘者可入。八荒令持有者优先，其余散修需验仙缘。" },
   { id: "e2", type: "冲突", typeKey: "chongtu", time: "丁酉 · 戌时", title: "海市符账之争", where: "沧州 · 海市", prose: "散修赊符未果，与沧浪阁伙计言语冲突，未成刀兵，已被月清压下。" },
   { id: "e3", type: "异象", typeKey: "yixiang", time: "丁酉 · 申时", title: "沙海紫气", where: "凉州 · 沙海", prose: "紫气一线冲天，旋即散入风沙。玄机观推演未竟。" },
   { id: "e4", type: "潮汐", typeKey: "chaoxi", time: "丁酉 · 午时", title: "沧州大潮", where: "沧州近海", prose: "海兽随潮近岸，船班暂停。潮汐符告急。" },
   { id: "e5", type: "秘境", typeKey: "mijing", time: "丁酉 · 巳时", title: "雷泽试炼传闻", where: "雷州 · 雷泽", prose: "有人言泽心有古剑纹，尚未证实。初入者多被雷纹吓退。" },
   { id: "e6", type: "冲突", typeKey: "chongtu", time: "丁酉 · 辰时", title: "雾林旧冢异动", where: "幽州 · 雾林", prose: "残魂外溢，雾隐门封阵三日，劝散修勿近。" },
-  { id: "e7", type: "异象", typeKey: "yixiang", time: "丙申 · 夜", title: "八荒门槛微震", where: "九州感应", prose: "多地筑基以上修士感应微动，旋复平静。无人入门。" },
+  { id: "e7", type: "异象", typeKey: "yixiang", time: "丙申 · 夜", title: "八荒门槛微震", where: "各州", prose: "多地筑基以上修士仙缘微动，旋复平静。无人入门。" },
   { id: "e8", type: "潮汐", typeKey: "chaoxi", time: "丙申 · 酉时", title: "月湖水落", where: "青州 · 月湖", prose: "湖岸露出旧碑半截，字迹漫漶，沧浪阁已遣人拓印。" },
 ];
 

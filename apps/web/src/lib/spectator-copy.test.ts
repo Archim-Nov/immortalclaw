@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   actionLine,
+  formatRealmLabel,
   publicChronicleTitle,
   publicEffectLabel,
   publicItemName,
@@ -13,6 +14,18 @@ import {
   publicStandingLabel,
   publicTechniqueLabel,
 } from "./spectator-copy";
+
+test("realm labels use early mid and late phases, including qi refining", () => {
+  assert.equal(formatRealmLabel({ realm: "炼气", realmLevel: 1, realmPhase: "前期" }), "炼气前期");
+  assert.equal(formatRealmLabel({ realm: "炼气", realmLevel: 3, realmPhase: "后期" }), "炼气后期");
+  assert.equal(formatRealmLabel({ realm: "炼气九层", realmLevel: 9, realmPhase: "九层" }), "炼气后期");
+  assert.equal(formatRealmLabel({ realm: "炼气四层", realmLevel: 4, realmPhase: "四层" }), "炼气中期");
+  assert.equal(formatRealmLabel({ realm: "炼气", realmLevel: 1 }), "炼气前期");
+  assert.equal(formatRealmLabel({ realm: "筑基", realmLevel: 5, realmPhase: "中期" }), "筑基中期");
+  assert.equal(formatRealmLabel({ realm: "金丹", realmLevel: 9, realmPhase: "后期" }), "金丹后期");
+  assert.equal(formatRealmLabel({ realm: "化神", realmLevel: 13, realmPhase: "前期" }), "化神前期");
+  assert.equal(formatRealmLabel({ realm: "大乘", realmLevel: 24, realmPhase: "后期" }), "大乘后期");
+});
 
 test("an English province label becomes the Chinese state the cultivator is standing in", () => {
   assert.equal(publicOriginChip({
