@@ -10550,8 +10550,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const chatUpTargetId = parseChatUpTarget(actionId);
   if (chatUpTargetId) {
     const target = getCultivatorOrThrow(world, chatUpTargetId);
-    if (cultivator.locationId !== target.locationId) throw new Error("搭讪 requires being at the same location.");
-    if (cultivator.id === target.id) throw new Error("Cannot chat up yourself.");
+    if (cultivator.locationId !== target.locationId) throw new GameplayRejection("要跟对方在同一地点才能搭讪。");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能搭讪自己。");
     const existingLink = getSocialLink(world, cultivator.id, target.id);
     if (existingLink?.lastChatUpTick !== undefined && world.tick - existingLink.lastChatUpTick < CHAT_UP_COOLDOWN_TICKS) {
       const wait = CHAT_UP_COOLDOWN_TICKS - (world.tick - existingLink.lastChatUpTick);
@@ -10734,8 +10734,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   const partyInviteTargetId = parsePartyInviteTarget(actionId);
   if (partyInviteTargetId) {
     const target = getCultivatorOrThrow(world, partyInviteTargetId);
-    if (cultivator.id === target.id) throw new Error("Cannot invite yourself to a party.");
-    if (cultivator.locationId !== target.locationId) throw new Error("组队邀请 requires being at the same location.");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能邀请自己组队。");
+    if (cultivator.locationId !== target.locationId) throw new GameplayRejection("要跟对方在同一地点才能组队。");
     const ownParty = getPartyOf(world, cultivator.id);
     if (ownParty && ownParty.memberIds.length >= PARTY_MAX_MEMBERS) {
       throw new GameplayRejection("队伍已满，五人就是上限。这一趟带不了第六个人。");

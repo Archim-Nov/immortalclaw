@@ -28,6 +28,8 @@
 
 若再探仍因内部错误提前结束，摘要、道录、游记和 recentEvents 写「再探时岔路散了，这一段见闻没留下。」英文原因不出现在这些句子里。
 
+人不在同一处时提交搭讪，`error` 和 `summary` 都是「要跟对方在同一地点才能搭讪。」组队邀请是「要跟对方在同一地点才能组队。」这两句不再夹 `requires being at the same location`。
+
 ## Constraints
 
 - 事件 id 保持 `wilderness-calm-foraging`、`wilderness-beast-trace`、`wilderness-spirit-vein-fragment`，不改种子里的池子来绕过缺口。
@@ -38,6 +40,7 @@
 - `starter-wilderness-tier-1.eventPool` 的每个 id，以及其余荒野层事件池的每个 id，都能取到定义。
 - 对这三个 id 调用再探结算不会抛出。完整的 `survey-wilderness` 差事以「这一段走完了」结束。
 - 故意使用一个不存在的事件 id 时，完成摘要和 recentEvents 含「再探时岔路散了」，不含 `Unknown wilderness event`。
+- 人不在同一处时，搭讪的 `error` 和 `summary` 都是「要跟对方在同一地点才能搭讪。」组队邀请是「要跟对方在同一地点才能组队。」两句都不含英文。
 - 领域测试通过。
 
 ## Open Questions

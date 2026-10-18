@@ -8,6 +8,7 @@ import {
   performAction,
   syncCultivatorFromPersona,
 } from "./index.js";
+import { actionFailureBody } from "./gameplay-error.js";
 import {
   AFFINITY_GAINS,
   AFFINITY_THRESHOLDS,
@@ -82,11 +83,31 @@ test("chat-up creates mutual social links and grows affinity", () => {
 
 test("chat-up requires same location", () => {
   const { world, first, second } = createTwoCultivators();
-  second.locationId = "yangzhou:main-city"; // different location
+  second.locationId = "yangzhou:dungeon-b";
 
   assert.throws(
     () => performAction(world, first.id, `chat-up:${second.id}`),
-    /same location/,
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      const body = actionFailureBody(error);
+      assert.equal(body.error, "要跟对方在同一地点才能搭讪。");
+      assert.equal(body.summary, body.error);
+      assert.equal(/[A-Za-z]/u.test(body.summary), false, body.summary);
+      assert.equal((error as { status?: number }).status, 409);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => performAction(world, first.id, `chat-up:${first.id}`),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      const body = actionFailureBody(error);
+      assert.equal(body.error, "不能搭讪自己。");
+      assert.equal(body.summary, body.error);
+      assert.equal(/[A-Za-z]/u.test(body.summary), false, body.summary);
+      return true;
+    },
   );
 });
 
@@ -292,7 +313,14 @@ test("party invite requires same location", () => {
 
   assert.throws(
     () => performAction(world, first.id, `party-invite:${second.id}`),
-    /same location/,
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      const body = actionFailureBody(error);
+      assert.equal(body.error, "要跟对方在同一地点才能组队。");
+      assert.equal(body.summary, body.error);
+      assert.equal(/[A-Za-z]/u.test(body.summary), false, body.summary);
+      return true;
+    },
   );
 });
 

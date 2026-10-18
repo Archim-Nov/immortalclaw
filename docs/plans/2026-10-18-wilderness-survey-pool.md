@@ -29,6 +29,11 @@
 - `node --import tsx --test packages/domain/src/wilderness-survey-pool.test.ts`
 - `node --import tsx --test packages/domain/src/wild-beats.test.ts packages/domain/src/wilderness.test.ts packages/domain/src/deepen-playtest.test.ts`
 
+### Task 3
+
+- 搭讪和组队邀请不在同一处时，拒绝改成中文。
+- `packages/domain/src/social.test.ts` 断言 `error` 与 `summary` 都是这句中文。
+
 ## Doc Updates
 
 - `docs/specs/wilderness-survey-pool-v1/spec.md`
