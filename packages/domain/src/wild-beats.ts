@@ -1,3 +1,4 @@
+import { maybeEightWastesPass } from "./eight-wastes-pass.js";
 import { GameplayRejection } from "./gameplay-error.js";
 import { noteWild, type WildPlace } from "./wild-places.js";
 import type { Cultivator, ItemId, WildernessProgress, WorldEvent, WorldState } from "./model.js";
@@ -372,7 +373,15 @@ export function resolveWildBeat(
   const option = beat.options.find((candidate) => candidate.id === optionId);
   if (!option) throw new GameplayRejection("这个选择不在当前岔路上。");
   const body = applyWildBeatOption(world, cultivator, option);
-  const sentence = `你选了${option.label}。${place.name}这一段的见闻：${body}`;
+  const passLine = maybeEightWastesPass({
+    world,
+    cultivator,
+    source: "beat",
+    seed: `${world.tick}:${cultivator.id}:${optionId}:wild-beat`,
+    placeName: place.name,
+    progress,
+  });
+  const sentence = `你选了${option.label}。${place.name}这一段的见闻：${body}${passLine ?? ""}`;
   noteWild(cultivator, {
     tick: world.tick,
     locationId: cultivator.locationId,

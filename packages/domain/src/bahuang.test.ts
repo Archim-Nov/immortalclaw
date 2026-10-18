@@ -129,9 +129,9 @@ test("entry denied when realmLevel is below 5", () => {
   assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
 });
 
-test("entry denied when wildernessAttunement is below 60", () => {
+test("entry denied when wildernessAttunement is below 40", () => {
   const { world, cultivator } = prepareBahuangCandidate();
-  world.guixuProgress.wildernessAttunement[cultivator.id] = 30;
+  world.guixuProgress.wildernessAttunement[cultivator.id] = 39;
 
   const actions = listAvailableActions(world, cultivator.id);
   assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);

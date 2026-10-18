@@ -401,6 +401,7 @@ import {
   toSectOutpostLocationId,
   type TopologyGraph as RuntimeTopologyGraph,
 } from "./topology.js";
+import { dungeonPassCount, EIGHT_WASTES_PASS_ID, maybeEightWastesPass } from "./eight-wastes-pass.js";
 import {
   applyWildernessPressure,
   canEnterWilderness,
@@ -4955,6 +4956,14 @@ function finalizeDungeonExpedition(
   });
   if (outcome === "completed" || (outcome === "withdrew" && progress.stepIndex > 0)) {
     const beforeClose = structuredClone(cultivator.inventory);
+    const passCount = dungeonPassCount({
+      rank: progress.targetRank,
+      outcome,
+      seed: `${cultivator.id}:${progress.jobId}:${progress.targetRank}:${outcome}:${world.tick}`,
+    });
+    if (passCount > 0) {
+      cultivator.inventory[EIGHT_WASTES_PASS_ID] = (cultivator.inventory[EIGHT_WASTES_PASS_ID] ?? 0) + passCount;
+    }
     grantLoadoutSourceDrop(world, cultivator, metadata.grade, progress.targetRank, `${world.tick}:${cultivator.id}:expedition-loadout-source`);
     grantCultivationDrop(world, cultivator, metadata.grade, progress.targetRank);
     grantJiaTemperamentDrop(cultivator, progress, outcome);
@@ -12523,7 +12532,19 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         const cfg = getEnemyConfig(encId as unknown as EnemyConfigId);
         return cfg?.name ?? MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName;
       })();
-      const huntedLine = huntedPlace ? huntSentence(huntedPlace, retreated ? "retreat" : outcome === "victory" ? "win" : "loss") : null;
+      const passLine = outcome === "victory" && !retreated
+        ? maybeEightWastesPass({
+            world,
+            cultivator,
+            source: "hunt",
+            seed: `${baseSeed}:hunt`,
+            placeName: huntedPlace?.name ?? "荒野",
+            progress: getActiveWildernessProgress(world, cultivator.id),
+          })
+        : null;
+      const huntedLine = huntedPlace
+        ? `${huntSentence(huntedPlace, retreated ? "retreat" : outcome === "victory" ? "win" : "loss")}${passLine ?? ""}`
+        : passLine;
       if (huntedLine) {
         noteWild(cultivator, {
           tick: world.tick,
@@ -12597,6 +12618,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
             "spirit-ore": spiritOre,
             [pickBreakthroughDrop("mystic-jade-stone", `${baseSeed}:mine-beast-material`)]: 1,
             ...(beastCoreDrop > 0 ? { "beast-core": beastCoreDrop } : {}),
+            ...(passLine ? { [EIGHT_WASTES_PASS_ID]: 1 } : {}),
           },
           summary: huntedLine ?? `${cultivator.name} defeated ${enemyDisplayName} in ${totalRounds} rounds.`,
           encounterTemplateId: encId,
@@ -12608,7 +12630,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           preCultivatorStatusEffects: combatState.playerStatusEffectsBefore,
           finalPlayerHp: combatState.playerSnapshot.hp,
         });
-        return `${cultivator.name} defeated ${enemyDisplayName}.`;
+        return passLine ? (huntedLine ?? passLine) : `${cultivator.name} defeated ${enemyDisplayName}.`;
       }
 
       const qiLossPercent = 8 + (hashString(`${baseSeed}:defeat-qi-loss`) % 8);
