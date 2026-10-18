@@ -108,6 +108,10 @@ import {
   recordLife,
   recordSpokenEcho,
   spreadNearbyGossip,
+  GIFT_STONE_CARD_AMOUNTS,
+  GIFT_STONES_AFFINITY,
+  GIFT_STONES_MAX,
+  GIFT_STONES_MIN,
   SHARE_RESOURCE_COOLDOWN_TICKS,
   SHARE_RESOURCE_MINIMUM,
   SHARE_RESOURCE_STONES,
@@ -1867,6 +1871,17 @@ const parseSendMessage = (actionId: ActionId | string): { targetId: string; kind
   const lastColon = rest.lastIndexOf(":");
   if (lastColon === -1) return null;
   return { targetId: rest.slice(0, lastColon), kind: rest.slice(lastColon + 1) as MessageTemplateKind };
+};
+const parseGiftStones = (actionId: ActionId | string): { targetId: string; amount: number } | null => {
+  if (!actionId.startsWith("gift-stones:")) return null;
+  const rest = actionId.slice("gift-stones:".length);
+  const split = rest.lastIndexOf(":");
+  if (split <= 0 || split >= rest.length - 1) return null;
+  const amountText = rest.slice(split + 1);
+  if (!/^\d+$/.test(amountText)) return null;
+  const amount = Number(amountText);
+  if (!Number.isSafeInteger(amount)) return null;
+  return { targetId: rest.slice(0, split), amount };
 };
 const parseAcceptGift = (actionId: ActionId | string): string | null =>
   actionId.startsWith("accept-gift:") ? actionId.slice("accept-gift:".length) : null;
@@ -8159,9 +8174,9 @@ function resolveGiftItemId(
   actionItemId: string | undefined,
   bodyItemId: string | null | undefined,
 ): ItemId {
-  const requested = actionItemId ?? bodyItemId?.trim() ?? "";
-  if (requested) {
-    const itemId = requested as ItemId;
+  const named = actionItemId?.trim() || bodyItemId?.trim() || "";
+  if (named) {
+    const itemId = named as ItemId;
     if (!ITEM_CATALOG[itemId]) throw new Error("没有这件东西。");
     if ((cultivator.inventory[itemId] ?? 0) <= 0) throw new Error("身上没有这件能送的东西。");
     return itemId;
@@ -8169,6 +8184,36 @@ function resolveGiftItemId(
   const giftableEntry = Object.entries(cultivator.inventory).find(([, count]) => count > 0);
   if (!giftableEntry) throw new Error("身上没有能送的东西。");
   return giftableEntry[0] as ItemId;
+}
+
+function isStoneGift(gift: PendingGift): boolean {
+  return (gift.spiritStones ?? 0) > 0;
+}
+
+function giftStoneCardAmounts(balance: number): number[] {
+  if (balance < GIFT_STONES_MIN) return [];
+  const affordable = GIFT_STONE_CARD_AMOUNTS.filter((amount) => amount <= balance && amount <= GIFT_STONES_MAX);
+  if (affordable.length === 0) return [Math.min(balance, GIFT_STONES_MAX)];
+  if (affordable.length <= 2) return [...affordable];
+  return [affordable[0]!, affordable[affordable.length - 1]!];
+}
+
+function givePendingGift(receiver: Cultivator, gift: PendingGift): void {
+  if (isStoneGift(gift)) {
+    receiver.spiritStones += gift.spiritStones ?? 0;
+    return;
+  }
+  if (!gift.itemId) return;
+  receiver.inventory[gift.itemId] = (receiver.inventory[gift.itemId] ?? 0) + gift.count;
+}
+
+function returnPendingGift(sender: Cultivator, gift: PendingGift): void {
+  if (isStoneGift(gift)) {
+    sender.spiritStones += gift.spiritStones ?? 0;
+    return;
+  }
+  if (!gift.itemId) return;
+  sender.inventory[gift.itemId] = (sender.inventory[gift.itemId] ?? 0) + gift.count;
 }
 
 export function getCultivatorState(world: WorldState, cultivatorId: string): CultivatorStateView {
@@ -8441,14 +8486,28 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       ? buildResidenceContext(activeResidence, world.tick, recentResidenceAmbientEvents)
       : null,
     productionQueue: (cultivator.productionQueue ?? []).map((e) => ({ slot: e.slot, recipeId: e.recipeId, ticksRemaining: e.ticksRemaining })),
-    pendingGifts: (cultivator.pendingGifts ?? []).map((g) => ({
-      messageId: g.messageId,
-      fromCultivatorId: g.fromCultivatorId,
-      fromName: world.cultivators[g.fromCultivatorId]?.name ?? "unknown",
-      itemId: g.itemId,
-      itemName: itemDisplayName(g.itemId),
-      count: g.count,
-    })),
+    pendingGifts: (cultivator.pendingGifts ?? []).map((g) => {
+      const fromName = world.cultivators[g.fromCultivatorId]?.name ?? "某人";
+      if (isStoneGift(g)) {
+        const amount = g.spiritStones ?? 0;
+        return {
+          messageId: g.messageId,
+          fromCultivatorId: g.fromCultivatorId,
+          fromName,
+          itemName: "灵石",
+          count: amount,
+          spiritStones: amount,
+        };
+      }
+      return {
+        messageId: g.messageId,
+        fromCultivatorId: g.fromCultivatorId,
+        fromName,
+        itemId: g.itemId,
+        itemName: itemDisplayName(g.itemId ?? ""),
+        count: g.count,
+      };
+    }),
     localCommissions: Object.values(world.commissions ?? {})
       .filter((c) => c.locationId === cultivator.locationId && c.completedAtTick === null && c.acceptedById === null && c.posterId !== cultivator.id)
       .map((c) => ({
@@ -9615,6 +9674,20 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
             kind: "immediate",
           });
         }
+        for (const amount of giftStoneCardAmounts(cultivator.spiritStones)) {
+          const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
+          actions.push({
+            actionId: `gift-stones:${target.id}:${amount}` as ActionId,
+            label: `赠${amount}枚灵石：${target.name}`,
+            description: feud === "宿怨"
+              ? `${target.name}和你是宿怨，见面剑拔弩张。这${amount}枚灵石递过去也会被退回，还在你手里，好感不会涨。`
+              : feud
+                ? `${target.name}和你有嫌隙，见面剑拔弩张。这${amount}枚灵石可以先放下，但好感不会涨。对方可以拒。收下以后不再退。`
+                : `把${amount}枚灵石递给${target.name}。对方可以收下，也可以退回。收下以后，这一笔不再退。没有人代为保管。别的数目，从${GIFT_STONES_MIN}枚到${GIFT_STONES_MAX}枚，也可以直接递。`,
+            durationTicks: 0,
+            kind: "immediate",
+          });
+        }
       }
       if (target.injuryTicksRemaining > 0) {
         actions.push({
@@ -9741,6 +9814,15 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
     const giftGroups = new Map<string, NonNullable<Cultivator["pendingGifts"]>>();
     for (const gift of cultivator.pendingGifts ?? []) {
+      if (isStoneGift(gift)) {
+        const fromName = world.cultivators[gift.fromCultivatorId]?.name ?? "某人";
+        const amount = gift.spiritStones ?? 0;
+        actions.push(
+          { actionId: `accept-gift:${gift.messageId}` as ActionId, label: `收下${fromName}的${amount}枚灵石`, description: `收下${fromName}递来的${amount}枚灵石。收下以后，这一笔不再退。`, durationTicks: 0, kind: "immediate" },
+          { actionId: `reject-gift:${gift.messageId}` as ActionId, label: `退回${fromName}的${amount}枚灵石`, description: `把这${amount}枚灵石退还给${fromName}。`, durationTicks: 0, kind: "immediate" },
+        );
+        continue;
+      }
       const key = `${gift.fromCultivatorId}\0${gift.itemId}`;
       const group = giftGroups.get(key) ?? [];
       group.push(gift);
@@ -9749,7 +9831,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     for (const group of giftGroups.values()) {
       const first = group[0]!;
       const fromName = world.cultivators[first.fromCultivatorId]?.name ?? "某人";
-      const itemName = itemDisplayName(first.itemId);
+      const itemName = itemDisplayName(first.itemId ?? "");
       const total = group.reduce((sum, gift) => sum + gift.count, 0);
       if (group.length === 1) {
         actions.push(
@@ -10171,7 +10253,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     if (!feud) throw new GameplayRejection(`${other.name}和你还没有嫌隙。礼若是不想收，等对方递过来再拒。`);
     const pending = (cultivator.pendingGifts ?? []).filter((gift) => gift.fromCultivatorId === other.id);
     for (const gift of pending) {
-      other.inventory[gift.itemId] = (other.inventory[gift.itemId] ?? 0) + gift.count;
+      returnPendingGift(other, gift);
     }
     if (pending.length > 0) {
       cultivator.pendingGifts = (cultivator.pendingGifts ?? []).filter((gift) => gift.fromCultivatorId !== other.id);
@@ -11337,6 +11419,106 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} challenged ${target.name} over a feud.` };
   }
 
+  // ---- Negotiated stone gift. Pending accept, no escrow, no refund after accept. ----
+  if (actionId.startsWith("gift-stones:")) {
+    const parsed = parseGiftStones(actionId);
+    if (!parsed) {
+      throw new GameplayRejection("灵石一次从1枚到800枚，这一笔没有写清给谁、给多少。");
+    }
+    const { targetId, amount } = parsed;
+    const target = world.cultivators[targetId];
+    if (!target) throw new GameplayRejection("没有这个人。");
+    if (cultivator.id === target.id) throw new GameplayRejection("不能把灵石赠给自己。");
+    if (cultivator.locationId !== target.locationId) throw new GameplayRejection("赠灵石要当面。人现在不在一处。");
+    if (amount < GIFT_STONES_MIN || amount > GIFT_STONES_MAX) {
+      throw new GameplayRejection(`灵石一次从${GIFT_STONES_MIN}枚到${GIFT_STONES_MAX}枚，这一笔不在这个数上。`);
+    }
+    if ((cultivator.lastGiftTick ?? -1) >= world.tick) {
+      throw new GameplayRejection("这一刻已经送过礼了。下一刻再送。");
+    }
+    const feud = grudgeArcOf(getSocialLink(world, cultivator.id, target.id)?.grudge ?? 0);
+    if (feud === "宿怨") {
+      const place = world.locations[cultivator.locationId]?.name ?? "这里";
+      const tense = `${cultivator.name}把灵石递向${target.name}，人在${place}。话没热，剑拔弩张，灵石没有递出去。`;
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: tense, names: [target.name] });
+      recordLife(target, { tick: world.tick, kind: "relationship", text: tense, names: [cultivator.name] });
+      cultivator.lastGiftTick = world.tick;
+      addDaoLog(world, cultivator.id, "拒礼", tense, ["social", "feud", "gift"]);
+      return {
+        tick: world.tick,
+        cultivatorId: cultivator.id,
+        actionId,
+        accepted: true,
+        summary: `${target.name}和你有宿怨，剑拔弩张，灵石没有递出去。好感没有涨。`,
+      };
+    }
+    if (cultivator.spiritStones < amount) {
+      throw new GameplayRejection("身上的灵石不够这一笔。");
+    }
+    cultivator.spiritStones -= amount;
+    cultivator.lastGiftTick = world.tick;
+    const giftName = `${amount}枚灵石`;
+    const giftSpoken = openSpokenLine(world, cultivator.id, target.id, "gift-item", world.tick, speechLine, { giftName });
+    const giftContent = `${cultivator.name}向你递来${giftName}，说：「${giftSpoken}」请收下或退回。收下以后，这一笔不再退。`;
+    const giftMsg = addMessage(world, target.id, cultivator.name, `${cultivator.name}的灵石`, giftContent, {
+      fromCultivatorId: cultivator.id,
+      toCultivatorId: target.id,
+      spokenLine: giftSpoken,
+    });
+    const gift: PendingGift = {
+      messageId: giftMsg.id,
+      fromCultivatorId: cultivator.id,
+      count: amount,
+      tick: world.tick,
+      spiritStones: amount,
+    };
+    if (!target.pendingGifts) target.pendingGifts = [];
+    target.pendingGifts.push(gift);
+    const tenseGift = feud === "嫌隙";
+    if (!tenseGift) {
+      addMutualAffinity(world, cultivator.id, target.id, GIFT_STONES_AFFINITY);
+    } else {
+      const place = world.locations[cultivator.locationId]?.name ?? "这里";
+      const tense = `${cultivator.name}把${giftName}递给${target.name}，人在${place}。话没热，剑拔弩张，好感没有涨。`;
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: tense, names: [target.name] });
+      recordLife(target, { tick: world.tick, kind: "relationship", text: tense, names: [cultivator.name] });
+    }
+    addDaoLog(
+      world,
+      cultivator.id,
+      "赠灵石",
+      tenseGift
+        ? `${cultivator.name}把${giftName}递给${target.name}。两个人有嫌隙，剑拔弩张，好感没有涨。`
+        : `${cultivator.name}向${target.name}递了${giftName}。好感度+${GIFT_STONES_AFFINITY}。对方还没说收不收。`,
+      ["social", "gift", "stones"],
+    );
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `把灵石递给${target.name}`,
+      detail: `${cultivator.name}把${giftName}塞进${target.name}手里，说：「${giftSpoken}」还没说收不收。没有人代为保管。`,
+      locationId: cultivator.locationId,
+      mood: "灵石先离开了自己",
+    }));
+    pushTravelNote(target, travelNote({
+      tick: world.tick,
+      kind: "person",
+      title: `${cultivator.name}递来灵石`,
+      detail: `${cultivator.name}递来${giftName}，说：「${giftSpoken}」收或不收，都得回一句话。`,
+      locationId: target.locationId,
+      mood: "手里多了别人的灵石",
+    }));
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: true,
+      summary: tenseGift
+        ? `${cultivator.name}把${giftName}递给${target.name}。你们有嫌隙，剑拔弩张，好感没有涨。`
+        : `${cultivator.name}把${giftName}递给${target.name}。对方还没说收不收。好感+${GIFT_STONES_AFFINITY}。`,
+    };
+  }
+
   // ---- Social Verbs: send-message ----
   const sendMessageParsed = parseSendMessage(actionId);
   if (sendMessageParsed) {
@@ -11568,7 +11750,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   if (acceptedBatch || rejectedBatch) {
     const parsed = (acceptedBatch ?? rejectedBatch)!;
     const matching = (cultivator.pendingGifts ?? []).filter(
-      (gift) => gift.fromCultivatorId === parsed.fromId && gift.itemId === parsed.itemId,
+      (gift) => !isStoneGift(gift) && gift.fromCultivatorId === parsed.fromId && gift.itemId === parsed.itemId,
     );
     if (matching.length === 0) throw new Error("这份礼已经不在了。");
     const total = matching.reduce((sum, gift) => sum + gift.count, 0);
@@ -11578,14 +11760,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const fromName = sender?.name ?? "某人";
     cultivator.pendingGifts = (cultivator.pendingGifts ?? []).filter((gift) => !ids.has(gift.messageId));
     if (acceptedBatch) {
-      cultivator.inventory[parsed.itemId] = (cultivator.inventory[parsed.itemId] ?? 0) + total;
+      for (const gift of matching) givePendingGift(cultivator, gift);
       const forgiven = forgiveOneFavor(world, cultivator.id, parsed.fromId);
       rememberGiftExchange(world, cultivator.id, parsed.fromId, "accepted", itemName);
       rememberGiftExchange(world, parsed.fromId, cultivator.id, "accepted", itemName);
       const detail = forgiven
         ? `${cultivator.name}把${fromName}送来的${total}份${itemName}一起收下了，并勾掉了一份对方欠下的人情。`
         : `${cultivator.name}把${fromName}送来的${total}份${itemName}一起收下了。`;
-      addMessage(world, parsed.fromId, "赠礼", "赠礼已被接受", `${cultivator.name}收下了你送来的${total}份${itemName}。`, { fromCultivatorId: cultivator.id });
+      addMessage(world, parsed.fromId, "赠礼", `收下了${itemName}`, `${cultivator.name}收下了你送来的${total}份${itemName}。`, { fromCultivatorId: cultivator.id });
       addResourceGainLog(world, cultivator.id, "接受赠礼", detail, ["social", "gift"], [{ itemId: parsed.itemId, count: total }]);
       pushTravelNote(cultivator, travelNote({ tick: world.tick, kind: "person", title: `收下了${fromName}的礼`, detail, locationId: cultivator.locationId, mood: "手里多了一叠东西" }));
       if (sender) {
@@ -11597,11 +11779,11 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}收下了${fromName}送来的${total}份${itemName}。` };
     }
     if (!sender) throw new Error("这份礼已经不在了。");
-    sender.inventory[parsed.itemId] = (sender.inventory[parsed.itemId] ?? 0) + total;
+    for (const gift of matching) returnPendingGift(sender, gift);
     rememberGiftExchange(world, cultivator.id, parsed.fromId, "returned", itemName);
     rememberGiftExchange(world, parsed.fromId, cultivator.id, "returned", itemName);
     const detail = `${cultivator.name}把${fromName}的${total}份${itemName}一起退了回去。`;
-    addMessage(world, parsed.fromId, "赠礼", "赠礼被退还", `${cultivator.name}退回了你送来的${total}份${itemName}。`, { fromCultivatorId: cultivator.id });
+    addMessage(world, parsed.fromId, "赠礼", `退回了${itemName}`, `${cultivator.name}退回了你送来的${total}份${itemName}。东西回到你手里。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "拒绝赠礼", detail, ["social", "gift"]);
     pushTravelNote(cultivator, travelNote({ tick: world.tick, kind: "person", title: `退回了${fromName}的礼`, detail, locationId: cultivator.locationId, mood: "东西没有留下" }));
     pushTravelNote(sender, travelNote({ tick: world.tick, kind: "person", title: `${cultivator.name}退回了礼`, detail, locationId: sender.locationId, mood: "礼被退了回来" }));
@@ -11618,16 +11800,47 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const gifts = cultivator.pendingGifts ?? [];
     const giftIdx = gifts.findIndex((g) => g.messageId === acceptGiftMsgId);
     if (giftIdx === -1) throw new Error("这份礼已经不在了。");
-    const gift = gifts[giftIdx];
-    cultivator.inventory[gift.itemId] = (cultivator.inventory[gift.itemId] ?? 0) + gift.count;
+    const gift = gifts[giftIdx]!;
+    givePendingGift(cultivator, gift);
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
     const giver = world.cultivators[gift.fromCultivatorId];
-    const fromName = giver?.name ?? "unknown";
-    const giftName = itemDisplayName(gift.itemId);
+    const fromName = giver?.name ?? "某人";
+    if (isStoneGift(gift)) {
+      const amount = gift.spiritStones ?? 0;
+      const stoneName = `${amount}枚灵石`;
+      rememberGiftExchange(world, cultivator.id, gift.fromCultivatorId, "accepted", stoneName);
+      rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "accepted", stoneName);
+      const detail = `${cultivator.name}收下了${fromName}的${stoneName}。这一笔不再退。`;
+      addMessage(world, gift.fromCultivatorId, "赠礼", `收下了${stoneName}`, `${cultivator.name}收下了你送来的${stoneName}。`, { fromCultivatorId: cultivator.id });
+      addSpiritStoneGainLog(world, cultivator.id, "接受赠礼", detail, ["social", "gift", "stones"]);
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `收下了${fromName}的灵石`,
+        detail,
+        locationId: cultivator.locationId,
+        mood: "手里多了一笔灵石",
+      }));
+      if (giver) {
+        pushTravelNote(giver, travelNote({
+          tick: world.tick,
+          kind: "person",
+          title: `${cultivator.name}收下了灵石`,
+          detail,
+          locationId: giver.locationId,
+          mood: "灵石送到了",
+        }));
+        shiftCultivatorMood(world, giver, "gift", `${cultivator.name}收下了这${stoneName}。`);
+      }
+      shiftCultivatorMood(world, cultivator, "gift");
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: detail });
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}收下了${fromName}送来的${stoneName}。` };
+    }
+    const giftName = itemDisplayName(gift.itemId ?? "");
     const forgiven = forgiveOneFavor(world, cultivator.id, gift.fromCultivatorId);
     rememberGiftExchange(world, cultivator.id, gift.fromCultivatorId, "accepted", giftName);
     rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "accepted", giftName);
-    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼已被接受", `${cultivator.name}接受了你赠送的${gift.count}个${giftName}。`, { fromCultivatorId: cultivator.id });
+    addMessage(world, gift.fromCultivatorId, "赠礼", `收下了${giftName}`, `${cultivator.name}收下了你送来的${gift.count}个${giftName}。`, { fromCultivatorId: cultivator.id });
     addResourceGainLog(world, cultivator.id, "接受赠礼", `${cultivator.name}接受了${fromName}赠送的${gift.count}个${giftName}。`, ["social", "gift"], [{ itemId: gift.itemId as ItemId, count: gift.count }]);
     const giftBond = relationClause(getSocialLink(world, cultivator.id, gift.fromCultivatorId), fromName, null);
     const pillEase = gift.itemId === "healing-pill" && cultivator.injuryTicksRemaining > 0
@@ -11666,17 +11879,46 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const gifts = cultivator.pendingGifts ?? [];
     const giftIdx = gifts.findIndex((g) => g.messageId === rejectGiftMsgId);
     if (giftIdx === -1) throw new Error("这份礼已经不在了。");
-    const gift = gifts[giftIdx];
-    // Return item to sender
+    const gift = gifts[giftIdx]!;
     const sender = getCultivatorOrThrow(world, gift.fromCultivatorId);
-    sender.inventory[gift.itemId] = (sender.inventory[gift.itemId] ?? 0) + gift.count;
+    returnPendingGift(sender, gift);
     cultivator.pendingGifts = [...gifts.slice(0, giftIdx), ...gifts.slice(giftIdx + 1)];
     const fromName = sender.name;
-    const giftName = itemDisplayName(gift.itemId);
+    if (isStoneGift(gift)) {
+      const amount = gift.spiritStones ?? 0;
+      const stoneName = `${amount}枚灵石`;
+      rememberGiftExchange(world, cultivator.id, gift.fromCultivatorId, "returned", stoneName);
+      rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "returned", stoneName);
+      const rejectDetail = `${cultivator.name}把${fromName}的${stoneName}退了回去。灵石回到了原主手里。`;
+      addMessage(world, gift.fromCultivatorId, "赠礼", `退回了${stoneName}`, `${cultivator.name}把这${stoneName}退了回来。钱回到你手里。`, { fromCultivatorId: cultivator.id });
+      addDaoLog(world, cultivator.id, "拒绝赠礼", rejectDetail, ["social", "gift", "stones"]);
+      pushTravelNote(cultivator, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `退回了${fromName}的灵石`,
+        detail: rejectDetail,
+        locationId: cultivator.locationId,
+        mood: "灵石没有留下",
+      }));
+      pushTravelNote(sender, travelNote({
+        tick: world.tick,
+        kind: "person",
+        title: `${cultivator.name}退回了灵石`,
+        detail: rejectDetail,
+        locationId: sender.locationId,
+        mood: "灵石被退了回来",
+      }));
+      addMutualGrudge(world, cultivator.id, sender.id, GRUDGE_FROM_REJECTION);
+      shiftCultivatorMood(world, sender, "rejection", `${cultivator.name}把灵石退了回来。`);
+      shiftCultivatorMood(world, cultivator, "rejection", `把${fromName}的灵石退了回去。`);
+      recordLife(cultivator, { tick: world.tick, kind: "relationship", text: rejectDetail });
+      return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}把${fromName}的${stoneName}退了回去。` };
+    }
+    const giftName = itemDisplayName(gift.itemId ?? "");
     rememberGiftExchange(world, cultivator.id, gift.fromCultivatorId, "returned", giftName);
     rememberGiftExchange(world, gift.fromCultivatorId, cultivator.id, "returned", giftName);
     const rejectDetail = `${cultivator.name}把${fromName}的${giftName}退了回去。东西回到了原主手里。`;
-    addMessage(world, gift.fromCultivatorId, "赠礼", "赠礼被退还", `${cultivator.name}拒绝了你赠送的${gift.count}个${giftName}，物品已退还。`, { fromCultivatorId: cultivator.id });
+    addMessage(world, gift.fromCultivatorId, "赠礼", `退回了${giftName}`, `${cultivator.name}把你送来的${gift.count}个${giftName}退了回来。东西回到你手里。`, { fromCultivatorId: cultivator.id });
     addDaoLog(world, cultivator.id, "拒绝赠礼", `${cultivator.name}拒绝了${fromName}的赠礼，${gift.count}个${giftName}已退还。`, ["social", "gift"]);
     pushTravelNote(cultivator, travelNote({
       tick: world.tick,

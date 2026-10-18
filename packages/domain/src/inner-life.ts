@@ -43,6 +43,12 @@ export const SPAR_TEACH_COOLDOWN_TICKS = 4;
 export const SHARE_RESOURCE_COOLDOWN_TICKS = 4;
 export const SHARE_RESOURCE_STONES = 8;
 export const SHARE_RESOURCE_MINIMUM = 16;
+
+/** Negotiated stone gift. Separate from the fixed eight-stone 知己 share. */
+export const GIFT_STONES_MIN = 1;
+export const GIFT_STONES_MAX = 800;
+export const GIFT_STONES_AFFINITY = 3;
+export const GIFT_STONE_CARD_AMOUNTS = [20, 50, 100, 200] as const;
 export const SPAR_TEACH_SPIRIT = 6;
 export const SPAR_TEACH_PRACTICE = 2;
 

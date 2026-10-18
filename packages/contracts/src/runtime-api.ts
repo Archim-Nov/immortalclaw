@@ -112,6 +112,7 @@ export interface PerformActionRequest {
   /**
    * Selects the gifted item when actionId is send-message:<id>:gift-item.
    * Ignored when the action id already ends in gift-item:<itemId>.
+   * Stone gifts put the amount in gift-stones:<id>:<amount> and do not use this field.
    */
   itemId?: string;
 }
