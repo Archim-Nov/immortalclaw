@@ -4848,6 +4848,7 @@ function echoPartyWitness(
   }
 }
 
+// title and detail are the witness note. Name both people, and leave the pair's affinity sentence on their own notes.
 function shareMoment(
   world: WorldState,
   principals: readonly Cultivator[],
@@ -10879,8 +10880,8 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     shareMoment(
       world,
       [cultivator, target],
-      `${cultivator.name}过来攀谈`,
-      chatDetail,
+      `听见${cultivator.name}跟${target.name}攀谈`,
+      `${cultivator.name}在${chatPlace}跟${target.name}攀谈，说到：「${spoken}」`,
       `${cultivator.name}说：「${spoken}」`,
       "spoken",
     );
@@ -11428,7 +11429,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: "话留在了耳朵里",
       }));
     }
-    shareMoment(world, [cultivator, target], `${cultivator.name}说了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
+    shareMoment(
+      world,
+      [cultivator, target],
+      `听见${cultivator.name}对${target.name}说了一句`,
+      detail,
+      `${cultivator.name}说：「${spoken}」`,
+      "spoken",
+    );
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}对${target.name}说了一句。` };
   }
 
@@ -11455,7 +11463,14 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: "话接上了",
       }));
     }
-    shareMoment(world, [cultivator, target], `${cultivator.name}回了一句`, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
+    shareMoment(
+      world,
+      [cultivator, target],
+      `听见${cultivator.name}回${target.name}一句`,
+      detail,
+      `${cultivator.name}说：「${spoken}」`,
+      "spoken",
+    );
     return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: summaryWithSpokenLine(`${cultivator.name}回了${target.name}一句`, spoken, "。") };
   }
 
@@ -11703,6 +11718,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           subject: "门口会合",
           content: `${cultivator.name}传话：到地宫门口会合。人到了、闲着，再一起下。`,
           title: `约${target.name}到门口`,
+          witnessTitle: `听见${cultivator.name}约${target.name}到门口`,
           replyTitle: `${cultivator.name}约在门口`,
           mood: "约在地宫门口",
           summary: `${cultivator.name}约${target.name}到门口会合。`,
@@ -11711,6 +11727,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           subject: "可以下了",
           content: `${cultivator.name}传话：人已就绪，可以下地宫。闲着就一起进，不另开工。`,
           title: `告诉${target.name}可以下了`,
+          witnessTitle: `听见${cultivator.name}告诉${target.name}可以下了`,
           replyTitle: `${cultivator.name}说可以下了`,
           mood: "等人一起进",
           summary: `${cultivator.name}告诉${target.name}可以下了。`,
@@ -11719,6 +11736,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
           subject: "先等一等",
           content: `${cultivator.name}传话：先别下。在原地等，齐了再进。`,
           title: `让${target.name}先等`,
+          witnessTitle: `听见${cultivator.name}让${target.name}先等`,
           replyTitle: `${cultivator.name}说先等`,
           mood: "先别进门",
           summary: `${cultivator.name}让${target.name}先等一等。`,
@@ -11745,7 +11763,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         locationId: target.locationId,
         mood: line.mood,
       }));
-      shareMoment(world, [cultivator, target], line.title, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
+      shareMoment(world, [cultivator, target], line.witnessTitle, detail, `${cultivator.name}说：「${spoken}」`, "spoken");
       return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: line.summary };
     }
     if (cultivator.locationId !== target.locationId) throw new Error("传话要当面。人现在不在一处。");
@@ -11818,7 +11836,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       shareMoment(
         world,
         [cultivator, target],
-        `${cultivator.name}递来一份礼`,
+        `听见${cultivator.name}把礼递给${target.name}`,
         `${cultivator.name}把1个${giftName}塞给${target.name}，说：「${giftSpoken}」`,
         `${cultivator.name}说：「${giftSpoken}」`,
         "spoken",
@@ -11852,24 +11870,27 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       };
       target.pendingHelpRequests = [...existing, request].slice(-PENDING_HELP_LIMIT);
     }
-    const messageNotes: Record<string, { title: string; detail: string; replyTitle: string; replyDetail: string }> = {
+    const messageNotes: Record<string, { title: string; detail: string; replyTitle: string; replyDetail: string; witnessTitle: string }> = {
       greet: {
         title: `向${target.name}问了好`,
         detail: `${cultivator.name}在${world.locations[cultivator.locationId]?.name ?? "这里"}跟${target.name}点了下头，说：「${spoken}」`,
         replyTitle: `${cultivator.name}打了招呼`,
         replyDetail: `${cultivator.name}跟你问了好：「${spoken}」人就在眼前。`,
+        witnessTitle: `听见${cultivator.name}向${target.name}问了好`,
       },
       "share-info": {
         title: `把见闻说给${target.name}`,
         detail: `${cultivator.name}把路上的事说给${target.name}听：「${spoken}」对方听完，没有立刻走开。`,
         replyTitle: `${cultivator.name}说了路上的事`,
         replyDetail: `${cultivator.name}分享了一段见闻：「${spoken}」值得记下来。`,
+        witnessTitle: `听见${cultivator.name}把见闻说给${target.name}`,
       },
       "request-help": {
         title: `向${target.name}求了一手`,
         detail: `${cultivator.name}向${target.name}开口求助：「${spoken}」人情还没落地，话已经说出去了。`,
         replyTitle: `${cultivator.name}来求助`,
         replyDetail: `${cultivator.name}向你求了一手：「${spoken}」帮或不帮，都会被记住。`,
+        witnessTitle: `听见${cultivator.name}向${target.name}求了一手`,
       },
     };
     const note = messageNotes[kind];
@@ -11892,7 +11913,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         locationId: target.locationId,
         mood: "有人找上门了",
       }));
-      shareMoment(world, [cultivator, target], note.title, `${note.detail}${said}`, `${cultivator.name}说：「${spoken}」`, "spoken");
+      shareMoment(world, [cultivator, target], note.witnessTitle, note.detail, `${cultivator.name}说：「${spoken}」`, "spoken");
     }
     const messageSummaries: Record<string, string> = {
       greet: summaryWithSpokenLine(`${cultivator.name}向${target.name}问了好`, spoken, "。好感+3。"),
