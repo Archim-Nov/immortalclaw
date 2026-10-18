@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="immortal-claw-template" content="act-result">
-<meta name="immortal-claw-template-version" content="3">
+<meta name="immortal-claw-template-version" content="4">
 <title>{{title}}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
@@ -289,7 +289,41 @@ h2 {
 .self-block > .ledger {
   margin-top: 0.15rem;
 }
-.self-block:not(:has(dd:not(:empty))) {
+.self-block:not(:has(dd:not(:empty), .prose:not(:empty), .footnote:not(:empty), .chip:not(:empty))) {
+  display: none;
+}
+.self-block > .chips {
+  margin-bottom: 0.35rem;
+}
+h3 {
+  margin: 1.15rem 0 0.4rem;
+  color: var(--ink);
+  font-family: var(--font-xianxia);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08rem;
+}
+.archive {
+  margin: 0;
+}
+.archive:not(:has(.prose:not(:empty), dd:not(:empty), .footnote:not(:empty))) {
+  display: none;
+}
+.archive .ledger {
+  margin-top: 0.15rem;
+}
+.archive .ledger-row:first-child {
+  border-top: 0;
+  padding-top: 0.15rem;
+}
+.footnote {
+  margin: 0.2rem 0 0;
+  color: var(--ink-3);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.footnote:empty {
   display: none;
 }
 @media (max-width: 640px) {
@@ -301,7 +335,7 @@ h2 {
 </style>
 </head>
 <body>
-<!-- immortal-claw-template: act-result version 3. Read-only report of a life you already lived. Show it to your owner. Fill 自身近况 and 内心想法 from that life, in 修仙白话. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
+<!-- immortal-claw-template: act-result version 4. Read-only report of a life you already lived. Show it to your owner. Fill 自身近况 at 修士档案 depth, plus 见闻 and 内心想法, in 修仙白话. 近事, 关系, and 传音摘要 are read-only text, not links. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
 <div class="ink-backdrop" aria-hidden="true"><div class="ink-grain"></div></div>
 <main class="sheet">
 <article class="glass-panel">
@@ -326,24 +360,111 @@ h2 {
 </section>
 <section class="beat self-block">
 <h2>自身近况</h2>
+<div class="chips">
+<span class="chip gold" data-slot="realm">{{realm}}</span>
+<span class="chip" data-slot="region">{{region}}</span>
+<span class="chip" data-slot="location">{{location}}</span>
+<span class="chip" data-slot="sect">{{sect}}</span>
+<span class="chip" data-slot="status">{{status}}</span>
+</div>
+<section class="archive">
+<h3>概览</h3>
+<p class="prose" data-slot="overview">{{overview}}</p>
+</section>
+<section class="archive">
+<h3>修为</h3>
 <dl class="ledger">
 <div class="ledger-row"><dt>境界</dt><dd data-slot="realm">{{realm}}</dd></div>
-<div class="ledger-row"><dt>所在</dt><dd data-slot="location">{{location}}</dd></div>
-<div class="ledger-row"><dt>修为</dt><dd data-slot="cultivation">{{cultivation}}</dd></div>
-<div class="ledger-row"><dt>气血</dt><dd data-slot="vitals">{{vitals}}</dd></div>
+<div class="ledger-row"><dt>进度</dt><dd data-slot="cultivation">{{cultivation}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>气血 · 灵力</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>气血</dt><dd data-slot="qi">{{qi}}</dd></div>
+<div class="ledger-row"><dt>灵力</dt><dd data-slot="spirit">{{spirit}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>状态</h3>
+<dl class="ledger">
 <div class="ledger-row"><dt>状态</dt><dd data-slot="status">{{status}}</dd></div>
-<div class="ledger-row"><dt>行囊</dt><dd data-slot="inventory">{{inventory}}</dd></div>
+<div class="ledger-row"><dt>年岁</dt><dd data-slot="years">{{years}}</dd></div>
+<div class="ledger-row"><dt>战备</dt><dd data-slot="battle">{{battle}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>行囊</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>灵石</dt><dd data-slot="stones">{{stones}}</dd></div>
+<div class="ledger-row"><dt>物品</dt><dd data-slot="inventory">{{inventory}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>功法 · 装备</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>主修</dt><dd data-slot="mainArt">{{mainArt}}</dd></div>
+<div class="ledger-row"><dt>兵器</dt><dd data-slot="weapon">{{weapon}}</dd></div>
 <div class="ledger-row"><dt>功法</dt><dd data-slot="techniques">{{techniques}}</dd></div>
 <div class="ledger-row"><dt>法术</dt><dd data-slot="spells">{{spells}}</dd></div>
 <div class="ledger-row"><dt>装备</dt><dd data-slot="equipment">{{equipment}}</dd></div>
-<div class="ledger-row"><dt>房产</dt><dd data-slot="residence">{{residence}}</dd></div>
-<div class="ledger-row"><dt>八维</dt><dd data-slot="eight">{{eight}}</dd></div>
-<div class="ledger-row"><dt>仙缘</dt><dd data-slot="attunement">{{attunement}}</dd></div>
-<div class="ledger-row"><dt>五行</dt><dd data-slot="wuxing">{{wuxing}}</dd></div>
-<div class="ledger-row"><dt>势力</dt><dd data-slot="faction">{{faction}}</dd></div>
-<div class="ledger-row"><dt>谋略</dt><dd data-slot="strategy">{{strategy}}</dd></div>
-<div class="ledger-row"><dt>详情</dt><dd data-slot="traits">{{traits}}</dd></div>
 </dl>
+</section>
+<section class="archive">
+<h3>八维</h3>
+<p class="prose" data-slot="eight">{{eight}}</p>
+<p class="footnote" data-slot="eightNote">{{eightNote}}</p>
+</section>
+<section class="archive">
+<h3>详细属性</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>声望</dt><dd data-slot="reputation">{{reputation}}</dd></div>
+<div class="ledger-row"><dt>心性</dt><dd data-slot="morality">{{morality}}</dd></div>
+<div class="ledger-row"><dt>出身</dt><dd data-slot="origin">{{origin}}</dd></div>
+<div class="ledger-row"><dt>性情</dt><dd data-slot="temperament">{{temperament}}</dd></div>
+<div class="ledger-row"><dt>攻道</dt><dd data-slot="attack">{{attack}}</dd></div>
+<div class="ledger-row"><dt>职司</dt><dd data-slot="office">{{office}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>五行 · 灵根</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>灵根</dt><dd data-slot="root">{{root}}</dd></div>
+<div class="ledger-row"><dt>五行</dt><dd data-slot="wuxing">{{wuxing}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>势力</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>宗门</dt><dd data-slot="sect">{{sect}}</dd></div>
+<div class="ledger-row"><dt>地位</dt><dd data-slot="standing">{{standing}}</dd></div>
+<div class="ledger-row"><dt>贡献</dt><dd data-slot="contribution">{{contribution}}</dd></div>
+<div class="ledger-row"><dt>仙缘</dt><dd data-slot="attunement">{{attunement}}</dd></div>
+</dl>
+</section>
+<section class="archive">
+<h3>房产 · 谋略</h3>
+<dl class="ledger">
+<div class="ledger-row"><dt>洞府</dt><dd data-slot="residence">{{residence}}</dd></div>
+<div class="ledger-row"><dt>谋略</dt><dd data-slot="strategy">{{strategy}}</dd></div>
+</dl>
+</section>
+</section>
+<section class="beat">
+<h2>近事</h2>
+<p class="prose" data-slot="deeds">{{deeds}}</p>
+</section>
+<section class="beat">
+<h2>关系</h2>
+<p class="prose" data-slot="relations">{{relations}}</p>
+</section>
+<section class="beat">
+<h2>见闻</h2>
+<p class="prose" data-slot="sights">{{sights}}</p>
+</section>
+<section class="beat">
+<h2>传音摘要</h2>
+<p class="prose" data-slot="whispers">{{whispers}}</p>
 </section>
 </article>
 <p class="sheet-foot">修仙Claw · 纪事</p>

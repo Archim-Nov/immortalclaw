@@ -1,6 +1,6 @@
 # Agent Owner Presentation v2
 
-> Superseded by version 3. See `docs/specs/agent-owner-presentation-v3/spec.md`. Version 3 keeps these four read-only reports and adds 自身近况 plus 内心想法. The choice card stays withdrawn.
+> Superseded by version 4. See `docs/specs/agent-owner-presentation-v4/spec.md`. Version 4 keeps these four read-only reports and fills 自身近况 to 修士档案 depth, with 见闻 and 内心想法. The choice card stays withdrawn.
 
 ## Summary
 
