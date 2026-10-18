@@ -7,16 +7,16 @@ export const SPECIAL_ITEMS: Record<
 > = {
   "eight-wastes-pass": {
     id: "eight-wastes-pass",
-    name: "八荒符关",
-    nameByLocale: makeLocalizedText("八荒符关", "Eight Wastes Pass"),
+    name: "八荒令",
+    nameByLocale: makeLocalizedText("八荒令", "Eight Wastes Pass"),
     category: "material",
-    description: "进入八荒阈层所需的通行凭证，由入口逻辑直接消耗。可在主城坊市购买。",
+    description: "进入八荒所需的通行凭证，由入口直接消耗。主城坊市可以买。荒野巡查、猎兽、答过的岔路，以及地宫四阶以上撤出或走完，也有机会摸到一枚。",
     descriptionByLocale: makeLocalizedText(
-      "进入八荒阈层所需的通行凭证，由入口逻辑直接消耗。可在主城坊市购买。",
-      "Pass required to enter the Eight Wastes threshold layer, consumed automatically at the entrance. Available at main city markets.",
+      "进入八荒所需的通行凭证，由入口直接消耗。主城坊市可以买。荒野巡查、猎兽、答过的岔路，以及地宫四阶以上撤出或走完，也有机会摸到一枚。",
+      "Pass required to enter the Eight Wastes, consumed at the entrance. Sold at main-city markets. Wilderness surveys, hunts, answered beats, and dungeon ranks 4 and above can also yield one on a withdraw or a clear.",
     ),
     baseValue: 800,
-    tags: ["ticket", "bahuang-expedition", "eight-wastes"],
+    tags: ["ticket", "bahuang-expedition", "eight-wastes", "wilderness-loot", "dungeon-loot"],
     trade: {
       buyBasePrice: 800,
       sellBasePrice: 200,

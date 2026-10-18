@@ -37,8 +37,8 @@ const DUNGEON_STRATEGY_POSTURES = ["conservative", "balanced", "aggressive"] as 
 
 const SECONDARY_DROPS_BY_BAND: Record<"1-3" | "4-6" | "7-9", ItemId[]> = {
   "1-3": ["ruin-fragment"],
-  "4-6": ["ruin-fragment", "healing-pill", "qi-pill"],
-  "7-9": ["ruin-fragment", "healing-pill", "qi-pill", "ward-talisman"],
+  "4-6": ["ruin-fragment", "healing-pill", "qi-pill", "eight-wastes-pass"],
+  "7-9": ["ruin-fragment", "healing-pill", "qi-pill", "ward-talisman", "eight-wastes-pass"],
 };
 
 const ESTIMATED_MATERIAL_YIELD_BY_BAND: Record<
@@ -1493,6 +1493,9 @@ export function createDungeonExpeditionReport(input: {
     haulClause,
     `气血耗去${input.progress.qiSpent ?? 0}，灵力耗去${input.progress.spiritualPowerSpent ?? 0}。`,
     (input.progress.stonesLost ?? 0) > 0 ? `路上散落灵石${input.progress.stonesLost}枚。` : null,
+    (secondaryDrops["eight-wastes-pass"] ?? 0) > 0
+      ? `袖里还有${(secondaryDrops["eight-wastes-pass"] ?? 0) > 1 ? `${secondaryDrops["eight-wastes-pass"]}枚` : "一枚"}八荒令。`
+      : null,
     remembered ? `记得最清楚的是：${remembered.detail}` : null,
     input.progress.carriedLine ?? null,
     input.relic?.arcLine ?? null,

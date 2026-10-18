@@ -1,3 +1,4 @@
+import { maybeEightWastesPass } from "./eight-wastes-pass.js";
 import { recordWildernessAttunement } from "./guixu-service.js";
 import { pickLoadoutSourceDrop } from "./loadout-sourcing.js";
 import { wildRoomLine } from "./dungeon-interior.js";
@@ -286,6 +287,16 @@ export function applyWildernessPressure(world: WorldState, cultivator: Cultivato
         detail: wildRoomLine(place.name, `${cultivator.id}:${progress.ticksSurvived}:room`),
       });
     }
+    if (progress.ticksSurvived > 0 && progress.ticksSurvived % 4 === 0) {
+      maybeEightWastesPass({
+        world,
+        cultivator,
+        source: "layer",
+        seed: `${cultivator.id}:${progress.layerId}:${progress.ticksSurvived}:layer`,
+        placeName: place.name,
+        progress,
+      });
+    }
   }
   cultivator.qi = clamp(cultivator.qi - layer.survivalPressure.qiDamagePerTick, 0, cultivator.maxQi);
   cultivator.spiritualPower = clamp(
@@ -376,6 +387,15 @@ export function resolveWildernessSurvey(
     });
   }
 
+  const passLine = maybeEightWastesPass({
+    world,
+    cultivator,
+    source: "survey",
+    seed: `${world.tick}:${job.id}:survey`,
+    placeName: surveyed?.name ?? "荒野",
+    progress,
+  });
+
   // ---- Loadout source drop (wilderness survey) ----
   if (layer.tier >= 1 && layer.tier <= 3) {
     const wsSourceDrop = pickLoadoutSourceDrop(layer.tier as 1 | 2 | 3, `${world.tick}:${cultivator.id}:${job.id}:wilderness-source`);
@@ -386,6 +406,6 @@ export function resolveWildernessSurvey(
     withdrawFromWilderness(world, cultivator, eventId);
   }
 
-  if (surveyed) return `${surveyed.name}这一段走完了。`;
-  return `${cultivator.name}在这一层走了一段。`;
+  if (surveyed) return passLine ? `${surveyed.name}这一段走完了。${passLine}` : `${surveyed.name}这一段走完了。`;
+  return passLine ? `${cultivator.name}在这一层走了一段。${passLine}` : `${cultivator.name}在这一层走了一段。`;
 }

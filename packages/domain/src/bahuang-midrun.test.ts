@@ -85,7 +85,7 @@ test("each bahuang band has its own Chinese wakes", () => {
   const stele = previewBahuangWakes(blankProgress(5));
   const ravine = previewBahuangWakes(blankProgress(8));
   for (const wakes of [dust, stele, ravine]) {
-    assert.equal(wakes.length, 3);
+    assert.equal(wakes.length, 4);
     for (const wake of wakes) {
       assert.ok(wake.options.length >= 3 && wake.options.length <= 4);
       assertChinese(wake.context);
@@ -101,14 +101,17 @@ test("each bahuang band has its own Chinese wakes", () => {
   assert.match(dustText, /沙客/);
   assert.match(dustText, /尘骑/);
   assert.match(dustText, /断法/);
+  assert.match(dustText, /井/);
   assert.doesNotMatch(dustText, /碑影|灯烬/);
   assert.match(steleText, /碑影/);
   assert.match(steleText, /碑仆/);
   assert.match(steleText, /定根/);
+  assert.match(steleText, /干粮/);
   assert.doesNotMatch(steleText, /沙客|灯烬/);
   assert.match(ravineText, /灯烬/);
   assert.match(ravineText, /壑影/);
   assert.match(ravineText, /幻惑/);
+  assert.match(ravineText, /灭掉的灯/);
   assert.doesNotMatch(ravineText, /沙客|碑影/);
 });
 
@@ -199,8 +202,10 @@ test("a bahuang wake timeout does not grant the pocket the player did not choose
   assert.ok(pending);
   assert.ok(pending?.options.some((option) => option.optionId.endsWith("-pocket")));
   const stones = cultivator.spiritStones;
+  const rations = world.bahuangProgress[cultivator.id]?.supplies.rations;
   advanceWorld(world, 3);
   assert.equal(cultivator.spiritStones, stones);
+  assert.equal(world.bahuangProgress[cultivator.id]?.supplies.rations, rations);
   assert.equal(getCultivatorState(world, cultivator.id).bahuang?.pendingWakeNode ?? null, null);
   const notes = getCultivatorState(world, cultivator.id).travelogue.notes.map((note) => note.detail).join("\n");
   assert.match(notes, /时辰到了/);
@@ -228,7 +233,7 @@ test("choosing the bahuang pocket puts stones in the bag", () => {
   const result = performAction(world, cultivator.id, `bahuang-wake-decision:${pocket!.optionId}` as never);
   assert.equal(result.accepted, true);
   assertChinese(result.summary);
-  assert.equal(cultivator.spiritStones, stones + 6);
+  assert.equal(cultivator.spiritStones, stones + 28);
 });
 
 test("bahuang gate refusals are Chinese", () => {
@@ -248,7 +253,7 @@ test("bahuang gate refusals are Chinese", () => {
   cultivator.locationId = "qingzhou:dungeon-a";
   cultivator.inventory["eight-wastes-pass"] = 0;
   const noTicket = canEnterBahuang(cultivator, cultivator.locationId, world);
-  assert.match(noTicket.reason ?? "", /八荒路引/);
+  assert.match(noTicket.reason ?? "", /八荒令/);
   assertChinese(noTicket.reason ?? "");
 
   cultivator.inventory["eight-wastes-pass"] = 1;

@@ -425,4 +425,6 @@ export const EXTRA_BAHUANG_ROOMS = [
   (place: string) => `${place}有一块能挡风的碑。你在碑阴站了一会儿，没有刻字。`,
   (place: string) => `${place}侧面的石缝里有光。你看了一眼，光是从外面漏的。`,
   (place: string) => `${place}前面有人把干粮纸留在石头上。你没有捡，只把纸压好。`,
+  (place: string) => `${place}里有一口没人汲的井。你看了看水面，没有把绳子放下去。`,
+  (place: string) => `${place}的石缝里塞着一小袋干粮。你看清袋口是系着的，没有解开。`,
 ] as const;

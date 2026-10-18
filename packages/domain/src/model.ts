@@ -870,6 +870,8 @@ export interface WildernessProgress {
   nextBeatAt?: number;
   /** The beat waiting for a choice. Absent when the path is clear. */
   pendingBeatId?: string;
+  /** This stay already found an 八荒令. Absent on older runs. */
+  passFound?: boolean;
 }
 
 export interface DungeonYieldEstimate {

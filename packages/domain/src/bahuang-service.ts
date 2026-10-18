@@ -273,7 +273,7 @@ export function canEnterBahuang(
     return { allowed: false, reason: "宗门贡献还不够，进不了八荒。" };
   }
   if ((cultivator.inventory[EIGHT_WASTES_CONTENT.entryRequirement.entryTicket] ?? 0) <= 0) {
-    return { allowed: false, reason: "没有八荒路引，进不了八荒。" };
+    return { allowed: false, reason: "没有八荒令，进不了八荒。" };
   }
   const { entryWindowCycle, entryWindowDuration } = EIGHT_WASTES_CONTENT.entryRequirement;
   if (world.tick % entryWindowCycle >= entryWindowDuration) {
@@ -576,8 +576,8 @@ function applySceneEffect(
   }
   if (effect.kind === "pocket") {
     progress.pressure += 1;
-    progress.rewards.spiritStones += 6;
-    cultivator.spiritStones += 6;
+    progress.rewards.spiritStones += effect.amount;
+    cultivator.spiritStones += effect.amount;
     return;
   }
   if (effect.kind === "stones") {
@@ -603,6 +603,11 @@ function applySceneEffect(
     cultivator.spiritStones -= effect.cost;
     progress.rewards.spiritStones += effect.gain;
     cultivator.spiritStones += effect.gain;
+    return;
+  }
+  if (effect.kind === "stock") {
+    progress.supplies.rations += effect.rations;
+    progress.pressure += effect.pressure;
   }
 }
 
@@ -736,24 +741,24 @@ function resolveBahuangMeeting(
   let leftResult: "win" | "loss" | "draw" | "retreat" = "draw";
   let rightResult: "win" | "loss" | "draw" | "retreat" = "draw";
   if (battle.outcome === "win") {
-    cultivator.spiritStones += 12;
-    peer.spiritStones = Math.max(0, peer.spiritStones - 6);
+    cultivator.spiritStones += 36;
+    peer.spiritStones = Math.max(0, peer.spiritStones - 18);
     leftResult = "win";
     rightResult = "loss";
   } else if (battle.outcome === "loss") {
-    cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 8);
-    peer.spiritStones += 10;
+    cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 24);
+    peer.spiritStones += 30;
     leftResult = "loss";
     rightResult = "win";
   } else if (battle.outcome === "withdraw") {
     if (battle.retreatingSide === "enemy") {
-      cultivator.spiritStones += 8;
-      peer.spiritStones = Math.max(0, peer.spiritStones - 4);
+      cultivator.spiritStones += 24;
+      peer.spiritStones = Math.max(0, peer.spiritStones - 12);
       leftResult = "win";
       rightResult = "retreat";
     } else {
-      cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 6);
-      peer.spiritStones += 4;
+      cultivator.spiritStones = Math.max(0, cultivator.spiritStones - 18);
+      peer.spiritStones += 12;
       leftResult = "retreat";
       rightResult = "win";
     }
