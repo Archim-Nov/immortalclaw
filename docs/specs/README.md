@@ -59,6 +59,7 @@ Recent supporting gameplay specs:
 - `docs/specs/party-expedition-social/spec.md`
 - `docs/specs/yi-midrun-party-window/spec.md`
 - `docs/specs/jia-temperament-loot/spec.md`
+- `docs/specs/dungeon-yield-alignment/spec.md`
 - `docs/specs/jia-relic-chronicle/spec.md`
 - `docs/specs/wild-route-identity/spec.md`
 - `docs/specs/agent-owner-presentation-v1/spec.md` (withdrawn choice card; see v2)

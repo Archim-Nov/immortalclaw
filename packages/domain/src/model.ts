@@ -1034,6 +1034,8 @@ export interface DungeonExpeditionProgress {
   beatsTold?: number;
   /** How many new beats to gather before the next 见闻. Two, three, or four. */
   nextSightingGap?: number;
+  /** Flavor beat titles already shown on this run, so the same 见闻 is not told twice. */
+  usedBeatTitles?: string[];
   /** Latest reusable win line. The same sentence is copied onto the fight. */
   carriedLine?: string;
   /** Party social wakes already opened on this run. Absent on older expeditions. */

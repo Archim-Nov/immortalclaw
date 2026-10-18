@@ -451,7 +451,10 @@ import {
   parseEnterDungeonActionId,
   parseStartDungeonExpeditionActionId,
   recordDungeonExpeditionStep,
+  estimatedPrimaryYield,
   expeditionPressureFor,
+  expeditionPrimaryMaterialId,
+  pickExpeditionBreakthroughDrop,
   shouldRetreatDungeonExpedition,
   strategyFromPolicy,
 } from "./dungeon-expedition-service.js";
@@ -540,6 +543,33 @@ const DUNGEON_META_BY_NODE_TYPE: Record<DungeonNodeType, {
 function pickBreakthroughDrop(bandKey: ItemId, seed: string, rank = 1): ItemId {
   const pool = breakthroughDropPool(bandKey, rank);
   return pool[hashString(seed) % pool.length]!;
+}
+
+function pickDungeonMaterialDrop(
+  world: WorldState,
+  job: ActionJob,
+  band: ItemId,
+  rank: number,
+  seed: string,
+): ItemId {
+  if (job.label.startsWith("Dungeon expedition")) {
+    const progress = getActiveDungeonExpedition(world, job.cultivatorId);
+    if (progress) {
+      return pickExpeditionBreakthroughDrop({
+        band,
+        grade: progress.grade,
+        rank: progress.targetRank,
+        policy: progress.policy,
+        stepIndex: progress.stepIndex,
+        maxSteps: progress.maxSteps,
+        primarySoFar: progress.primaryMaterialCount,
+        seen: progress.secondaryDrops,
+        runSeed: progress.jobId,
+        stepSeed: seed,
+      });
+    }
+  }
+  return pickBreakthroughDrop(band, seed, rank);
 }
 const REALM_ORDER = {
   炼气: 0,
@@ -5095,13 +5125,22 @@ function finalizeDungeonExpedition(
       secondaryDrops: mergePositiveDrops(progress.secondaryDrops, positiveInventoryDelta(beforeClose, cultivator.inventory)),
     };
   }
+  if (outcome === "completed" && progress.stepIndex >= progress.maxSteps) {
+    const primaryId = expeditionPrimaryMaterialId(progress.grade, progress.targetRank, metadata.materialBand);
+    const floor = estimatedPrimaryYield(progress.targetRank, progress.policy).min;
+    if (progress.primaryMaterialCount < floor) {
+      const missing = floor - progress.primaryMaterialCount;
+      cultivator.inventory[primaryId] = (cultivator.inventory[primaryId] ?? 0) + missing;
+      progress = { ...progress, primaryMaterialCount: floor };
+    }
+  }
   const report = createDungeonExpeditionReport({
     progress,
     outcome,
     endedAtTick: world.tick,
     returnLocationId,
     returnPlaceName: world.locations[returnLocationId]?.name,
-    primaryMaterial: metadata.materialBand,
+    primaryMaterial: expeditionPrimaryMaterialId(progress.grade, progress.targetRank, metadata.materialBand),
     relic: relic ?? undefined,
     realmProgressCapped: cultivator.realmProgress >= BREAKTHROUGH_PROGRESS_REQUIRED && progress.realmProgressGain <= 0,
   });
@@ -5620,6 +5659,7 @@ function resolveDungeonExpeditionStepIfDue(
   cultivator.activeJobId = outerJobId;
 
   const qiRatioBefore = cultivator.maxQi > 0 ? cultivator.qi / cultivator.maxQi : 0;
+  const usedBeatTitles = effectiveProgress.usedBeatTitles ?? [];
   const pressure = expeditionPressureFor({
     policy: effectiveProgress.policy,
     rank: effectiveProgress.targetRank,
@@ -5627,6 +5667,7 @@ function resolveDungeonExpeditionStepIfDue(
     action: actionKind,
     seed: `${world.tick}:${job.id}:${effectiveProgress.stepIndex}:${actionKind}`,
     qiRatio: qiRatioBefore,
+    usedBeatTitles,
   });
   if (pressure.stoneDelta !== 0) {
     cultivator.spiritStones = Math.max(0, cultivator.spiritStones + pressure.stoneDelta);
@@ -5749,8 +5790,9 @@ function resolveDungeonExpeditionStepIfDue(
     step: completedStep,
     fought: Boolean(expeditionBattle || interiorBattle),
   });
+  const flavorFresh = fightBeats.length === 0 && !usedBeatTitles.includes(pressure.beat.title);
   const addedBeats = [
-    ...(fightBeats.length > 0 ? fightBeats : [pressure.beat]),
+    ...(flavorFresh ? [pressure.beat] : fightBeats),
     ...(roomBeat ? [roomBeat] : []),
     ...(bandFailBeat ? [bandFailBeat] : []),
   ];
@@ -5773,6 +5815,7 @@ function resolveDungeonExpeditionStepIfDue(
     spiritualPowerSpent: (effectiveProgress.spiritualPowerSpent ?? 0) + spiritualDrain,
     injuryTicksGained: (effectiveProgress.injuryTicksGained ?? 0) + injuryTicks,
     stonesLost: (effectiveProgress.stonesLost ?? 0) + bandFailStones,
+    usedBeatTitles: flavorFresh ? [...usedBeatTitles, pressure.beat.title] : usedBeatTitles,
   };
   if (appended.sighting) {
     publishExpeditionStory(world, cultivator, effectiveProgress, appended.sighting, "growth");
@@ -5850,8 +5893,13 @@ function resolveDungeonExpeditionStepIfDue(
     .filter((entry): entry is [ItemId, number] => typeof entry[1] === "number" && entry[1] > 0)
     .slice(0, 2)
     .map(([itemId, count]) => ({ name: ITEM_CATALOG[itemId]?.name ?? itemId, count }));
-  const primaryMaterialCount = inventoryDelta[metadata.materialBand] ?? 0;
-  delete inventoryDelta[metadata.materialBand];
+  const primaryId = expeditionPrimaryMaterialId(
+    effectiveProgress.grade,
+    effectiveProgress.targetRank,
+    metadata.materialBand,
+  );
+  const primaryMaterialCount = inventoryDelta[primaryId] ?? 0;
+  delete inventoryDelta[primaryId];
 
   let updatedProgress = recordDungeonExpeditionStep({
     progress: effectiveProgress,
@@ -6157,10 +6205,10 @@ function materialSourcesOf(
       note: realmLevel >= 15
         ? "这一阶的灵材坊市不卖，甲级也不另开层。凉州或雷州的灵脉，化神后期以后去收，会在化神那一份之外再分出这一档。"
         : realmLevel >= 12
-        ? "化神的突破灵材不在坊市出售。甲级地宫七层到九层，探宝和守关都会掉。"
+        ? "化神的突破灵材不在坊市出售。甲级七层到九层的神纹天隙，探宝和守关都会掉神念晶这一档。"
         : realmLevel >= 9
-          ? "元婴的突破灵材不在坊市出售。甲级地宫四层往上才有，七层也出。探宝和守关都会掉。"
-          : "金丹期突破灵材主要来自甲级地宫高风险探索与守关。",
+          ? "元婴的突破灵材不在坊市出售。甲级地宫四层到六层的婴火莲池，探宝和守关都会掉婴火莲这一档。七层要元婴后期才开。"
+          : "金丹前期和中期的材料坊市不卖。甲级一到三层的丹霞内府，探宝和守关都会掉金灵花这一档。",
     });
   }
 
@@ -13080,7 +13128,14 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
         if (ward > 0) {
           cultivator.inventory["ward-talisman"] += ward;
         }
-        cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`, challengeGuardianRank)] += 1;
+        const guardianMaterial = pickDungeonMaterialDrop(
+          world,
+          job,
+          metadata.materialBand,
+          challengeGuardianRank,
+          `${world.tick}:${job.id}:guardian-material`,
+        );
+        cultivator.inventory[guardianMaterial] += 1;
         cultivator.spiritStones += spiritStones;
         addRealmProgress(cultivator, tuning.realmProgressReward);
         grantLoadoutSourceDrop(world, cultivator, metadata.grade, challengeGuardianRank, `${world.tick}:${job.id}:guardian-loadout-source`);
@@ -13111,7 +13166,7 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
           loot: {
             "ruin-fragment": fragment,
             ...(ward > 0 ? { "ward-talisman": ward } : {}),
-            [pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:guardian-material`, challengeGuardianRank)]: 1,
+            [guardianMaterial]: 1,
           },
           summary: `${cultivator.name} broke the guardian seal at ${location.name} rank ${challengeGuardianRank}.`,
           encounterTemplateId: guardianEncId,
@@ -13520,7 +13575,13 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       if (metadata.grade === "乙" && roll % 5 === 0) cultivator.inventory["qi-pill"] += 1;
       if (metadata.grade === "甲") cultivator.inventory["ward-talisman"] += 1;
     }
-    cultivator.inventory[pickBreakthroughDrop(metadata.materialBand, `${world.tick}:${job.id}:enhanced-search-material`, searchFortuneRank)] += 1;
+    cultivator.inventory[pickDungeonMaterialDrop(
+      world,
+      job,
+      metadata.materialBand,
+      searchFortuneRank,
+      `${world.tick}:${job.id}:enhanced-search-material`,
+    )] += 1;
     grantCultivationDrop(world, cultivator, metadata.grade, searchFortuneRank);
     if (dungeonSourceTier(metadata.grade, searchFortuneRank) >= 4) {
       grantLoadoutSourceDrop(world, cultivator, metadata.grade, searchFortuneRank, `${world.tick}:${job.id}:enhanced-loadout-source`);
