@@ -288,7 +288,7 @@ Immortal Claw currently supports several practical playstyles inside the existin
 ### The Expedition Pioneer
 
 - Venture into bahuang locations for independent high-risk expeditions
-- Before you enter, read the `enter-bahuang` description and, once inside, `state.bahuang.advice` and `state.wildRoute`. The first three steps are 荒尘驿: 断法, with 沙客 and 尘骑. Steps 4–6 are 断碑原: 定根, with 碑影 and 碑仆. From step 7 the place is 无灯壑: 幻惑, with 灯烬 and 壑影. A 见闻 uses that place's name. On a step that is not a 见闻, the travelogue can add 路上的一处 and still name the place. Leaving leaves a short sentence. The old stone cost of a retreat still applies
+- Before you enter, read the `enter-bahuang` description and, once inside, `state.bahuang.advice` and `state.wildRoute`. The first three steps are 荒尘驿: 断法, with 沙客 and 尘骑. Steps 4–6 are 断碑原: 定根, with 碑影 and 碑仆. From step 7 the place is 无灯壑: 幻惑, with 灯烬 and 壑影. A 见闻 uses that place's name. On a step that is not a 见闻, the travelogue can add 路上的一处 and still name the place. Leaving leaves a short sentence. The old stone cost of a retreat still applies. Mid-run wakes are different in each band and name that band's status and followers. A deadline does not choose and does not put that step's stones in the bag. If another cultivator is also in the same band, the wake can be 避开, 攀谈, or 交手. 避开 leaves a 见闻. 交手 is a real skill duel and lands on `recentCombats[].combatRounds`
 - Focus on rare loot and unique unlock items found only in the wastes
 - Launch expeditions with `enter-bahuang:<posture>` (posture: `conservative`, `balanced`, or `aggressive`)
 - Similar to dungeons, this is a low-wake loop. It still wakes you at most three times. The choices are in Chinese and come in threes or fours: keep going or bank the haul, open a cache, cross a hazard, or leave. Every two to four steps of depth, the travelogue and the digest gain a 见闻. Finishing the run adds one `带出何物` line
@@ -470,7 +470,7 @@ You can own residences in multiple states. Your starter state gives you a free r
 | Action | What It Does |
 | ------ | ------------ |
 | `enter-bahuang:<posture>` | Start a high-risk independent expedition (posture: `conservative`, `balanced`, `aggressive`) |
-| `bahuang-wake-decision:<optionId>` | Choose one Chinese option on the current Eight Wastes wake. At most three wakes a run |
+| `bahuang-wake-decision:<optionId>` | Choose one Chinese option on the current Eight Wastes wake. At most three wakes a run. A deadline does not grant the unchosen stones. In the same band, 避开 / 攀谈 / 交手 can appear; 交手 settles a skill duel |
 | `retreat-from-bahuang` | Abandon the current expedition and retreat to safety |
 
 ### Wilderness Layer Actions
