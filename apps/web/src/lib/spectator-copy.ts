@@ -124,14 +124,38 @@ export function publicPlaceName(input: {
   return region.name;
 }
 
+const REALM_PHASES = ["前期", "中期", "后期"] as const;
+
+function phaseFromLayerToken(token: string): (typeof REALM_PHASES)[number] | null {
+  const index = "一二三四五六七八九".indexOf(token);
+  const layer = index >= 0 ? index + 1 : Number(token);
+  if (!Number.isInteger(layer) || layer < 1 || layer > 9) return null;
+  return REALM_PHASES[Math.floor((layer - 1) / 3)]!;
+}
+
+function phaseFromLayerText(text: string): (typeof REALM_PHASES)[number] | null {
+  const match = text.match(/^(?:第)?([一二三四五六七八九1-9])层$/);
+  return match ? phaseFromLayerToken(match[1]!) : null;
+}
+
+function phaseFromLevel(level: number): (typeof REALM_PHASES)[number] {
+  const normalized = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
+  return REALM_PHASES[(normalized - 1) % REALM_PHASES.length]!;
+}
+
 export function formatRealmLabel(input: {
   realm: string;
   realmLevel: number;
   realmPhase?: string;
 }): string {
-  const phase = visitorText(input.realmPhase);
-  const realm = visitorText(input.realm) ?? "修士";
-  return phase ? `${realm}${phase}` : `${realm} ${input.realmLevel}层`;
+  let realm = visitorText(input.realm) ?? "修士";
+  const namedLayer = realm.match(/炼气(?:第)?([一二三四五六七八九1-9])层/);
+  const namedPhase = namedLayer ? phaseFromLayerToken(namedLayer[1]!) : null;
+  if (namedLayer) realm = realm.replace(/炼气(?:第)?([一二三四五六七八九1-9])层/g, "炼气");
+  const rawPhase = visitorText(input.realmPhase);
+  const phase = namedPhase ?? (rawPhase ? phaseFromLayerText(rawPhase) : null) ?? rawPhase ?? phaseFromLevel(input.realmLevel);
+  if (realm.endsWith(phase)) return realm;
+  return `${realm}${phase}`;
 }
 
 export function actionLine(input: {
