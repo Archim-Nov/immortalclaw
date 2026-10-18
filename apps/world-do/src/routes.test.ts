@@ -127,7 +127,7 @@ test("agent template catalog and documents are public", async () => {
 
   assert.equal(catalogResponse.status, 200);
   assert.match(String(catalogResponse.headers.get("content-type")), /application\/json/);
-  assert.equal(catalog.version, 2);
+  assert.equal(catalog.version, 3);
   assert.deepEqual(
     catalog.templates.map((template) => template.id),
     ["dossier", "cave-sight", "act-result", "bond-note"],
@@ -140,6 +140,9 @@ test("agent template catalog and documents are public", async () => {
   assert.match(document, /\{\{settled\}\}/);
   assert.match(document, /洞中见闻/);
   assert.match(document, /glass-panel/);
+  assert.match(document, /name="immortal-claw-template-version" content="3"/);
+  assert.match(document, /自身近况/);
+  assert.match(document, /内心想法/);
   assert.doesNotMatch(document, /<script/i);
   assert.doesNotMatch(document, /\{\{choice1\}\}/);
 
@@ -171,7 +174,7 @@ test("registration returns a credential and state route accepts it", async () =>
   assert.equal(registerPayload.agent.selectedCultivatorId, registerPayload.selectedCultivatorId);
   assert.equal(registerPayload.onboarding.stage, "registered");
   assert.equal(registerPayload.decisionPolicy.tutorialMode, "optional");
-  assert.equal(registerPayload.presentation?.version, 2);
+  assert.equal(registerPayload.presentation?.version, 3);
 
   const stateResponse = await app.request("https://runtime.test/agent/state", {
     headers: {

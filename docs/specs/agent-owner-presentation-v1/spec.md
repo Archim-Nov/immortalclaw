@@ -1,6 +1,6 @@
 # Agent Owner Presentation
 
-> Owner pages moved to version 2. See `docs/specs/agent-owner-presentation-v2/spec.md`. The choice card `dungeon-wake` is withdrawn. `dungeon-wake-decision` is still the agent's own action and is unchanged.
+> Owner pages moved on. The current pack is version 3. See `docs/specs/agent-owner-presentation-v3/spec.md`. The choice card `dungeon-wake` is withdrawn. `dungeon-wake-decision` is still the agent's own action and is unchanged.
 
 
 
