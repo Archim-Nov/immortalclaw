@@ -163,6 +163,7 @@ import {
 } from "./combat-statuses.js";
 import {
   getEnemyConfig,
+  enemyFacingName,
   enemyConfigToEncounterTemplate,
   getEncounterBuild,
   pickDungeonGuardianBuildId,
@@ -5592,7 +5593,9 @@ function resolveDungeonExpeditionStepIfDue(
       }
       const template = guardianTemplate;
       const cfg = expedGuardianEncounter.enemyConfigId ? getEnemyConfig(expedGuardianEncounter.enemyConfigId) : null;
-      const enemyName = cfg?.nameCn ?? template.enemyName;
+      const enemyName = cfg
+        ? enemyFacingName(cfg)
+        : (/[\u4e00-\u9fff]/u.test(template.enemyName) ? template.enemyName : "守关");
       const enemies = buildGuardianPack({
         id: template.id,
         name: enemyName,
@@ -5878,7 +5881,7 @@ function resolveDungeonExpeditionStepIfDue(
         const guardianCombat = getCombatJobState(syntheticJob);
         if (!guardianCombat) return [];
         const cfg = getEnemyConfig(guardianCombat.encounterTemplateId as unknown as EnemyConfigId);
-        const guardianName = cfg?.nameCn && /[\u4e00-\u9fff]/u.test(cfg.nameCn) ? cfg.nameCn : "守关";
+        const guardianName = enemyFacingName(cfg, "守关");
         return [`${guardianName}这一场`];
       })();
 
@@ -12995,10 +12998,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       const encId = combatState.encounterTemplateId;
       // Use the enemy name from the encounter registry, fall back to legacy
       const huntedPlace = wildPlaceForState(world.locations[cultivator.locationId]?.stateId);
-      const enemyDisplayName = huntedPlace?.enemy ?? (() => {
-        const cfg = getEnemyConfig(encId as unknown as EnemyConfigId);
-        return cfg?.name ?? MINE_BEAST_ENCOUNTER_TEMPLATE.enemyName;
-      })();
+      const enemyDisplayName = huntedPlace?.enemy ?? enemyFacingName(
+        getEnemyConfig(encId as unknown as EnemyConfigId),
+        "脉兽",
+      );
       const passLine = outcome === "victory" && !retreated
         ? maybeEightWastesPass({
             world,
@@ -13139,10 +13142,10 @@ function resolveEnhancedJob(world: WorldState, job: ActionJob): string {
       const tuning = guardianTuningForDungeon(metadata.grade, challengeGuardianRank);
       const baseSeed = `${world.tick}:${job.id}:ruins-guardian:${metadata.grade}:${challengeGuardianRank}`;
       const guardianEncId = combatState.encounterTemplateId;
-      const guardianDisplayName = (() => {
-        const cfg = getEnemyConfig(guardianEncId as unknown as EnemyConfigId);
-        return cfg ? `${location.name} ${cfg.name}` : `${location.name} Guardian`;
-      })();
+      const guardianDisplayName = enemyFacingName(
+        getEnemyConfig(guardianEncId as unknown as EnemyConfigId),
+        "守关",
+      );
       noteFightDiary(
         world,
         cultivator,

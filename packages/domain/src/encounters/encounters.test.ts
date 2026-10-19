@@ -1,6 +1,8 @@
 import { describe, test } from "node:test";
 import * as assert from "node:assert/strict";
 import {
+  enemyConfigToEncounterTemplate,
+  enemyFacingName,
   getAllEnemyConfigs,
   getEnemyConfig,
   getEnemyConfigsByTag,
@@ -42,6 +44,19 @@ describe("enemy config registry", () => {
     for (const c of guardian) {
       assert.ok(c.contextTags.includes("guardian"), `${c.id} missing guardian tag`);
     }
+  });
+});
+
+describe("player-facing foe names", () => {
+  test("a configured enemy shows nameCn and keeps the English registry name", () => {
+    const heavy = getAllEnemyConfigs().find((config) => config.id === "guardian-heavy-warden");
+    assert.ok(heavy);
+    assert.equal(heavy.name, "Heavy Warden");
+    assert.equal(heavy.nameCn, "重压守卫");
+    assert.equal(enemyFacingName(heavy), "重压守卫");
+    assert.equal(enemyConfigToEncounterTemplate(heavy).enemyName, "重压守卫");
+    assert.equal(enemyFacingName(null), "守关");
+    assert.equal(enemyFacingName({ nameCn: "   " }, "脉兽"), "脉兽");
   });
 });
 
