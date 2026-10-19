@@ -74,6 +74,17 @@ const DUST: readonly BahuangScene[] = [
       { optionId: "dust-well-stock", label: "把干粮袋捞上来", description: "袋是别人的，人还是收进了自己袋里。压力高一点，干粮多两口。", effect: { kind: "stock", rations: 2, pressure: 2 } },
     ],
   },
+  {
+    sceneKind: "dust-cairn",
+    context: "荒尘驿岔口有一堆石头。沙客把绳子绕在最上头，尘骑的蹄印从两边分开。断法让符纸贴在石头上。",
+    defaultOptionId: "dust-cairn-wait",
+    options: [
+      { optionId: "dust-cairn-wait", label: "不搬这堆石头", description: "人从旁边走过去，石堆留在原处。", effect: { kind: "ease", pressure: 1 } },
+      { optionId: "dust-cairn-pocket", label: "在石缝里摸一把", description: "缝里有二十八枚灵石，断法也更沉一点。", effect: { kind: "pocket", amount: POCKET } },
+      { optionId: "dust-cairn-rope", label: "把绳子从石头上解下来", description: "绳子是干的，手里多了一点灵石。", effect: { kind: "stones", amount: 18 } },
+      { optionId: "dust-cairn-push", label: "顶着断法把石堆推开", description: "压力升高，修为也会多一点。", effect: { kind: "realm", amount: 5, pressure: 3 } },
+    ],
+  },
 ];
 
 const STELE: readonly BahuangScene[] = [
@@ -121,6 +132,17 @@ const STELE: readonly BahuangScene[] = [
       { optionId: "stele-bowl-stock", label: "把干粮收进来", description: "干粮进了自己的袋子。压力高一点，能多走两步。", effect: { kind: "stock", rations: 2, pressure: 2 } },
     ],
   },
+  {
+    sceneKind: "stele-pole",
+    context: "断碑原风口插着半截杆子。碑影压在杆下，碑仆靠着杆没动。定根从杆根往上爬。",
+    defaultOptionId: "stele-pole-leave",
+    options: [
+      { optionId: "stele-pole-leave", label: "不碰这根杆", description: "人从杆边走过去。", effect: { kind: "ease", pressure: 2 } },
+      { optionId: "stele-pole-pocket", label: "在杆下摸一把", description: "杆下有二十八枚灵石，步子更沉。", effect: { kind: "pocket", amount: POCKET } },
+      { optionId: "stele-pole-read", label: "只看杆上还剩什么", description: "看清就走，杆没拔起来。", effect: { kind: "stones", amount: 12 } },
+      { optionId: "stele-pole-ration", label: "把干粮挂在杆上", description: "少一口粮，步子轻一点。", effect: { kind: "ration", delta: -1, pressure: 2 } },
+    ],
+  },
 ];
 
 const RAVINE: readonly BahuangScene[] = [
@@ -166,6 +188,17 @@ const RAVINE: readonly BahuangScene[] = [
       { optionId: "lamp-ration-pocket", label: "在灯下摸一把", description: "灯下有二十八枚灵石，眼前更花。", effect: { kind: "pocket", amount: POCKET } },
       { optionId: "lamp-ration-mark", label: "把灯留在原处", description: "灯没点着，人只在旁边停了一停。", effect: { kind: "stones", amount: 12 } },
       { optionId: "lamp-ration-stock", label: "把干粮收进来", description: "干粮进了袋子。幻惑更重一点，能多走两步。", effect: { kind: "stock", rations: 2, pressure: 2 } },
+    ],
+  },
+  {
+    sceneKind: "ravine-stone",
+    context: "无灯壑窄处横着一块凉石头。灯烬堆在石前，壑影站在石头后面。幻惑让石头看起来比脚边近。",
+    defaultOptionId: "ravine-stone-wait",
+    options: [
+      { optionId: "ravine-stone-wait", label: "不踩上去", description: "脚停在石头外面。", effect: { kind: "ease", pressure: 1 } },
+      { optionId: "ravine-stone-pocket", label: "在石头边上摸一把", description: "边上有二十八枚灵石，眼前更花。", effect: { kind: "pocket", amount: POCKET } },
+      { optionId: "ravine-stone-mark", label: "在旁边停一停", description: "停完再走，石头没踩。", effect: { kind: "stones", amount: 12 } },
+      { optionId: "ravine-stone-push", label: "踩上去再停住", description: "幻惑更重，修为多一点。", effect: { kind: "realm", amount: 5, pressure: 3 } },
     ],
   },
 ];

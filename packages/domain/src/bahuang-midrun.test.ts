@@ -6,6 +6,7 @@ import {
   advanceWorld,
   createSeedWorld,
   getCultivatorState,
+  listAvailableActions,
   performAction,
 } from "./index.js";
 import { createCultivator } from "./engine.js";
@@ -85,7 +86,7 @@ test("each bahuang band has its own Chinese wakes", () => {
   const stele = previewBahuangWakes(blankProgress(5));
   const ravine = previewBahuangWakes(blankProgress(8));
   for (const wakes of [dust, stele, ravine]) {
-    assert.equal(wakes.length, 4);
+    assert.equal(wakes.length, 5);
     for (const wake of wakes) {
       assert.ok(wake.options.length >= 3 && wake.options.length <= 4);
       assertChinese(wake.context);
@@ -102,16 +103,19 @@ test("each bahuang band has its own Chinese wakes", () => {
   assert.match(dustText, /尘骑/);
   assert.match(dustText, /断法/);
   assert.match(dustText, /井/);
+  assert.match(dustText, /石堆/);
   assert.doesNotMatch(dustText, /碑影|灯烬/);
   assert.match(steleText, /碑影/);
   assert.match(steleText, /碑仆/);
   assert.match(steleText, /定根/);
   assert.match(steleText, /干粮/);
+  assert.match(steleText, /杆/);
   assert.doesNotMatch(steleText, /沙客|灯烬/);
   assert.match(ravineText, /灯烬/);
   assert.match(ravineText, /壑影/);
   assert.match(ravineText, /幻惑/);
   assert.match(ravineText, /灭掉的灯/);
+  assert.match(ravineText, /凉石头/);
   assert.doesNotMatch(ravineText, /沙客|碑影/);
 });
 
@@ -267,4 +271,50 @@ test("bahuang gate refusals are Chinese", () => {
   const closed = canEnterBahuang(cultivator, cultivator.locationId, world);
   assert.match(closed.reason ?? "", /关着/);
   assertChinese(closed.reason ?? "");
+});
+
+test("balanced and conservative bahuang opens a first wake once depth moves", () => {
+  for (const posture of ["balanced", "conservative"] as const) {
+    const world = createSeedWorld();
+    const cultivator = world.cultivators[CULTIVATOR_ID]!;
+    cultivator.locationId = "qingzhou:dungeon-a";
+    cultivator.realm = "金丹";
+    cultivator.realmLevel = 5;
+    cultivator.totalContribution = 220;
+    cultivator.qi = cultivator.maxQi = 800;
+    cultivator.spiritualPower = cultivator.maxSpiritualPower = 800;
+    cultivator.inventory["eight-wastes-pass"] = 1;
+    world.guixuProgress.wildernessAttunement[cultivator.id] = 80;
+    world.tick = 10;
+
+    const entered = performAction(world, cultivator.id, `enter-bahuang:${posture}` as never);
+    assert.equal(entered.accepted, true);
+    const started = world.bahuangProgress[cultivator.id];
+    assert.equal(started?.status, "active");
+    assert.equal(started?.encounteredWakeNodes.length ?? 0, 0);
+    const depthBefore = started?.depth ?? 0;
+
+    advanceWorld(world, 1);
+
+    const progress = world.bahuangProgress[cultivator.id];
+    assert.equal(progress?.status, "active");
+    assert.ok((progress?.depth ?? 0) > depthBefore);
+    const pending = getCultivatorState(world, cultivator.id).bahuang?.pendingWakeNode;
+    assert.ok(pending);
+    assertChinese(pending!.context);
+    assert.ok((pending?.options.length ?? 0) >= 3 && (pending?.options.length ?? 0) <= 4);
+    for (const option of pending?.options ?? []) {
+      assertChinese(option.label);
+      assertChinese(option.description);
+    }
+
+    const choices = listAvailableActions(world, cultivator.id).filter((action) =>
+      String(action.actionId).startsWith("bahuang-wake-decision:"),
+    );
+    assert.ok(choices.length >= 3);
+    for (const choice of choices) {
+      assertChinese(choice.label);
+      assertChinese(choice.description);
+    }
+  }
 });

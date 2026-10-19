@@ -185,7 +185,7 @@ function createWakeNode(world: WorldState, progress: BahuangExpeditionProgress, 
   }
 
   const chance = progress.strategy.posture === "conservative" ? 14 : progress.strategy.posture === "balanced" ? 24 : 34;
-  const forceFirst = progress.strategy.posture === "aggressive" && progress.encounteredWakeNodes.length === 0;
+  const forceFirst = progress.encounteredWakeNodes.length === 0;
   const roll = hashString(`${progress.cultivatorId}:${progress.depth}:${worldTick}:bahuang-wake`) % 100;
   if (!forceFirst && roll >= chance) {
     return null;
