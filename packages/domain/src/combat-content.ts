@@ -174,7 +174,7 @@ function gearPaths(kind: "weapon" | "spell", id: string, tier: ContentTier): Gea
     {
       kind: "配方",
       actionId: recipe,
-      line: `带回洞府，用 ${recipe} 把${material}做成能学的${thing}。用掉才会学会，不会自动换上。`,
+      line: `带回洞府，按配方把${material}做成能学的${thing}。用掉才会学会，不会自动换上。`,
     },
     {
       kind: "宗门",
@@ -199,7 +199,7 @@ function gearPaths(kind: "weapon" | "spell", id: string, tier: ContentTier): Gea
     paths.push({
       kind: "坊市",
       actionId: buy,
-      line: `境界到了，坊市用 ${buy} 就能买下一阶。不让跳阶。`,
+      line: `境界到了，坊市就能买下一阶。不让跳阶。`,
     });
   }
   return paths;
