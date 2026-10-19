@@ -4,6 +4,8 @@
 
 好感回执里的数字后来也拿掉了，只留等级，例如两人更近了些（认识）。见 `docs/specs/affinity-receipt-labels/spec.md`。
 
+城里切磋的下书、应战、拒绝、等待和宿怨挑战，回执后来改成中文，等待卡不再写行动 id。见 `docs/specs/city-duel-receipt-zh/spec.md`。
+
 ## Summary
 
 #42 把赠礼卡换成了中文物品名。再浸泡一次，礼送出去以后的回执仍是 `gifted`、`qi-pill` 和 `Affinity`。人还在做事时提交别的动作，拒绝也还是 `Cultivator is busy with an active job`。这一轮只换这几句给人看的字。

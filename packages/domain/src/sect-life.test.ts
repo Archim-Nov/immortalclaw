@@ -179,19 +179,26 @@ test("a duel leaves 嫌隙, and the next meeting is tense", () => {
   second.activeJobId = null;
 
   const challengedAt = world.tick;
-  performAction(world, first.id, `challenge-cultivator:${second.id}`);
+  const issued = performAction(world, first.id, `challenge-cultivator:${second.id}`);
+  assert.match(issued.summary, /下了切磋挑战书/);
+  assert.equal(issued.summary.includes("duel"), false);
   const challengeId = second.pendingPvpChallengeId;
   assert.ok(challengeId);
   assert.equal(first.pendingPvpChallengeId, challengeId);
   assert.equal(world.pendingPvpChallenges[challengeId]?.expiresAtTick, challengedAt + 6);
   const waiting = listAvailableActions(world, first.id).find((action) => action.actionId === `await-pvp-challenge:${challengeId}`);
   assert.match(waiting?.description ?? "", /6 刻/);
+  assert.match(waiting?.description ?? "", /应战/);
+  assert.match(waiting?.description ?? "", /拒绝/);
+  assert.equal(/accept-pvp-challenge:|reject-pvp-challenge:|await-pvp-challenge:|pvp-challenge-/.test(`${waiting?.label ?? ""}\n${waiting?.description ?? ""}`), false);
   assert.match(waiting?.label ?? "", /还剩6刻/);
   const accept = listAvailableActions(world, second.id).find((action) => action.actionId === `accept-pvp-challenge:${challengeId}`);
   assert.match(accept?.label ?? "", /还剩6刻/);
   const held = performAction(world, first.id, `await-pvp-challenge:${challengeId}`);
   assert.equal(held.accepted, false);
   assert.match(held.summary, /没有取消/);
+  assert.match(held.summary, /应战或拒绝/);
+  assert.equal(/accept-pvp-challenge:|reject-pvp-challenge:|await-pvp-challenge:|pvp-challenge-/.test(held.summary), false);
   assert.equal(world.pendingPvpChallenges[challengeId]?.id, challengeId);
   performAction(world, second.id, `accept-pvp-challenge:${challengeId}`);
   runUntilIdle(world, first.id);

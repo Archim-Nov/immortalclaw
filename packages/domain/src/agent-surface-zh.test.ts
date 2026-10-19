@@ -696,6 +696,181 @@ test("city duel cards stay Chinese with or without a grudge", () => {
   assert.equal(feud.description.includes("Challenge"), false);
 });
 
+function assertDuelRefusal(act: () => unknown, expected: string) {
+  assert.throws(act, (error: unknown) => {
+    assert.ok(error instanceof GameplayRejection);
+    const body = actionFailureBody(error);
+    assert.equal(body.error, expected);
+    assert.equal(body.summary, expected);
+    assert.equal(/accept-pvp-challenge:|reject-pvp-challenge:|await-pvp-challenge:|pvp-challenge-/.test(body.error), false);
+    assert.equal(/\bduel\b/i.test(body.error), false);
+    return true;
+  });
+}
+
+function placeForDuel(name: string) {
+  const world = createSeedWorld();
+  const first = world.cultivators[CULTIVATOR_ID]!;
+  const created = createCultivator(world, { name });
+  const second = world.cultivators[created.id]!;
+  first.locationId = "qingzhou:main-city";
+  second.locationId = "qingzhou:main-city";
+  first.activeJobId = null;
+  second.activeJobId = null;
+  first.qi = first.maxQi;
+  second.qi = second.maxQi;
+  first.realm = "炼气";
+  second.realm = "炼气";
+  first.injuryTicksRemaining = 0;
+  second.injuryTicksRemaining = 0;
+  return { world, first, second };
+}
+
+test("city duel receipts stay Chinese and do not name the action id", () => {
+  const { world, first, second } = placeForDuel("青萝");
+  const issued = performAction(world, first.id, `challenge-cultivator:${second.id}` as never);
+  assert.equal(issued.accepted, true);
+  assert.equal(issued.summary, "云中鹤向青萝下了切磋挑战书。还剩6刻，等对方应战或拒绝。");
+  const challengeId = second.pendingPvpChallengeId;
+  assert.ok(challengeId);
+
+  const waiting = listAvailableActions(world, first.id).find((action) => action.actionId === `await-pvp-challenge:${challengeId}`);
+  assert.ok(waiting);
+  assert.equal(waiting.label, "切磋待回应：青萝（还剩6刻）");
+  assert.equal(waiting.description, "挑战书已经递给青萝。对方还剩 6 刻，可以应战，也可以拒绝。过了这几刻，这场就会自己搁下。再交一次这张卡，不会开战，也不会取消。");
+  assert.equal(/accept-pvp-challenge:|reject-pvp-challenge:|await-pvp-challenge:|pvp-challenge-/.test(`${waiting.label}\n${waiting.description}`), false);
+
+  const held = performAction(world, first.id, `await-pvp-challenge:${challengeId}` as never);
+  assert.equal(held.accepted, false);
+  assert.equal(held.summary, "挑战书还在青萝手里，还剩 6 刻，没有取消。等对方应战或拒绝。再交一次也不会开战。");
+  assert.equal(world.pendingPvpChallenges[challengeId]?.id, challengeId);
+
+  const rejected = performAction(world, second.id, `reject-pvp-challenge:${challengeId}` as never);
+  assert.equal(rejected.accepted, true);
+  assert.equal(rejected.summary, "青萝拒绝了云中鹤的切磋。");
+
+  const answered = placeForDuel("青萝");
+  const again = performAction(answered.world, answered.first.id, `challenge-cultivator:${answered.second.id}` as never);
+  assert.equal(again.summary, "云中鹤向青萝下了切磋挑战书。还剩6刻，等对方应战或拒绝。");
+  const nextId = answered.second.pendingPvpChallengeId;
+  assert.ok(nextId);
+  const accepted = performAction(answered.world, answered.second.id, `accept-pvp-challenge:${nextId}` as never);
+  assert.equal(accepted.accepted, true);
+  assert.equal(accepted.summary, "青萝应了云中鹤的切磋。这一架开始了。");
+  assert.equal(accepted.summary.includes("Combat started"), false);
+
+  const feudWorld = placeForDuel("青萝");
+  writeSocialLink(feudWorld.world, feudWorld.first.id, {
+    targetCultivatorId: feudWorld.second.id,
+    affinity: 0,
+    specialBond: null,
+    firstMetTick: 0,
+    lastInteractionTick: 0,
+    grudge: 18,
+  });
+  const feud = performAction(feudWorld.world, feudWorld.first.id, `grudge-challenge:${feudWorld.second.id}` as never);
+  assert.equal(feud.accepted, true);
+  assert.equal(feud.summary, "云中鹤因宿怨向青萝下了挑战书。还剩6刻，等对方应战或拒绝。");
+});
+
+test("city duel refusals stay Chinese on error and summary", () => {
+  const { world, first, second } = placeForDuel("青萝");
+  assertDuelRefusal(
+    () => performAction(world, first.id, `challenge-cultivator:${first.id}` as never),
+    "不能跟自己切磋。",
+  );
+  second.locationId = "qingzhou:sub-town-east";
+  assertDuelRefusal(
+    () => performAction(world, first.id, `challenge-cultivator:${second.id}` as never),
+    "要跟对方在同一地点才能切磋。",
+  );
+  second.locationId = first.locationId;
+  first.qi = Math.floor(first.maxQi * 0.4);
+  assertDuelRefusal(
+    () => performAction(world, first.id, `challenge-cultivator:${second.id}` as never),
+    "气血不到一半，先养一养再下挑战书。",
+  );
+  first.qi = first.maxQi;
+  second.realm = "元婴";
+  assertDuelRefusal(
+    () => performAction(world, first.id, `challenge-cultivator:${second.id}` as never),
+    "境界差得太多，这场切磋不好约。",
+  );
+  second.realm = first.realm;
+  first.sectId = "qing-yun-sect";
+  second.sectId = "qing-yun-sect";
+  assertDuelRefusal(
+    () => performAction(world, first.id, `challenge-cultivator:${second.id}` as never),
+    "同门在城里不好公开切磋。",
+  );
+  first.sectId = null;
+  second.sectId = null;
+
+  const issued = performAction(world, first.id, `challenge-cultivator:${second.id}` as never);
+  assert.equal(issued.accepted, true);
+  const challengeId = second.pendingPvpChallengeId;
+  assert.ok(challengeId);
+  const third = createCultivator(world, { name: "楚晚" });
+  const other = world.cultivators[third.id]!;
+  other.locationId = first.locationId;
+  other.qi = other.maxQi;
+  other.realm = first.realm;
+  other.activeJobId = null;
+  other.injuryTicksRemaining = 0;
+  assertDuelRefusal(
+    () => performAction(world, first.id, `challenge-cultivator:${other.id}` as never),
+    "你手里已经有一张挑战书，先等这一场有个结果。",
+  );
+  assertDuelRefusal(
+    () => performAction(world, other.id, `challenge-cultivator:${second.id}` as never),
+    "青萝手里已经有一张挑战书。",
+  );
+  assertDuelRefusal(
+    () => performAction(world, first.id, `reject-pvp-challenge:${challengeId}` as never),
+    "只有被挑战的人能拒绝这场切磋。",
+  );
+  assertDuelRefusal(
+    () => performAction(world, first.id, `accept-pvp-challenge:${challengeId}` as never),
+    "只有被挑战的人能应战。",
+  );
+  assertDuelRefusal(
+    () => performAction(world, second.id, "reject-pvp-challenge:missing" as never),
+    "这张挑战书已经不在了，或是时辰过了。",
+  );
+
+  const away = placeForDuel("青萝");
+  performAction(away.world, away.first.id, `challenge-cultivator:${away.second.id}` as never);
+  const awayId = away.second.pendingPvpChallengeId;
+  assert.ok(awayId);
+  performAction(away.world, away.first.id, "travel-to:qingzhou:sub-town-east" as never);
+  assertDuelRefusal(
+    () => performAction(away.world, away.second.id, `accept-pvp-challenge:${awayId}` as never),
+    "人离开了下挑战书的地方，这场切磋先作罢。",
+  );
+
+  const late = placeForDuel("青萝");
+  performAction(late.world, late.first.id, `challenge-cultivator:${late.second.id}` as never);
+  const lateId = late.second.pendingPvpChallengeId;
+  assert.ok(lateId);
+  const letter = late.world.pendingPvpChallenges[lateId];
+  assert.ok(letter);
+  late.world.tick = letter.expiresAtTick;
+  assertDuelRefusal(
+    () => performAction(late.world, late.second.id, `accept-pvp-challenge:${lateId}` as never),
+    "时辰过了，这张挑战书已经搁下。",
+  );
+
+  const gone = placeForDuel("青萝");
+  performAction(gone.world, gone.first.id, `challenge-cultivator:${gone.second.id}` as never);
+  const goneId = gone.second.pendingPvpChallengeId;
+  assert.ok(goneId);
+  delete gone.world.cultivators[gone.first.id];
+  assertDuelRefusal(
+    () => performAction(gone.world, gone.second.id, `accept-pvp-challenge:${goneId}` as never),
+    "下挑战书的人已经不在了。",
+  );
+});
+
 test("upgrade-residence describes the next tier without naming the action id", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators[CULTIVATOR_ID]!;

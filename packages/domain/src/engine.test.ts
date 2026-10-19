@@ -93,10 +93,14 @@ function startCityDuelCombat() {
   target.activeJobId = null;
   const challengeResult = performAction(world, challenger.id, `challenge-cultivator:${target.id}`);
   assert.equal(challengeResult.accepted, true);
+  assert.match(challengeResult.summary, /下了切磋挑战书/);
+  assert.equal(challengeResult.summary.includes(" to a duel"), false);
   const challengeId = target.pendingPvpChallengeId;
   assert.ok(challengeId);
   const acceptResult = performAction(world, target.id, `accept-pvp-challenge:${challengeId}`);
   assert.equal(acceptResult.accepted, true);
+  assert.match(acceptResult.summary, /这一架开始了/);
+  assert.equal(acceptResult.summary.includes("Combat started"), false);
   const jobId = challenger.activeJobId;
   assert.ok(jobId);
   const job = world.jobs[jobId];
@@ -124,6 +128,8 @@ function startPendingCityDuelChallenge() {
   target.activeJobId = null;
   const challengeResult = performAction(world, challenger.id, `challenge-cultivator:${target.id}`);
   assert.equal(challengeResult.accepted, true);
+  assert.match(challengeResult.summary, /下了切磋挑战书/);
+  assert.equal(challengeResult.summary.includes(" to a duel"), false);
   const challengeId = target.pendingPvpChallengeId;
   assert.ok(challengeId);
   return {

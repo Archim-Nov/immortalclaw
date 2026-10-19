@@ -108,6 +108,9 @@ test("grudge crossings unlock a feud challenge", () => {
 
   const challenged = performAction(world, first.id, `grudge-challenge:${second.id}`);
   assert.equal(challenged.accepted, true);
+  assert.match(challenged.summary, /因宿怨向楚晚下了挑战书/);
+  assert.equal(challenged.summary.includes("feud"), false);
+  assert.equal(challenged.summary.includes("duel"), false);
   assert.ok(second.pendingPvpChallengeId);
   const letter = (world.messages ?? []).find((message) => message.toCultivatorId === second.id && message.subject.includes("挑战"));
   assert.match(letter?.content ?? "", /宿怨/);
@@ -171,6 +174,8 @@ test("a breakthrough and a city duel leave a mood the digest can retell", () => 
   const { world: duelWorld, first, second } = spawn("对手");
   const challenged = performAction(duelWorld, first.id, `challenge-cultivator:${second.id}`);
   assert.equal(challenged.accepted, true);
+  assert.match(challenged.summary, /下了切磋挑战书/);
+  assert.equal(challenged.summary.includes("duel"), false);
   performAction(duelWorld, second.id, `accept-pvp-challenge:${second.pendingPvpChallengeId}`);
   runUntilIdle(duelWorld, first.id, 10);
   const left = getCultivatorState(duelWorld, first.id);
