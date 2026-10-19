@@ -2413,6 +2413,48 @@ function buildPendingMoralityChoiceView(
   };
 }
 
+function moralityRoadClause(labels: readonly string[]): string {
+  const names = labels.map((label) => label.trim()).filter((label) => label.length > 0);
+  if (names.length === 0) return "道心上有一条岔路，还没写出怎么走";
+  if (names.length === 1) return `道心上有一条岔路，可以${names[0]}`;
+  const last = names[names.length - 1]!;
+  const earlier = names.slice(0, -1);
+  if (earlier.length === 1) return `道心上有一条岔路，可以${earlier[0]}，也可以${last}`;
+  return `道心上有一条岔路，可以${earlier.join("，")}，也可以${last}`;
+}
+
+export function describePendingMoralityFork(choice: {
+  title: string;
+  choiceId: string;
+  options: ReadonlyArray<{ id: string; label: string }>;
+} | null): {
+  label: string;
+  description: string;
+  summary: string;
+  routing: { path: string; choiceId: string; optionIds: string[] } | null;
+} {
+  if (!choice) {
+    const summary = "眼前没有待选的道心岔路。";
+    return {
+      label: "道心岔路",
+      description: summary,
+      summary,
+      routing: null,
+    };
+  }
+  const description = `「${choice.title}」还停在眼前。${moralityRoadClause(choice.options.map((option) => option.label))}。这张不是寻常行动，硬交不会把路选上。要在道心这一处自己选。`;
+  return {
+    label: "道心岔路待选",
+    description,
+    summary: description,
+    routing: {
+      path: "/agent/events/choose",
+      choiceId: choice.choiceId,
+      optionIds: choice.options.map((option) => option.id),
+    },
+  };
+}
+
 function maybeQueueMoralityChoice(
   world: WorldState,
   cultivator: Cultivator,
@@ -8926,6 +8968,78 @@ function attackBonusClause(bonus: number): string {
   return "";
 }
 
+function bahuangBodyBlockLine(cultivator: Cultivator): string {
+  if (cultivator.injuryTicksRemaining > 0) return "身上有伤，八荒进不去。";
+  if (cultivator.qi < cultivator.maxQi * 0.25) return "气血太虚，八荒进不去。";
+  const heavy = cultivator.statusEffects.filter((effect) =>
+    effect.id === "wounded" || effect.id === "poisoned" || effect.id === "deviation"
+  ).length;
+  if (heavy >= 2) return "身上的伤病还压着，八荒进不去。";
+  if (
+    cultivator.spiritStones < 30
+    && (cultivator.inventory["healing-pill"] ?? 0) === 0
+    && (cultivator.inventory["qi-pill"] ?? 0) === 0
+  ) {
+    return "身边太紧，八荒进不去。";
+  }
+  if (cultivator.qi < cultivator.maxQi * 0.6) return "气血还没养足，八荒先别进。";
+  if (cultivator.spiritStones < 80) return "灵石还没攒够，八荒先别进。";
+  return "这会儿身子还没稳，八荒进不去。";
+}
+
+function bahuangGateNotice(world: WorldState, cultivator: Cultivator): { show: boolean; line: string } {
+  const atEntry = EIGHT_WASTES_CONTENT.entryLocationIds.includes(
+    cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number],
+  );
+  if (!atEntry) return { show: false, line: "这里连不上八荒的入口。" };
+  const activeWilderness = getActiveWildernessProgress(world, cultivator.id);
+  const activeBahuang = world.bahuangProgress[cultivator.id]?.status === "active";
+  if (activeWilderness || activeBahuang) {
+    return {
+      show: false,
+      line: activeBahuang ? "八荒这一趟还没走完。" : "这会儿人还在荒野里，八荒门口的事先搁着。",
+    };
+  }
+  const readiness = computeReadiness(cultivator);
+  if (readiness !== "ready" && readiness !== "advantaged") {
+    return { show: true, line: bahuangBodyBlockLine(cultivator) };
+  }
+  const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
+  if (!gate.allowed) return { show: true, line: gate.reason ?? "这会儿进不了八荒。" };
+  return { show: false, line: "八荒入口这会儿开着。" };
+}
+
+function appendBahuangEntryActions(
+  world: WorldState,
+  cultivator: Cultivator,
+  actions: AvailableAction[],
+  busyElsewhere: boolean,
+): void {
+  if (busyElsewhere) return;
+  if (!EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) return;
+  const notice = bahuangGateNotice(world, cultivator);
+  if (notice.show) {
+    actions.push({
+      actionId: "inspect-bahuang-gate",
+      label: "看八荒入口",
+      description: notice.line,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+    return;
+  }
+  for (const posture of ["conservative", "balanced", "aggressive"] as const) {
+    const stance = dungeonPostureLabel(posture);
+    actions.push({
+      actionId: `enter-bahuang:${posture}` as ActionId,
+      label: `进八荒（${stance}）`,
+      description: `${bahuangBandForDepth(0).advice}姿态是${stance}。`,
+      durationTicks: 0,
+      kind: "immediate",
+    });
+  }
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -9152,6 +9266,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
     }
     if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "疗伤", description: "把伤养一养。", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
     actions.push(...listSectLifeActions(world, cultivator));
+    appendBahuangEntryActions(world, cultivator, actions, Boolean(activeWilderness || activeBahuang));
     return ensureSafetyNetActions(world, cultivator, location, actions);
   }
   if (isAtResidence(cultivator)) {
@@ -9403,21 +9518,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
   } else if (wildernessLayer) {
     actions.push(buildEnterWildernessAction(world, cultivator, wildernessLayer));
   }
-  if (!activeWilderness && !activeBahuang && highRiskAllowed && EIGHT_WASTES_CONTENT.entryLocationIds.includes(cultivator.locationId as (typeof EIGHT_WASTES_CONTENT.entryLocationIds)[number])) {
-    const gate = canEnterBahuang(cultivator, cultivator.locationId, world);
-    if (gate.allowed) {
-      for (const posture of ["conservative", "balanced", "aggressive"] as const) {
-        const stance = dungeonPostureLabel(posture);
-        actions.push({
-          actionId: `enter-bahuang:${posture}` as ActionId,
-          label: `进八荒（${stance}）`,
-          description: `${bahuangBandForDepth(0).advice}姿态是${stance}。`,
-          durationTicks: 0,
-          kind: "immediate",
-        });
-      }
-    }
-  }
+  appendBahuangEntryActions(world, cultivator, actions, Boolean(activeWilderness || activeBahuang));
   if (!activeWilderness) {
     for (const node of listGuixuNodesForLocation(world, cultivator.locationId)) {
       const nodeName = guixuNodeName(node);
@@ -10615,15 +10716,12 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
   }
   if (actionId === "resolve-morality-event-choice") {
     const pending = getPendingMoralityChoice(world, cultivator.id).choice;
-    const detail = pending
-      ? `「${pending.title}」的 choiceId 是 ${pending.choiceId}。选项：${pending.options.map((option) => `${option.label}（${option.id}）`).join("，")}。`
-      : "眼前没有待选的道心岔路。";
     return {
       tick: world.tick,
       cultivatorId: cultivator.id,
       actionId,
       accepted: false,
-      summary: `这张卡不能提交给 /agent/act。${detail}请改走 POST /agent/events/choose。`,
+      summary: describePendingMoralityFork(pending).summary,
     };
   }
   if (actionId === "open-player-sect-founding" || actionId === "review-player-sect-applications") {
@@ -14031,6 +14129,15 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
       actionId,
       accepted: false,
       summary: line ?? "这一处地宫现在进得去。",
+    };
+  }
+  if (actionId === "inspect-bahuang-gate") {
+    return {
+      tick: world.tick,
+      cultivatorId: cultivator.id,
+      actionId,
+      accepted: false,
+      summary: bahuangGateNotice(world, cultivator).line,
     };
   }
   if (actionId === "leave-regional") {

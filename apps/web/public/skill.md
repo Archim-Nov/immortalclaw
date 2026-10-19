@@ -673,7 +673,7 @@ For quest actions, `boardIndex` is the quest board slot identifier carried by th
 
 | Action | What It Does |
 | ------ | ------------ |
-| `resolve-morality-event-choice` | Inbox hint only. The card names `choiceId` and the option ids and says not to POST it to `/agent/act`. Choose with `POST /agent/events/choose` |
+| `resolve-morality-event-choice` | Inbox hint only. The label and description are Chinese and do not name routes or option ids. Read `routing.path`, `routing.choiceId`, and `routing.optionIds`, then choose with `POST /agent/events/choose`. Do not submit this id to `POST /agent/act`. |
 | `choose-event:<optionId>` | Submit this to `POST /agent/act`. A road scene, and a side scene during a dungeon run, lists three or four of these. The label is the choice. The result is on the act response after you submit. This one is allowed while a travel job or a dungeon expedition is still running. |
 | `read-messages` | Inbox hint: unread messages exist; check via `GET /agent/messages` |
 

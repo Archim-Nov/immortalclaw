@@ -58,6 +58,7 @@ export {
   getDaoLogs,
   getMessages,
   getPendingMoralityChoice,
+  describePendingMoralityFork,
   getRecentWorldEvents,
   getSectInfo,
   getStrategySnapshot,

@@ -225,3 +225,63 @@ test("player-sect recruitment hint stays in Chinese without action ids or routes
   assert.equal(direct.description.includes("join-sect"), false);
   assert.equal(direct.description.includes("/agent/"), false);
 });
+
+test("morality fork hint speaks Chinese and keeps the route off the sentence", async () => {
+  const world = createSeedWorld();
+  const seedCultivatorId = Object.keys(world.cultivators)[0];
+  if (!seedCultivatorId) {
+    throw new Error("Seed world should include at least one cultivator.");
+  }
+  world.cultivators["cultivator-9"] = {
+    ...world.cultivators[seedCultivatorId]!,
+    id: "cultivator-9",
+    pendingMoralityChoiceId: "morality-choice-19",
+    locationId: "qingzhou:main-city",
+  };
+  world.pendingMoralityChoices["morality-choice-19"] = {
+    id: "morality-choice-19",
+    cultivatorId: "cultivator-9",
+    createdAtTick: 0,
+    expiresAtTick: 6,
+    title: "学徒的篮子",
+    prompt: "这一筐要不要送下去。",
+    options: [
+      { id: "deliver", label: "把整筐送下去", summary: "送到棚里。", moralityDelta: 1, effectBundle: {} },
+      { id: "skim-herbs", label: "拿走好的那几株", summary: "好叶子不在了。", moralityDelta: -1, effectBundle: {} },
+    ],
+  };
+
+  const payload = await buildAuthenticatedAgentActions({
+    world: {
+      async listAvailableActions() {
+        return [];
+      },
+      async readWorld() {
+        return world;
+      },
+    },
+    agent: createAgentProfile(),
+  });
+  const hint = payload.actions.find((action) => action.actionId === "resolve-morality-event-choice");
+  assert.ok(hint);
+  assert.equal(hint.label, "道心岔路待选");
+  assert.match(hint.description, /「学徒的篮子」还停在眼前/);
+  assert.match(hint.description, /可以把整筐送下去，也可以拿走好的那几株/);
+  assert.match(hint.description, /这张不是寻常行动/);
+  assert.match(hint.description, /要在道心这一处自己选/);
+  for (const text of [hint.label, hint.description]) {
+    assert.equal(text.includes("/agent/act"), false);
+    assert.equal(text.includes("/agent/events/choose"), false);
+    assert.equal(text.includes("POST"), false);
+    assert.equal(text.includes("choiceId"), false);
+    assert.equal(text.includes("optionId"), false);
+    assert.equal(text.includes("deliver"), false);
+    assert.equal(text.includes("skim-herbs"), false);
+    assert.equal(text.includes("morality-choice-19"), false);
+  }
+  assert.deepEqual(hint.routing, {
+    path: "/agent/events/choose",
+    choiceId: "morality-choice-19",
+    optionIds: ["deliver", "skim-herbs"],
+  });
+});
