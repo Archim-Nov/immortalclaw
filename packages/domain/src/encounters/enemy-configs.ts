@@ -761,6 +761,18 @@ const ENEMY_CONFIGS: Record<string, EnemyConfigDefinition> = {
 
 // ---- Public API ----
 
+const CJK = /[\u4e00-\u9fff]/u;
+
+/** Player-facing foe name. Configs keep an English `name` for the registry; 见闻 and 战报 read this. */
+export function enemyFacingName(
+  config: Pick<EnemyConfigDefinition, "nameCn"> | null | undefined,
+  fallback = "守关",
+): string {
+  const label = config?.nameCn?.trim() ?? "";
+  if (label && CJK.test(label)) return label;
+  return fallback;
+}
+
 export function getEnemyConfig(id: EnemyConfigId): EnemyConfigDefinition | null {
   return ENEMY_CONFIGS[id] ?? null;
 }
@@ -777,7 +789,7 @@ export function getEnemyConfigsByTag(tag: EnemyContextTag): readonly EnemyConfig
 export function enemyConfigToEncounterTemplate(config: EnemyConfigDefinition): EncounterTemplate {
   return {
     id: config.id,
-    enemyName: config.name,
+    enemyName: enemyFacingName(config, config.name),
     maxRounds: config.maxRounds,
     stylePreference: [...config.stylePreference],
     baseHp: config.baseHp,

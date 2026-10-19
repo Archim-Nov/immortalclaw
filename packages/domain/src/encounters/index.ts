@@ -6,6 +6,7 @@ export {
   getEnemyConfig,
   getAllEnemyConfigs,
   getEnemyConfigsByTag,
+  enemyFacingName,
   enemyConfigToEncounterTemplate,
 } from "./enemy-configs.js";
 
