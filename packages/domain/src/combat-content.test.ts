@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { WEAPON_TYPE_DEFINITIONS } from "./combat-loadouts.js";
 import { CATALOG_ELEMENTS, CATALOG_FAMILIES, CONTENT_SKILLS } from "./combat-catalog.js";
-import { dungeonSourceTier } from "./combat-content.js";
+import { dungeonSourceTier, gearOffer } from "./combat-content.js";
 import { listNextUnlocks, listResolvedSkills, type SkillContext } from "./combat-skills.js";
 import { createSeedWorld, getCultivatorState, listAvailableActions, performAction } from "./index.js";
-import type { WeaponLoadoutId, WeaponTypeId } from "./model.js";
+import type { SpellLoadoutId, WeaponLoadoutId, WeaponTypeId } from "./model.js";
 import { runPartyBattle, type BattleCombatant } from "./party-battle.js";
 
 function blank(partial: Partial<SkillContext> & Pick<SkillContext, "weaponType" | "weaponFamily">): SkillContext {
@@ -388,4 +388,57 @@ test("炼气 next unlocks from the live context name the realm gate", () => {
   });
   assert.ok(unlocks.some((entry) => entry.blockedBy === "境界" && entry.manualRank === "小成"));
   assert.ok(unlocks.every((entry) => entry.seek.length > 0 && entry.need.length > 0));
+});
+
+const GEAR_LINE_LEAK = /residence-produce:|buy-next-weapon|buy-next-manual|band-errand|exchange-sect/;
+
+test("下一阶兵器和功法的途径说明不写行动标识", () => {
+  const samples = [
+    { owned: [] as number[], tier: 2 },
+    { owned: [2], tier: 3 },
+    { owned: [2, 3], tier: 4 },
+    { owned: [2, 3, 4, 5], tier: 6 },
+  ];
+  for (const sample of samples) {
+    const world = createSeedWorld();
+    const cultivator = world.cultivators["yun-zhong-he"]!;
+    for (const tier of sample.owned) {
+      cultivator.unlockedWeaponLoadoutIds.push(`sword-tier-${tier}` as WeaponLoadoutId);
+      cultivator.unlockedSpellLoadoutIds.push(`metal-edge-tier-${tier}` as SpellLoadoutId);
+    }
+    for (const kind of ["weapon", "spell"] as const) {
+      const offer = gearOffer(cultivator, kind);
+      assert.ok(offer, kind);
+      assert.equal(offer.tier, sample.tier);
+      for (const path of offer.paths) {
+        const found = path.line.match(GEAR_LINE_LEAK);
+        assert.equal(found, null, `${kind} tier ${offer.tier} ${path.kind} leaked ${found?.[0] ?? ""} in ${path.line}`);
+      }
+      const recipe = offer.paths.find((path) => path.kind === "配方");
+      const thing = kind === "weapon" ? "兵器" : "功法";
+      const material = kind === "weapon" ? "锻材" : "残页";
+      assert.equal(
+        recipe?.line,
+        sample.tier >= 6
+          ? `锻材或残页带回洞府，按这一阶的配方做成能学的${thing}。用掉才会学会，不会自动换上。`
+          : `带回洞府，按配方把${material}做成能学的${thing}。用掉才会学会，不会自动换上。`,
+      );
+      assert.equal(
+        recipe?.actionId,
+        kind === "weapon"
+          ? `residence-produce:recipe-forge-sword-tier-${sample.tier}`
+          : `residence-produce:recipe-synthesize-metal-edge-tier-${sample.tier}`,
+      );
+      const exchange = offer.paths.find((path) => path.kind === "宗门");
+      assert.equal(exchange?.actionId, kind === "weapon" ? "exchange-sect-weapon" : "exchange-sect-manual");
+      if (sample.tier < 4) {
+        const shop = offer.paths.find((path) => path.kind === "坊市");
+        assert.equal(shop?.line, "境界到了，坊市就能买下一阶。不让跳阶。");
+        assert.equal(shop?.actionId, kind === "weapon" ? "buy-next-weapon" : "buy-next-manual");
+      } else {
+        const errand = offer.paths.find((path) => path.kind === "任务");
+        assert.equal(errand?.actionId, kind === "weapon" ? "band-errand:weapon" : "band-errand:manual");
+      }
+    }
+  }
 });
