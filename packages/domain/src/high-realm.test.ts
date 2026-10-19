@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createSeedWorld, getCultivatorState, listAvailableActions, performAction, advanceWorld } from "./index.js";
 import type { Cultivator, ItemId, SpellLoadoutId, WeaponLoadoutId } from "./model.js";
-import { mysteryEntry } from "./high-realm.js";
+import { seekLine } from "./combat-content.js";
+import { mysteryEntry, resourceGoals } from "./high-realm.js";
+
+const SURFACE_ACTION_LEAK = /band-errand:|exchange-sect-/;
 
 function finish(world: ReturnType<typeof createSeedWorld>, id: string) {
   for (let step = 0; step < 12 && world.cultivators[id]?.activeJobId; step += 1) {
@@ -112,9 +115,15 @@ test("大圆满兵器不在坊市，五条途径和宗门差事都写得出来",
   assert.equal(weapon?.reachable, true);
   const kinds = (weapon?.paths ?? []).map((path) => path.kind);
   assert.deepEqual(kinds, ["秘境", "配方", "宗门", "任务", "破境"]);
-  assert.match(weapon?.paths?.map((path) => path.line).join("") ?? "", /婴火莲池/);
+  const pathProse = weapon?.paths?.map((path) => path.line).join("") ?? "";
+  assert.match(pathProse, /婴火莲池/);
+  assert.equal(SURFACE_ACTION_LEAK.test(`${weapon?.seek ?? ""}${pathProse}`), false);
+  assert.equal(weapon?.paths?.find((path) => path.kind === "任务")?.actionId, "band-errand:weapon");
+  assert.equal(weapon?.paths?.find((path) => path.kind === "宗门")?.actionId, "exchange-sect-weapon");
   assert.match(weapon?.seek ?? "", /坊市不卖/);
+  assert.match(weapon?.seek ?? "", /跑一趟差事/);
   assert.match(state.realmPath.resources?.join("") ?? "", /养魂砂/);
+  assert.equal(SURFACE_ACTION_LEAK.test(`${state.realmPath.resources?.join("") ?? ""}${state.realmPath.goals.join("")}`), false);
   const actions = listAvailableActions(world, cultivator.id).map((action) => action.actionId);
   assert.equal(actions.includes("buy-next-weapon"), false);
   assert.throws(() => performAction(world, cultivator.id, "buy-next-weapon"), /坊市不卖/);
@@ -124,11 +133,72 @@ test("大圆满兵器不在坊市，五条途径和宗门差事都写得出来",
   cultivator.neutralSectId = hall.id;
   cultivator.neutralContribution = 140;
   cultivator.locationId = hall.headquarters;
-  const atHall = listAvailableActions(world, cultivator.id).map((action) => action.actionId);
+  const atHallCards = listAvailableActions(world, cultivator.id);
+  const atHall = atHallCards.map((action) => action.actionId);
   assert.ok(atHall.includes("exchange-sect-weapon"));
   assert.ok(atHall.includes("band-errand:weapon"));
+  const exchangeCard = atHallCards.find((action) => action.actionId === "exchange-sect-weapon");
+  const errandCard = atHallCards.find((action) => action.actionId === "band-errand:weapon");
+  assert.equal(
+    SURFACE_ACTION_LEAK.test(`${exchangeCard?.label ?? ""}${exchangeCard?.description ?? ""}${errandCard?.label ?? ""}${errandCard?.description ?? ""}`),
+    false,
+  );
   performAction(world, cultivator.id, "band-errand:weapon");
   finish(world, cultivator.id);
   assert.equal(cultivator.inventory["weapon-material-sword-tier-4" as ItemId], 1);
   assert.throws(() => performAction(world, cultivator.id, "band-errand:weapon"), /六个时辰/);
+});
+
+test("金丹后期和化神的资源、寻路句子不写差事和兑换的行动标识", () => {
+  for (const level of [9, 10, 11, 12, 13, 14]) {
+    for (const line of resourceGoals(level)) {
+      assert.equal(SURFACE_ACTION_LEAK.test(line), false, `resourceGoals(${level}) leaked ${line.match(SURFACE_ACTION_LEAK)?.[0] ?? ""}`);
+    }
+  }
+  assert.match(resourceGoals(9).join(""), /兵器差事/);
+  assert.match(resourceGoals(9).join(""), /功法差事/);
+  assert.match(resourceGoals(9).join(""), /贡献到 140/);
+  assert.match(resourceGoals(12).join(""), /贡献到 220/);
+
+  for (const tier of [4, 5]) {
+    for (const channel of ["weapon", "spell"] as const) {
+      const line = seekLine(channel, tier);
+      assert.equal(SURFACE_ACTION_LEAK.test(line), false, `seekLine(${channel}, ${tier}) leaked ${line.match(SURFACE_ACTION_LEAK)?.[0] ?? ""}`);
+      assert.match(line, /跑一趟差事把锻材带回来/);
+      assert.match(line, /在驻地用贡献直接换/);
+    }
+  }
+
+  const world = createSeedWorld();
+  const cultivator = world.cultivators["yun-zhong-he"]!;
+  cultivator.realm = "金丹";
+  cultivator.realmLevel = 9;
+  cultivator.realmProgress = 100;
+  cultivator.unlockedWeaponLoadoutIds = [
+    ...cultivator.unlockedWeaponLoadoutIds,
+    "sword-tier-2" as WeaponLoadoutId,
+    "sword-tier-3" as WeaponLoadoutId,
+  ];
+  cultivator.unlockedSpellLoadoutIds = [
+    ...cultivator.unlockedSpellLoadoutIds,
+    "metal-edge-tier-2" as SpellLoadoutId,
+    "metal-edge-tier-3" as SpellLoadoutId,
+  ];
+  const state = getCultivatorState(world, cultivator.id);
+  const prose = [
+    ...(state.realmPath.resources ?? []),
+    ...state.realmPath.goals,
+    state.combatProfile.nextWeapon?.seek ?? "",
+    state.combatProfile.nextManual?.seek ?? "",
+    ...(state.combatProfile.nextWeapon?.paths ?? []).map((path) => path.line),
+    ...(state.combatProfile.nextManual?.paths ?? []).map((path) => path.line),
+    ...(state.combatProfile.nextUnlocks ?? []).map((entry) => `${entry.seek}${entry.need}`),
+  ].join("");
+  assert.equal(SURFACE_ACTION_LEAK.test(prose), false);
+  assert.match(state.realmPath.resources?.join("") ?? "", /婴火莲池/);
+  assert.match(state.realmPath.goals.join(""), /兵器差事/);
+  assert.equal(state.combatProfile.nextWeapon?.paths?.find((path) => path.kind === "任务")?.actionId, "band-errand:weapon");
+  assert.equal(state.combatProfile.nextWeapon?.paths?.find((path) => path.kind === "宗门")?.actionId, "exchange-sect-weapon");
+  assert.equal(state.combatProfile.nextManual?.paths?.find((path) => path.kind === "任务")?.actionId, "band-errand:manual");
+  assert.equal(state.combatProfile.nextManual?.paths?.find((path) => path.kind === "宗门")?.actionId, "exchange-sect-manual");
 });
