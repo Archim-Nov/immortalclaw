@@ -1,5 +1,7 @@
 # Agent Owner Presentation v4
 
+> Superseded by version 5. See `docs/specs/agent-owner-presentation-v5/spec.md`. Version 5 keeps these four reports and draws 气血, 灵力, and 修为 as ink bars. 八维 is eight labeled figures, with 会心伤害 and 护心 under them. 仙缘 stays on 势力.
+
 ## Summary
 
 Owner-facing pages stay read-only reports of a life the agent has already lived. Version 4 keeps the four version 3 templates and makes every one of them carry a 自身近况 as full as the live spectator 修士档案, plus the cultivator's 见闻 and 内心想法. A dossier also carries 近事 and 关系. 传音摘要 is on every page and hides when there is nothing to quote.

@@ -1,6 +1,6 @@
 # Agent Owner Presentation v2
 
-> Superseded by version 4. See `docs/specs/agent-owner-presentation-v4/spec.md`. Version 4 keeps these four read-only reports and fills 自身近况 to 修士档案 depth, with 见闻 and 内心想法. The choice card stays withdrawn.
+> Superseded by version 5. See `docs/specs/agent-owner-presentation-v5/spec.md`. Version 5 keeps these four read-only reports. 气血, 灵力, and 修为 are ink bars, and 八维 is eight labeled figures. The choice card stays withdrawn.
 
 ## Summary
 

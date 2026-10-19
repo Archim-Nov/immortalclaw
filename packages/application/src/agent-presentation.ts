@@ -3,7 +3,7 @@ import type {
   AgentPresentationSlot,
 } from "../../contracts/src/runtime-api.js";
 
-export const AGENT_PRESENTATION_VERSION = 4;
+export const AGENT_PRESENTATION_VERSION = 5;
 
 const CRITICAL_CSS = `
 :root {
@@ -20,6 +20,9 @@ const CRITICAL_CSS = `
   --gold-wash: rgba(164, 132, 43, 0.12);
   --cinnabar: #b3392b;
   --cinnabar-deep: #8f2c20;
+  --indigo: #3e4f5f;
+  --jade: #45685c;
+  --qi-ink: #7a5340;
   --font-xianxia: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
   --font-brush: "Ma Shan Zheng", "Noto Serif SC", cursive;
   --font-code: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
@@ -287,7 +290,7 @@ h2 {
 .self-block > .ledger {
   margin-top: 0.15rem;
 }
-.self-block:not(:has(dd:not(:empty), .prose:not(:empty), .footnote:not(:empty), .chip:not(:empty))) {
+.self-block:not(:has([data-slot]:not(:empty))) {
   display: none;
 }
 .self-block > .chips {
@@ -301,11 +304,30 @@ h3 {
   font-weight: 700;
   letter-spacing: 0.08rem;
 }
+.archive-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.35rem;
+}
+.archive-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
 .archive {
   margin: 0;
+  padding: 0.7rem 0.75rem 0.65rem;
+  background: rgba(251, 247, 238, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 2px;
 }
-.archive:not(:has(.prose:not(:empty), dd:not(:empty), .footnote:not(:empty))) {
+.archive:not(:has([data-slot]:not(:empty))) {
   display: none;
+}
+.archive h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.98rem;
 }
 .archive .ledger {
   margin-top: 0.15rem;
@@ -314,6 +336,153 @@ h3 {
   border-top: 0;
   padding-top: 0.15rem;
 }
+.realm-line {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06rem;
+}
+.vital + .vital { margin-top: 0.55rem; }
+.vital-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  letter-spacing: 0.08rem;
+}
+.vital-label strong,
+.stat-fig strong,
+.aside-fig strong,
+.stones-line strong,
+.attune strong,
+.status-fig strong {
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02rem;
+  text-align: right;
+}
+meter.ink-meter {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin: 0.28rem 0 0;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(18, 18, 18, 0.07);
+  color: var(--indigo);
+  accent-color: var(--indigo);
+  overflow: hidden;
+  -webkit-appearance: none;
+  appearance: none;
+}
+meter.ink-meter::-webkit-meter-bar {
+  height: 7px;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(18, 18, 18, 0.07);
+}
+meter.ink-meter::-webkit-meter-optimum-value,
+meter.ink-meter::-webkit-meter-suboptimum-value,
+meter.ink-meter::-webkit-meter-even-less-good-value {
+  background: linear-gradient(90deg, var(--indigo), rgba(62, 79, 95, 0.45));
+  border-radius: 1px;
+}
+meter.ink-meter::-moz-meter-bar {
+  background: linear-gradient(90deg, var(--indigo), rgba(62, 79, 95, 0.45));
+  border-radius: 1px;
+}
+meter.ink-meter.qi { color: var(--qi-ink); accent-color: var(--qi-ink); }
+meter.ink-meter.qi::-webkit-meter-optimum-value,
+meter.ink-meter.qi::-webkit-meter-suboptimum-value,
+meter.ink-meter.qi::-webkit-meter-even-less-good-value,
+meter.ink-meter.qi::-moz-meter-bar {
+  background: linear-gradient(90deg, var(--qi-ink), rgba(122, 83, 64, 0.42));
+}
+meter.ink-meter.sp { color: var(--indigo); accent-color: var(--indigo); }
+meter.ink-meter.cult { color: var(--jade); accent-color: var(--jade); }
+meter.ink-meter.cult::-webkit-meter-optimum-value,
+meter.ink-meter.cult::-webkit-meter-suboptimum-value,
+meter.ink-meter.cult::-webkit-meter-even-less-good-value,
+meter.ink-meter.cult::-moz-meter-bar {
+  background: linear-gradient(90deg, var(--jade), rgba(69, 104, 92, 0.42));
+}
+meter.ink-meter[value=""],
+meter.ink-meter[max=""] { display: none; }
+.status-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.status-fig {
+  min-width: 0;
+  padding: 0.4rem 0.55rem 0.35rem;
+  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.status-fig span,
+.aside-fig > span,
+.attune span,
+.stones-line span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  letter-spacing: 0.12rem;
+}
+.status-fig strong {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.95rem;
+  text-align: left;
+}
+.stones-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 0.55rem;
+  padding: 0.4rem 0.65rem;
+  background: rgba(110, 101, 84, 0.08);
+  border: 1px solid rgba(110, 101, 84, 0.22);
+  border-radius: 2px;
+}
+.stones-line span { letter-spacing: 0.14rem; }
+.stones-line strong { font-size: 1.12rem; color: #6e6554; }
+.bag { font-size: 0.92rem; color: var(--ink-2); }
+.eight-grid,
+.eight-aside {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1.15rem;
+}
+.eight-aside {
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed rgba(33, 29, 24, 0.14);
+}
+.aside-fig {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.aside-fig > span { letter-spacing: 0.08rem; }
+.aside-fig strong { white-space: nowrap; }
+.attune {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(62, 79, 95, 0.06);
+  border: 1px solid rgba(62, 79, 95, 0.16);
+  border-radius: 2px;
+}
+.attune span { letter-spacing: 0.14rem; }
 .footnote {
   margin: 0.2rem 0 0;
   color: var(--ink-3);
@@ -329,6 +498,10 @@ h3 {
   .glass-panel { padding: 1.4rem 1.1rem 1.2rem; }
   h1 { font-size: 1.6rem; }
   .ledger-row { grid-template-columns: 1fr; gap: 0.2rem; }
+  .archive-pair,
+  .status-row,
+  .eight-grid,
+  .eight-aside { grid-template-columns: 1fr; }
 }
 `.trim();
 
@@ -364,7 +537,7 @@ ${CRITICAL_CSS}
 </style>
 </head>
 <body>
-<!-- immortal-claw-template: ${id} version ${AGENT_PRESENTATION_VERSION}. Read-only report of a life you already lived. Show it to your owner. Fill 自身近况 at 修士档案 depth, plus 见闻 and 内心想法, in 修仙白话. 近事, 关系, and 传音摘要 are read-only text, not links. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
+<!-- immortal-claw-template: ${id} version ${AGENT_PRESENTATION_VERSION}. Read-only report of a life you already lived. Show it to your owner. Fill 自身近况 at 修士档案 depth, plus 见闻 and 内心想法, in 修仙白话. 气血, 灵力, and 修为 keep a readable line and take digits for the ink bar. 八维 is eight numbers. 近事, 关系, and 传音摘要 are read-only text, not links. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
 <div class="ink-backdrop" aria-hidden="true"><div class="ink-grain"></div></div>
 <main class="sheet">
 <article class="glass-panel">
@@ -417,6 +590,20 @@ ${body}
 </section>`;
 }
 
+function vital(label: string, textName: string, nowName: string, maxName: string, meterClass: string): string {
+  return `<div class="vital">
+<div class="vital-label"><span>${label}</span><strong data-slot="${textName}">{{${textName}}}</strong></div>
+<meter class="ink-meter ${meterClass}" min="0" max="{{${maxName}}}" value="{{${nowName}}}" aria-label="${label}"></meter>
+</div>`;
+}
+
+function eightCell(label: string, name: string): string {
+  return `<div class="stat-fig">
+<div class="vital-label"><span>${label}</span><strong data-slot="${name}">{{${name}}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{${name}}}" aria-label="${label}"></meter>
+</div>`;
+}
+
 function identityChips(): string {
   return `<div class="chips">
 ${slot("realm", "chip gold")}
@@ -431,18 +618,48 @@ function selfBlock(withChips: boolean): string {
   return `<section class="beat self-block">
 <h2>自身近况</h2>
 ${withChips ? identityChips() : ""}
+<div class="archive-stack">
 ${panel("概览", textBlock("p", "prose", "overview"))}
-${panel("修为", ledger(["境界", "realm"], ["进度", "cultivation"]))}
-${panel("气血 · 灵力", ledger(["气血", "qi"], ["灵力", "spirit"]))}
-${panel("状态", ledger(["状态", "status"], ["年岁", "years"], ["战备", "battle"]))}
-${panel("行囊", ledger(["灵石", "stones"], ["物品", "inventory"]))}
+<div class="archive-pair">
+${panel("修为", `<p class="realm-line" data-slot="realm">{{realm}}</p>
+${vital("进度", "cultivation", "cultivationNow", "cultivationMax", "cult")}`)}
+${panel("气血 · 灵力", `${vital("气血", "qi", "qiNow", "qiMax", "qi")}
+${vital("灵力", "spirit", "spiritNow", "spiritMax", "sp")}`)}
+</div>
+${panel("状态", `<div class="status-row">
+<div class="status-fig"><span>状态</span><strong data-slot="status">{{status}}</strong></div>
+<div class="status-fig"><span>年岁</span><strong data-slot="years">{{years}}</strong></div>
+<div class="status-fig"><span>战备</span><strong data-slot="battle">{{battle}}</strong></div>
+</div>`)}
+<div class="archive-pair">
+${panel("行囊", `<p class="stones-line"><span>灵石</span><strong data-slot="stones">{{stones}}</strong></p>
+${textBlock("p", "prose bag", "inventory")}`)}
 ${panel("功法 · 装备", ledger(["主修", "mainArt"], ["兵器", "weapon"], ["功法", "techniques"], ["法术", "spells"], ["装备", "equipment"]))}
-${panel("八维", `${textBlock("p", "prose", "eight")}
-${textBlock("p", "footnote", "eightNote")}`)}
+</div>
+${panel("八维", `<div class="eight-grid">
+${eightCell("物攻", "physAtk")}
+${eightCell("法攻", "spellAtk")}
+${eightCell("物防", "physDef")}
+${eightCell("法防", "spellDef")}
+${eightCell("身法", "speed")}
+${eightCell("命中", "hit")}
+${eightCell("闪避", "dodge")}
+${eightCell("会心", "crit")}
+</div>
+<div class="eight-aside">
+<div class="aside-fig"><span>会心伤害</span><strong>×<span data-slot="critDamage">{{critDamage}}</span></strong></div>
+<div class="aside-fig"><span>护心</span><strong data-slot="guardHeart">{{guardHeart}}</strong></div>
+</div>`)}
+<div class="archive-pair">
 ${panel("详细属性", ledger(["声望", "reputation"], ["心性", "morality"], ["出身", "origin"], ["性情", "temperament"], ["攻道", "attack"], ["职司", "office"]))}
 ${panel("五行 · 灵根", ledger(["灵根", "root"], ["五行", "wuxing"]))}
-${panel("势力", ledger(["宗门", "sect"], ["地位", "standing"], ["贡献", "contribution"], ["仙缘", "attunement"]))}
+</div>
+<div class="archive-pair">
+${panel("势力", `${ledger(["宗门", "sect"], ["地位", "standing"], ["贡献", "contribution"])}
+<div class="attune"><span>仙缘</span><strong data-slot="attunement">{{attunement}}</strong></div>`)}
 ${panel("房产 · 谋略", ledger(["洞府", "residence"], ["谋略", "strategy"]))}
+</div>
+</div>
 </section>`;
 }
 
@@ -467,9 +684,15 @@ function archivePlaceholders(): AgentPresentationSlot[] {
     { name: "sect", required: true, hint: "宗门. state.sect.name, or neutralSect.name. If you belong to neither, write 无门无派." },
     { name: "status", required: true, hint: "状态. cultivator.status in 修仙白话: idle 安然, busy 正忙, injured 带伤. Add a statusEffects name when one is on you, such as 心神清明." },
     { name: "overview", required: true, hint: "概览. One or two sentences of where you stand, the same job as the spectator deed line. state.digest.summary is a good source. Do not paste the whole 历练 or the event again." },
-    { name: "cultivation", required: true, hint: "进度. cultivator.realmProgress against a full bar of 100, such as 38/100. If progress is already full, say 修为已经满了，再涨要等破境." },
-    { name: "qi", required: true, hint: "气血. cultivator.qi and cultivator.maxQi, such as 640/700." },
-    { name: "spirit", required: true, hint: "灵力. cultivator.spiritualPower and cultivator.maxSpiritualPower, such as 410/460." },
+    { name: "cultivation", required: true, hint: "进度, the line the owner reads. cultivator.realmProgress against a full bar of 100, such as 38/100. If progress is already full, you may write 修为已经满了，再涨要等破境. The bar still uses cultivationNow and cultivationMax." },
+    { name: "cultivationNow", required: true, hint: "进度 current. Digits only, from cultivator.realmProgress, such as 38. When progress is full, write 100. Do not write a slash or the word 进度." },
+    { name: "cultivationMax", required: true, hint: "进度 max. Digits only. The full bar is 100." },
+    { name: "qi", required: true, hint: "气血, the line the owner reads. cultivator.qi and cultivator.maxQi, such as 640/700. The bar reads qiNow and qiMax." },
+    { name: "qiNow", required: true, hint: "气血 current. Digits only, from cultivator.qi, such as 640. Do not write the slash or the word 气血." },
+    { name: "qiMax", required: true, hint: "气血 max. Digits only, from cultivator.maxQi, such as 700." },
+    { name: "spirit", required: true, hint: "灵力, the line the owner reads. cultivator.spiritualPower and cultivator.maxSpiritualPower, such as 410/460. The bar reads spiritNow and spiritMax." },
+    { name: "spiritNow", required: true, hint: "灵力 current. Digits only, from cultivator.spiritualPower, such as 410." },
+    { name: "spiritMax", required: true, hint: "灵力 max. Digits only, from cultivator.maxSpiritualPower, such as 460." },
     { name: "years", required: true, hint: "年岁. Round cultivator.age and read cultivator.lifespan. Write 二十二 / 寿元一百二十." },
     { name: "battle", required: true, hint: "战备. combatProfile.battleReadiness or derivedState.readiness: poor 难战, stable 尚可, ready 可战, advantaged 占优." },
     { name: "stones", required: true, hint: "灵石. The number only, from cultivator.spiritStones. The row label is already 灵石." },
@@ -479,8 +702,17 @@ function archivePlaceholders(): AgentPresentationSlot[] {
     { name: "techniques", required: true, hint: "功法. cultivation.techniques, one name per line. Include the main art. 松息吐纳 and 轻身术 stay in Chinese." },
     { name: "spells", required: false, hint: "法术. combatProfile.equippedSkills and equippedSpellLoadout.name, one per line. Empty hides the row." },
     { name: "equipment", required: false, hint: "装备. Gear you are wearing that is not the weapon. Empty hides the row. The weapon belongs in weapon." },
-    { name: "eight", required: true, hint: "八维. One figure per line from combatProfile.coreCombatStats: weaponAttack 物攻, spellAttack 法攻, physicalDefense 物防, spellDefense 法防, speed 身法, hit 命中, dodge 闪避, crit 会心. Write 物攻 and 法攻. Do not write 兵器攻 or 法术攻. Newlines are kept." },
-    { name: "eightNote", required: true, hint: "会心伤害 and 护心. Write 会心伤害 ×N · 护心 M from coreCombatStats.critDamage and coreCombatStats.guardHeart." },
+    { name: "physAtk", required: true, hint: "物攻. Digits only, from combatProfile.coreCombatStats.weaponAttack. The label is already on the page. Do not write 兵器攻 or 法术攻. The eight figures are 物攻, 法攻, 物防, 法防, 身法, 命中, 闪避, and 会心." },
+    { name: "spellAtk", required: true, hint: "法攻. Digits only, from combatProfile.coreCombatStats.spellAttack. Do not write 法术攻." },
+    { name: "physDef", required: true, hint: "物防. Digits only, from combatProfile.coreCombatStats.physicalDefense." },
+    { name: "spellDef", required: true, hint: "法防. Digits only, from combatProfile.coreCombatStats.spellDefense." },
+    { name: "speed", required: true, hint: "身法. Digits only, from combatProfile.coreCombatStats.speed." },
+    { name: "hit", required: true, hint: "命中. Digits only, from combatProfile.coreCombatStats.hit." },
+    { name: "dodge", required: true, hint: "闪避. Digits only, from combatProfile.coreCombatStats.dodge." },
+    { name: "crit", required: true, hint: "会心. Digits only, from combatProfile.coreCombatStats.crit." },
+    { name: "eightMax", required: true, hint: "Digits only. Shared scale for the eight bars: the larger of 100 and the highest of 物攻, 法攻, 物防, 法防, 身法, 命中, 闪避, and 会心. Write that number. Do not add a label." },
+    { name: "critDamage", required: true, hint: "会心伤害. Digits only, from coreCombatStats.critDamage, such as 40. The page already writes 会心伤害 ×. Do not add the × or the words." },
+    { name: "guardHeart", required: true, hint: "护心. Digits only, from coreCombatStats.guardHeart, such as 10. The page already writes 护心." },
     { name: "reputation", required: true, hint: "声望. cultivator.reputation, this state's local reputation. The number is enough." },
     { name: "morality", required: true, hint: "心性. cultivator.moralityAlignment, 正道 or 魔道. You may add the score." },
     { name: "origin", required: true, hint: "出身. cultivator.origin. Keep a Chinese origin as it is. If the stored origin is English, say the place in 修仙白话 when you know it." },
@@ -559,7 +791,7 @@ const TEMPLATES: AgentTemplateDefinition[] = [
     id: "dossier",
     version: AGENT_PRESENTATION_VERSION,
     title: "近况汇报",
-    whenToUse: "The page your owner actually reads. Use it for the first reply after registration, the end of a phase, or whenever they ask how you are. Tell the journey in 历练, then 内心想法. 自身近况 matches the live 修士档案: 概览, 修为, 气血 · 灵力, 状态 with 年岁 and 战备, 行囊 with 灵石, 功法 · 装备, 八维 with 物攻 and 法攻 plus 会心伤害 and 护心, 详细属性, 五行 · 灵根, 势力 with 仙缘, and 房产 · 谋略. Then 近事, 关系, 见闻, and 传音摘要 when you have whispers. This is a report of a life you already lived. It is not a turn for them to play.",
+    whenToUse: "The page your owner actually reads. Use it for the first reply after registration, the end of a phase, or whenever they ask how you are. Tell the journey in 历练, then 内心想法. 自身近况 matches the live 修士档案: 概览, 修为, 气血 · 灵力, 状态 with 年岁 and 战备, 行囊 with 灵石, 功法 · 装备, 八维 as eight labeled figures (物攻, 法攻, 物防, 法防, 身法, 命中, 闪避, 会心) with 会心伤害 and 护心 under them, 详细属性, 五行 · 灵根, 势力 with 仙缘, and 房产 · 谋略. 气血, 灵力, and 修为 are ink bars; the owner still reads a line such as 640/700. Then 近事, 关系, 见闻, and 传音摘要 when you have whispers. This is a report of a life you already lived. It is not a turn for them to play.",
     placeholders: dossierPlaceholders(),
     html: shell(
       "dossier",
@@ -705,8 +937,8 @@ export function buildAgentPresentationCatalog(): AgentPresentationCatalog {
   return {
     ok: true,
     version: AGENT_PRESENTATION_VERSION,
-    cache: "Download each template once at registration and cache the HTML under a versioned directory. Download again only when version changes. Version 4 supersedes version 3: the same four reports now carry a 修士档案-depth 自身近况, plus 见闻 and 内心想法. Discard a version 3 cache. Version 2 withdrew progress-summary, dungeon-wake, and gift-notice; those pages stay withdrawn.",
-    fill: "Fill these pages to report your life to your owner. The owner watches; you play. Never present a template as a game, a menu, or a card they click through. You answer a dungeon wake, a road scene, and a party vote yourself on POST /agent/act, then retell it here in the past tense. Every page carries a 修士档案-depth 自身近况, 见闻, and 内心想法. 自身近况 uses the live archive headings: 概览, 修为, 气血 · 灵力, 状态, 行囊, 功法 · 装备, 八维, 详细属性, 五行 · 灵根, 势力, and 房产 · 谋略. The eight figures say 物攻 and 法攻. 会心伤害 and 护心 sit under 八维. 仙缘 is the attunement figure. 年岁 and 战备 sit under 状态. 灵石 is its own row in 行囊. 近事 and 关系 are required on dossier; on the other three an empty one hides. 传音摘要 hides when empty and is plain text, not a link. 内心想法 is your own first-person mind about what already happened. It is not a tip for the owner and not a choice. Write 修仙白话. Inside 炼气 write 初期, 中期, or 后期. Do not write 修士（智能体） or 只观不问. Replace every double-brace placeholder with plain text. Escape &, <, >, and \" first. Pass every listed placeholder; an optional one may be an empty string. Do not add CSS, style attributes, tags, buttons, or choices.",
+    cache: "Download each template once at registration and cache the HTML under a versioned directory. Download again only when version changes. Version 5 supersedes version 4: the same four reports still carry 见闻 and 内心想法, and now draw 气血, 灵力, and 修为 as ink bars. 八维 is eight labeled figures (物攻, 法攻, 物防, 法防, 身法, 命中, 闪避, 会心) with 会心伤害 and 护心 under them. Discard a version 4 cache. Version 2 withdrew progress-summary, dungeon-wake, and gift-notice; those pages stay withdrawn.",
+    fill: "Fill these pages to report your life to your owner. The owner watches; you play. Never present a template as a game, a menu, or a card they click through. You answer a dungeon wake, a road scene, and a party vote yourself on POST /agent/act, then retell it here in the past tense. Every page carries a 修士档案-depth 自身近况, 见闻, and 内心想法. 自身近况 uses the live archive headings: 概览, 修为, 气血 · 灵力, 状态, 行囊, 功法 · 装备, 八维, 详细属性, 五行 · 灵根, 势力, and 房产 · 谋略. 气血, 灵力, and 修为 keep a readable line such as 640/700, and also take digits (qiNow, qiMax, spiritNow, spiritMax, cultivationNow, cultivationMax) so an ink bar can be drawn. If you only have 640/700, split it: the left number is now, the right number is max. 八维 is eight digits, one slot each: physAtk 物攻, spellAtk 法攻, physDef 物防, spellDef 法防, speed 身法, hit 命中, dodge 闪避, crit 会心. Write 物攻 and 法攻. Do not write 兵器攻 or 法术攻. eightMax is the larger of 100 and the highest of those eight. 会心伤害 is critDamage and 护心 is guardHeart, digits only; the page writes the words. 仙缘 is the attunement figure on 势力, not one of the eight. 年岁 and 战备 sit under 状态. 灵石 is its own mark in 行囊. 近事 and 关系 are required on dossier; on the other three an empty one hides. 传音摘要 hides when empty and is plain text, not a link. 内心想法 is your own first-person mind about what already happened. It is not a tip for the owner and not a choice. Write 修仙白话. Inside 炼气 write 初期, 中期, or 后期. Do not write 修士（智能体） or 只观不问. Replace every double-brace placeholder with plain text. Escape &, <, >, and \" first. Pass every listed placeholder; an optional one may be an empty string. Do not add CSS, style attributes, tags, buttons, or choices.",
     templates: TEMPLATES.map((template) => ({
       id: template.id,
       version: template.version,
@@ -738,6 +970,86 @@ function escapeHtml(value: string): string {
     .replaceAll("\"", "&quot;");
 }
 
+const VITAL_RATIOS: ReadonlyArray<readonly [string, string, string]> = [
+  ["cultivation", "cultivationNow", "cultivationMax"],
+  ["qi", "qiNow", "qiMax"],
+  ["spirit", "spiritNow", "spiritMax"],
+];
+
+const EIGHT_FIGURE_NAMES = new Set([
+  "physAtk",
+  "spellAtk",
+  "physDef",
+  "spellDef",
+  "speed",
+  "hit",
+  "dodge",
+  "crit",
+]);
+
+const NUMBER_SLOT_NAMES = [
+  ...EIGHT_FIGURE_NAMES,
+  "critDamage",
+  "guardHeart",
+];
+
+function trailingNumber(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("/")) {
+    return null;
+  }
+  const match = trimmed.match(/(\d+(?:\.\d+)?)\s*$/);
+  return match?.[1] ?? null;
+}
+
+function ratioPair(value: string): { now: string; max: string } | null {
+  const match = value.trim().match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+  return { now: match[1], max: match[2] };
+}
+
+function normalizePresentationSlots(slots: Record<string, string>): Record<string, string> {
+  const next = { ...slots };
+  for (const [textKey, nowKey, maxKey] of VITAL_RATIOS) {
+    const parsed = ratioPair(next[textKey] ?? "") ?? ratioPair(next[nowKey] ?? "");
+    const now = trailingNumber(next[nowKey] ?? "");
+    const max = trailingNumber(next[maxKey] ?? "");
+    if (now) {
+      next[nowKey] = now;
+    } else if (parsed) {
+      next[nowKey] = parsed.now;
+    }
+    if (max) {
+      next[maxKey] = max;
+    } else if (parsed) {
+      next[maxKey] = parsed.max;
+    }
+  }
+
+  const figureValues: number[] = [];
+  for (const name of NUMBER_SLOT_NAMES) {
+    const parsed = trailingNumber(next[name] ?? "");
+    if (!parsed) {
+      continue;
+    }
+    next[name] = parsed;
+    if (EIGHT_FIGURE_NAMES.has(name)) {
+      figureValues.push(Number(parsed));
+    }
+  }
+
+  const givenMax = trailingNumber(next.eightMax ?? "");
+  if (givenMax && Number(givenMax) >= 1) {
+    next.eightMax = givenMax;
+  } else if ("eightMax" in next) {
+    const peak = figureValues.reduce((best, value) => Math.max(best, value), 100);
+    next.eightMax = String(peak);
+  }
+  return next;
+}
+
 export function fillAgentTemplate(templateId: string, slots: Record<string, string>): string {
   const template = TEMPLATE_BY_ID.get(templateId);
   if (!template) {
@@ -755,10 +1067,14 @@ export function fillAgentTemplate(templateId: string, slots: Record<string, stri
   }
 
   for (const slot of template.placeholders) {
-    const value = slots[slot.name];
-    if (typeof value !== "string") {
+    if (typeof slots[slot.name] !== "string") {
       throw new Error(`Missing slot ${slot.name} for ${templateId}.`);
     }
+  }
+
+  const normalized = normalizePresentationSlots(slots);
+  for (const slot of template.placeholders) {
+    const value = normalized[slot.name] ?? "";
     if (slot.required && value.trim() === "") {
       throw new Error(`Slot ${slot.name} is required for ${templateId}.`);
     }
@@ -768,6 +1084,6 @@ export function fillAgentTemplate(templateId: string, slots: Record<string, stri
     if (!known.has(name)) {
       return token;
     }
-    return escapeHtml(slots[name] ?? "");
+    return escapeHtml(normalized[name] ?? "");
   });
 }

@@ -24,8 +24,14 @@ const ARCHIVE_REQUIRED = [
   "status",
   "overview",
   "cultivation",
+  "cultivationNow",
+  "cultivationMax",
   "qi",
+  "qiNow",
+  "qiMax",
   "spirit",
+  "spiritNow",
+  "spiritMax",
   "years",
   "battle",
   "stones",
@@ -33,8 +39,17 @@ const ARCHIVE_REQUIRED = [
   "mainArt",
   "weapon",
   "techniques",
-  "eight",
-  "eightNote",
+  "physAtk",
+  "spellAtk",
+  "physDef",
+  "spellDef",
+  "speed",
+  "hit",
+  "dodge",
+  "crit",
+  "eightMax",
+  "critDamage",
+  "guardHeart",
   "reputation",
   "morality",
   "origin",
@@ -94,12 +109,13 @@ function slotsFor(templateId: string, overrides: Record<string, string> = {}): R
   return slots;
 }
 
-test("presentation catalog is a version 4 pack of read-only life reports", () => {
+test("presentation catalog is a version 5 pack of read-only life reports", () => {
   const catalog = buildAgentPresentationCatalog();
   assert.equal(catalog.ok, true);
-  assert.equal(catalog.version, 4);
-  assert.equal(AGENT_PRESENTATION_VERSION, 4);
-  assert.match(catalog.cache, /Version 4 supersedes version 3/i);
+  assert.equal(catalog.version, 5);
+  assert.equal(AGENT_PRESENTATION_VERSION, 5);
+  assert.match(catalog.cache, /Version 5 supersedes version 4/i);
+  assert.match(catalog.cache, /Discard a version 4 cache/);
   assert.match(catalog.cache, /内心想法/);
   assert.match(catalog.cache, /见闻/);
   assert.match(catalog.cache, /dungeon-wake/);
@@ -111,6 +127,8 @@ test("presentation catalog is a version 4 pack of read-only life reports", () =>
   assert.match(catalog.fill, /物攻/);
   assert.match(catalog.fill, /法攻/);
   assert.match(catalog.fill, /仙缘/);
+  assert.match(catalog.fill, /qiNow/);
+  assert.match(catalog.fill, /640\/700/);
   assert.match(catalog.fill, /传音摘要/);
   assert.doesNotMatch(catalog.fill, /choice1|dungeon-wake/);
   assert.deepEqual(
@@ -127,12 +145,17 @@ test("presentation catalog is a version 4 pack of read-only life reports", () =>
   for (const name of ["social", "spells", "equipment", "whispers", "quote", "next"]) {
     assert.equal(dossierSlots.get(name)?.required, false, `dossier should keep ${name} optional`);
   }
-  assert.match(dossierSlots.get("eight")?.hint ?? "", /物攻/);
-  assert.match(dossierSlots.get("eight")?.hint ?? "", /法攻/);
-  assert.match(dossierSlots.get("eight")?.hint ?? "", /Do not write 兵器攻/);
-  assert.match(dossierSlots.get("eight")?.hint ?? "", /coreCombatStats/);
-  assert.match(dossierSlots.get("eightNote")?.hint ?? "", /会心伤害/);
-  assert.match(dossierSlots.get("eightNote")?.hint ?? "", /护心/);
+  assert.equal(dossierSlots.has("eight"), false);
+  assert.equal(dossierSlots.has("eightNote"), false);
+  assert.match(dossierSlots.get("physAtk")?.hint ?? "", /物攻/);
+  assert.match(dossierSlots.get("physAtk")?.hint ?? "", /法攻/);
+  assert.match(dossierSlots.get("physAtk")?.hint ?? "", /Do not write 兵器攻/);
+  assert.match(dossierSlots.get("physAtk")?.hint ?? "", /coreCombatStats/);
+  assert.match(dossierSlots.get("spellAtk")?.hint ?? "", /法攻/);
+  assert.match(dossierSlots.get("critDamage")?.hint ?? "", /会心伤害/);
+  assert.match(dossierSlots.get("guardHeart")?.hint ?? "", /护心/);
+  assert.match(dossierSlots.get("qi")?.hint ?? "", /640\/700/);
+  assert.match(dossierSlots.get("qiNow")?.hint ?? "", /Digits only/);
   assert.match(dossierSlots.get("attunement")?.hint ?? "", /仙缘/);
   assert.match(dossierSlots.get("attunement")?.hint ?? "", /wildernessAttunement/);
   assert.match(dossierSlots.get("sights")?.hint ?? "", /travelogue/);
@@ -153,18 +176,28 @@ test("presentation catalog is a version 4 pack of read-only life reports", () =>
     assert.match(html, /\.chip \{/);
     assert.match(html, /class="chip/);
     assert.match(html, /Read-only report/);
-    assert.match(html, /name="immortal-claw-template-version" content="4"/);
+    assert.match(html, /name="immortal-claw-template-version" content="5"/);
     for (const heading of ARCHIVE_HEADINGS) {
       assert.match(html, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
     assert.match(html, /\{\{thoughts\}\}/);
     assert.match(html, /\{\{sights\}\}/);
     assert.match(html, /\{\{qi\}\}/);
+    assert.match(html, /\{\{qiNow\}\}/);
+    assert.match(html, /\{\{qiMax\}\}/);
     assert.match(html, /\{\{spirit\}\}/);
     assert.match(html, /\{\{stones\}\}/);
-    assert.match(html, /\{\{eight\}\}/);
-    assert.match(html, /\{\{eightNote\}\}/);
+    assert.match(html, /\{\{physAtk\}\}/);
+    assert.match(html, /\{\{critDamage\}\}/);
+    assert.match(html, /\{\{guardHeart\}\}/);
     assert.match(html, /\{\{attunement\}\}/);
+    assert.match(html, /<meter /);
+    assert.match(html, /aria-label="气血"/);
+    assert.match(html, /aria-label="物攻"/);
+    assert.match(html, />会心伤害</);
+    assert.match(html, />护心</);
+    assert.doesNotMatch(html, /\{\{eight\}\}/);
+    assert.doesNotMatch(html, /\{\{eightNote\}\}/);
     assert.doesNotMatch(html, /<script/i);
     assert.doesNotMatch(html, /<button/i);
     assert.doesNotMatch(html, /<a[\s>]/i);
@@ -173,7 +206,7 @@ test("presentation catalog is a version 4 pack of read-only life reports", () =>
     assert.doesNotMatch(html, /兵器攻|法术攻|修士（智能体）|只观不问/);
     assert.equal(template.downloadPath, `/agent-templates/${template.id}.html`);
     assert.equal(template.runtimePath, `/agent/templates/${template.id}`);
-    assert.equal(template.version, 4);
+    assert.equal(template.version, 5);
 
     const names = new Map(template.placeholders.map((slot) => [slot.name, slot]));
     for (const name of ARCHIVE_REQUIRED) {
@@ -218,7 +251,7 @@ test("public template files match the runtime documents and omit the withdrawn c
   for (const templateId of listAgentTemplateIds()) {
     const published = readFileSync(path.join(publicDir, `${templateId}.html`), "utf8");
     assert.equal(published, readAgentTemplateHtml(templateId));
-    assert.match(published, /name="immortal-claw-template-version" content="4"/);
+    assert.match(published, /name="immortal-claw-template-version" content="5"/);
   }
 });
 
@@ -238,8 +271,14 @@ test("fillAgentTemplate escapes text and leaves optional sections empty", () => 
     social: "",
     overview: "这六个时辰耗在听潮钟窟门口。",
     cultivation: "38/100",
+    cultivationNow: "38",
+    cultivationMax: "100",
     qi: "640/700",
+    qiNow: "640",
+    qiMax: "700",
     spirit: "410/460",
+    spiritNow: "410",
+    spiritMax: "460",
     years: "二十二 / 寿元一百二十",
     battle: "可战",
     stones: "640",
@@ -249,8 +288,17 @@ test("fillAgentTemplate escapes text and leaves optional sections empty", () => 
     techniques: "沧浪听潮诀\n松息吐纳",
     spells: "",
     equipment: "",
-    eight: "物攻 32\n法攻 41",
-    eightNote: "会心伤害 ×40 · 护心 10",
+    physAtk: "32",
+    spellAtk: "41",
+    physDef: "28",
+    spellDef: "36",
+    speed: "30",
+    hit: "34",
+    dodge: "29",
+    crit: "18",
+    eightMax: "100",
+    critDamage: "40",
+    guardHeart: "10",
     attunement: "仙缘二十六",
     residence: "广津城河道旁的石室。",
     strategy: "潮窗开了再进听潮钟窟。",
@@ -266,10 +314,17 @@ test("fillAgentTemplate escapes text and leaves optional sections empty", () => 
   assert.match(filled, /潮还没退干净。\n我没有进听潮钟窟。/);
   assert.match(filled, /data-slot="thoughts">潮压在门口，我并不急。<\/p>/);
   assert.match(filled, /data-slot="social"><\/p>/);
-  assert.match(filled, /data-slot="inventory">回气丹 ×2<\/dd>/);
-  assert.match(filled, /data-slot="stones">640<\/dd>/);
-  assert.match(filled, /data-slot="years">二十二 \/ 寿元一百二十<\/dd>/);
-  assert.match(filled, /data-slot="eightNote">会心伤害 ×40 · 护心 10<\/p>/);
+  assert.match(filled, /data-slot="inventory">回气丹 ×2<\/p>/);
+  assert.match(filled, /data-slot="stones">640<\/strong>/);
+  assert.match(filled, /data-slot="years">二十二 \/ 寿元一百二十<\/strong>/);
+  assert.match(filled, /data-slot="qi">640\/700<\/strong>/);
+  assert.match(filled, /aria-label="气血"/);
+  assert.match(filled, /max="700" value="640"/);
+  assert.match(filled, /aria-label="物攻"/);
+  assert.match(filled, /max="100" value="32"/);
+  assert.match(filled, /×<span data-slot="critDamage">40<\/span>/);
+  assert.match(filled, /data-slot="guardHeart">10<\/strong>/);
+  assert.match(filled, /data-slot="attunement">仙缘二十六<\/strong>/);
   assert.match(filled, /data-slot="sights">潮还没退\n我在门口等了一阵。<\/p>/);
   assert.match(filled, /data-slot="whispers"><\/p>/);
   assert.match(filled, /data-slot="spells"><\/dd>/);
@@ -343,7 +398,53 @@ test("a slot value is not scanned for further placeholders", () => {
   assert.match(filled, /data-slot="thoughts">话送出去了，人还在码头上。<\/p>/);
 });
 
-test("owner guides send agents to the version 4 pack", () => {
+test("a readable 120/200 line still draws the bar, and a copied label is only the number", () => {
+  const filled = fillAgentTemplate("dossier", slotsFor("dossier", {
+    qi: "120 / 200",
+    qiNow: "",
+    qiMax: "",
+    spirit: "灵力 80/90",
+    spiritNow: "not-a-number",
+    spiritMax: "",
+    cultivation: "修为已经满了，再涨要等破境",
+    cultivationNow: "100",
+    cultivationMax: "100",
+    physAtk: "物攻 32",
+    spellAtk: "180",
+    eightMax: "",
+    critDamage: "会心伤害 ×40",
+    guardHeart: "护心 10",
+  }));
+  assert.match(filled, /data-slot="qi">120 \/ 200<\/strong>/);
+  assert.match(filled, /max="200" value="120"/);
+  assert.match(filled, /max="90" value="80"/);
+  assert.match(filled, /data-slot="cultivation">修为已经满了，再涨要等破境<\/strong>/);
+  assert.match(filled, /max="100" value="100"/);
+  assert.match(filled, /data-slot="physAtk">32<\/strong>/);
+  assert.match(filled, /max="180" value="32"/);
+  assert.match(filled, /×<span data-slot="critDamage">40<\/span>/);
+  assert.match(filled, /data-slot="guardHeart">10<\/strong>/);
+  assert.doesNotMatch(filled, /\{\{/);
+
+  const hostile = fillAgentTemplate("dossier", slotsFor("dossier", {
+    qi: "640/700",
+    qiNow: `"><script>`,
+    qiMax: "700",
+  }));
+  assert.match(hostile, /value="640"/);
+  assert.doesNotMatch(hostile, /<script>/);
+
+  assert.throws(
+    () => fillAgentTemplate("dossier", slotsFor("dossier", {
+      cultivation: "修为已经满了，再涨要等破境",
+      cultivationNow: "",
+      cultivationMax: "",
+    })),
+    /Slot cultivationNow is required/,
+  );
+});
+
+test("owner guides send agents to the version 5 pack", () => {
   const files = [
     "apps/web/public/skill.md",
     "apps/web/public/heartbeat.md",
@@ -352,7 +453,8 @@ test("owner guides send agents to the version 4 pack", () => {
   ];
   for (const relativePath of files) {
     const text = readFileSync(path.join(repoRoot, relativePath), "utf8");
-    assert.match(text, /Version 4 supersedes version 3/);
+    assert.match(text, /Version 5 supersedes version 4/);
+    assert.doesNotMatch(text, /templates\/v4/);
     assert.match(text, /内心想法/);
     assert.match(text, /自身近况/);
     assert.match(text, /见闻/);
@@ -376,8 +478,14 @@ test("cave-sight records a settled moment and has no choice list", () => {
     region: "青州",
     location: "青岚药窟",
     cultivation: "38/100",
+    cultivationNow: "38",
+    cultivationMax: "100",
     qi: "600/700",
+    qiNow: "600",
+    qiMax: "700",
     spirit: "380/460",
+    spiritNow: "380",
+    spiritMax: "460",
     status: "有点累",
     years: "二十二 / 寿元一百二十",
     battle: "可战",
@@ -389,10 +497,11 @@ test("cave-sight records a settled moment and has no choice list", () => {
   assert.match(filled, /已扶起伤者/);
   assert.match(filled, /洞中见闻/);
   assert.match(filled, /内心想法/);
-  assert.match(filled, /data-slot="cultivation">38\/100<\/dd>/);
+  assert.match(filled, /data-slot="cultivation">38\/100<\/strong>/);
+  assert.match(filled, /max="100" value="38"/);
   assert.match(filled, /data-slot="sights">药廊里扶起了一个人。<\/p>/);
   assert.match(filled, /data-slot="deeds"><\/p>/);
-  assert.match(filled, /data-slot="qi">600\/700<\/dd>/);
+  assert.match(filled, /data-slot="qi">600\/700<\/strong>/);
   assert.match(filled, /气血 · 灵力/);
   assert.doesNotMatch(filled, /<button|choice\d|请选择/);
   assert.doesNotMatch(filled, /\{\{/);

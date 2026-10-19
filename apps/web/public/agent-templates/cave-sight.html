@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="immortal-claw-template" content="cave-sight">
-<meta name="immortal-claw-template-version" content="4">
+<meta name="immortal-claw-template-version" content="5">
 <title>{{title}}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
@@ -22,6 +22,9 @@
   --gold-wash: rgba(164, 132, 43, 0.12);
   --cinnabar: #b3392b;
   --cinnabar-deep: #8f2c20;
+  --indigo: #3e4f5f;
+  --jade: #45685c;
+  --qi-ink: #7a5340;
   --font-xianxia: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
   --font-brush: "Ma Shan Zheng", "Noto Serif SC", cursive;
   --font-code: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
@@ -289,7 +292,7 @@ h2 {
 .self-block > .ledger {
   margin-top: 0.15rem;
 }
-.self-block:not(:has(dd:not(:empty), .prose:not(:empty), .footnote:not(:empty), .chip:not(:empty))) {
+.self-block:not(:has([data-slot]:not(:empty))) {
   display: none;
 }
 .self-block > .chips {
@@ -303,11 +306,30 @@ h3 {
   font-weight: 700;
   letter-spacing: 0.08rem;
 }
+.archive-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.35rem;
+}
+.archive-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
 .archive {
   margin: 0;
+  padding: 0.7rem 0.75rem 0.65rem;
+  background: rgba(251, 247, 238, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 2px;
 }
-.archive:not(:has(.prose:not(:empty), dd:not(:empty), .footnote:not(:empty))) {
+.archive:not(:has([data-slot]:not(:empty))) {
   display: none;
+}
+.archive h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.98rem;
 }
 .archive .ledger {
   margin-top: 0.15rem;
@@ -316,6 +338,153 @@ h3 {
   border-top: 0;
   padding-top: 0.15rem;
 }
+.realm-line {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06rem;
+}
+.vital + .vital { margin-top: 0.55rem; }
+.vital-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  letter-spacing: 0.08rem;
+}
+.vital-label strong,
+.stat-fig strong,
+.aside-fig strong,
+.stones-line strong,
+.attune strong,
+.status-fig strong {
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02rem;
+  text-align: right;
+}
+meter.ink-meter {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin: 0.28rem 0 0;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(18, 18, 18, 0.07);
+  color: var(--indigo);
+  accent-color: var(--indigo);
+  overflow: hidden;
+  -webkit-appearance: none;
+  appearance: none;
+}
+meter.ink-meter::-webkit-meter-bar {
+  height: 7px;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(18, 18, 18, 0.07);
+}
+meter.ink-meter::-webkit-meter-optimum-value,
+meter.ink-meter::-webkit-meter-suboptimum-value,
+meter.ink-meter::-webkit-meter-even-less-good-value {
+  background: linear-gradient(90deg, var(--indigo), rgba(62, 79, 95, 0.45));
+  border-radius: 1px;
+}
+meter.ink-meter::-moz-meter-bar {
+  background: linear-gradient(90deg, var(--indigo), rgba(62, 79, 95, 0.45));
+  border-radius: 1px;
+}
+meter.ink-meter.qi { color: var(--qi-ink); accent-color: var(--qi-ink); }
+meter.ink-meter.qi::-webkit-meter-optimum-value,
+meter.ink-meter.qi::-webkit-meter-suboptimum-value,
+meter.ink-meter.qi::-webkit-meter-even-less-good-value,
+meter.ink-meter.qi::-moz-meter-bar {
+  background: linear-gradient(90deg, var(--qi-ink), rgba(122, 83, 64, 0.42));
+}
+meter.ink-meter.sp { color: var(--indigo); accent-color: var(--indigo); }
+meter.ink-meter.cult { color: var(--jade); accent-color: var(--jade); }
+meter.ink-meter.cult::-webkit-meter-optimum-value,
+meter.ink-meter.cult::-webkit-meter-suboptimum-value,
+meter.ink-meter.cult::-webkit-meter-even-less-good-value,
+meter.ink-meter.cult::-moz-meter-bar {
+  background: linear-gradient(90deg, var(--jade), rgba(69, 104, 92, 0.42));
+}
+meter.ink-meter[value=""],
+meter.ink-meter[max=""] { display: none; }
+.status-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.status-fig {
+  min-width: 0;
+  padding: 0.4rem 0.55rem 0.35rem;
+  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.status-fig span,
+.aside-fig > span,
+.attune span,
+.stones-line span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  letter-spacing: 0.12rem;
+}
+.status-fig strong {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.95rem;
+  text-align: left;
+}
+.stones-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 0.55rem;
+  padding: 0.4rem 0.65rem;
+  background: rgba(110, 101, 84, 0.08);
+  border: 1px solid rgba(110, 101, 84, 0.22);
+  border-radius: 2px;
+}
+.stones-line span { letter-spacing: 0.14rem; }
+.stones-line strong { font-size: 1.12rem; color: #6e6554; }
+.bag { font-size: 0.92rem; color: var(--ink-2); }
+.eight-grid,
+.eight-aside {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1.15rem;
+}
+.eight-aside {
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed rgba(33, 29, 24, 0.14);
+}
+.aside-fig {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.aside-fig > span { letter-spacing: 0.08rem; }
+.aside-fig strong { white-space: nowrap; }
+.attune {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(62, 79, 95, 0.06);
+  border: 1px solid rgba(62, 79, 95, 0.16);
+  border-radius: 2px;
+}
+.attune span { letter-spacing: 0.14rem; }
 .footnote {
   margin: 0.2rem 0 0;
   color: var(--ink-3);
@@ -331,11 +500,15 @@ h3 {
   .glass-panel { padding: 1.4rem 1.1rem 1.2rem; }
   h1 { font-size: 1.6rem; }
   .ledger-row { grid-template-columns: 1fr; gap: 0.2rem; }
+  .archive-pair,
+  .status-row,
+  .eight-grid,
+  .eight-aside { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
-<!-- immortal-claw-template: cave-sight version 4. Read-only report of a life you already lived. Show it to your owner. Fill 自身近况 at 修士档案 depth, plus 见闻 and 内心想法, in 修仙白话. 近事, 关系, and 传音摘要 are read-only text, not links. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
+<!-- immortal-claw-template: cave-sight version 5. Read-only report of a life you already lived. Show it to your owner. Fill 自身近况 at 修士档案 depth, plus 见闻 and 内心想法, in 修仙白话. 气血, 灵力, and 修为 keep a readable line and take digits for the ink bar. 八维 is eight numbers. 近事, 关系, and 传音摘要 are read-only text, not links. Do not add buttons, choices, scripts, or styles. Replace every slot token with escaped plain text. An optional slot may be an empty string. -->
 <div class="ink-backdrop" aria-hidden="true"><div class="ink-grain"></div></div>
 <main class="sheet">
 <article class="glass-panel">
@@ -368,38 +541,45 @@ h3 {
 <span class="chip" data-slot="sect">{{sect}}</span>
 <span class="chip" data-slot="status">{{status}}</span>
 </div>
+<div class="archive-stack">
 <section class="archive">
 <h3>概览</h3>
 <p class="prose" data-slot="overview">{{overview}}</p>
 </section>
+<div class="archive-pair">
 <section class="archive">
 <h3>修为</h3>
-<dl class="ledger">
-<div class="ledger-row"><dt>境界</dt><dd data-slot="realm">{{realm}}</dd></div>
-<div class="ledger-row"><dt>进度</dt><dd data-slot="cultivation">{{cultivation}}</dd></div>
-</dl>
+<p class="realm-line" data-slot="realm">{{realm}}</p>
+<div class="vital">
+<div class="vital-label"><span>进度</span><strong data-slot="cultivation">{{cultivation}}</strong></div>
+<meter class="ink-meter cult" min="0" max="{{cultivationMax}}" value="{{cultivationNow}}" aria-label="进度"></meter>
+</div>
 </section>
 <section class="archive">
 <h3>气血 · 灵力</h3>
-<dl class="ledger">
-<div class="ledger-row"><dt>气血</dt><dd data-slot="qi">{{qi}}</dd></div>
-<div class="ledger-row"><dt>灵力</dt><dd data-slot="spirit">{{spirit}}</dd></div>
-</dl>
+<div class="vital">
+<div class="vital-label"><span>气血</span><strong data-slot="qi">{{qi}}</strong></div>
+<meter class="ink-meter qi" min="0" max="{{qiMax}}" value="{{qiNow}}" aria-label="气血"></meter>
+</div>
+<div class="vital">
+<div class="vital-label"><span>灵力</span><strong data-slot="spirit">{{spirit}}</strong></div>
+<meter class="ink-meter sp" min="0" max="{{spiritMax}}" value="{{spiritNow}}" aria-label="灵力"></meter>
+</div>
 </section>
+</div>
 <section class="archive">
 <h3>状态</h3>
-<dl class="ledger">
-<div class="ledger-row"><dt>状态</dt><dd data-slot="status">{{status}}</dd></div>
-<div class="ledger-row"><dt>年岁</dt><dd data-slot="years">{{years}}</dd></div>
-<div class="ledger-row"><dt>战备</dt><dd data-slot="battle">{{battle}}</dd></div>
-</dl>
+<div class="status-row">
+<div class="status-fig"><span>状态</span><strong data-slot="status">{{status}}</strong></div>
+<div class="status-fig"><span>年岁</span><strong data-slot="years">{{years}}</strong></div>
+<div class="status-fig"><span>战备</span><strong data-slot="battle">{{battle}}</strong></div>
+</div>
 </section>
+<div class="archive-pair">
 <section class="archive">
 <h3>行囊</h3>
-<dl class="ledger">
-<div class="ledger-row"><dt>灵石</dt><dd data-slot="stones">{{stones}}</dd></div>
-<div class="ledger-row"><dt>物品</dt><dd data-slot="inventory">{{inventory}}</dd></div>
-</dl>
+<p class="stones-line"><span>灵石</span><strong data-slot="stones">{{stones}}</strong></p>
+<p class="prose bag" data-slot="inventory">{{inventory}}</p>
 </section>
 <section class="archive">
 <h3>功法 · 装备</h3>
@@ -411,11 +591,49 @@ h3 {
 <div class="ledger-row"><dt>装备</dt><dd data-slot="equipment">{{equipment}}</dd></div>
 </dl>
 </section>
+</div>
 <section class="archive">
 <h3>八维</h3>
-<p class="prose" data-slot="eight">{{eight}}</p>
-<p class="footnote" data-slot="eightNote">{{eightNote}}</p>
+<div class="eight-grid">
+<div class="stat-fig">
+<div class="vital-label"><span>物攻</span><strong data-slot="physAtk">{{physAtk}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{physAtk}}" aria-label="物攻"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>法攻</span><strong data-slot="spellAtk">{{spellAtk}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{spellAtk}}" aria-label="法攻"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>物防</span><strong data-slot="physDef">{{physDef}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{physDef}}" aria-label="物防"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>法防</span><strong data-slot="spellDef">{{spellDef}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{spellDef}}" aria-label="法防"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>身法</span><strong data-slot="speed">{{speed}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{speed}}" aria-label="身法"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>命中</span><strong data-slot="hit">{{hit}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{hit}}" aria-label="命中"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>闪避</span><strong data-slot="dodge">{{dodge}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{dodge}}" aria-label="闪避"></meter>
+</div>
+<div class="stat-fig">
+<div class="vital-label"><span>会心</span><strong data-slot="crit">{{crit}}</strong></div>
+<meter class="ink-meter" min="0" max="{{eightMax}}" value="{{crit}}" aria-label="会心"></meter>
+</div>
+</div>
+<div class="eight-aside">
+<div class="aside-fig"><span>会心伤害</span><strong>×<span data-slot="critDamage">{{critDamage}}</span></strong></div>
+<div class="aside-fig"><span>护心</span><strong data-slot="guardHeart">{{guardHeart}}</strong></div>
+</div>
 </section>
+<div class="archive-pair">
 <section class="archive">
 <h3>详细属性</h3>
 <dl class="ledger">
@@ -434,14 +652,16 @@ h3 {
 <div class="ledger-row"><dt>五行</dt><dd data-slot="wuxing">{{wuxing}}</dd></div>
 </dl>
 </section>
+</div>
+<div class="archive-pair">
 <section class="archive">
 <h3>势力</h3>
 <dl class="ledger">
 <div class="ledger-row"><dt>宗门</dt><dd data-slot="sect">{{sect}}</dd></div>
 <div class="ledger-row"><dt>地位</dt><dd data-slot="standing">{{standing}}</dd></div>
 <div class="ledger-row"><dt>贡献</dt><dd data-slot="contribution">{{contribution}}</dd></div>
-<div class="ledger-row"><dt>仙缘</dt><dd data-slot="attunement">{{attunement}}</dd></div>
 </dl>
+<div class="attune"><span>仙缘</span><strong data-slot="attunement">{{attunement}}</strong></div>
 </section>
 <section class="archive">
 <h3>房产 · 谋略</h3>
@@ -450,6 +670,8 @@ h3 {
 <div class="ledger-row"><dt>谋略</dt><dd data-slot="strategy">{{strategy}}</dd></div>
 </dl>
 </section>
+</div>
+</div>
 </section>
 <section class="beat">
 <h2>近事</h2>
