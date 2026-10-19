@@ -93,18 +93,15 @@ const ELEMENT_BRANCH: Record<FiveElementId, SpellBranchId> = {
 export function seekLine(channel: "weapon" | "spell", tier: number): string {
   const band = bandForTier(tier);
   const thing = channel === "weapon" ? "兵器" : "功法";
-  const errand = channel === "weapon" ? "band-errand:weapon" : "band-errand:manual";
-  const exchange = channel === "weapon" ? "exchange-sect-weapon" : "exchange-sect-manual";
   if (tier >= 6) {
-    const band = bandForTier(tier);
     const gate = CONTRIBUTION_GATE[tier as ContentTier];
     return `${band.realm}这一阶${thing}，坊市不卖。得到${band.realm}才装备得上。先把这一系更低的阶补齐。凉州或雷州的灵脉，入了当地山门、把灵脉护下来再收，会在破境灵材之外再分出一份锻材或残页。人已经到了这一档，甲级七层到九层的神纹天隙探宝也会掉。带回洞府按配方做成，用掉才会学会。宗门贡献到${gate}，在驻地可以直接换，贡献不扣，也可以跑一趟差事把锻材带回来。大境界破过去，会留下一页这一阶的功法残页。`;
   }
   if (tier >= 5) {
-    return `化神这一阶${thing}，坊市不卖。先得自己破进化神，再去甲级七层到九层的神纹天隙拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑 ${errand}。贡献到 220 可以用 ${exchange} 直接换，贡献不扣。破境时会留下一页功法残页。`;
+    return `化神这一阶${thing}，坊市不卖。先得自己破进化神，再去甲级七层到九层的神纹天隙拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑一趟差事把锻材带回来。贡献到 220，在驻地用贡献直接换，贡献不扣。破境时会留下一页功法残页。`;
   }
   if (tier >= 4) {
-    return `元婴这一阶${thing}，坊市不卖。先得自己破进元婴，再去甲级四层到六层的婴火莲池拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑 ${errand}。贡献到 140 可以用 ${exchange} 直接换，贡献不扣。破境时会留下一页功法残页。`;
+    return `元婴这一阶${thing}，坊市不卖。先得自己破进元婴，再去甲级四层到六层的婴火莲池拿锻材，有时直接掉成器。带回洞府按配方锻，或在宗门驻地跑一趟差事把锻材带回来。贡献到 140，在驻地用贡献直接换，贡献不扣。破境时会留下一页功法残页。`;
   }
   const where = tier <= 2
     ? "丙级地宫六层往上、坊市，或宗门"
@@ -182,14 +179,14 @@ function gearPaths(kind: "weapon" | "spell", id: string, tier: ContentTier): Gea
     {
       kind: "宗门",
       actionId: exchange,
-      line: `宗门贡献到 ${CONTRIBUTION_GATE[tier]} 以后，在安全的地方用 ${exchange} 直接换。贡献不扣，只要门槛。`,
+      line: `宗门贡献到 ${CONTRIBUTION_GATE[tier]} 以后，在安全的地方用贡献直接换。贡献不扣，只要门槛。`,
     },
   ];
   if (tier >= 4) {
     paths.push({
       kind: "任务",
       actionId: errand,
-      line: `在自己宗门的驻地用 ${errand} 跑一趟差事，带回一份${material}。同一趟要隔六个时辰。`,
+      line: `在自己宗门的驻地跑一趟差事，带回一份${material}。同一趟要隔六个时辰。`,
     });
     paths.push({
       kind: "破境",
