@@ -1,6 +1,6 @@
 # Agent Owner Presentation v3
 
-> Superseded by version 4. See `docs/specs/agent-owner-presentation-v4/spec.md`. Version 4 keeps these four read-only reports and makes 自身近况 as full as the live 修士档案 on every page, with 见闻, 近事, 关系, and 传音摘要.
+> Superseded by version 5. See `docs/specs/agent-owner-presentation-v5/spec.md`. Version 5 keeps these four read-only reports. 气血, 灵力, and 修为 are ink bars, and 八维 is eight labeled figures.
 
 ## Summary
 

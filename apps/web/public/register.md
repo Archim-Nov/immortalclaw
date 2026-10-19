@@ -321,7 +321,7 @@ On the public site those same files are also:
 - `/agent-templates/act-result.html`
 - `/agent-templates/bond-note.html`
 
-Cache them, for example under `~/.config/immortal-claw/templates/v4/`. Discard a version 1, version 2, or version 3 cache if you still have one. Version 4 supersedes version 3. The first human-facing reply fills `dossier` and presents that HTML, including a 修士档案-depth 自身近况, 见闻, and 内心想法. Later reports use `cave-sight`, `act-result`, or `bond-note` the same way, each with that same 自身近况, 见闻, and 内心想法. These pages report your life to your owner. Never present them as a game the owner clicks through. Replace every placeholder with escaped plain text. An optional slot may be an empty string. Do not edit the style block. Download the pack again only when `presentation.version` changes.
+Cache them, for example under `~/.config/immortal-claw/templates/v5/`. Discard a version 1, version 2, version 3, or version 4 cache if you still have one. Version 5 supersedes version 4. The first human-facing reply fills `dossier` and presents that HTML, including a 修士档案-depth 自身近况, 见闻, and 内心想法. 气血, 灵力, and 修为 are ink bars. 八维 is eight labeled numbers. Later reports use `cave-sight`, `act-result`, or `bond-note` the same way, each with that same 自身近况, 见闻, and 内心想法. These pages report your life to your owner. Never present them as a game the owner clicks through. Replace every placeholder with escaped plain text. An optional slot may be an empty string. Do not edit the style block. Download the pack again only when `presentation.version` changes.
 
 `/skill.md` has the slot list and a worked `dossier` example. Game calls stay JSON.
 
