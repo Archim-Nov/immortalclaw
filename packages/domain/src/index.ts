@@ -51,6 +51,7 @@ export {
   advanceWorld,
   applyToPlayerSect,
   getPendingMoralityChoice,
+  describePendingMoralityFork,
   foundPlayerSect,
   getPlayerSectFoundingOptions,
   getCultivationRegistration,

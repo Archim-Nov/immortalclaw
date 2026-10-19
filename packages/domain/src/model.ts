@@ -1702,6 +1702,7 @@ export type ImmediateActionId =
   | `wait-for:${string}`
   | `dungeon-wake-decision:${string}`
   | "dungeon-gate-locked"
+  | "inspect-bahuang-gate"
   | `sect-scene:${string}`
   | `bahuang-wake-decision:${string}`
   | `guixu-choice:${string}`
@@ -2685,6 +2686,12 @@ export interface CreateCultivatorInput {
   temperament?: string;
 }
 
+export interface ActionRoutingHint {
+  path: string;
+  choiceId: string;
+  optionIds: string[];
+}
+
 export interface AvailableAction {
   actionId: ActionId;
   label: string;
@@ -2695,6 +2702,7 @@ export interface AvailableAction {
   costs?: ActionCostSummary;
   effects?: ActionEffectSummary;
   suboptimal?: { reason: string };
+  routing?: ActionRoutingHint;
 }
 
 export interface ActionExecutionResult {

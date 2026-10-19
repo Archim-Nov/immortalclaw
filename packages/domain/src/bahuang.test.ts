@@ -36,7 +36,13 @@ test("enter-bahuang:balanced appears when cultivator meets requirement at entry 
   const { world, cultivator } = prepareBahuangCandidate();
 
   const actions = listAvailableActions(world, cultivator.id);
-  assert.ok(actions.some((action) => action.actionId === "enter-bahuang:balanced"));
+  const entries = actions.filter((action) => String(action.actionId).startsWith("enter-bahuang:"));
+  assert.deepEqual(entries.map((action) => action.actionId), [
+    "enter-bahuang:conservative",
+    "enter-bahuang:balanced",
+    "enter-bahuang:aggressive",
+  ]);
+  assert.equal(actions.some((action) => action.actionId === "inspect-bahuang-gate"), false);
   assert.equal(actions.some((action) => String(action.actionId).startsWith("enter-wilderness:")), false);
 });
 
@@ -112,13 +118,69 @@ test("retreat-from-bahuang immediately ends the expedition", () => {
   assert.equal(state.bahuang, null);
 });
 
-test("entry denied when tick is outside the entry time window", () => {
-  const { world, cultivator } = prepareBahuangCandidate();
-  // Move tick outside the 120-tick window
-  world.tick = 200;
+test("closed bahuang gate still shows a Chinese notice at the entry", () => {
+  const { world, cultivator, inventory } = prepareBahuangCandidate();
+  world.tick = 259;
+  const passes = inventory["eight-wastes-pass"];
 
   const actions = listAvailableActions(world, cultivator.id);
-  assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("enter-bahuang:")), false);
+  const notice = actions.find((action) => action.actionId === "inspect-bahuang-gate");
+  assert.ok(notice);
+  assert.equal(notice.label, "看八荒入口");
+  assert.equal(notice.description, "八荒入口关着，再过461刻才开。");
+  assert.equal(/[A-Za-z]/.test(`${notice.label}${notice.description}`), false);
+
+  const result = performAction(world, cultivator.id, "inspect-bahuang-gate");
+  assert.equal(result.accepted, false);
+  assert.equal(result.summary, notice.description);
+  assert.equal(/[A-Za-z]/.test(result.summary), false);
+  assert.equal(result.summary.includes("inspect-bahuang-gate"), false);
+  assert.equal(inventory["eight-wastes-pass"], passes);
+  assert.equal(world.bahuangProgress[cultivator.id], undefined);
+});
+
+test("bahuang entry without a pass shows the missing-pass notice", () => {
+  const { world, cultivator, inventory } = prepareBahuangCandidate();
+  inventory["eight-wastes-pass"] = 0;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  const notice = actions.find((action) => action.actionId === "inspect-bahuang-gate");
+  assert.ok(notice);
+  assert.equal(notice.description, "没有八荒令，进不了八荒。");
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("enter-bahuang:")), false);
+
+  const result = performAction(world, cultivator.id, "inspect-bahuang-gate");
+  assert.equal(result.accepted, false);
+  assert.equal(result.summary, "没有八荒令，进不了八荒。");
+  assert.equal(world.bahuangProgress[cultivator.id], undefined);
+});
+
+test("a wound at the bahuang entry is said out loud", () => {
+  const { world, cultivator } = prepareBahuangCandidate();
+  cultivator.injuryTicksRemaining = 4;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  const notice = actions.find((action) => action.actionId === "inspect-bahuang-gate");
+  assert.ok(notice);
+  assert.equal(notice.description, "身上有伤，八荒进不去。");
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("enter-bahuang:")), false);
+
+  const result = performAction(world, cultivator.id, "inspect-bahuang-gate");
+  assert.equal(result.accepted, false);
+  assert.equal(result.summary, "身上有伤，八荒进不去。");
+  assert.equal(cultivator.injuryTicksRemaining, 4);
+  assert.equal(world.bahuangProgress[cultivator.id], undefined);
+});
+
+test("bahuang gate notice is not listed away from the entry", () => {
+  const { world, cultivator } = prepareBahuangCandidate();
+  cultivator.locationId = "qingzhou:main-city";
+  world.tick = 259;
+
+  const actions = listAvailableActions(world, cultivator.id);
+  assert.equal(actions.some((action) => action.actionId === "inspect-bahuang-gate"), false);
+  assert.equal(actions.some((action) => String(action.actionId).startsWith("enter-bahuang:")), false);
 });
 
 test("entry denied when realmLevel is below 5", () => {
@@ -127,6 +189,10 @@ test("entry denied when realmLevel is below 5", () => {
 
   const actions = listAvailableActions(world, cultivator.id);
   assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
+  const notice = actions.find((action) => action.actionId === "inspect-bahuang-gate");
+  assert.ok(notice);
+  assert.match(notice.description, /境界/);
+  assert.equal(/[A-Za-z]/.test(notice.description), false);
 });
 
 test("entry denied when wildernessAttunement is below 40", () => {
@@ -135,6 +201,9 @@ test("entry denied when wildernessAttunement is below 40", () => {
 
   const actions = listAvailableActions(world, cultivator.id);
   assert.equal(actions.some((action) => action.actionId === "enter-bahuang:balanced"), false);
+  const notice = actions.find((action) => action.actionId === "inspect-bahuang-gate");
+  assert.ok(notice);
+  assert.match(notice.description, /感应/);
 });
 
 test("eight-wastes-pass can be purchased at market", () => {

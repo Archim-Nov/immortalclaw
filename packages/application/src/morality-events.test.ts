@@ -32,11 +32,11 @@ test("buildAuthenticatedAgentActions adds a generic morality-choice inbox hint o
       cultivatorId: cultivator.id,
       createdAtTick: 0,
       expiresAtTick: 6,
-      title: "Crossroads Beggar",
-      prompt: "Choose how to act.",
+      title: "学徒的篮子",
+      prompt: "这一筐要不要送下去。",
       options: [
-        { id: "aid", label: "Aid", summary: "Help", moralityDelta: 3, effectBundle: {} },
-        { id: "loot", label: "Loot", summary: "Exploit", moralityDelta: -3, effectBundle: {} },
+        { id: "deliver", label: "把整筐送下去", summary: "送到棚里。", moralityDelta: 3, effectBundle: {} },
+        { id: "skim-herbs", label: "拿走好的那几株", summary: "好叶子不在了。", moralityDelta: -3, effectBundle: {} },
       ],
     },
   };
@@ -61,10 +61,26 @@ test("buildAuthenticatedAgentActions adds a generic morality-choice inbox hint o
     agent: createAgentProfile(cultivator.id),
   });
 
-  assert.equal(
-    payload.actions.filter((action) => action.actionId === ("resolve-morality-event-choice" as never)).length,
-    1,
-  );
+  const hints = payload.actions.filter((action) => action.actionId === ("resolve-morality-event-choice" as never));
+  assert.equal(hints.length, 1);
+  const hint = hints[0]!;
+  assert.equal(hint.label, "道心岔路待选");
+  assert.match(hint.description, /学徒的篮子/);
+  assert.match(hint.description, /把整筐送下去/);
+  assert.match(hint.description, /拿走好的那几株/);
+  assert.match(hint.description, /道心/);
+  assert.equal(hint.label.includes("/agent/"), false);
+  assert.equal(hint.description.includes("/agent/"), false);
+  assert.equal(hint.description.includes("POST"), false);
+  assert.equal(hint.description.includes("choiceId"), false);
+  assert.equal(hint.description.includes("optionId"), false);
+  assert.equal(hint.description.includes("deliver"), false);
+  assert.equal(hint.description.includes("skim-herbs"), false);
+  assert.deepEqual(hint.routing, {
+    path: "/agent/events/choose",
+    choiceId: "choice-1",
+    optionIds: ["deliver", "skim-herbs"],
+  });
 });
 
 test("application package exports morality event workflow helpers", () => {

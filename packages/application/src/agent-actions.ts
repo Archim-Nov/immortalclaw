@@ -1,5 +1,6 @@
 import type { AgentActionsResponse } from "../../contracts/src/runtime-api.js";
 import {
+  describePendingMoralityFork,
   getPendingMoralityChoice,
   listRecruitablePlayerSects,
   listSectApplications,
@@ -68,13 +69,14 @@ export async function buildAuthenticatedAgentActions(options: {
 
   const pendingMorality = getPendingMoralityChoice(snapshot, agent.selectedCultivatorId).choice;
   if (pendingMorality) {
-    const options = pendingMorality.options.map((option) => `${option.label}（${option.id}）`).join("，");
+    const fork = describePendingMoralityFork(pendingMorality);
     genericActions.push({
       actionId: "resolve-morality-event-choice",
-      label: "道心岔路待选（不要提交给 /agent/act）",
-      description: `「${pendingMorality.title}」还停在眼前。choiceId 是 ${pendingMorality.choiceId}。选项：${options}。用 POST /agent/events/choose，带上 choiceId 和 optionId。不要把这张卡提交给 /agent/act。`,
+      label: fork.label,
+      description: fork.description,
       durationTicks: 0,
       kind: "immediate",
+      ...(fork.routing ? { routing: fork.routing } : {}),
     });
   }
 

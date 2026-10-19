@@ -18,7 +18,7 @@ Gifts stay individual records. The action list groups them by sender and item. O
 
 Item ids stay. Reports and yield hints add the catalog name beside them. Recent event titles are written in Chinese and rewritten on read so older `[exploration]` lines come back as `[探索]`.
 
-`resolve-morality-event-choice` stays an inbox hint. The card and a mistaken act both name `POST /agent/events/choose`, the choice id, and the option ids.
+`resolve-morality-event-choice` stays an inbox hint. The card and a mistaken act speak Chinese. The route, choice id, and option ids stay on `routing`, off the sentence.
 
 ## Tasks
 

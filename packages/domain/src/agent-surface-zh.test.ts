@@ -201,7 +201,7 @@ test("old English event tags, status names, wilderness entry, and onboarding rea
   assert.equal(entered.summary.includes("荒原·灵材散落带"), false);
 });
 
-test("resolve-morality-event-choice tells the caller to use the dedicated route", () => {
+test("resolve-morality-event-choice stays in Chinese and does not name the route", () => {
   const world = createSeedWorld();
   const cultivator = world.cultivators[CULTIVATOR_ID]!;
   cultivator.pendingMoralityChoiceId = "morality-choice-test";
@@ -210,19 +210,36 @@ test("resolve-morality-event-choice tells the caller to use the dedicated route"
     cultivatorId: CULTIVATOR_ID,
     createdAtTick: world.tick,
     expiresAtTick: world.tick + 6,
-    title: "路口的人",
-    prompt: "要不要搭把手。",
+    title: "学徒的篮子",
+    prompt: "要不要把整筐送下去。",
     options: [
-      { id: "aid", label: "搭把手", summary: "停下来。", moralityDelta: 1, effectBundle: {} },
-      { id: "walk", label: "走过去", summary: "不停。", moralityDelta: -1, effectBundle: {} },
+      { id: "deliver", label: "把整筐送下去", summary: "送到棚里。", moralityDelta: 1, effectBundle: {} },
+      { id: "skim-herbs", label: "拿走好的那几株", summary: "好叶子不在了。", moralityDelta: -1, effectBundle: {} },
     ],
   };
   const result = performAction(world, CULTIVATOR_ID, "resolve-morality-event-choice");
   assert.equal(result.accepted, false);
-  assert.match(result.summary, /POST \/agent\/events\/choose/);
-  assert.match(result.summary, /morality-choice-test/);
-  assert.match(result.summary, /搭把手（aid）/);
-  assert.equal(result.summary.includes("dedicated route"), false);
+  assert.match(result.summary, /学徒的篮子/);
+  assert.match(result.summary, /把整筐送下去/);
+  assert.match(result.summary, /拿走好的那几株/);
+  assert.match(result.summary, /道心/);
+  assert.match(result.summary, /寻常行动|硬交/);
+  assert.equal(result.summary.includes("deliver"), false);
+  assert.equal(result.summary.includes("skim-herbs"), false);
+  assert.equal(result.summary.includes("choiceId"), false);
+  assert.equal(result.summary.includes("optionId"), false);
+  assert.equal(result.summary.includes("POST"), false);
+  assert.equal(result.summary.includes("/agent/"), false);
+  assert.equal(result.summary.includes("morality-choice-test"), false);
+  assert.equal(cultivator.pendingMoralityChoiceId, "morality-choice-test");
+  assert.ok(world.pendingMoralityChoices["morality-choice-test"]);
+
+  cultivator.pendingMoralityChoiceId = null;
+  delete world.pendingMoralityChoices["morality-choice-test"];
+  const empty = performAction(world, CULTIVATOR_ID, "resolve-morality-event-choice");
+  assert.equal(empty.accepted, false);
+  assert.match(empty.summary, /眼前没有待选的道心岔路/);
+  assert.equal(/[A-Za-z]/.test(empty.summary), false);
 });
 
 test("gift-item cards use the Chinese item name and a unique action id", () => {
