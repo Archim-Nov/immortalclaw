@@ -1969,20 +1969,20 @@ function getCityDuelChallengeBlockReason(
   challenger: Cultivator,
   target: Cultivator | undefined,
 ): string | null {
-  if (!target) return "Target cultivator not found.";
+  if (!target) return "没有这个人。";
   const location = world.locations[challenger.locationId];
-  if (!location || location.kind !== "safe") return "City duels can only be initiated in safe zones.";
-  if (challenger.id === target.id) return "Cannot challenge yourself.";
-  if (challenger.locationId !== target.locationId) return "Target must be in the same location.";
+  if (!location || location.kind !== "safe") return "切磋要在城里安全的地方发起。";
+  if (challenger.id === target.id) return "不能跟自己切磋。";
+  if (challenger.locationId !== target.locationId) return "要跟对方在同一地点才能切磋。";
   if (challenger.activeJobId) return "你正忙着，这一手等手头的事做完再来。";
   if (target.activeJobId) return `${target.name}正忙着，改日再来。`;
-  if (target.pendingPvpChallengeId) return "Target already has a pending PVP challenge.";
-  if (challenger.pendingPvpChallengeId) return "You already have a pending PVP challenge.";
+  if (target.pendingPvpChallengeId) return `${target.name}手里已经有一张挑战书。`;
+  if (challenger.pendingPvpChallengeId) return "你手里已经有一张挑战书，先等这一场有个结果。";
   const hpRatio = challenger.maxQi > 0 ? challenger.qi / challenger.maxQi : 0;
-  if (hpRatio < 0.5) return "Your qi must be at least 50% to issue a challenge.";
+  if (hpRatio < 0.5) return "气血不到一半，先养一养再下挑战书。";
   const realmGap = Math.abs((REALM_ORDER[challenger.realm] ?? 0) - (REALM_ORDER[target.realm] ?? 0));
-  if (realmGap > 2) return "Realm gap too large for a fair duel.";
-  if (challenger.sectId && challenger.sectId === target.sectId) return "Cannot challenge a sect member in the city.";
+  if (realmGap > 2) return "境界差得太多，这场切磋不好约。";
+  if (challenger.sectId && challenger.sectId === target.sectId) return "同门在城里不好公开切磋。";
   return null;
 }
 
@@ -9536,7 +9536,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         actions.push({
           actionId: `await-pvp-challenge:${pendingChallenge.id}` as ActionId,
           label: `切磋待回应：${targetName}（还剩${remain}刻）`,
-          description: `挑战书已经递给${targetName}。对方要在 ${remain} 刻内用 accept-pvp-challenge:${pendingChallenge.id} 应战，或用 reject-pvp-challenge:${pendingChallenge.id} 拒绝。过了这几刻，这场就会自己搁下。把这张卡提交给 act 不会再开一场，也不会取消。`,
+          description: `挑战书已经递给${targetName}。对方还剩 ${remain} 刻，可以应战，也可以拒绝。过了这几刻，这场就会自己搁下。再交一次这张卡，不会开战，也不会取消。`,
           durationTicks: 0,
           kind: "immediate",
         });
@@ -10714,7 +10714,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     const targetId = actionId.slice("challenge-cultivator:".length);
     const target = world.cultivators[targetId];
     const blockReason = getCityDuelChallengeBlockReason(world, cultivator, target);
-    if (blockReason) throw new Error(blockReason);
+    if (blockReason) throw new GameplayRejection(blockReason);
 
     const challengeId = `pvp-challenge-${world.nextPvpChallengeSequence++}`;
     const challenge: PendingPvpChallenge = {
@@ -10727,15 +10727,15 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
     };
     publishCityDuel(world, challenge, cultivator, target);
     addMessage(world, targetId, "切磋挑战", "挑战书", `${cultivator.name}向你发起了切磋挑战，请在${CITY_DUEL_REPLY_TICKS}刻内回复。`, { fromCultivatorId: cultivator.id });
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} challenged ${target.name} to a duel.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}向${target.name}下了切磋挑战书。还剩${CITY_DUEL_REPLY_TICKS}刻，等对方应战或拒绝。` };
   }
 
   // ---- PVP: Reject challenge ----
   if (actionId.startsWith("reject-pvp-challenge:")) {
     const challengeId = actionId.slice("reject-pvp-challenge:".length);
     const challenge = world.pendingPvpChallenges[challengeId];
-    if (!challenge) throw new Error("Challenge not found or already expired.");
-    if (challenge.targetCultivatorId !== cultivator.id) throw new Error("Only the challenged cultivator can reject.");
+    if (!challenge) throw new GameplayRejection("这张挑战书已经不在了，或是时辰过了。");
+    if (challenge.targetCultivatorId !== cultivator.id) throw new GameplayRejection("只有被挑战的人能拒绝这场切磋。");
     delete world.pendingPvpChallenges[challengeId];
     cultivator.pendingPvpChallengeId = null;
     const challenger = world.cultivators[challenge.challengerCultivatorId];
@@ -10745,32 +10745,32 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       shiftCultivatorMood(world, challenger, "rejection", `${cultivator.name}拒绝了这场切磋，挑战书像被当面按下。`);
       shiftCultivatorMood(world, cultivator, "rejection", `拒绝了${challenger.name}的切磋，场上安静了一下。`);
     }
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} rejected the duel challenge.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}拒绝了${challenger?.name ?? "对方"}的切磋。` };
   }
 
   // ---- PVP: Accept challenge → start combat ----
   if (actionId.startsWith("accept-pvp-challenge:")) {
     const challengeId = actionId.slice("accept-pvp-challenge:".length);
     const challenge = world.pendingPvpChallenges[challengeId];
-    if (!challenge) throw new Error("Challenge not found or already expired.");
-    if (challenge.targetCultivatorId !== cultivator.id) throw new Error("Only the challenged cultivator can accept.");
+    if (!challenge) throw new GameplayRejection("这张挑战书已经不在了，或是时辰过了。");
+    if (challenge.targetCultivatorId !== cultivator.id) throw new GameplayRejection("只有被挑战的人能应战。");
     const invalidReason = getPendingPvpChallengeInvalidReason(world, challenge);
     if (invalidReason === "expired") {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
-      throw new Error("Challenge has expired.");
+      throw new GameplayRejection("时辰过了，这张挑战书已经搁下。");
     }
     if (invalidReason === "challenger-left-area" || invalidReason === "target-left-area") {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
-      throw new Error("Both duelists must remain at the original challenge location.");
+      throw new GameplayRejection("人离开了下挑战书的地方，这场切磋先作罢。");
     }
     const challenger = world.cultivators[challenge.challengerCultivatorId];
-    if (!challenger) throw new Error("Challenger no longer exists.");
+    if (!challenger) throw new GameplayRejection("下挑战书的人已经不在了。");
     if (challenger.activeJobId) {
       delete world.pendingPvpChallenges[challengeId];
       cultivator.pendingPvpChallengeId = null;
-      throw new Error(`${challenger.name}正忙着，这场切磋先作罢。`);
+      throw new GameplayRejection(`${challenger.name}正忙着，这场切磋先作罢。`);
     }
 
     // Clean up challenge
@@ -10810,7 +10810,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       setCombatJobState(result.job, combatState);
     }
     addMessage(world, cultivator.id, "切磋开始", "挑战已接受", `你接受了${challenger.name}的切磋挑战，战斗即将开始。`);
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} accepted the duel. Combat started for ${challenger.name}.`, job: result.job };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}应了${challenger.name}的切磋。这一架开始了。`, job: result.job };
   }
 
   if (actionId.startsWith("await-pvp-challenge:")) {
@@ -10826,7 +10826,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: false,
-      summary: `挑战书还在${targetName}手里，还剩 ${remain} 刻，没有取消。等对方用 accept-pvp-challenge:${challengeId} 应战。把这张卡再提交一次也不会开战。`,
+      summary: `挑战书还在${targetName}手里，还剩 ${remain} 刻，没有取消。等对方应战或拒绝。再交一次也不会开战。`,
     };
   }
 
@@ -11588,7 +11588,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       throw new GameplayRejection(`和${target?.name ?? "对方"}还没到宿怨，不必为这点嫌隙公开挑战。`);
     }
     const blockReason = getCityDuelChallengeBlockReason(world, cultivator, target);
-    if (blockReason) throw new Error(blockReason);
+    if (blockReason) throw new GameplayRejection(blockReason);
     const challengeId = `pvp-challenge-${world.nextPvpChallengeSequence++}`;
     const challenge: PendingPvpChallenge = {
       id: challengeId,
@@ -11613,7 +11613,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
         mood: "宿怨摆到了明面上",
       }));
     }
-    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name} challenged ${target.name} over a feud.` };
+    return { tick: world.tick, cultivatorId: cultivator.id, actionId, accepted: true, summary: `${cultivator.name}因宿怨向${target.name}下了挑战书。还剩${CITY_DUEL_REPLY_TICKS}刻，等对方应战或拒绝。` };
   }
 
   // ---- Negotiated stone gift. Pending accept, no escrow, no refund after accept. ----

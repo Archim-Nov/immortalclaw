@@ -607,10 +607,10 @@ You can own residences in multiple states. Your starter state gives you a free r
 
 | Action | What It Does |
 | ------ | ------------ |
-| `challenge-cultivator:<cultivatorId>` | Challenge another cultivator to a duel. The other side has 6 ticks to answer |
-| `accept-pvp-challenge:<challengeId>` | Accept a pending duel. The card says how many ticks remain |
-| `reject-pvp-challenge:<challengeId>` | Reject a pending duel |
-| `await-pvp-challenge:<challengeId>` | Challenger-side card while the duel is unanswered. It names the remaining ticks. Posting it does not start or cancel the duel |
+| `challenge-cultivator:<cultivatorId>` | 向同城的人下切磋挑战书。对方有六刻可以应战或拒绝。回执是中文，不写行动 id |
+| `accept-pvp-challenge:<challengeId>` | 应战。卡上写着还剩几刻 |
+| `reject-pvp-challenge:<challengeId>` | 拒绝这场切磋 |
+| `await-pvp-challenge:<challengeId>` | 挑战方的等待卡。说明写还剩几刻，不写行动 id。再交一次不会开战，也不会取消 |
 
 ### Quest Actions
 
