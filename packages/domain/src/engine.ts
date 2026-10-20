@@ -248,11 +248,11 @@ import {
   markQuestInProgress,
   parseQuestActionId,
   refreshQuestBoardsIfDue,
+  questOutcomeSentence,
   resolveActiveQuest,
   updateSectTitles,
   updateSectTitlesIfDue,
 } from "./quest.js";
-import { facingPersonName } from "./facing-names.js";
 import {
   createResidenceForState,
   getActiveResidence,
@@ -8589,6 +8589,10 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
         };
       }),
     currentJob: cultivator.activeJobId ? world.jobs[cultivator.activeJobId] ?? null : null,
+    ...(() => {
+      const held = heldQuestViews(world, cultivator);
+      return held.length > 0 ? { activeQuests: held } : {};
+    })(),
     nearbyOpportunities: [location && canTradeAtLocation(location) ? "这里能买卖。" : "换个地方，机会会多一些。", location?.nodeType === "wilderness" ? "可以采集，也可以猎兽。" : "留意这一带的事。"],
     statusEffects: cultivator.statusEffects.map((effect) => {
       const facing = facingStatus(effect.id, effect.name, effect.description);
@@ -8705,7 +8709,7 @@ export function getCultivatorState(world: WorldState, cultivatorId: string): Cul
       .filter((c) => c.locationId === cultivator.locationId && c.completedAtTick === null && c.acceptedById === null && c.posterId !== cultivator.id)
       .map((c) => ({
         id: c.id,
-        posterName: facingPersonName(world.cultivators[c.posterId]?.name ?? "某人"),
+        posterName: world.cultivators[c.posterId]?.name?.trim() || "某人",
         type: c.type,
         targetItemId: c.targetItemId,
         itemName: itemDisplayName(c.targetItemId),
@@ -9040,6 +9044,71 @@ function appendBahuangEntryActions(
   }
 }
 
+function heldQuestPlaceName(world: WorldState, cultivator: Cultivator, quest: { locationId?: string }): string {
+  const locationId = quest.locationId || cultivator.locationId;
+  return world.locations[locationId]?.name ?? "这里";
+}
+
+function heldQuestBlockSentence(name: string, placeName: string, reason: "hurt" | "busy"): string {
+  if (reason === "busy") {
+    return `这桩「${name}」是在${placeName}接下的。手头的事还没做完，这一桩等这一趟结束再做。`;
+  }
+  return `身上有伤，这桩「${name}」做不了。这是在${placeName}接下的，养好了再做。`;
+}
+
+function heldQuestViews(world: WorldState, cultivator: Cultivator): NonNullable<CultivatorStateView["activeQuests"]> {
+  return cultivator.activeQuests.map((quest) => {
+    const name = questFacingName(quest);
+    const placeName = heldQuestPlaceName(world, cultivator, quest);
+    const base = {
+      name,
+      placeName,
+      durationTicks: quest.durationTicks,
+      acceptedAtTick: quest.acceptedAtTick,
+      status: quest.status,
+    };
+    if (quest.status === "in-progress") {
+      return {
+        ...base,
+        placeLine: `这桩「${name}」正在做，做完要${quest.durationTicks}刻。`,
+      };
+    }
+    if (cultivator.activeJobId) {
+      const blockReason = heldQuestBlockSentence(name, placeName, "busy");
+      return { ...base, placeLine: blockReason, blockReason };
+    }
+    if (cultivator.injuryTicksRemaining > 0) {
+      const blockReason = heldQuestBlockSentence(name, placeName, "hurt");
+      return { ...base, placeLine: blockReason, blockReason };
+    }
+    return {
+      ...base,
+      placeLine: `这桩「${name}」是在${placeName}接下的，人在这里就能做。做完要${quest.durationTicks}刻，不会自己过期。`,
+    };
+  });
+}
+
+function appendHeldQuestActions(world: WorldState, cultivator: Cultivator, actions: AvailableAction[], injured: boolean): void {
+  for (const [activeIndex, activeQuest] of cultivator.activeQuests.entries()) {
+    const name = questFacingName(activeQuest);
+    const placeName = heldQuestPlaceName(world, cultivator, activeQuest);
+    actions.push({
+      actionId: buildExecuteQuestActionId(activeQuest.type, activeIndex) as ActionId,
+      label: `去做：${name}`,
+      description: injured ? heldQuestBlockSentence(name, placeName, "hurt") : questFacingDescription(activeQuest),
+      durationTicks: activeQuest.durationTicks,
+      kind: "timed",
+    });
+  }
+}
+
+function injuredQuestRefusal(world: WorldState, cultivator: Cultivator, actionId: string): string {
+  const parsed = parseQuestActionId(actionId);
+  const quest = parsed ? getActiveQuestByReadableIndex(cultivator, parsed.questType, parsed.index) : null;
+  if (!quest) return "身上有伤，这桩事做不了。养好了再做。";
+  return heldQuestBlockSentence(questFacingName(quest), heldQuestPlaceName(world, cultivator, quest), "hurt");
+}
+
 export function listAvailableActions(world: WorldState, cultivatorId: string): AvailableAction[] {
   ensureOptionalProgressMaps(world);
   const cultivator = getCultivatorOrThrow(world, cultivatorId);
@@ -9240,6 +9309,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         kind: "immediate",
       });
       actions.push(...sceneChoiceActions(world, cultivator));
+      appendHeldQuestActions(world, cultivator, actions, true);
       return actions;
     }
     if (isAtResidence(cultivator)) {
@@ -9262,11 +9332,13 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
         ...queueActions,
       );
       actions.push(...methodActions);
+      appendHeldQuestActions(world, cultivator, actions, true);
       return ensureSafetyNetActions(world, cultivator, location, actions);
     }
     if (canHealAtLocation(location)) actions.push({ actionId: "heal", label: "疗伤", description: "把伤养一养。", durationTicks: DEFAULT_ACTION_DURATIONS.heal, kind: "timed" });
     actions.push(...listSectLifeActions(world, cultivator));
     appendBahuangEntryActions(world, cultivator, actions, Boolean(activeWilderness || activeBahuang));
+    appendHeldQuestActions(world, cultivator, actions, true);
     return ensureSafetyNetActions(world, cultivator, location, actions);
   }
   if (isAtResidence(cultivator)) {
@@ -9455,15 +9527,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       });
     }
   }
-  for (const [activeIndex, activeQuest] of cultivator.activeQuests.entries()) {
-    actions.push({
-      actionId: buildExecuteQuestActionId(activeQuest.type, activeIndex) as ActionId,
-      label: `去做：${questFacingName(activeQuest)}`,
-      description: questFacingDescription(activeQuest),
-      durationTicks: activeQuest.durationTicks,
-      kind: "timed",
-    });
-  }
+  appendHeldQuestActions(world, cultivator, actions, false);
   if (activeWilderness) {
     actions.push(
       {
@@ -10152,7 +10216,7 @@ export function listAvailableActions(world: WorldState, cultivatorId: string): A
       if (owned < commission.targetCount) {
         continue;
       }
-      const posterName = facingPersonName(world.cultivators[commission.posterId]?.name ?? "某人");
+      const posterName = world.cultivators[commission.posterId]?.name?.trim() || "某人";
       actions.push({
         actionId: `accept-commission:${commission.id}` as ActionId,
         label: `接受委托：${posterName}的${commission.type === "gather" ? "采集" : "运送"}任务`,
@@ -10278,7 +10342,7 @@ function addFactionReputation(cultivator: Cultivator, factionId: string, amount:
   cultivator.factionReputation[factionId] = (cultivator.factionReputation[factionId] ?? 0) + amount;
 }
 
-function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
+function requireSafeIfInjured(world: WorldState, cultivator: Cultivator, actionId: ActionId) {
   if (cultivator.injuryTicksRemaining <= 0) return;
   const allowed = new Set<ActionId>(["meditate", "heal", "residence-breakthrough", "residence-heal", "residence-recover-qi", "residence-heal:use-pill", "residence-heal:no-pill", "residence-recover-qi:use-pill", "residence-recover-qi:no-pill", "use-healing-pill", "use-qi-pill", "use-ward-talisman", "buy-healing-pill", "buy-qi-pill", "buy-ward-talisman", "buy-current-breakthrough-material", "buy-next-weapon", "buy-next-manual", "exchange-sect-weapon", "exchange-sect-manual", "sell-spirit-ore", "sell-ruin-fragment", "sell-beast-core", "take-neutral-duty", "leave-neutral-sect", "withdraw-from-wilderness", "retreat-from-bahuang"]);
   if (
@@ -10355,6 +10419,9 @@ function requireSafeIfInjured(cultivator: Cultivator, actionId: ActionId) {
   if (injuredSectTask) {
     const tpl = getSectTaskById(injuredSectTask);
     if (tpl && (tpl.riskLevel === "none" || tpl.riskLevel === "low")) return;
+  }
+  if (actionId.startsWith("quest:execute:")) {
+    throw new GameplayRejection(injuredQuestRefusal(world, cultivator, actionId));
   }
   if (!allowed.has(actionId)) throw new Error("身上有伤，这一手做不了。先养伤、赶路，或做坊市里的稳妥事。");
 }
@@ -12589,29 +12656,52 @@ function resolveJob(world: WorldState, job: ActionJob): string {
   }
   if (questAction?.phase === "execute" && activeQuestId) {
     const resolved = resolveActiveQuest(world, cultivator, activeQuestId, `${world.tick}:${job.id}:${activeQuestId}`);
-      if (resolved.success) {
-        if (resolved.quest.category === "sect") {
-          if (cultivator.sectId) {
-            addFactionReputation(cultivator, cultivator.sectId, 8);
-          }
-        }
-      addDaoLog(
-        world,
-        cultivator.id,
-        "任务完成",
-        `${cultivator.name} 完成任务：${resolved.quest.name}。`,
-        ["quest-complete", resolved.quest.category],
-      );
-    } else {
-      addDaoLog(
-        world,
-        cultivator.id,
-        "任务失败",
-        `${cultivator.name} 未能完成任务：${resolved.quest.name}。`,
-        ["quest-failed", resolved.quest.category],
-      );
+    if (resolved.success && resolved.quest.category === "sect" && cultivator.sectId) {
+      addFactionReputation(cultivator, cultivator.sectId, 8);
     }
-    return resolved.summary;
+    if (resolved.injuryTicks > 0) {
+      cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, resolved.injuryTicks);
+      syncWounded(cultivator);
+      shiftCultivatorMood(world, cultivator, "wound");
+    }
+    const summary = questOutcomeSentence({
+      cultivatorName: cultivator.name,
+      quest: resolved.quest,
+      success: resolved.success,
+      spiritStoneDelta: resolved.spiritStoneDelta,
+      injuryTicks: resolved.injuryTicks,
+      woundTicksRemaining: cultivator.injuryTicksRemaining,
+      reputationDelta: resolved.reputationDelta,
+      contributionDelta: resolved.contributionDelta,
+    });
+    const questName = questFacingName(resolved.quest);
+    if (resolved.success) {
+      addSpiritStoneGainLog(world, cultivator.id, "事务做成了", summary, ["quest-complete", resolved.quest.category]);
+    } else {
+      addDaoLog(world, cultivator.id, "事务没做成", summary, ["quest-failed", resolved.quest.category]);
+    }
+    addWorldEvent(world, {
+      cultivatorId: cultivator.id,
+      locationId: cultivator.locationId,
+      title: resolved.success ? "事务做成了" : "事务没做成",
+      content: summary,
+      severity: resolved.injuryTicks > 0 ? "medium" : "low",
+      tags: [resolved.success ? "quest-complete" : "quest-failed", resolved.quest.category],
+    });
+    pushTravelNote(cultivator, travelNote({
+      tick: world.tick,
+      kind: resolved.injuryTicks > 0 ? "injury" : resolved.success ? "find" : "setback",
+      title: resolved.success ? `做成了${questName}` : `没做成${questName}`,
+      detail: summary,
+      locationId: cultivator.locationId,
+      mood: resolved.success ? "这一笔对得上" : "这一趟不顺",
+    }));
+    recordLife(cultivator, {
+      tick: world.tick,
+      kind: resolved.injuryTicks > 0 ? "fight" : "growth",
+      text: summary,
+    });
+    return summary;
   }
   if (job.actionId === "survey-wilderness") {
     return resolveWildernessSurvey(world, cultivator, job);
@@ -14182,7 +14272,7 @@ export function performAction(world: WorldState, cultivatorId: string, actionId:
     }
   }
   requireIdle(world, cultivator);
-  requireSafeIfInjured(cultivator, actionId);
+  requireSafeIfInjured(world, cultivator, actionId);
   const location = world.locations[cultivator.locationId];
   if (!location) throw new Error(`Location not found: ${cultivator.locationId}`);
   if (actionId.startsWith("enter-regional:")) {

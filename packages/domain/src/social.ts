@@ -416,34 +416,41 @@ export function describeSocialBond(link: SocialLink): string {
 export function describeArcLine(link: SocialLink, selfName: string, otherName: string): string {
   const bond = bondArcOf(link.affinity);
   const feud = grudgeArcOf(link.grudge ?? 0);
+  const pair = `${selfName}与${otherName}`;
   if (bond === "知己" && feud === "宿怨") {
-    return `${selfName}与${otherName}成了知己，也结了宿怨。可以切磋指点，分一小笔灵石，也可以公开挑战。`;
+    return `${pair}成了知己，也结了宿怨。可以切磋指点，分一小笔灵石，也可以公开挑战。`;
   }
-  if (bond === "知己" && feud) {
-    return `${selfName}与${otherName}是知己，同时有了${feud}。可以切磋指点，也可以分出一小笔灵石。`;
+  if (bond === "知己" && feud === "嫌隙") {
+    return `${pair}是知己，两人之间也有了嫌隙。可以切磋指点，也可以分出一小笔灵石。`;
   }
   if (bond === "知己") {
-    return `${selfName}与${otherName}成了知己。可以切磋指点，也可以分出一小笔灵石。`;
+    return `${pair}成了知己。可以切磋指点，也可以分出一小笔灵石。`;
   }
-  if (bond === "好友" && feud) {
-    return `${selfName}与${otherName}已是好友，可嫌隙到了${feud}。要紧的事还能开口，但话里已经不那么客气。`;
+  if (bond === "好友" && feud === "宿怨") {
+    return `${pair}已是好友，可两人结了宿怨。要紧的事还能开口，但话里已经不那么客气。`;
+  }
+  if (bond === "好友" && feud === "嫌隙") {
+    return `${pair}已是好友，两人之间却有了嫌隙。要紧的事还能开口，但话里已经不那么客气。`;
   }
   if (bond === "好友") {
-    return `${selfName}与${otherName}已是好友。要紧的事可以直接开口，不必再先客套。`;
+    return `${pair}已是好友。要紧的事可以直接开口，不必再先客套。`;
   }
-  if (bond === "点头之交" && feud) {
-    return `${selfName}与${otherName}本是点头之交，现在有了${feud}。见面还会招呼，心里却不痛快。`;
+  if (bond === "点头之交" && feud === "宿怨") {
+    return `${pair}本是点头之交，现在结了宿怨。见面还会招呼，心里却不痛快。`;
+  }
+  if (bond === "点头之交" && feud === "嫌隙") {
+    return `${pair}本是点头之交，现在有了嫌隙。见面还会招呼，心里却不痛快。`;
   }
   if (bond === "点头之交") {
-    return `${selfName}与${otherName}是点头之交。在城里碰见，会互相招呼一声。`;
+    return `${pair}是点头之交。在城里碰见，会互相招呼一声。`;
   }
   if (feud === "宿怨") {
-    return `${selfName}与${otherName}结成了宿怨。见面剑拔弩张，可以公开下挑战书，也可以把礼拒了。`;
+    return `${pair}结成了宿怨。见面剑拔弩张，可以公开下挑战书，也可以把礼拒了。`;
   }
   if (feud === "嫌隙") {
-    return `${selfName}与${otherName}之间有了嫌隙。下次见面剑拔弩张，话会很硬。`;
+    return `${pair}之间有了嫌隙。下次见面剑拔弩张，话会很硬。`;
   }
-  return `${selfName}与${otherName}目前是${getAffinityLevel(link.affinity)}，还没有跨过点头之交，也没有结下嫌隙。`;
+  return `${pair}目前是${getAffinityLevel(link.affinity)}，还没有跨过点头之交，也没有结下嫌隙。`;
 }
 
 // ---------------------------------------------------------------------------

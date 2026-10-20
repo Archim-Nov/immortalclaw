@@ -186,11 +186,27 @@ export function getQuestBoard(world: WorldState, locationId: string): QuestBoard
 
 const QUEST_FACING_TEMPLATES = [...BASE_QUEST_TEMPLATES, ...HIGH_RISK_QUEST_TEMPLATES, ...SECT_QUEST_TEMPLATES];
 
-export function questFacingName(quest: { name: string; nameCn?: string; templateId?: string }): string {
-  if (quest.nameCn && /[\u4e00-\u9fff]/u.test(quest.nameCn)) return polishEmbeddedNames(quest.nameCn);
-  const template = QUEST_FACING_TEMPLATES.find((entry) => entry.id === quest.templateId);
-  if (template?.nameCn) return polishEmbeddedNames(template.nameCn);
-  if (/[\u4e00-\u9fff]/u.test(quest.name)) return polishEmbeddedNames(quest.name);
+/** Names that used to be design labels. Old saves still store them. */
+const RETIRED_QUEST_NAMES: Record<string, string> = {
+  "强事件线索": "凶险传闻",
+  "州内精英任务": "州府急务",
+};
+
+function publicQuestName(name: string): string {
+  return RETIRED_QUEST_NAMES[name] ?? name;
+}
+
+export function questFacingName(quest: { name: string; nameCn?: string; templateId?: string; type?: string }): string {
+  if (quest.nameCn && /[\u4e00-\u9fff]/u.test(quest.nameCn)) return publicQuestName(polishEmbeddedNames(quest.nameCn));
+  const byId = quest.templateId
+    ? QUEST_FACING_TEMPLATES.find((entry) => entry.id === quest.templateId)
+    : undefined;
+  const byType = !byId && quest.type
+    ? QUEST_FACING_TEMPLATES.find((entry) => entry.type === quest.type)
+    : undefined;
+  const templateName = byId?.nameCn ?? byType?.nameCn;
+  if (templateName) return publicQuestName(polishEmbeddedNames(templateName));
+  if (/[\u4e00-\u9fff]/u.test(quest.name)) return publicQuestName(polishEmbeddedNames(quest.name));
   return "这一桩事务";
 }
 
@@ -242,6 +258,7 @@ export function acceptQuest(world: WorldState, cultivator: Cultivator, questType
     successRate: instance.successRate,
     acceptedAtTick: world.tick,
     status: "accepted",
+    locationId: cultivator.locationId,
   };
 
   board.quests.splice(instanceIndex, 1);
@@ -268,41 +285,83 @@ export function getActiveQuest(cultivator: Cultivator, activeQuestId: string): A
   return cultivator.activeQuests.find((quest) => quest.id === activeQuestId) ?? null;
 }
 
+export interface QuestResolution {
+  success: boolean;
+  quest: ActiveQuest;
+  spiritStoneDelta: number;
+  injuryTicks: number;
+  reputationDelta: number;
+  contributionDelta: number;
+}
+
+export function questOutcomeSentence(input: {
+  cultivatorName: string;
+  quest: { name: string; nameCn?: string; templateId?: string; type?: string };
+  success: boolean;
+  spiritStoneDelta: number;
+  injuryTicks: number;
+  woundTicksRemaining: number;
+  reputationDelta: number;
+  contributionDelta: number;
+}): string {
+  const questName = questFacingName(input.quest);
+  if (input.success) {
+    const fame = input.reputationDelta > 0 ? `，本州声望涨了${input.reputationDelta}` : "";
+    const merit = input.contributionDelta > 0 ? `，宗门贡献加了${input.contributionDelta}` : "";
+    return `${input.cultivatorName}把「${questName}」做完了，得了${input.spiritStoneDelta}灵石${fame}${merit}。`;
+  }
+  const hurt = input.injuryTicks > 0
+    ? `这一趟挂了伤，还要养${input.woundTicksRemaining}刻。`
+    : "这一趟没有挂上新伤。";
+  const stones = input.spiritStoneDelta < 0
+    ? `灵石少了${-input.spiritStoneDelta}。`
+    : "灵石没少。";
+  return `${input.cultivatorName}没能做成「${questName}」。${hurt}${stones}`;
+}
+
 export function resolveActiveQuest(
   world: WorldState,
   cultivator: Cultivator,
   activeQuestId: string,
   seed: string,
-): { success: boolean; quest: ActiveQuest; summary: string } {
+): QuestResolution {
   const questIndex = cultivator.activeQuests.findIndex((candidate) => candidate.id === activeQuestId);
   if (questIndex < 0) throw new Error(`Active quest not found: ${activeQuestId}`);
   const quest = cultivator.activeQuests[questIndex]!;
 
   const roll = hashString(seed) % 100;
   const success = roll < clamp(quest.successRate, 0, 100);
+  let spiritStoneDelta = 0;
+  let injuryTicks = 0;
+  let reputationDelta = 0;
+  let contributionDelta = 0;
 
   if (success) {
-    cultivator.spiritStones += quest.reward.spiritStones;
-    addCurrentStateReputation(cultivator, quest.reward.reputation);
+    spiritStoneDelta = quest.reward.spiritStones;
+    cultivator.spiritStones += spiritStoneDelta;
+    reputationDelta = quest.reward.reputation;
+    addCurrentStateReputation(cultivator, reputationDelta);
     if (quest.category === "base") {
       cultivator.completedBaseQuests += 1;
     }
     cultivator.realmProgress = Math.min(100, cultivator.realmProgress + (quest.category === "high-risk" ? 6 : 3));
     if (quest.category === "sect" && quest.reward.contribution > 0) {
+      contributionDelta = quest.reward.contribution;
       const previousContribution = cultivator.totalContribution;
-      cultivator.totalContribution += quest.reward.contribution;
+      cultivator.totalContribution += contributionDelta;
       if (cultivator.totalContribution > previousContribution) {
         cultivator.contributionReachedAt = world.tick;
       }
     }
   } else {
-    cultivator.injuryTicksRemaining = Math.max(cultivator.injuryTicksRemaining, quest.failurePenalty.injuryTicks);
-    cultivator.spiritStones = Math.max(0, cultivator.spiritStones - quest.failurePenalty.spiritStoneLoss);
+    injuryTicks = quest.failurePenalty.injuryTicks;
+    const loss = Math.min(cultivator.spiritStones, quest.failurePenalty.spiritStoneLoss);
+    cultivator.spiritStones -= loss;
+    spiritStoneDelta = -loss;
   }
 
   cultivator.activeQuests.splice(questIndex, 1);
-  const summary = success ? `${cultivator.name} completed quest ${quest.name}.` : `${cultivator.name} failed quest ${quest.name}.`;
-  return { success, quest, summary };
+  return { success, quest, spiritStoneDelta, injuryTicks, reputationDelta, contributionDelta };
 }
 
 function titlePriority(contribution: number): SectTitle {
