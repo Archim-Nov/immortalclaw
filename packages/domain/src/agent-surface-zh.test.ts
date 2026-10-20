@@ -1015,7 +1015,7 @@ test("say and reply-line cards do not name the act body", () => {
   assert.equal(/\bline\b/i.test(replyNote.description), false);
 });
 
-test("favor, quest, and bounty cards show a Chinese name for an English given name", () => {
+test("quest titles polish embedded Latin, and a cultivator keeps one stored name", () => {
   const world = createSeedWorld();
   const first = world.cultivators[CULTIVATOR_ID]!;
   first.locationId = "qingzhou:main-city";
@@ -1040,17 +1040,16 @@ test("favor, quest, and bounty cards show a Chinese name for an English given na
   assert.ok(stubGuard);
   assert.ok(qingGuard);
   assert.ok(noahGuard);
-  assert.equal(emmaGuard.label, "请托：艾玛守关");
-  assert.equal(emmaGuard.label.includes("Emma"), false);
-  assert.equal(emmaGuard.description.includes("Emma"), false);
+  assert.equal(emmaGuard.label, "请托：Emma守关");
+  assert.match(emmaGuard.description, /Emma/);
   assert.match(emmaGuard.description, /守在洞府外/);
-  assert.equal(stubGuard.label, "请托：林月兰守关");
-  assert.equal(stubGuard.label.includes("Lin"), false);
+  assert.equal(stubGuard.label, "请托：Lin Yuelan守关");
   assert.equal(qingGuard.label, "请托：青萝守关");
-  assert.equal(/[A-Za-z]/.test(noahGuard.label), false);
+  assert.match(noahGuard.label, /Noah/);
   assert.match(noahGuard.label, /守关/);
   assert.equal(emma.name, "Emma");
   assert.equal(stub.name, "Lin Yuelan");
+  assert.equal(getCultivatorState(world, first.id).nearbyCultivators?.find((row) => row.cultivatorId === emma.id)?.name, "Emma");
 
   const board = world.questBoards[first.locationId]!;
   const bounty = board.quests.find((quest) => quest.type === "bounty-low") ?? board.quests[0]!;
@@ -1079,9 +1078,9 @@ test("favor, quest, and bounty cards show a Chinese name for an English given na
   };
   const commission = listAvailableActions(world, first.id).find((action) => action.actionId === "accept-commission:comm-emma");
   assert.ok(commission);
-  assert.equal(commission.label, "接受委托：艾玛的采集任务");
-  assert.equal(commission.description.includes("Emma"), false);
-  assert.equal(getCultivatorState(world, first.id).localCommissions.find((row) => row.id === "comm-emma")?.posterName, "艾玛");
+  assert.equal(commission.label, "接受委托：Emma的采集任务");
+  assert.match(commission.description, /Emma/);
+  assert.equal(getCultivatorState(world, first.id).localCommissions.find((row) => row.id === "comm-emma")?.posterName, "Emma");
 });
 
 test("creation, registration, sect errand, and dual wilderness text stays Chinese", () => {

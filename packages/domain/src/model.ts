@@ -422,7 +422,20 @@ export interface ActiveQuest {
     successRate: number;
     acceptedAtTick: number;
     status: "accepted" | "in-progress";
+    /** Where the board was when this was accepted. Older saves omit it. */
+    locationId?: string;
   }
+
+export interface HeldQuestView {
+  name: string;
+  placeName: string;
+  placeLine: string;
+  durationTicks: number;
+  acceptedAtTick: number;
+  status: "accepted" | "in-progress";
+  /** Set when this quest cannot be started right now. */
+  blockReason?: string;
+}
 
 export interface QuestBoard {
   locationId: string;
@@ -3195,6 +3208,8 @@ export interface CultivatorStateView {
   inventory: Record<ItemId, number>;
   inventoryDetails: InventoryEntryView[];
   currentJob: ActionJob | null;
+  /** Accepted board quests that are not finished yet. Omitted when none are open. */
+  activeQuests?: HeldQuestView[];
   nearbyOpportunities: string[];
   statusEffects: StatusEffectView[];
   factionReputation: FactionStandingView[];
