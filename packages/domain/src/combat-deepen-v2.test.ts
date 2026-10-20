@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   listResolvedSkills,
+  PARTY_ROLE_LABEL,
   proficiencyPowerMultiplier,
   skillContextOf,
   type SkillContext,
@@ -234,6 +235,56 @@ test("an agent can choose a legal party role and three skill slots", () => {
   }
   performAction(world, hero.id, "clear-skill-loadout");
   assert.equal((getCultivatorState(world, hero.id).combatProfile.equippedSkillIds ?? []).length, 0);
+});
+
+test("setting a party role returns a Chinese receipt", () => {
+  const world = createSeedWorld();
+  const weaponLean = spawnAgent(world, "agent-role-receipt-weapon", "墨儿");
+  weaponLean.mainAttributeGrowth.tipu = (weaponLean.mainAttributeGrowth.tipu ?? 0) + 40;
+  weaponLean.equippedWeaponLoadoutId = "starter-axe" as typeof weaponLean.equippedWeaponLoadoutId;
+  const guard = performAction(world, weaponLean.id, "set-party-role:guard");
+  assert.equal(
+    guard.summary,
+    "墨儿把站位换成了护卫。护卫、辅助、控场用兵器或法术都行。你更顺手的是兵器，逆着偏向的守、补、控会略弱一点。",
+  );
+
+  const hero = spawnAgent(world, "agent-role-receipt", "墨儿");
+  hero.equippedWeaponLoadoutId = "starter-staff" as typeof hero.equippedWeaponLoadoutId;
+  const legal = new Set(
+    (getCultivatorState(world, hero.id).combatProfile.legalPartyRoles ?? []).map((role) => role.id),
+  );
+  assert.ok(legal.has("guard"));
+
+  for (const roleId of ROLES) {
+    const actionId = `set-party-role:${roleId}` as const;
+    if (!legal.has(roleId)) {
+      assert.throws(
+        () => performAction(world, hero.id, actionId),
+        (error: Error) => {
+          assert.match(error.message, /站不了/);
+          assert.equal(error.message.includes("set party role"), false);
+          assert.equal(error.message.includes("set-party-role"), false);
+          return true;
+        },
+      );
+      continue;
+    }
+    const result = performAction(world, hero.id, actionId);
+    const hint = getCultivatorState(world, hero.id).combatProfile.combatLeaning?.roleHint ?? "";
+    assert.equal(result.summary, `墨儿把站位换成了${PARTY_ROLE_LABEL[roleId]}。${hint}`);
+    assert.equal(result.summary.includes("set party role"), false);
+    assert.equal(result.summary.includes("set-party-role"), false);
+    assert.equal(result.actionId, actionId);
+  }
+
+  const state = getCultivatorState(world, hero.id);
+  const visible = [
+    ...state.travelogue.notes.flatMap((note) => [note.title, note.detail, note.mood ?? ""]),
+    ...state.recentEvents.flatMap((event) => [event.title, event.content]),
+    ...world.daoLogs.filter((entry) => entry.cultivatorId === hero.id).flatMap((entry) => [entry.title, entry.content]),
+  ].join("\n");
+  assert.equal(visible.includes("set party role"), false);
+  assert.equal(visible.includes("set-party-role"), false);
 });
 
 test("stepping away from the gate keeps a companion until they explicitly leave", () => {

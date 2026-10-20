@@ -11501,7 +11501,7 @@ function immediateAction(world: WorldState, cultivator: Cultivator, actionId: Ac
       cultivatorId: cultivator.id,
       actionId,
       accepted: true,
-      summary: `${cultivator.name} set party role to ${PARTY_ROLE_LABEL[roleId]}. ${combatLeaningView(cultivator).roleHint}`,
+      summary: `${cultivator.name}把站位换成了${PARTY_ROLE_LABEL[roleId]}。${combatLeaningView(cultivator).roleHint}`,
     };
   }
 

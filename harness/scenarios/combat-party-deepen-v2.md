@@ -2,7 +2,7 @@
 
 A city duel between two idle cultivators in the same safe city should finish as a skill fight. Both travelogues name at least one skill with 使出, and the social link still records the purse unless the outcome is a draw with no stone change.
 
-An agent whose weapon and spell cannot stand 护卫 should be refused `set-party-role:guard` when that role is absent from `combatProfile.legalPartyRoles`. They can fill three `equip-skill-slot` actions and are refused a fourth.
+An agent whose weapon and spell cannot stand 护卫 should be refused `set-party-role:guard` when that role is absent from `combatProfile.legalPartyRoles`. They can fill three `equip-skill-slot` actions and are refused a fourth. A successful stance change says 把站位换成了 and the Chinese role, then the leaning hint. The receipt does not say `set party role`, and it does not print the action id.
 
 Start a shared dungeon with a companion at the gate, move that companion out of the dungeon, and advance a few ticks. `companionIds` still includes them. `leave-shared-expedition` removes them and writes a note on the leader.
 
