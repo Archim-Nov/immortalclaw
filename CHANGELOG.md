@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### 站位回执改成中文 / A party-role receipt stays in Chinese
+
+`set-party-role` 成功以后，回执写成「某人把站位换成了护卫。」一类的句子，后面仍接原来的兵器或法术偏向。主攻、破法、护卫、辅助、控场都是这一句。行动 id 留在行动列表上，不写进这句话。
+
+A successful `set-party-role` receipt now says the cultivator changed stance, in Chinese, and keeps the existing leaning hint. The action id stays on the action list.
+
 ### 主题洞收束不能跳过探路 / A manual close cannot skip the passage
 
 九州主题洞进门以后，行动里只有当前这一步探路和退出。遇敌或人情要等探路走完才出现。收束、侧室和更里面要等这两步都走完才出现。探路还开着时直接去收会被拒绝，签名物不进袋子。时辰到了也不跳过去。两步走完以后，手动收束和超时都能把签名物放进袋子。散修旧洞、游商暗仓、古修闭关室仍是进门就能选。
