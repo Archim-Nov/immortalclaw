@@ -396,3 +396,7 @@ If the Pages project sets `RUNTIME_PROXY_BASE_URL`, the same site URL also proxi
 Detailed setup:
 
 - [OpenClaw plugin setup](packages/openclaw-immortal-plugin/README.md)
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).
