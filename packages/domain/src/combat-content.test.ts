@@ -403,13 +403,14 @@ test("下一阶兵器和功法的途径说明不写行动标识", () => {
     const world = createSeedWorld();
     const cultivator = world.cultivators["yun-zhong-he"]!;
     for (const tier of sample.owned) {
-      cultivator.unlockedWeaponLoadoutIds.push(`sword-tier-${tier}` as WeaponLoadoutId);
-      cultivator.unlockedSpellLoadoutIds.push(`metal-edge-tier-${tier}` as SpellLoadoutId);
+      cultivator.unlockedWeaponLoadoutIds = [...cultivator.unlockedWeaponLoadoutIds, `sword-tier-${tier}` as WeaponLoadoutId];
+      cultivator.unlockedSpellLoadoutIds = [...cultivator.unlockedSpellLoadoutIds, `metal-edge-tier-${tier}` as SpellLoadoutId];
     }
     for (const kind of ["weapon", "spell"] as const) {
       const offer = gearOffer(cultivator, kind);
       assert.ok(offer, kind);
       assert.equal(offer.tier, sample.tier);
+      assert.ok(offer.paths, `${kind} tier ${offer.tier} must expose acquisition paths`);
       for (const path of offer.paths) {
         const found = path.line.match(GEAR_LINE_LEAK);
         assert.equal(found, null, `${kind} tier ${offer.tier} ${path.kind} leaked ${found?.[0] ?? ""} in ${path.line}`);

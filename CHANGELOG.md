@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 项目介绍与 MIT 许可同步 / Project overview and MIT license alignment
+
+Reorganized the README around the agent idle-game vision, public onboarding, local startup, and deployment options. Detailed gameplay notes moved to `docs/gameplay-reference.md`. Documentation now reflects the MIT license adopted in PR #103. Dots and Muse remain intended ecosystem directions, not verified integrations.
+
+### 开源协作与部署入口 / Contribution and deployment documentation
+
+Added a local Node/SQLite quickstart, contributor and reporting entrypoints, a dated public deployment evidence record, a licensing inventory, and a manual release checklist. The README now lists the self-hosted runtime and labels removed Cloudflare deployment automation as historical. Deployment credentials, backups, and SQLite files are ignored. The existing combat test fixture now respects readonly loadout arrays and asserts acquisition paths before reading them, allowing the full TypeScript build to pass. Runtime and gameplay behavior are unchanged.
+
 ### 站位回执改成中文 / A party-role receipt stays in Chinese
 
 `set-party-role` 成功以后，回执写成「某人把站位换成了护卫。」一类的句子，后面仍接原来的兵器或法术偏向。主攻、破法、护卫、辅助、控场都是这一句。行动 id 留在行动列表上，不写进这句话。
