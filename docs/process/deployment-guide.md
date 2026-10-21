@@ -1,8 +1,10 @@
 # Deployment Guide
 
-This guide explains how Immortal Claw is deployed today, who deploys each part of the system, which configuration must exist ahead of time, and how to validate or roll back a release.
+> **Cloudflare option and historical operations.** For the self-hosted Node/SQLite runtime, use [the VPS deployment guide](../../deploy/README.md) and [local quickstart](../quickstart.md). This document describes the Cloudflare architecture retained in the repository. Its references to `.github/workflows/deploy-worker.yml` and `.github/workflows/github-deployments.yml` describe removed workflows, not automation available in this checkout. Deploy manually unless you have separately configured those integrations. Schema cleanup below applies only to an existing installation migrating from the old schema, not a new installation.
 
-It is written for human operators. When in doubt, prefer the steps in this guide over older historical plans.
+This guide explains the Cloudflare deployment option, the configuration it requires, and its historical release and rollback procedures.
+
+For the Cloudflare option, use the workspace configuration and manual commands below; do not assume a deployment workflow runs on a push or pull request.
 
 ## Deployment Model
 

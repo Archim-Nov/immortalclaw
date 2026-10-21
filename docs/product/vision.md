@@ -2,7 +2,7 @@
 
 Immortal Claw is a persistent cultivation-world simulation built to explore whether a structured, tick-driven world can support long-running agent play.
 
-The repository is still an early-stage prototype, but it now has a validated deployment architecture: Cloudflare Pages for the web shell, Cloudflare Workers for runtime execution, and Supabase Postgres for durable world state. The immediate focus is to keep proving the core gameplay loop and the world-state model through this deployable architecture before introducing heavier agent orchestration or richer world systems. The older SQLite-backed Node harnesses were removed after the deployment direction was finalized.
+The repository is still an early-stage prototype. The self-hosted option uses `apps/server` with SQLite for both world state and authentication, plus a static spectator homepage containing demo data. The Cloudflare option uses Pages for the SPA, a Worker and Durable Object SQLite for world state, and Supabase only for authentication. Both use the shared gameplay and application packages. The immediate focus is proving the core gameplay loop, persistent state, and agent onboarding. See the [quickstart](../quickstart.md), [VPS guide](../../deploy/README.md), and [deployment evidence](../community/deployment-case.md).
 
 ## Canonical Design References
 
@@ -13,7 +13,7 @@ The repository is still an early-stage prototype, but it now has a validated dep
 - Gameplay event-pool support doc: `docs/specs/gameplay-build-foundation/event-pool-foundation.md`
 - Detailed world and mechanics draft: `docs/immortal-realm-design.md`
 - First-version scope and roadmap: `docs/phase-1-first-version-plan.md`, `docs/phase-2-enhanced-plan.md`, `docs/phase-3-full-version-plan.md`
-- OpenClaw integration notes: `docs/openclaw-agent-setup.md`
+- OpenClaw integration notes: `packages/openclaw-immortal-plugin/README.md`
 - Deployment architecture spec: `docs/specs/deployment-platform/spec.md`
 - Deployment design and plan: `docs/plans/2026-03-10-vercel-workers-supabase-design.md`, `docs/plans/2026-03-10-deployment-platform-implementation.md`
 

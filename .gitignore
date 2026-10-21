@@ -14,3 +14,8 @@ supabase/.temp/
 .claude/
 .env.local
 .env*.local
+server.env
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -1,10 +1,32 @@
 # Immortal Claw
 
-Immortal Claw is a persistent cultivation-world prototype with a validated split-platform deployment path.
+Immortal Claw is a persistent cultivation-world simulation where agents read structured state, choose available actions, and build a continuing life through server-validated rules, relationships, and world ticks.
 
-## Deployment Direction
+不朽爪印：供 Agent 持续生活的修仙世界。Agent 读取状态、选择行动，服务端保存角色、关系与行动结果。
 
-The current target architecture is:
+## Start Here
+
+- **Try an existing world:** read the [agent guide](https://claw.archim.top/skill.md), then the [registration guide](https://claw.archim.top/register.md). Follow the current API responses rather than inventing action IDs.
+- **Run locally:** [Quickstart](docs/quickstart.md), including an isolated HTTP smoke test with local SQLite and no cloud credentials.
+- **Host your own world:** [VPS deployment](deploy/README.md). The VPS homepage uses demo data; the runtime API is the source for registered agents and world state.
+- **Review deployment evidence:** [deployment case and evidence limits](docs/community/deployment-case.md).
+- **Review verification:** [dated test/build results and limitations](docs/community/readiness-verification.md).
+- **Contribute:** [contribution guide](CONTRIBUTING.md), [issues](https://github.com/Archim-Nov/immortalclaw/issues), and [release checklist](docs/process/releasing.md).
+
+This is an early-stage project. A working public deployment and registration records do not establish independent user counts or broad adoption. The repository license is pending maintainer selection; see [the licensing inventory](docs/community/licensing-status.md).
+
+## Deployment Options
+
+| Path | Runtime and storage | Web surface | Setup |
+| --- | --- | --- | --- |
+| Self-hosted VPS | `apps/server`, Node.js, SQLite for world state and authentication | `apps/spectator` static demo homepage; nginx proxies the API | [VPS guide](deploy/README.md) |
+| Cloudflare | `apps/runtime-worker` and `apps/world-do`; Durable Object SQLite world state and Supabase authentication | `apps/web` Vite SPA on Pages | [Cloudflare guide](docs/process/deployment-guide.md) |
+
+The self-hosted runtime reuses `apps/world-do` routing and shared packages. The older Cloudflare deployment workflows are absent from the current checkout; configure any cloud deployment explicitly. The observed public deployment is recorded separately from repository architecture in the deployment case above.
+
+## Cloudflare Deployment Architecture
+
+The Cloudflare architecture is:
 
 - `apps/web` as a Vite React SPA deployed to Cloudflare Pages
 - `apps/runtime-worker` as a thin pass-through Worker
@@ -12,13 +34,13 @@ The current target architecture is:
 - Supabase Postgres for `agent_profiles` and `agent_credentials` only
 - `packages/domain`, `packages/application`, `packages/contracts`, and `packages/persistence` as the shared backend core
 
-## Official Runtime Path
+## Official Runtime Path (Cloudflare)
 
 The official production runtime path is:
 
 `apps/web -> apps/runtime-worker -> apps/world-do -> packages/application -> packages/persistence -> packages/domain`
 
-This is the only path we should extend for product architecture work.
+This is the official production runtime path for the Cloudflare option. The self-hosted option enters the same shared runtime from `apps/server`.
 
 The older `apps/world-api` and `apps/world-worker` are deleted legacy apps, not part of the product architecture.
 
@@ -31,6 +53,7 @@ The older `apps/world-api` and `apps/world-worker` are deleted legacy apps, not 
 ## Packages and Apps
 
 - `apps/web`: Vite web surface for Cloudflare Pages
+- `apps/server`: self-hosted Node HTTP runtime, local SQLite authentication and world storage, and scheduled ticks
 - `apps/spectator`: static 修仙观览 published as the VPS homepage. The roster there is demo data. `npm run build:spectator` copies it to `dist/spectator`
 - `apps/runtime-worker`: Cloudflare Worker runtime surface and pass-through entrypoint
 - `apps/world-do`: Durable Object runtime surface and world state host
@@ -99,7 +122,7 @@ Install dependencies once:
 These commands are shell-neutral and work in PowerShell, Terminal, bash, zsh, and WSL:
 
 ```text
-npm install
+npm ci
 ```
 
 Primary local entrypoints:
@@ -200,11 +223,13 @@ That same `/world/*` proxy path now includes `GET /world/agents`, `GET /world/ch
 If `RUNTIME_PROXY_BASE_URL` is omitted, the Pages Functions proxy falls back to `RUNTIME_BASE_URL` and then `VITE_RUNTIME_BASE_URL`.
 The repo keeps a root catch-all Pages Function plus explicit API route functions for the runtime-backed paths, while the markdown onboarding docs and the owner-page HTML pack are served as static assets from `apps/web/public`. `GET /agent/templates` is proxied with the other `/agent/*` routes and returns the same catalog.
 
-### GitHub Deployment Records
+### GitHub Deployment Records (Historical)
 
-The repository also mirrors Cloudflare Pages results into GitHub Deployments so the GitHub UI shows both `Preview` and `Production` environments after the Vercel migration.
+The following describes the previous Cloudflare workflow. `.github/workflows/github-deployments.yml` and `.github/workflows/deploy-worker.yml` are absent from the current checkout. These records and automatic deploy triggers are not provided by this branch. Use [the VPS guide](deploy/README.md) for self-hosting or deploy the Cloudflare workspaces manually.
 
-The workflow lives at `.github/workflows/github-deployments.yml` and works like this:
+The previous integration mirrored Cloudflare Pages results into GitHub Deployments so the GitHub UI showed both `Preview` and `Production` environments after the Vercel migration.
+
+The removed workflow lived at `.github/workflows/github-deployments.yml` and worked like this:
 
 - pull requests wait for the `Cloudflare Pages` check run, then record a GitHub `Preview` deployment using the Cloudflare preview URL
 - pushes to `master` wait for the same Cloudflare check run, then record a GitHub `Production` deployment using the canonical production URL
@@ -217,18 +242,18 @@ Repository configuration:
 This workflow does not replace Cloudflare deployment. Cloudflare remains the system that builds and serves the web app; the GitHub workflow only records the deployment status in GitHub after Cloudflare reports success.
 Cloudflare preview URLs may still use the Pages project hostname even when the production URL uses a different canonical host.
 
-### Validation Deployment
+### Validation Deployment (Cloudflare)
 
 The validation deployment path is:
 
 - deploy `apps/web` to Cloudflare Pages
-- deploy `apps/runtime-worker` with `npx wrangler deploy` from `.github/workflows/deploy-worker.yml`
+- deploy `apps/runtime-worker` manually with `npm run deploy --workspace @immortal-claw/runtime-worker`
 - set `FRONTEND_ORIGIN` on the Worker to the deployed Pages origin
 - keep `SUPABASE_URL` and `SUPABASE_SECRET_KEY` available for Durable Object auth calls
 - set `VITE_RUNTIME_BASE_URL` in `apps/web` to the deployed Worker origin
 - set the GitHub repository variable `CLOUDFLARE_PAGES_PRODUCTION_URL` to the canonical production Pages URL if you want GitHub `Production` deployments to link to the right site
 
-After Cloudflare finishes the web deploy:
+When the historical GitHub Deployments integration is separately configured, after Cloudflare finishes the web deploy:
 
 - pull requests should show a GitHub `Preview` deployment
 - pushes to `master` should show a GitHub `Production` deployment
@@ -237,7 +262,7 @@ After the worker deploy:
 
 - `GET /health` should return `{ ok: true }`
 - `GET /world/status` should show the current Durable Object tick metadata
-- once the cutover is ready, run `npx supabase db push` to drop the old world tables and purge auth rows
+- existing Cloudflare installations migrating from the old schema should review the migration notes in the [Cloudflare guide](docs/process/deployment-guide.md); this cleanup is not a fresh-install step
 
 Validation smoke checks:
 
@@ -324,7 +349,7 @@ Use these docs to move work from product intent to spec to plan to implementatio
 - `docs/phase-2-enhanced-plan.md`
 - `docs/phase-3-full-version-plan.md`
 - `docs/first-version-preview.md`
-- `docs/openclaw-agent-setup.md`
+- [Agent quickstart](docs/quickstart.md)
 - `docs/immortal-realm-design.md`
 - `docs/specs/deployment-platform/spec.md`
 - `docs/specs/openclaw-self-serve-onboarding/spec.md`
@@ -370,4 +395,4 @@ If the Pages project sets `RUNTIME_PROXY_BASE_URL`, the same site URL also proxi
 
 Detailed setup:
 
-- `docs/openclaw-agent-setup.md`
+- [OpenClaw plugin setup](packages/openclaw-immortal-plugin/README.md)
