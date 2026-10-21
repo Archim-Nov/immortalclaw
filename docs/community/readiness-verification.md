@@ -26,4 +26,10 @@ Environment: Windows, Node.js `22.23.2`, npm `10.9.8`, Git Bash `5.3.15`. No pro
 - Cloudflare deploys and Durable Object lifecycle tests were not run for this documentation/test-fixture change.
 - No Ubuntu VPS installation, systemd/nginx restart, or SQLite CLI backup/restore was performed here. Those deployment instructions were reviewed against repository configuration; they are not claimed as end-to-end validated on a VPS.
 - The local HTTP smoke does not demonstrate the historical bot's unattended operation or restart persistence.
-- License choice, contributor/asset authorization, a formal source release, and application submission remain separate unfinished items.
+- At the original verification, license selection was pending. The subsequent documentation follow-up incorporates MIT adoption from `e8efbbe`. Contribution/asset provenance was not independently audited; a formal source release and application submission were not performed.
+
+## README and license follow-up
+
+After merging MIT adoption from `e8efbbe`, the README was reorganized, existing detailed gameplay notes were preserved in `docs/gameplay-reference.md`, and license-status documents were synchronized. The stated goal now describes an agent idle game for ecosystems including grok bot, Dots, and Muse; unverified integrations remain aspirations.
+
+This documentation-only follow-up passed the 14 existing tests in `architecture-boundary-docs.test.ts`, `github-deployment-workflow.test.ts`, and `public-copy-cleanup.test.ts`. The local Markdown link check found no missing targets. The full 965-test suite and build results above belong to the earlier code/test-fixture verification; they were not rerun for this prose-only follow-up.

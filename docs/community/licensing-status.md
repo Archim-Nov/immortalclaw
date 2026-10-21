@@ -1,24 +1,28 @@
-# Licensing Inventory — Maintainer Decision Pending
+# Project License and Source Inventory
 
-As of 2026-10-21, no project-wide LICENSE, COPYING, NOTICE, or asset-attribution file was found in the tracked checkout at `6324eeeaa93c30163ddbf41c887d4b8f75772737`. GitHub's community profile also returned no detected repository license. This is an inventory observation, not an ownership determination.
+The public repository adopted the [MIT License](../../LICENSE) in commit `e8efbbe` (PR #103). The copyright notice is **Copyright (c) 2026 Archim CC**, and the root `package.json` declares `"license": "MIT"`. These files were checked on 2026-10-21 and incorporated into the documentation branch.
 
-## Before adopting a license
+The earlier inventory at commit `6324eee` preceded this addition. Its statement that license selection was pending is superseded by the MIT adoption above.
 
-1. Choose the intended project license with the maintainers. MIT, Apache-2.0, and AGPL-3.0 have different terms; none has been selected here.
-2. Review contribution provenance. GitHub lists contributions under `Archim-Nov`, `Xyri1`, and `xhrisfu`; determine which permissions or contributor agreements apply to their work. Account names and commit attribution alone do not establish licensing consent.
-3. Review `apps/web/public`, `apps/web/src`, `apps/spectator`, and other bundled art/font/media files. Record source, author, license, required attribution, and redistribution permission; record generation provenance for generated assets where known. Do not place an unsupported blanket license over third-party materials.
-4. Review copied or adapted source and design materials. README references to another project do not establish whether code was reused or under which terms.
-5. Keep dependency licenses separate from project authorship. npm dependencies retain their own licenses; review any redistributed dependency artifacts.
-6. Add the chosen LICENSE text and any necessary NOTICE/asset attribution, then update README and CONTRIBUTING together. Only then describe the project as licensed under those terms.
+## Source and attribution records
+
+The MIT declaration establishes the project's selected license. This documentation update did not independently audit ownership or permissions for every contribution and bundled asset. Continue recording:
+
+- external or adapted source: origin, applicable license, and notices;
+- bundled art, fonts, and media: source, author, license, redistribution terms, and attribution;
+- generated assets: known generation provenance;
+- npm dependencies: their own licenses and notices for redistributed artifacts.
+
+Relevant asset directories include `apps/web/public`, `apps/web/src`, and `apps/spectator`. Existing third-party notices must remain intact.
 
 ## Current status
 
 | Item | Status |
 | --- | --- |
 | Public source repository | Available |
-| Project license selection | Awaiting maintainer choice |
-| Contributor licensing/provenance | Awaiting maintainer confirmation |
-| Bundled asset attribution | Inventory and source confirmation needed |
-| Redistribution-ready source release | Pending the above and release validation |
+| Project license | MIT; LICENSE and package metadata agree |
+| Copyright notice | 2026 Archim CC |
+| Contribution and bundled-asset provenance | Not independently audited in this update |
+| Formal source release | Not published by this documentation work |
 
-This file does not grant a license or certify a completed legal review.
+The license text is authoritative for the project's terms; this inventory records repository state and source-attribution work.

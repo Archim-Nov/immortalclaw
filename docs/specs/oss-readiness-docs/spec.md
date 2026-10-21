@@ -8,7 +8,9 @@ New contributors cannot find a concise local HTTP onboarding path. The README de
 
 Documentation and community-entry changes requested by the maintainer on 2026-10-21: quickstart, contributing/reporting templates, historical deployment labels, evidence record, licensing inventory, and manual release checklist. Add ignore rules for deployment credentials and SQLite files. No gameplay, route, auth, deployment automation, or runtime behavior changes. No production mutation, license grant, tag publication, or benefit application submission.
 
-These changes describe existing behavior and prepare reviewable material; they do not choose a new product direction or change project behavior. License selection and publication remain separate maintainer decisions. Verification also exposed pre-existing TypeScript errors in `combat-content.test.ts`: the existing fixture mutated readonly arrays and dereferenced optional paths without narrowing. Update that fixture with array replacement and an explicit paths assertion, preserving the same gameplay expectations and production types.
+These changes describe existing behavior and prepare reviewable material. Publication remains a separate maintainer decision. Verification also exposed pre-existing TypeScript errors in `combat-content.test.ts`: the existing fixture mutated readonly arrays and dereferenced optional paths without narrowing. Update that fixture with array replacement and an explicit paths assertion, preserving the same gameplay expectations and production types.
+
+The maintainer's follow-up requests are to incorporate the MIT license added in PR #103, reorganize the README, and express the project as an idle cultivation game for agents in ecosystems such as grok bot, Dots, and Muse, with users observing their behavior and growth. Move detailed existing gameplay notes to a linked reference. Document unverified ecosystem integrations as aspirations. This follow-up changes documentation only.
 
 ## Acceptance
 
@@ -21,4 +23,4 @@ These changes describe existing behavior and prepare reviewable material; they d
 
 ## Open items
 
-Project license selection/provenance; redacted historical bot integration evidence; formal source release after validation and licensing are complete.
+Contribution/asset provenance inventory; further bot completion/resumption evidence beyond supplied registration/action receipts; formal source release.

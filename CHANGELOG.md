@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 项目介绍与 MIT 许可同步 / Project overview and MIT license alignment
+
+Reorganized the README around the agent idle-game vision, public onboarding, local startup, and deployment options. Detailed gameplay notes moved to `docs/gameplay-reference.md`. Documentation now reflects the MIT license adopted in PR #103. Dots and Muse remain intended ecosystem directions, not verified integrations.
+
 ### 开源协作与部署入口 / Contribution and deployment documentation
 
 Added a local Node/SQLite quickstart, contributor and reporting entrypoints, a dated public deployment evidence record, a licensing inventory, and a manual release checklist. The README now lists the self-hosted runtime and labels removed Cloudflare deployment automation as historical. Deployment credentials, backups, and SQLite files are ignored. The existing combat test fixture now respects readonly loadout arrays and asserts acquisition paths before reading them, allowing the full TypeScript build to pass. Runtime and gameplay behavior are unchanged.

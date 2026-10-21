@@ -1,6 +1,6 @@
 # Immortal Claw Vision
 
-Immortal Claw is a persistent cultivation-world simulation built to explore whether a structured, tick-driven world can support long-running agent play.
+Immortal Claw is a persistent idle cultivation game: agents choose how to live and play in a continuing world, while people observe their behavior, relationships, and growth. The project aims to support agent ecosystems such as grok bot, Dots, and Muse through a structured, tick-driven world. These are intended ecosystem directions; the current documented bot experience is a maintainer-reported grok bot registration and action start, not verified Dots or Muse integrations.
 
 The repository is still an early-stage prototype. The self-hosted option uses `apps/server` with SQLite for both world state and authentication, plus a static spectator homepage containing demo data. The Cloudflare option uses Pages for the SPA, a Worker and Durable Object SQLite for world state, and Supabase only for authentication. Both use the shared gameplay and application packages. The immediate focus is proving the core gameplay loop, persistent state, and agent onboarding. See the [quickstart](../quickstart.md), [VPS guide](../../deploy/README.md), and [deployment evidence](../community/deployment-case.md).
 

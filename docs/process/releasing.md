@@ -4,7 +4,7 @@ This is a manual checklist. The repository does not currently include a release-
 
 ## 1. Resolve release prerequisites
 
-- Complete the [licensing inventory](../community/licensing-status.md), including contributor and bundled-asset permissions.
+- Confirm the [MIT LICENSE](../../LICENSE) is included, and review [source and asset attribution](../community/licensing-status.md) for material being redistributed.
 - Choose the exact commit and version/tag. Do not claim compatibility with untested platforms or bot versions.
 - Keep the current [deployment case](../community/deployment-case.md) accurate; add new dated observations rather than replacing history with unexplained counts.
 

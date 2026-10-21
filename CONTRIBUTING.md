@@ -31,4 +31,4 @@ Run checks relevant to the change, report failures as well as passes, and update
 
 ## Licensing status
 
-The repository has not yet adopted a project-wide license. Public visibility alone is not a license grant. Before adding external code or assets, record their source and terms, and resolve the [licensing inventory](docs/community/licensing-status.md) with the maintainers. Do not assume this project is MIT-licensed.
+The project uses the [MIT License](LICENSE), with copyright attributed to 2026 Archim CC. Before adding external code or assets, record their source and terms and preserve any required notices. Dependencies and third-party materials retain their own license requirements; see the [licensing inventory](docs/community/licensing-status.md).
